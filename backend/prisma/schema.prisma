@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  PARENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum QuestionType {
+  MCQ
+  MULTI_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  EXPIRED
+}
+
+enum ProctorEventType {
+  NO_FACE
+  MULTIPLE_FACES
+  FACE_MISMATCH
+  TAB_SWITCH
+  SCREEN_CAPTURE
+  NETWORK_DISCONNECT
+  SEB_VIOLATION
+  IP_CHANGE
+}
+
+// ──────────────────────────────────────────────
+// Users & Auth
+// ──────────────────────────────────────────────
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  role            Role           @default(STUDENT)
+  classBand       Int?
+  schoolId        String?
+  school          School?        @relation(fields: [schoolId], references: [id])
+  faceEmbedding   Bytes?
+  profileImageUrl String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  attempts        Attempt[]
+  refreshTokens   RefreshToken[]
+
+  @@index([email])
+  @@index([schoolId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model School {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  city      String
+  state     String
+  users     User[]
+  createdAt DateTime @default(now())
+
+  @@index([code])
+}
+
+// ──────────────────────────────────────────────
+// Exams & Questions
+// ──────────────────────────────────────────────
+
+model Exam {
+  id              String         @id @default(uuid())
+  title           String
+  description     String?
+  classBands      Int[]
+  totalMarks      Int
+  durationMinutes Int
+  isPublished     Boolean        @default(false)
+  sections        ExamSection[]
+  instances       ExamInstance[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([isPublished])
+}
+
+model ExamSection {
+  id        String     @id @default(uuid())
+  examId    String
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  title     String
+  sortOrder Int
+  questions Question[]
+
+  @@index([examId])
+}
+
+model Question {
+  id            String       @id @default(uuid())
+  sectionId     String?
+  section       ExamSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  type          QuestionType
+  difficulty    Difficulty
+  text          String
+  options       Json?
+  correctAnswer String?
+  marks         Int          @default(1)
+  negativeMarks Float        @default(0)
+  timeLimitSecs Int?
+  tags          String[]
+  explanation   String?
+  createdAt     DateTime     @default(now())
+  attemptItems  AttemptItem[]
+
+  @@index([sectionId])
+  @@index([type])
+  @@index([difficulty])
+}
+
+model ExamInstance {
+  id             String    @id @default(uuid())
+  examId         String
+  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  startsAt       DateTime
+  endsAt         DateTime
+  requireSeb     Boolean   @default(true)
+  browserExamKey String?
+  configKey      String?
+  quitUrl        String?
+  maxAttempts    Int       @default(1)
+  attempts       Attempt[]
+  createdAt      DateTime  @default(now())
+
+  @@index([examId])
+  @@index([startsAt, endsAt])
+}
+
+// ──────────────────────────────────────────────
+// Attempts & Scoring
+// ──────────────────────────────────────────────
+
+model Attempt {
+  id                String        @id @default(uuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id])
+  examInstanceId    String
+  examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id])
+  status            AttemptStatus  @default(NOT_STARTED)
+  startedAt         DateTime?
+  submittedAt       DateTime?
+  totalScore        Float?
+  maxScore          Float?
+  ipAddress         String?
+  deviceFingerprint String?
+  items             AttemptItem[]
+  proctorEvents     ProctorEvent[]
+  riskScore         Float?         @default(0)
+  createdAt         DateTime       @default(now())
+
+  @@unique([userId, examInstanceId])
+  @@index([userId])
+  @@index([examInstanceId])
+  @@index([status])
+}
+
+model AttemptItem {
+  id         String   @id @default(uuid())
+  attemptId  String
+  attempt    Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  answer     Json?
+  isCorrect  Boolean?
+  score      Float?
+  answeredAt DateTime?
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+// ──────────────────────────────────────────────
+// Proctoring
+// ──────────────────────────────────────────────
+
+model ProctorEvent {
+  id        String           @id @default(uuid())
+  attemptId String
+  attempt   Attempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  type      ProctorEventType
+  severity  Int              @default(1)
+  details   Json?
+  timestamp DateTime         @default(now())
+
+  @@index([attemptId])
+  @@index([type])
+}
+
+// ──────────────────────────────────────────────
+// Audit Logging
+// ──────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

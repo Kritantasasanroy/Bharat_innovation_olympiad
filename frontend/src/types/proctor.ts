@@ -1,0 +1,34 @@
+// ── Proctor Types ──
+
+export type ProctorEventType =
+    | 'NO_FACE'
+    | 'MULTIPLE_FACES'
+    | 'FACE_MISMATCH'
+    | 'TAB_SWITCH'
+    | 'SCREEN_CAPTURE'
+    | 'NETWORK_DISCONNECT'
+    | 'SEB_VIOLATION';
+
+export interface ProctorEvent {
+    id: string;
+    attemptId: string;
+    type: ProctorEventType;
+    severity: number;
+    details?: Record<string, any>;
+    timestamp: string;
+}
+
+export interface FrameAnalysisResult {
+    facePresent: boolean;
+    numFaces: number;
+    matchScore: number | null;
+    riskScore: number;
+    flags: string[];
+}
+
+export interface DeviceCheckStatus {
+    viewport: boolean;
+    webcam: boolean;
+    seb: boolean;
+    audio: boolean;
+}
