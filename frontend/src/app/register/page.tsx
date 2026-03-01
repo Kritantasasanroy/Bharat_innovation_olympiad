@@ -59,7 +59,7 @@ export default function RegisterPage() {
         <div className="auth-page">
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
-                    <div className="auth-logo">🍋</div>
+                    <div className="auth-logo"><img src="/lemon-ideas-logo.png" alt="Lemon Ideas" style={{ height: '48px', width: 'auto' }} /></div>
                     <h1 className="auth-title">{APP_NAME}</h1>
                     <p className="auth-company">by {COMPANY_NAME}</p>
                     <p className="auth-subtitle">Create your student account</p>

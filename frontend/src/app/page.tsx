@@ -11,7 +11,7 @@ export default function HomePage() {
         <div className="hero-bg" />
         <div className="container hero-content">
           <div className="hero-badge">
-            <span>🍋</span> Powered by {COMPANY_NAME}
+            <img src="/lemon-ideas-logo.png" alt="Lemon Ideas" style={{ height: '20px', width: 'auto' }} /> Powered by {COMPANY_NAME}
           </div>
           <h1 className="hero-title">
             <span className="gradient-text">{APP_NAME}</span>

@@ -5,101 +5,101 @@ import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 
 export default function Navbar() {
-    const { user, logout } = useAuth();
-    const router = useRouter();
-    const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
-    const handleLogout = () => {
-        logout();
-        router.push('/login');
-    };
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
-    return (
-        <nav className="navbar">
-            <div className="navbar-inner">
-                <div className="navbar-brand" onClick={() => router.push('/')}>
-                    <div className="brand-icon">🍋</div>
-                    <div className="brand-text-group">
-                        <span className="brand-text">{APP_NAME}</span>
-                        <span className="brand-sub">by {COMPANY_NAME}</span>
-                    </div>
-                </div>
+  return (
+    <nav className="navbar">
+      <div className="navbar-inner">
+        <div className="navbar-brand" onClick={() => router.push('/')}>
+          <img src="/lemon-ideas-logo.png" alt="Lemon Ideas" className="brand-logo" />
+          <div className="brand-text-group">
+            <span className="brand-text">{APP_NAME}</span>
+            <span className="brand-sub">by {COMPANY_NAME}</span>
+          </div>
+        </div>
 
-                <div className="navbar-links">
-                    {user?.role === 'STUDENT' && (
-                        <>
-                            <a
-                                className={`nav-link ${pathname === '/dashboard' ? 'active' : ''}`}
-                                onClick={() => router.push('/dashboard')}
-                            >
-                                Dashboard
-                            </a>
-                            <a
-                                className={`nav-link ${pathname?.startsWith('/exams') ? 'active' : ''}`}
-                                onClick={() => router.push('/exams')}
-                            >
-                                Exams
-                            </a>
-                            <a
-                                className={`nav-link ${pathname === '/results' ? 'active' : ''}`}
-                                onClick={() => router.push('/results')}
-                            >
-                                Results
-                            </a>
-                        </>
-                    )}
-                    {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                        <>
-                            <a
-                                className={`nav-link ${pathname === '/admin/dashboard' ? 'active' : ''}`}
-                                onClick={() => router.push('/admin/dashboard')}
-                            >
-                                Dashboard
-                            </a>
-                            <a
-                                className={`nav-link ${pathname?.startsWith('/admin/questions') ? 'active' : ''}`}
-                                onClick={() => router.push('/admin/questions')}
-                            >
-                                Questions
-                            </a>
-                            <a
-                                className={`nav-link ${pathname?.startsWith('/admin/exams') ? 'active' : ''}`}
-                                onClick={() => router.push('/admin/exams')}
-                            >
-                                Exams
-                            </a>
-                            <a
-                                className={`nav-link ${pathname === '/admin/analytics' ? 'active' : ''}`}
-                                onClick={() => router.push('/admin/analytics')}
-                            >
-                                Analytics
-                            </a>
-                        </>
-                    )}
-                </div>
+        <div className="navbar-links">
+          {user?.role === 'STUDENT' && (
+            <>
+              <a
+                className={`nav-link ${pathname === '/dashboard' ? 'active' : ''}`}
+                onClick={() => router.push('/dashboard')}
+              >
+                Dashboard
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/exams') ? 'active' : ''}`}
+                onClick={() => router.push('/exams')}
+              >
+                Exams
+              </a>
+              <a
+                className={`nav-link ${pathname === '/results' ? 'active' : ''}`}
+                onClick={() => router.push('/results')}
+              >
+                Results
+              </a>
+            </>
+          )}
+          {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+            <>
+              <a
+                className={`nav-link ${pathname === '/admin/dashboard' ? 'active' : ''}`}
+                onClick={() => router.push('/admin/dashboard')}
+              >
+                Dashboard
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/admin/questions') ? 'active' : ''}`}
+                onClick={() => router.push('/admin/questions')}
+              >
+                Questions
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/admin/exams') ? 'active' : ''}`}
+                onClick={() => router.push('/admin/exams')}
+              >
+                Exams
+              </a>
+              <a
+                className={`nav-link ${pathname === '/admin/analytics' ? 'active' : ''}`}
+                onClick={() => router.push('/admin/analytics')}
+              >
+                Analytics
+              </a>
+            </>
+          )}
+        </div>
 
-                <div className="navbar-user">
-                    {user && (
-                        <>
-                            <div className="user-avatar">
-                                {user.firstName[0]}
-                                {user.lastName[0]}
-                            </div>
-                            <div className="user-info">
-                                <span className="user-name">
-                                    {user.firstName} {user.lastName}
-                                </span>
-                                <span className="user-role">{user.role}</span>
-                            </div>
-                            <button className="btn btn-sm btn-secondary" onClick={handleLogout}>
-                                Logout
-                            </button>
-                        </>
-                    )}
-                </div>
-            </div>
+        <div className="navbar-user">
+          {user && (
+            <>
+              <div className="user-avatar">
+                {user.firstName[0]}
+                {user.lastName[0]}
+              </div>
+              <div className="user-info">
+                <span className="user-name">
+                  {user.firstName} {user.lastName}
+                </span>
+                <span className="user-role">{user.role}</span>
+              </div>
+              <button className="btn btn-sm btn-secondary" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-            <style jsx>{`
+      <style jsx>{`
         .navbar {
           position: sticky;
           top: 0;
@@ -124,8 +124,10 @@ export default function Navbar() {
           gap: var(--space-3);
           cursor: pointer;
         }
-        .brand-icon {
-          font-size: 1.5rem;
+        .brand-logo {
+          height: 36px;
+          width: auto;
+          object-fit: contain;
         }
         .brand-text-group {
           display: flex;
@@ -198,6 +200,6 @@ export default function Navbar() {
           text-transform: capitalize;
         }
       `}</style>
-        </nav>
-    );
+    </nav>
+  );
 }
