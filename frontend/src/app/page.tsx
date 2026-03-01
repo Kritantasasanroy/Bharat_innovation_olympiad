@@ -1,11 +1,20 @@
 'use client';
 
 import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
+import { useThemeStore } from '@/store/themeStore';
 import Link from 'next/link';
 
 export default function HomePage() {
+  const { theme, toggleTheme } = useThemeStore();
+
   return (
     <div className="page-wrapper">
+      {/* Theme toggle - top right */}
+      <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
+        <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+      </div>
       {/* Hero Section */}
       <section className="hero">
         <div className="hero-bg" />
