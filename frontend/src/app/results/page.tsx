@@ -2,8 +2,38 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import api from '@/lib/api';
+import { useEffect, useState } from 'react';
+
+interface ExamResult {
+    id: string;
+    title: string;
+    score: number;
+    total: number;
+    rank?: number;
+    totalStudents?: number;
+    date: string;
+    percentage: number;
+}
 
 export default function ResultsPage() {
+    const [results, setResults] = useState<ExamResult[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchResults = async () => {
+            try {
+                const { data } = await api.get<ExamResult[]>('/attempts/results');
+                setResults(data || []);
+            } catch {
+                // API may not exist yet — show empty state
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchResults();
+    }, []);
+
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <Navbar />
@@ -13,62 +43,78 @@ export default function ResultsPage() {
                     View detailed performance analytics for your completed exams.
                 </p>
 
-                <div className="results-list">
-                    {[
-                        { id: '1', title: 'Practice Test: Logic & Reasoning', score: 85, total: 100, rank: 42, totalStudents: 1200, date: 'Feb 28, 2026', percentage: 85 },
-                        { id: '2', title: 'Trial Round: Innovation Aptitude', score: 72, total: 100, rank: 108, totalStudents: 1200, date: 'Feb 20, 2026', percentage: 72 },
-                        { id: '3', title: 'Mock Test: STEM Awareness', score: 91, total: 100, rank: 15, totalStudents: 950, date: 'Feb 10, 2026', percentage: 91 },
-                    ].map((result) => (
-                        <div key={result.id} className="glass-card result-card">
-                            <div className="result-header">
-                                <h3>{result.title}</h3>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>📅 {result.date}</span>
-                            </div>
-
-                            <div className="result-body">
-                                <div className="result-score-ring">
-                                    <svg viewBox="0 0 100 100" className="ring-svg">
-                                        <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg-elevated)" strokeWidth="8" />
-                                        <circle
-                                            cx="50" cy="50" r="42" fill="none"
-                                            stroke="url(#gradient)" strokeWidth="8"
-                                            strokeLinecap="round"
-                                            strokeDasharray={`${result.percentage * 2.64} ${264 - result.percentage * 2.64}`}
-                                            strokeDashoffset="66"
-                                        />
-                                        <defs>
-                                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stopColor="var(--primary-500)" />
-                                                <stop offset="100%" stopColor="var(--accent-500)" />
-                                            </linearGradient>
-                                        </defs>
-                                        <text x="50" y="48" textAnchor="middle" fill="var(--text-primary)" fontSize="20" fontWeight="800">
-                                            {result.percentage}%
-                                        </text>
-                                        <text x="50" y="64" textAnchor="middle" fill="var(--text-muted)" fontSize="9">
-                                            {result.score}/{result.total}
-                                        </text>
-                                    </svg>
+                {loading ? (
+                    <div className="loading-container">
+                        <div className="spinner" />
+                    </div>
+                ) : results.length > 0 ? (
+                    <div className="results-list">
+                        {results.map((result) => (
+                            <div key={result.id} className="glass-card result-card">
+                                <div className="result-header">
+                                    <h3>{result.title}</h3>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>📅 {result.date}</span>
                                 </div>
 
-                                <div className="result-stats">
-                                    <div className="result-stat">
-                                        <span className="result-stat-value">#{result.rank}</span>
-                                        <span className="result-stat-label">Rank</span>
+                                <div className="result-body">
+                                    <div className="result-score-ring">
+                                        <svg viewBox="0 0 100 100" className="ring-svg">
+                                            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg-elevated)" strokeWidth="8" />
+                                            <circle
+                                                cx="50" cy="50" r="42" fill="none"
+                                                stroke="url(#gradient)" strokeWidth="8"
+                                                strokeLinecap="round"
+                                                strokeDasharray={`${result.percentage * 2.64} ${264 - result.percentage * 2.64}`}
+                                                strokeDashoffset="66"
+                                            />
+                                            <defs>
+                                                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="var(--primary-400)" />
+                                                    <stop offset="100%" stopColor="var(--accent-500)" />
+                                                </linearGradient>
+                                            </defs>
+                                            <text x="50" y="48" textAnchor="middle" fill="var(--text-primary)" fontSize="20" fontWeight="800">
+                                                {result.percentage}%
+                                            </text>
+                                            <text x="50" y="64" textAnchor="middle" fill="var(--text-muted)" fontSize="9">
+                                                {result.score}/{result.total}
+                                            </text>
+                                        </svg>
                                     </div>
-                                    <div className="result-stat">
-                                        <span className="result-stat-value">Top {Math.round((result.rank / result.totalStudents) * 100)}%</span>
-                                        <span className="result-stat-label">Percentile</span>
-                                    </div>
-                                    <div className="result-stat">
-                                        <span className="result-stat-value">{result.totalStudents}</span>
-                                        <span className="result-stat-label">Participants</span>
+
+                                    <div className="result-stats">
+                                        {result.rank && (
+                                            <div className="result-stat">
+                                                <span className="result-stat-value">#{result.rank}</span>
+                                                <span className="result-stat-label">Rank</span>
+                                            </div>
+                                        )}
+                                        {result.rank && result.totalStudents && (
+                                            <div className="result-stat">
+                                                <span className="result-stat-value">Top {Math.round((result.rank / result.totalStudents) * 100)}%</span>
+                                                <span className="result-stat-label">Percentile</span>
+                                            </div>
+                                        )}
+                                        {result.totalStudents && (
+                                            <div className="result-stat">
+                                                <span className="result-stat-value">{result.totalStudents}</span>
+                                                <span className="result-stat-label">Participants</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="glass-card" style={{ padding: 'var(--space-10)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📋</div>
+                        <h3 style={{ marginBottom: 'var(--space-2)' }}>No Results Yet</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>
+                            Complete an exam to see your detailed performance analytics here.
+                        </p>
+                    </div>
+                )}
 
                 <style jsx>{`
           .results-list { display: flex; flex-direction: column; gap: var(--space-6); }

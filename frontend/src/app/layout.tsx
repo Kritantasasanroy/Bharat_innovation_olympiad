@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: 'Bharat Innovation Olympiad',
+    title: 'Bharat Innovation Olympiad | by Lemon Ideas',
     description:
-        'India\'s premier Innovation Olympiad exam platform for students in classes 6-12. Secure, AI-proctored online assessments.',
-    keywords: ['olympiad', 'innovation', 'exam', 'India', 'students', 'STEM'],
+        'India\'s premier Innovation & STEM Olympiad for students in classes 6-12, powered by Lemon Ideas. Secure, AI-proctored online assessments.',
+    keywords: ['olympiad', 'innovation', 'exam', 'India', 'students', 'STEM', 'Lemon Ideas'],
 };
 
 export default function RootLayout({

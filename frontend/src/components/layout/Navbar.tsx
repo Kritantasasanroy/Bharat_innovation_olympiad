@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
-import { APP_NAME } from '@/lib/constants';
+import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 
 export default function Navbar() {
@@ -18,8 +18,11 @@ export default function Navbar() {
         <nav className="navbar">
             <div className="navbar-inner">
                 <div className="navbar-brand" onClick={() => router.push('/')}>
-                    <div className="brand-icon">🏆</div>
-                    <span className="brand-text">{APP_NAME}</span>
+                    <div className="brand-icon">🍋</div>
+                    <div className="brand-text-group">
+                        <span className="brand-text">{APP_NAME}</span>
+                        <span className="brand-sub">by {COMPANY_NAME}</span>
+                    </div>
                 </div>
 
                 <div className="navbar-links">
@@ -124,13 +127,24 @@ export default function Navbar() {
         .brand-icon {
           font-size: 1.5rem;
         }
+        .brand-text-group {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+        }
         .brand-text {
           font-weight: 800;
-          font-size: 1.1rem;
+          font-size: 1.05rem;
           background: var(--gradient-brand);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
+        }
+        .brand-sub {
+          font-size: 0.65rem;
+          font-weight: 500;
+          color: var(--text-muted);
+          letter-spacing: 0.05em;
         }
         .navbar-links {
           display: flex;
@@ -151,7 +165,7 @@ export default function Navbar() {
         }
         .nav-link.active {
           color: var(--primary-400);
-          background: rgba(59, 130, 246, 0.1);
+          background: rgba(251, 197, 11, 0.1);
         }
         .navbar-user {
           display: flex;

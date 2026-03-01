@@ -2,8 +2,29 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import api from '@/lib/api';
+import { useEffect, useState } from 'react';
 
 export default function AdminDashboard() {
+    const [stats, setStats] = useState({ students: '—', exams: '—', questions: '—', uptime: '—' });
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const { data } = await api.get('/admin/stats');
+                setStats({
+                    students: data.students?.toLocaleString() || '—',
+                    exams: data.exams?.toString() || '—',
+                    questions: data.questions?.toLocaleString() || '—',
+                    uptime: data.uptime || '—',
+                });
+            } catch {
+                // API may not exist yet — show placeholder
+            }
+        };
+        fetchStats();
+    }, []);
+
     return (
         <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
             <Navbar />
@@ -16,19 +37,19 @@ export default function AdminDashboard() {
                 {/* Stats */}
                 <div className="grid-4 dashboard-stats" style={{ marginTop: 'var(--space-8)' }}>
                     <div className="stat-card">
-                        <div className="stat-value">1,247</div>
+                        <div className="stat-value">{stats.students}</div>
                         <div className="stat-label">Registered Students</div>
                     </div>
                     <div className="stat-card">
-                        <div className="stat-value">24</div>
+                        <div className="stat-value">{stats.exams}</div>
                         <div className="stat-label">Active Exams</div>
                     </div>
                     <div className="stat-card">
-                        <div className="stat-value">3,582</div>
+                        <div className="stat-value">{stats.questions}</div>
                         <div className="stat-label">Questions in Bank</div>
                     </div>
                     <div className="stat-card">
-                        <div className="stat-value">98.4%</div>
+                        <div className="stat-value">{stats.uptime}</div>
                         <div className="stat-label">Uptime</div>
                     </div>
                 </div>

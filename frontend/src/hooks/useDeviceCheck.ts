@@ -32,27 +32,41 @@ export function useDeviceCheck() {
         // 2. SEB check
         setDeviceCheck('seb', isSebBrowser());
 
-        // 3. Webcam check — just test availability, actual stream is started later
-        navigator.mediaDevices
-            .enumerateDevices()
-            .then((devices) => {
-                const hasCamera = devices.some((d) => d.kind === 'videoinput');
-                setDeviceCheck('webcam', hasCamera);
-            })
-            .catch(() => {
-                setDeviceCheck('webcam', false);
-            });
+        // 3 & 4. Webcam + Audio check
+        // enumerateDevices() may not detect devices before permission is granted.
+        // We first try enumerating; if no devices found, request a temporary stream
+        // to trigger the browser permission prompt, then re-enumerate.
+        const checkMediaDevices = async () => {
+            try {
+                let devices = await navigator.mediaDevices.enumerateDevices();
+                let hasCamera = devices.some((d) => d.kind === 'videoinput');
+                let hasMic = devices.some((d) => d.kind === 'audioinput');
 
-        // 4. Audio check
-        navigator.mediaDevices
-            .enumerateDevices()
-            .then((devices) => {
-                const hasMic = devices.some((d) => d.kind === 'audioinput');
+                // If no camera/mic found, it might be because permission hasn't been granted yet.
+                // Request a temporary stream to trigger the permission prompt.
+                if (!hasCamera && !hasMic) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        // Stop the temporary stream immediately
+                        stream.getTracks().forEach((t) => t.stop());
+                        // Re-enumerate after permission is granted
+                        devices = await navigator.mediaDevices.enumerateDevices();
+                        hasCamera = devices.some((d) => d.kind === 'videoinput');
+                        hasMic = devices.some((d) => d.kind === 'audioinput');
+                    } catch {
+                        // User denied or no devices — that's okay
+                    }
+                }
+
+                setDeviceCheck('webcam', hasCamera);
                 setDeviceCheck('audio', hasMic);
-            })
-            .catch(() => {
+            } catch {
+                setDeviceCheck('webcam', false);
                 setDeviceCheck('audio', false);
-            });
+            }
+        };
+
+        checkMediaDevices();
 
         return () => {
             window.removeEventListener('resize', checkViewport);

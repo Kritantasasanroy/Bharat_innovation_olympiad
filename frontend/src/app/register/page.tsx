@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, CLASS_BANDS } from '@/lib/constants';
+import { APP_NAME, CLASS_BANDS, COMPANY_NAME } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -45,8 +45,8 @@ export default function RegisterPage() {
 
         setIsLoading(true);
         try {
-            const { confirmPassword, ...data } = formData;
-            await register(data);
+            const { confirmPassword, schoolCode, ...data } = formData;
+            await register({ ...data, ...(schoolCode ? { schoolCode } : {}) });
             router.push('/dashboard');
         } catch (err: any) {
             setError(err.response?.data?.message || 'Registration failed');
@@ -59,8 +59,9 @@ export default function RegisterPage() {
         <div className="auth-page">
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
-                    <div className="auth-logo">🏆</div>
+                    <div className="auth-logo">🍋</div>
                     <h1 className="auth-title">{APP_NAME}</h1>
+                    <p className="auth-company">by {COMPANY_NAME}</p>
                     <p className="auth-subtitle">Create your student account</p>
                 </div>
 
@@ -108,11 +109,11 @@ export default function RegisterPage() {
                             </select>
                         </div>
                         <div className="input-group">
-                            <label className="input-label" htmlFor="schoolCode">School Code</label>
+                            <label className="input-label" htmlFor="schoolCode">School Code <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
                             <input
                                 id="schoolCode" name="schoolCode" type="text" className="input-field"
                                 placeholder="e.g. DPS001" value={formData.schoolCode}
-                                onChange={handleChange} required
+                                onChange={handleChange}
                             />
                         </div>
                     </div>
@@ -176,6 +177,7 @@ export default function RegisterPage() {
           background-clip: text;
         }
         .auth-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: var(--space-2); }
+        .auth-company { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); margin-top: var(--space-1); letter-spacing: 0.03em; }
         .auth-form { display: flex; flex-direction: column; }
         .auth-error {
           padding: var(--space-3) var(--space-4);

@@ -5,9 +5,10 @@ import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useSebHeaders } from '@/hooks/useSebHeaders';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { use, useState } from 'react';
 
-export default function ExamInstructionsPage({ params }: { params: { id: string } }) {
+export default function ExamInstructionsPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const { deviceChecks, allChecksPassed } = useDeviceCheck();
     const { videoRef, canvasRef, startWebcam } = useWebcam();
     const { isSebBrowser } = useSebHeaders();
@@ -20,7 +21,7 @@ export default function ExamInstructionsPage({ params }: { params: { id: string 
     };
 
     const handleProceed = () => {
-        router.push(`/exams/${params.id}/play`);
+        router.push(`/exams/${id}/play`);
     };
 
     const checks = [
@@ -115,7 +116,7 @@ export default function ExamInstructionsPage({ params }: { params: { id: string 
                             <h2>🔒 Launch Safe Exam Browser</h2>
                             <p>You are not currently in SEB. Click below to launch:</p>
                             <a
-                                href={`seb://${typeof window !== 'undefined' ? window.location.host : ''}/api/seb/config/${params.id}`}
+                                href={`seb://${typeof window !== 'undefined' ? window.location.host : ''}/api/seb/config/${id}`}
                                 className="btn btn-primary"
                             >
                                 Open in Safe Exam Browser

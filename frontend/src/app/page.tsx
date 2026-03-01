@@ -1,99 +1,99 @@
 'use client';
 
-import { APP_NAME } from '@/lib/constants';
+import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function HomePage() {
-    return (
-        <div className="page-wrapper">
-            {/* Hero Section */}
-            <section className="hero">
-                <div className="hero-bg" />
-                <div className="container hero-content">
-                    <div className="hero-badge">
-                        <span>🚀</span> Registration Open for 2026
-                    </div>
-                    <h1 className="hero-title">
-                        <span className="gradient-text">{APP_NAME}</span>
-                    </h1>
-                    <p className="hero-subtitle">
-                        India&apos;s premier Innovation & STEM Olympiad for students in Classes 6–12.
-                        Secure, AI-proctored, and designed to challenge the brightest minds.
-                    </p>
-                    <div className="hero-actions">
-                        <Link href="/register" className="btn btn-primary btn-lg">
-                            Register Now
-                        </Link>
-                        <Link href="/login" className="btn btn-secondary btn-lg">
-                            Student Login
-                        </Link>
-                    </div>
-                    <div className="hero-stats">
-                        <div className="hero-stat">
-                            <span className="stat-value">50K+</span>
-                            <span className="stat-label">Students</span>
-                        </div>
-                        <div className="hero-stat">
-                            <span className="stat-value">1,200+</span>
-                            <span className="stat-label">Schools</span>
-                        </div>
-                        <div className="hero-stat">
-                            <span className="stat-value">7</span>
-                            <span className="stat-label">Class Bands</span>
-                        </div>
-                        <div className="hero-stat">
-                            <span className="stat-value">AI</span>
-                            <span className="stat-label">Proctored</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
+  return (
+    <div className="page-wrapper">
+      {/* Hero Section */}
+      <section className="hero">
+        <div className="hero-bg" />
+        <div className="container hero-content">
+          <div className="hero-badge">
+            <span>🍋</span> Powered by {COMPANY_NAME}
+          </div>
+          <h1 className="hero-title">
+            <span className="gradient-text">{APP_NAME}</span>
+          </h1>
+          <p className="hero-subtitle">
+            India&apos;s premier Innovation &amp; STEM Olympiad for students in Classes 6–12,
+            by <strong>{COMPANY_NAME}</strong>. Secure, AI-proctored, and designed to challenge the brightest minds.
+          </p>
+          <div className="hero-actions">
+            <Link href="/register" className="btn btn-primary btn-lg">
+              Register Now
+            </Link>
+            <Link href="/login" className="btn btn-secondary btn-lg">
+              Student Login
+            </Link>
+          </div>
+          <div className="hero-stats">
+            <div className="hero-stat">
+              <span className="stat-value">50K+</span>
+              <span className="stat-label">Students</span>
+            </div>
+            <div className="hero-stat">
+              <span className="stat-value">1,200+</span>
+              <span className="stat-label">Schools</span>
+            </div>
+            <div className="hero-stat">
+              <span className="stat-value">7</span>
+              <span className="stat-label">Class Bands</span>
+            </div>
+            <div className="hero-stat">
+              <span className="stat-value">AI</span>
+              <span className="stat-label">Proctored</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-            {/* Features */}
-            <section className="features container">
-                <h2 className="section-title">Why Choose Us</h2>
-                <div className="grid-3 features-grid">
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">🔒</div>
-                        <h3>Secure Exam Environment</h3>
-                        <p>Safe Exam Browser integration locks down the device during exams. No cheating, no shortcuts.</p>
-                    </div>
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">🤖</div>
-                        <h3>AI Proctoring</h3>
-                        <p>Real-time face detection and identity verification ensures exam integrity without human proctors.</p>
-                    </div>
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">⏱️</div>
-                        <h3>Server-Synced Timers</h3>
-                        <p>Tamper-proof timers synced from our servers. Per-question timing ensures fairness for all.</p>
-                    </div>
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">📊</div>
-                        <h3>Instant Analytics</h3>
-                        <p>Detailed performance reports with topic-wise analysis, percentile rankings, and improvement tips.</p>
-                    </div>
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">🎮</div>
-                        <h3>Gamified Learning</h3>
-                        <p>Earn XP, build streaks, and climb leaderboards. Learning innovation has never been this engaging.</p>
-                    </div>
-                    <div className="glass-card feature-card">
-                        <div className="feature-icon">🏫</div>
-                        <h3>School Portal</h3>
-                        <p>Schools can register students in bulk, monitor performance, and access aggregate analytics.</p>
-                    </div>
-                </div>
-            </section>
+      {/* Features */}
+      <section className="features container">
+        <h2 className="section-title">Why Choose Us</h2>
+        <div className="grid-3 features-grid">
+          <div className="glass-card feature-card">
+            <div className="feature-icon">🔒</div>
+            <h3>Secure Exam Environment</h3>
+            <p>Safe Exam Browser integration locks down the device during exams. No cheating, no shortcuts.</p>
+          </div>
+          <div className="glass-card feature-card">
+            <div className="feature-icon">🤖</div>
+            <h3>AI Proctoring</h3>
+            <p>Real-time face detection and identity verification ensures exam integrity without human proctors.</p>
+          </div>
+          <div className="glass-card feature-card">
+            <div className="feature-icon">⏱️</div>
+            <h3>Server-Synced Timers</h3>
+            <p>Tamper-proof timers synced from our servers. Per-question timing ensures fairness for all.</p>
+          </div>
+          <div className="glass-card feature-card">
+            <div className="feature-icon">📊</div>
+            <h3>Instant Analytics</h3>
+            <p>Detailed performance reports with topic-wise analysis, percentile rankings, and improvement tips.</p>
+          </div>
+          <div className="glass-card feature-card">
+            <div className="feature-icon">🎮</div>
+            <h3>Gamified Learning</h3>
+            <p>Earn XP, build streaks, and climb leaderboards. Learning innovation has never been this engaging.</p>
+          </div>
+          <div className="glass-card feature-card">
+            <div className="feature-icon">🏫</div>
+            <h3>School Portal</h3>
+            <p>Schools can register students in bulk, monitor performance, and access aggregate analytics.</p>
+          </div>
+        </div>
+      </section>
 
-            {/* Footer */}
-            <footer className="footer">
-                <div className="container">
-                    <p>&copy; 2026 {APP_NAME}. All rights reserved.</p>
-                </div>
-            </footer>
+      {/* Footer */}
+      <footer className="footer">
+        <div className="container">
+          <p>&copy; 2026 {COMPANY_NAME} &mdash; {APP_NAME}. All rights reserved.</p>
+        </div>
+      </footer>
 
-            <style jsx>{`
+      <style jsx>{`
         .hero {
           position: relative;
           padding: var(--space-16) 0;
@@ -106,9 +106,9 @@ export default function HomePage() {
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(ellipse 60% 50% at 50% 20%, rgba(59, 130, 246, 0.15), transparent),
-            radial-gradient(ellipse 40% 40% at 80% 60%, rgba(139, 92, 246, 0.1), transparent),
-            radial-gradient(ellipse 40% 40% at 20% 80%, rgba(236, 72, 153, 0.08), transparent);
+            radial-gradient(ellipse 60% 50% at 50% 20%, rgba(251, 197, 11, 0.12), transparent),
+            radial-gradient(ellipse 40% 40% at 80% 60%, rgba(0, 154, 78, 0.08), transparent),
+            radial-gradient(ellipse 40% 40% at 20% 80%, rgba(255, 165, 0, 0.06), transparent);
           animation: pulseGlow 8s ease-in-out infinite alternate;
         }
         @keyframes pulseGlow {
@@ -125,8 +125,8 @@ export default function HomePage() {
           align-items: center;
           gap: var(--space-2);
           padding: var(--space-2) var(--space-4);
-          background: rgba(59, 130, 246, 0.1);
-          border: 1px solid rgba(59, 130, 246, 0.2);
+          background: rgba(251, 197, 11, 0.1);
+          border: 1px solid rgba(251, 197, 11, 0.2);
           border-radius: var(--radius-full);
           font-size: 0.85rem;
           font-weight: 600;
@@ -211,6 +211,6 @@ export default function HomePage() {
           margin-top: auto;
         }
       `}</style>
-        </div>
-    );
+    </div>
+  );
 }

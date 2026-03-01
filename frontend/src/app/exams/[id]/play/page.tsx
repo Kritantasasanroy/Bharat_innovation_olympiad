@@ -5,7 +5,7 @@ import { useExamSession } from '@/hooks/useExamSession';
 import { useTimer } from '@/hooks/useTimer';
 import { useWebcam } from '@/hooks/useWebcam';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -13,13 +13,14 @@ function formatTime(secs: number): string {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function ExamPlayPage({ params }: { params: { id: string } }) {
+export default function ExamPlayPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const {
         exam, attempt, questions, currentIndex, currentQuestion,
         answers, flagged, xpEarned, streak,
         startExam, saveAnswer, submitExam,
         goToQuestion, nextQuestion, prevQuestion, toggleFlag,
-    } = useExamSession(params.id);
+    } = useExamSession(id);
 
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
@@ -127,7 +128,7 @@ export default function ExamPlayPage({ params }: { params: { id: string } }) {
                             <div className="flex items-center gap-3">
                                 <span className="badge badge-primary">{currentQuestion.type}</span>
                                 <span className={`badge ${currentQuestion.difficulty === 'EASY' ? 'badge-success' :
-                                        currentQuestion.difficulty === 'MEDIUM' ? 'badge-warning' : 'badge-danger'
+                                    currentQuestion.difficulty === 'MEDIUM' ? 'badge-warning' : 'badge-danger'
                                     }`}>
                                     {currentQuestion.difficulty}
                                 </span>
@@ -226,8 +227,8 @@ export default function ExamPlayPage({ params }: { params: { id: string } }) {
                             <button
                                 key={q.id}
                                 className={`question-index-item ${i === currentIndex ? 'current' :
-                                        answers[q.id] ? 'answered' :
-                                            flagged.has(q.id) ? 'flagged' : ''
+                                    answers[q.id] ? 'answered' :
+                                        flagged.has(q.id) ? 'flagged' : ''
                                     }`}
                                 onClick={() => goToQuestion(i)}
                             >
