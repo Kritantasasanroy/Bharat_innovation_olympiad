@@ -5,7 +5,7 @@ import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useSebHeaders } from '@/hooks/useSebHeaders';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useRouter } from 'next/navigation';
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 
 export default function ExamInstructionsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -14,11 +14,21 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const { isSebBrowser } = useSebHeaders();
     const router = useRouter();
     const [webcamStarted, setWebcamStarted] = useState(false);
+    const [webcamLoading, setWebcamLoading] = useState(false);
 
     const handleStartWebcam = async () => {
-        await startWebcam();
-        setWebcamStarted(true);
+        setWebcamLoading(true);
+        const stream = await startWebcam();
+        setWebcamStarted(!!stream);
+        setWebcamLoading(false);
     };
+
+    // Auto-start webcam once the camera permission check passes
+    useEffect(() => {
+        if (deviceChecks.webcam && !webcamStarted && !webcamLoading) {
+            handleStartWebcam();
+        }
+    }, [deviceChecks.webcam]);
 
     const handleProceed = () => {
         router.push(`/exams/${id}/play`);
@@ -39,12 +49,20 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         },
         {
             label: 'Webcam',
-            description: 'Camera access required for AI proctoring',
+            description: deviceChecks.webcam === null
+                ? 'Requesting camera permission...'
+                : deviceChecks.webcam
+                    ? (webcamStarted ? 'Camera active and ready' : 'Camera detected, starting...')
+                    : 'Camera access denied or no camera found',
             passed: deviceChecks.webcam && webcamStarted,
         },
         {
             label: 'Microphone',
-            description: 'Audio input device detected',
+            description: deviceChecks.audio === null
+                ? 'Requesting microphone permission...'
+                : deviceChecks.audio
+                    ? 'Microphone detected'
+                    : 'No microphone found or access denied',
             passed: deviceChecks.audio,
         },
     ];
@@ -80,8 +98,8 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <div className="device-check-list">
                             {checks.map((check, i) => (
                                 <div key={i} className="device-check-item">
-                                    <div className={`check-icon ${check.passed ? 'pass' : 'fail'}`}>
-                                        {check.passed ? '✓' : '✗'}
+                                    <div className={`check-icon ${check.passed ? 'pass' : check.passed === null ? 'pending' : 'fail'}`}>
+                                        {check.passed ? '✓' : check.passed === null ? '…' : '✗'}
                                     </div>
                                     <div>
                                         <strong>{check.label}</strong>
@@ -97,15 +115,28 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     {/* Webcam Preview */}
                     <div className="glass-card instructions-card">
                         <h2>📷 Webcam Check</h2>
-                        {!webcamStarted ? (
-                            <button className="btn btn-secondary" onClick={handleStartWebcam}>
-                                Enable Webcam
-                            </button>
-                        ) : (
+                        {webcamStarted ? (
                             <div className="webcam-preview">
                                 <video ref={videoRef} autoPlay muted playsInline />
                                 <div className="webcam-indicator" />
                                 <canvas ref={canvasRef} style={{ display: 'none' }} />
+                            </div>
+                        ) : (
+                            <div>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
+                                    {deviceChecks.webcam === null
+                                        ? 'Waiting for camera permission...'
+                                        : deviceChecks.webcam === false
+                                            ? 'Camera access was denied. Please allow camera access in your browser settings and try again.'
+                                            : 'Starting camera...'}
+                                </p>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={handleStartWebcam}
+                                    disabled={webcamLoading}
+                                >
+                                    {webcamLoading ? 'Starting...' : 'Enable Webcam'}
+                                </button>
                             </div>
                         )}
                     </div>

@@ -5,6 +5,17 @@ import { useProctorStore } from '@/store/proctorStore';
 import { useEffect } from 'react';
 import { useSebHeaders } from './useSebHeaders';
 
+/**
+ * Checks device compatibility for the exam environment.
+ *
+ * Strategy for webcam/audio:
+ *   1. Always request getUserMedia FIRST to trigger the browser permission prompt.
+ *      enumerateDevices() alone is unreliable — most browsers return devices
+ *      with empty labels (or no devices at all) before permission is granted.
+ *   2. Request video and audio SEPARATELY so one failing doesn't block the other.
+ *   3. Stop temporary streams immediately after confirming they work.
+ *   4. Re-enumerate devices after permission is granted for accurate results.
+ */
 export function useDeviceCheck() {
     const { setDeviceCheck, deviceChecks, allChecksPassed } = useProctorStore();
     const { isSebBrowser } = useSebHeaders();
@@ -32,41 +43,46 @@ export function useDeviceCheck() {
         // 2. SEB check
         setDeviceCheck('seb', isSebBrowser());
 
-        // 3 & 4. Webcam + Audio check
-        // enumerateDevices() may not detect devices before permission is granted.
-        // We first try enumerating; if no devices found, request a temporary stream
-        // to trigger the browser permission prompt, then re-enumerate.
-        const checkMediaDevices = async () => {
+        // 3 & 4. Webcam + Audio — always request permission first
+        const checkCamera = async () => {
             try {
-                let devices = await navigator.mediaDevices.enumerateDevices();
-                let hasCamera = devices.some((d) => d.kind === 'videoinput');
-                let hasMic = devices.some((d) => d.kind === 'audioinput');
-
-                // If no camera/mic found, it might be because permission hasn't been granted yet.
-                // Request a temporary stream to trigger the permission prompt.
-                if (!hasCamera && !hasMic) {
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                        // Stop the temporary stream immediately
-                        stream.getTracks().forEach((t) => t.stop());
-                        // Re-enumerate after permission is granted
-                        devices = await navigator.mediaDevices.enumerateDevices();
-                        hasCamera = devices.some((d) => d.kind === 'videoinput');
-                        hasMic = devices.some((d) => d.kind === 'audioinput');
-                    } catch {
-                        // User denied or no devices — that's okay
-                    }
-                }
-
-                setDeviceCheck('webcam', hasCamera);
-                setDeviceCheck('audio', hasMic);
-            } catch {
+                // Request camera permission — this triggers the browser prompt
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                });
+                // Camera works — stop the temporary stream
+                stream.getTracks().forEach((t) => t.stop());
+                setDeviceCheck('webcam', true);
+            } catch (err: unknown) {
+                console.warn('[DeviceCheck] Camera check failed:', err);
                 setDeviceCheck('webcam', false);
+            }
+        };
+
+        const checkMicrophone = async () => {
+            try {
+                // Request microphone permission separately
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                });
+                stream.getTracks().forEach((t) => t.stop());
+                setDeviceCheck('audio', true);
+            } catch (err: unknown) {
+                console.warn('[DeviceCheck] Microphone check failed:', err);
                 setDeviceCheck('audio', false);
             }
         };
 
-        checkMediaDevices();
+        // Check if mediaDevices API is available at all
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+            // Run camera and mic checks in parallel (separate prompts)
+            checkCamera();
+            checkMicrophone();
+        } else {
+            console.error('[DeviceCheck] navigator.mediaDevices not available — page must be served over HTTPS');
+            setDeviceCheck('webcam', false);
+            setDeviceCheck('audio', false);
+        }
 
         return () => {
             window.removeEventListener('resize', checkViewport);
