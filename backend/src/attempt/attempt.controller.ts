@@ -2,7 +2,6 @@ import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/comm
 import { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { SebGuard } from '../common/guards/seb.guard';
 import { AttemptService } from './attempt.service';
 
 @Controller()
@@ -11,7 +10,6 @@ export class AttemptController {
     constructor(private attemptService: AttemptService) { }
 
     @Post('exams/:instanceId/start')
-    @UseGuards(SebGuard) // SEB validation applied on exam start
     async startAttempt(
         @Param('instanceId') instanceId: string,
         @CurrentUser('id') userId: string,

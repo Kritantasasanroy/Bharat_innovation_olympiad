@@ -26,7 +26,7 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
     deviceChecks: {
         viewport: false,
         webcam: false,
-        seb: false,
+        fullscreen: false,
         audio: false,
     },
     allChecksPassed: false,
@@ -52,7 +52,7 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
 
     reset: () =>
         set({
-            deviceChecks: { viewport: false, webcam: false, seb: false, audio: false },
+            deviceChecks: { viewport: false, webcam: false, fullscreen: false, audio: false },
             allChecksPassed: false,
             webcamStream: null,
             isWebcamActive: false,

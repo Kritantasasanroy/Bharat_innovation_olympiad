@@ -68,6 +68,20 @@ export class ExamService {
 
     // ── Admin operations ──
 
+    async findAllExamsForAdmin() {
+        return this.prisma.exam.findMany({
+            include: {
+                _count: {
+                    select: {
+                        sections: true,
+                        instances: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+
     async createExam(data: {
         title: string;
         description?: string;

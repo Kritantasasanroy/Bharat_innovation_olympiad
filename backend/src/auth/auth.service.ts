@@ -139,6 +139,37 @@ export class AuthService {
         });
     }
 
+    async getAllStudentsWithMarks() {
+        return this.prisma.user.findMany({
+            where: { role: 'STUDENT' },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                classBand: true,
+                school: { select: { name: true } },
+                createdAt: true,
+                attempts: {
+                    select: {
+                        id: true,
+                        status: true,
+                        totalScore: true,
+                        maxScore: true,
+                        submittedAt: true,
+                        examInstance: {
+                            select: {
+                                exam: { select: { title: true } }
+                            }
+                        }
+                    },
+                    orderBy: { submittedAt: 'desc' },
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    }
+
     private async generateTokens(userId: string, email: string, role: string) {
         const payload: JwtPayload = { sub: userId, email, role };
 

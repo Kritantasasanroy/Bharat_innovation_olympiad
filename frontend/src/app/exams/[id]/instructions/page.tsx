@@ -2,7 +2,6 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import { useDeviceCheck } from '@/hooks/useDeviceCheck';
-import { useSebHeaders } from '@/hooks/useSebHeaders';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
@@ -11,7 +10,6 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const { id } = use(params);
     const { deviceChecks, allChecksPassed } = useDeviceCheck();
     const { videoRef, canvasRef, startWebcam } = useWebcam();
-    const { isSebBrowser } = useSebHeaders();
     const router = useRouter();
     const [webcamStarted, setWebcamStarted] = useState(false);
     const [webcamLoading, setWebcamLoading] = useState(false);
@@ -41,11 +39,9 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
             passed: deviceChecks.viewport,
         },
         {
-            label: 'Safe Exam Browser',
-            description: 'SEB must be installed and active',
-            passed: deviceChecks.seb,
-            // For dev, we allow bypassing SEB check
-            allowBypass: true,
+            label: 'Fullscreen Support',
+            description: 'Browser must support fullscreen mode',
+            passed: deviceChecks.fullscreen,
         },
         {
             label: 'Webcam',
@@ -82,13 +78,14 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     <div className="glass-card instructions-card">
                         <h2>📋 Rules & Guidelines</h2>
                         <ul className="rules-list">
-                            <li>This exam must be taken using <strong>Safe Exam Browser (SEB)</strong>.</li>
+                            <li>The exam must be taken in <strong>fullscreen mode</strong>.</li>
                             <li>Your webcam must remain on throughout the exam for AI proctoring.</li>
-                            <li>Each question has its own timer — answer before it expires.</li>
-                            <li>No switching tabs, apps, or windows during the exam.</li>
-                            <li>Your answers are auto-saved every 10 seconds.</li>
+                            <li>Exiting fullscreen or switching tabs will pause the exam.</li>
+                            <li>If paused for more than 20 seconds, the exam will auto-submit.</li>
+                            <li>Maximum 3 violations allowed — exam auto-submits after that.</li>
+                            <li>Your answers are auto-saved continuously.</li>
                             <li>Negative marking applies for incorrect MCQ answers.</li>
-                            <li>Do not close the browser — use the Submit button when done.</li>
+                            <li>Use the Submit button when done — do not close the browser.</li>
                         </ul>
                     </div>
 
@@ -141,31 +138,11 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         )}
                     </div>
 
-                    {/* SEB Launch (if not in SEB) */}
-                    {!isSebBrowser() && (
-                        <div className="glass-card instructions-card seb-notice">
-                            <h2>🔒 Launch Safe Exam Browser</h2>
-                            <p>You are not currently in SEB. Click below to launch:</p>
-                            <a
-                                href={`seb://${typeof window !== 'undefined' ? window.location.host : ''}/api/seb/config/${id}`}
-                                className="btn btn-primary"
-                            >
-                                Open in Safe Exam Browser
-                            </a>
-                            <p className="seb-download">
-                                Don&apos;t have SEB?{' '}
-                                <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noopener">
-                                    Download here
-                                </a>
-                            </p>
-                        </div>
-                    )}
-
                     {/* Start Button */}
                     <div className="instructions-actions">
                         <button
                             className="btn btn-primary btn-lg"
-                            disabled={!deviceChecks.viewport || !webcamStarted}
+                            disabled={!deviceChecks.viewport || !deviceChecks.fullscreen || !webcamStarted}
                             onClick={handleProceed}
                         >
                             ✅ Start Exam

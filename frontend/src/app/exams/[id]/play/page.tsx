@@ -25,6 +25,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [pauseReason, setPauseReason] = useState<string>('');
 
     // Connect timer (only after attempt exists)
     const attemptId = attempt?.id || '';
@@ -32,6 +33,55 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     // Webcam proctoring
     const { videoRef, canvasRef, startWebcam, startProctoring } = useWebcam(attemptId);
+
+    // Handle auto-submit
+    const handleAutoSubmit = async (reason: string) => {
+        if (isSubmitting) return;
+        
+        setIsSubmitting(true);
+        try {
+            const result = await submitExam();
+            alert(`Exam auto-submitted: ${reason}`);
+            if (result?.redirectUrl) {
+                window.location.href = result.redirectUrl;
+            } else {
+                window.location.href = '/results';
+            }
+        } catch (err) {
+            console.error('Auto-submit error:', err);
+        }
+    };
+
+    // Fullscreen monitoring
+    const { isPaused, violationCount, isFullscreen } = useFullscreenMonitor({
+        onViolation: async (type, count) => {
+            console.log(`[Fullscreen] Violation ${count}: ${type}`);
+            setPauseReason(type === 'exit_fullscreen' ? 'Fullscreen exited' : 'Tab switched');
+            
+            // Log violation to backend
+            if (attemptId) {
+                try {
+                    await api.post(`/proctor/events`, {
+                        attemptId,
+                        type: type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN' : 'TAB_SWITCH',
+                        details: { violationCount: count },
+                    });
+                } catch (err) {
+                    console.error('[Fullscreen] Failed to log violation:', err);
+                }
+            }
+        },
+        onPause: () => {
+            console.log('[Fullscreen] Exam paused');
+        },
+        onResume: () => {
+            console.log('[Fullscreen] Exam resumed');
+            setPauseReason('');
+        },
+        onAutoSubmit: handleAutoSubmit,
+        maxViolations: 3,
+        pauseTimeoutSec: 20,
+    });
 
     useEffect(() => {
         // Start exam on mount
@@ -48,6 +98,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     }, [currentIndex, currentQuestion, answers]);
 
     const handleSelectOption = (optionId: string) => {
+        if (isPaused) return; // Prevent interaction when paused
         setSelectedOption(optionId);
         if (currentQuestion) {
             saveAnswer(currentQuestion.id, optionId);
@@ -90,6 +141,25 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <div className="exam-player">
+                {/* ── Pause Overlay ── */}
+                {isPaused && (
+                    <div className="pause-overlay">
+                        <div className="pause-modal glass-card">
+                            <h2>⚠️ Exam Paused</h2>
+                            <p>{pauseReason}</p>
+                            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                                Return to fullscreen to resume.
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--warning-400)', marginTop: '12px' }}>
+                                Violations: {violationCount} / 3
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--danger-400)' }}>
+                                Exam will auto-submit if paused for more than 20 seconds.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Header ── */}
                 <header className="exam-header">
                     <div className="flex items-center gap-4">
@@ -97,9 +167,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <span className="badge badge-primary">
                             Q {currentIndex + 1} / {questions.length}
                         </span>
+                        {!isFullscreen && (
+                            <span className="badge badge-danger" style={{ fontSize: '0.75rem' }}>
+                                ⚠️ Not Fullscreen
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-4">
+                        {/* Violation Counter */}
+                        {violationCount > 0 && (
+                            <div className="violation-badge">
+                                ⚠️ {violationCount} / 3
+                            </div>
+                        )}
+
                         {/* XP Badge */}
                         <div className="xp-badge">
                             ⚡ {xpEarned} XP
@@ -140,7 +222,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                             <button
                                 className={`btn btn-sm ${flagged.has(currentQuestion.id) ? 'btn-danger' : 'btn-secondary'}`}
-                                onClick={() => toggleFlag(currentQuestion.id)}
+                                onClick={() => !isPaused && toggleFlag(currentQuestion.id)}
+                                disabled={isPaused}
                             >
                                 {flagged.has(currentQuestion.id) ? '🚩 Flagged' : '🏳 Flag'}
                             </button>
@@ -157,7 +240,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                 {currentQuestion.options.map((opt, i) => (
                                     <div
                                         key={opt.id}
-                                        className={`option-item ${selectedOption === opt.id ? 'selected' : ''}`}
+                                        className={`option-item ${selectedOption === opt.id ? 'selected' : ''} ${isPaused ? 'disabled' : ''}`}
                                         onClick={() => handleSelectOption(opt.id)}
                                     >
                                         <div className="option-radio" />
@@ -176,7 +259,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className="question-nav">
                             <button
                                 className="btn btn-secondary"
-                                disabled={currentIndex === 0}
+                                disabled={currentIndex === 0 || isPaused}
                                 onClick={prevQuestion}
                             >
                                 ← Previous
@@ -184,6 +267,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                             <button
                                 className="btn btn-secondary"
+                                disabled={isPaused}
                                 onClick={() => {
                                     setSelectedOption(null);
                                     if (currentQuestion) saveAnswer(currentQuestion.id, null);
@@ -193,13 +277,18 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </button>
 
                             {currentIndex < questions.length - 1 ? (
-                                <button className="btn btn-primary" onClick={nextQuestion}>
+                                <button 
+                                    className="btn btn-primary" 
+                                    onClick={nextQuestion}
+                                    disabled={isPaused}
+                                >
                                     Next →
                                 </button>
                             ) : (
                                 <button
                                     className="btn btn-primary"
                                     onClick={() => setShowSubmitConfirm(true)}
+                                    disabled={isPaused}
                                 >
                                     Submit Exam ✓
                                 </button>
@@ -230,7 +319,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     answers[q.id] ? 'answered' :
                                         flagged.has(q.id) ? 'flagged' : ''
                                     }`}
-                                onClick={() => goToQuestion(i)}
+                                onClick={() => !isPaused && goToQuestion(i)}
+                                disabled={isPaused}
                             >
                                 {i + 1}
                             </button>
@@ -247,6 +337,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <button
                         className="btn btn-danger btn-lg sidebar-submit"
                         onClick={() => setShowSubmitConfirm(true)}
+                        disabled={isPaused}
                     >
                         Submit Exam
                     </button>
@@ -281,6 +372,26 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 )}
 
                 <style jsx>{`
+          .pause-overlay {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(12px);
+            display: flex; align-items: center; justify-content: center;
+          }
+          .pause-modal {
+            padding: var(--space-8); max-width: 500px; width: 90%;
+            text-align: center;
+          }
+          .pause-modal h2 { margin-bottom: var(--space-4); color: var(--warning-400); }
+          .violation-badge {
+            display: flex; align-items: center; gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: var(--radius-full);
+            font-size: 0.85rem; font-weight: 600;
+            color: var(--danger-400);
+          }
           .question-container { max-width: 800px; }
           .question-header {
             display: flex; justify-content: space-between; align-items: center;
@@ -295,6 +406,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             border: 1px solid var(--border-subtle);
           }
           .options-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); }
+          .option-item.disabled { opacity: 0.5; cursor: not-allowed; }
           .option-content { display: flex; gap: var(--space-2); }
           .option-label { font-weight: 600; color: var(--text-secondary); min-width: 24px; }
           .question-nav { display: flex; justify-content: space-between; gap: var(--space-3); }

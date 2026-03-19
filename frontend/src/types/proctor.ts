@@ -5,9 +5,9 @@ export type ProctorEventType =
     | 'MULTIPLE_FACES'
     | 'FACE_MISMATCH'
     | 'TAB_SWITCH'
+    | 'EXIT_FULLSCREEN'
     | 'SCREEN_CAPTURE'
-    | 'NETWORK_DISCONNECT'
-    | 'SEB_VIOLATION';
+    | 'NETWORK_DISCONNECT';
 
 export interface ProctorEvent {
     id: string;
@@ -29,6 +29,6 @@ export interface FrameAnalysisResult {
 export interface DeviceCheckStatus {
     viewport: boolean;
     webcam: boolean;
-    seb: boolean;
+    fullscreen: boolean;
     audio: boolean;
 }

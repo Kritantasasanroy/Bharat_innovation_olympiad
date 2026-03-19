@@ -37,4 +37,13 @@ export class AuthController {
     async getMe(@CurrentUser('id') userId: string) {
         return this.authService.getMe(userId);
     }
+
+    @Get('admin/users')
+    @UseGuards(JwtAuthGuard)
+    async getAllStudentsWithMarks(@CurrentUser('role') role: string) {
+        if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+            throw new Error('Unauthorized role');
+        }
+        return this.authService.getAllStudentsWithMarks();
+    }
 }

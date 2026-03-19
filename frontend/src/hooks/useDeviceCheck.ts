@@ -3,7 +3,6 @@
 import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
 import { useProctorStore } from '@/store/proctorStore';
 import { useEffect } from 'react';
-import { useSebHeaders } from './useSebHeaders';
 
 /**
  * Checks device compatibility for the exam environment.
@@ -18,7 +17,6 @@ import { useSebHeaders } from './useSebHeaders';
  */
 export function useDeviceCheck() {
     const { setDeviceCheck, deviceChecks, allChecksPassed } = useProctorStore();
-    const { isSebBrowser } = useSebHeaders();
 
     useEffect(() => {
         // 1. Viewport check — minimum 1024×768 ("10-inch class")
@@ -40,8 +38,19 @@ export function useDeviceCheck() {
         checkViewport();
         window.addEventListener('resize', checkViewport);
 
-        // 2. SEB check
-        setDeviceCheck('seb', isSebBrowser());
+        // 2. Fullscreen capability check
+        const checkFullscreen = () => {
+            const elem = document.documentElement;
+            const hasFullscreen = !!(
+                elem.requestFullscreen ||
+                (elem as any).webkitRequestFullscreen ||
+                (elem as any).mozRequestFullScreen ||
+                (elem as any).msRequestFullscreen
+            );
+            setDeviceCheck('fullscreen', hasFullscreen);
+        };
+
+        checkFullscreen();
 
         // 3 & 4. Webcam + Audio — always request permission first
         const checkCamera = async () => {

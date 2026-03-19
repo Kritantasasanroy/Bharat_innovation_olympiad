@@ -41,6 +41,13 @@ export class ExamController {
 
     // ── Admin routes ──
 
+    @Get('admin/exams')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async getAllExamsAdmin() {
+        return this.examService.findAllExamsForAdmin();
+    }
+
     @Post('admin/exams')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
