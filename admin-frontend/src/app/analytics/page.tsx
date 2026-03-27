@@ -37,7 +37,7 @@ export default function AdminAnalyticsPage() {
     useEffect(() => {
         const fetchStudents = async () => {
             try {
-                const { data } = await api.get<Student[]>('/admin/users');
+                const { data } = await api.get<Student[]>('/auth/admin/users');
                 setStudents(data);
             } catch (err) {
                 console.error('Failed to fetch students data', err);
@@ -150,81 +150,7 @@ export default function AdminAnalyticsPage() {
                     </div>
                 )}
 
-                <style jsx>{`
-                    .page-content { padding: var(--space-8) var(--space-6); min-height: calc(100vh - 72px); }
-                    .page-header { margin-bottom: var(--space-6); }
-                    
-                    .analytics-toolbar {
-                        display: flex; justify-content: space-between; align-items: center;
-                        margin-bottom: var(--space-6); gap: var(--space-4);
-                        flex-wrap: wrap;
-                    }
-                    .search-input {
-                        flex-grow: 1; max-width: 400px;
-                        padding: var(--space-3) var(--space-4);
-                        border-radius: var(--radius-full);
-                        border: 1px solid var(--border-default);
-                        background: var(--bg-input); color: var(--text-primary);
-                        transition: border-color var(--transition-fast);
-                    }
-                    .search-input:focus { outline: none; border-color: var(--primary-400); }
-                    .stats-pill {
-                        padding: var(--space-2) var(--space-4);
-                        border-radius: var(--radius-full);
-                        font-size: 0.9rem; color: var(--text-secondary);
-                    }
-                    
-                    /* Table Styles */
-                    .table-responsive { overflow-x: auto; padding: var(--space-2); }
-                    .data-table {
-                        width: 100%; border-collapse: collapse; text-align: left;
-                    }
-                    .data-table th, .data-table td {
-                        padding: var(--space-4) var(--space-5);
-                        border-bottom: 1px solid var(--border-subtle);
-                        vertical-align: middle;
-                    }
-                    .data-table th {
-                        font-size: 0.8rem; text-transform: uppercase;
-                        color: var(--text-muted); font-weight: 600;
-                        letter-spacing: 0.5px;
-                    }
-                    .data-table tr:last-child td { border-bottom: none; }
-                    .data-table tbody tr { transition: background-color var(--transition-fast); }
-                    .data-table tbody tr:hover { background-color: rgba(255, 255, 255, 0.02); }
-                    
-                    .student-name { display: flex; flex-direction: column; }
-                    .join-date { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-                    .text-muted { color: var(--text-muted); font-size: 0.9rem; }
-                    
-                    /* Attempts Styles */
-                    .attempts-list { display: flex; flex-direction: column; gap: var(--space-2); }
-                    .attempt-badge {
-                        display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);
-                        background: var(--bg-elevated); padding: var(--space-2) var(--space-3);
-                        border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
-                        font-size: 0.85rem;
-                    }
-                    .exam-title { color: var(--text-secondary); font-weight: 500; }
-                    
-                    .status-pill {
-                        padding: 2px 8px; border-radius: var(--radius-full);
-                        font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px;
-                    }
-                    .status-pill.submitted, .status-pill.auto_submitted {
-                        background: rgba(16, 185, 129, 0.1); color: var(--success-400); border: 1px solid rgba(16, 185, 129, 0.2);
-                    }
-                    .status-pill.in_progress {
-                        background: rgba(245, 158, 11, 0.1); color: var(--warning-400); border: 1px solid rgba(245, 158, 11, 0.2);
-                    }
-                    .status-pill.not_started {
-                        background: rgba(107, 114, 128, 0.1); color: var(--text-muted); border: 1px solid rgba(107, 114, 128, 0.2);
-                    }
-                    
-                    .empty-state {
-                        padding: var(--space-12) var(--space-6); text-align: center;
-                    }
-                `}</style>
+                
             </main>
         </AuthGuard>
     );

@@ -153,62 +153,7 @@ export default function RegisterPage() {
                 </div>
             </div>
 
-            <style jsx>{`
-        .auth-page {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: var(--space-6);
-        }
-        .auth-container {
-          width: 100%;
-          max-width: 520px;
-          padding: var(--space-8) var(--space-10);
-          background: var(--glass-bg);
-          backdrop-filter: blur(var(--glass-blur));
-          border: 1px solid var(--glass-border);
-          border-radius: var(--radius-xl);
-          box-shadow: var(--shadow-xl);
-        }
-        .auth-header {
-          text-align: center;
-          margin-bottom: var(--space-6);
-        }
-        .auth-logo { font-size: 2.5rem; margin-bottom: var(--space-2); }
-        .auth-title {
-          font-size: 1.3rem; font-weight: 800;
-          background: var(--gradient-brand);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .auth-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: var(--space-2); }
-        .auth-company { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); margin-top: var(--space-1); letter-spacing: 0.03em; }
-        .auth-form { display: flex; flex-direction: column; }
-        .auth-error {
-          padding: var(--space-3) var(--space-4);
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          border-radius: var(--radius-md);
-          color: var(--danger-400);
-          font-size: 0.85rem;
-          margin-bottom: var(--space-4);
-        }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-        .auth-submit { width: 100%; margin-top: var(--space-4); }
-        .auth-footer {
-          text-align: center; margin-top: var(--space-5);
-          font-size: 0.9rem; color: var(--text-secondary);
-        }
-        select.input-field {
-          appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 12px center;
-          padding-right: 36px;
-        }
-      `}</style>
+            
         </div>
     );
 }

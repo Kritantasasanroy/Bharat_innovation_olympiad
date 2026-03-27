@@ -9,11 +9,20 @@ export function useExamSession(instanceId: string) {
     const store = useExamStore();
 
     const startExam = useCallback(async () => {
-        // Start attempt on server
-        const { data: attempt } = await api.post<Attempt>(`/exams/${instanceId}/start`);
+        // Find instance id first, because we only have exam id from route
+        // Assuming the route is /exams/[id] where id is the examId, not instanceId
+        const { data: examData } = await api.get<Exam>(`/exams/${instanceId}`);
+        const activeInstance = examData.instances?.[0]; // Get the first active instance
+        
+        if (!activeInstance) {
+            throw new Error('No active instance found for this exam');
+        }
 
-        // Load exam data
-        const { data: exam } = await api.get<Exam>(`/exams/${attempt.examInstanceId}`);
+        // Start attempt on server using the instance ID
+        const { data: attempt } = await api.post<Attempt>(`/exams/${activeInstance.id}/start`);
+
+        // Load full exam data including questions
+        const { data: exam } = await api.get<Exam>(`/exams/${examData.id}`);
 
         // Flatten questions from sections
         const questions: Question[] = exam.sections

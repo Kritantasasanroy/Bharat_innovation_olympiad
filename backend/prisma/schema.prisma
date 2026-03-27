@@ -62,6 +62,7 @@ model Exam {
   totalMarks      Int
   durationMinutes Int
   isPublished     Boolean        @default(false)
+  isResultReleased Boolean       @default(false)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   instances       ExamInstance[]

@@ -1,0 +1,2 @@
+ALTER TABLE "Exam"
+ADD COLUMN "isResultReleased" BOOLEAN NOT NULL DEFAULT false;

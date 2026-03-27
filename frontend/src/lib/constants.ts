@@ -5,8 +5,8 @@ export const APP_SHORT = 'BIO';
 export const COMPANY_NAME = 'Lemon Ideas';
 
 // Minimum viewport for "10-inch class" screens
-export const MIN_VIEWPORT_WIDTH = 1024;
-export const MIN_VIEWPORT_HEIGHT = 768;
+export const MIN_VIEWPORT_WIDTH = 800; // Adjusted for smaller 10-inch tablets (often 800x1280 or similar)
+export const MIN_VIEWPORT_HEIGHT = 600;
 
 // Timer thresholds (seconds)
 export const TIMER_WARNING_THRESHOLD = 300;  // 5 minutes

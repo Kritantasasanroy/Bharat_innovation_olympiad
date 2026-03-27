@@ -92,8 +92,20 @@ export function useFullscreenMonitor({
   };
 
   useEffect(() => {
-    // Request fullscreen on mount
-    requestFullscreen();
+    // Request fullscreen on mount if we're not already in fullscreen
+    // Wrap in a user interaction event listener or just attempt and catch the warning silently
+    // since browsers require user gesture to enter fullscreen.
+    const attemptFullscreen = async () => {
+      try {
+        if (!checkFullscreen()) {
+          await requestFullscreen();
+        }
+      } catch (e) {
+        console.warn('Fullscreen request blocked by browser policy. User needs to interact with page first.');
+      }
+    };
+    
+    attemptFullscreen();
 
     // Fullscreen change handler
     const handleFullscreenChange = () => {

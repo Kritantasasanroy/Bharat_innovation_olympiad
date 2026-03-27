@@ -18,6 +18,13 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         setWebcamLoading(true);
         const stream = await startWebcam();
         setWebcamStarted(!!stream);
+        
+        // Ensure the video element plays the stream
+        if (stream && videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(e => console.error("Error playing video:", e));
+        }
+        
         setWebcamLoading(false);
     };
 
@@ -35,7 +42,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const checks = [
         {
             label: 'Screen Resolution',
-            description: 'Minimum 1024×768 display required',
+            description: 'Minimum 800×600 display required',
             passed: deviceChecks.viewport,
         },
         {
@@ -153,74 +160,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     </div>
                 </div>
 
-                <style jsx>{`
-          .instructions-page {
-            min-height: 100vh;
-            padding: var(--space-8) var(--space-6);
-            display: flex;
-            justify-content: center;
-          }
-          .instructions-container {
-            max-width: 720px;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-6);
-          }
-          .instructions-header {
-            text-align: center;
-            margin-bottom: var(--space-4);
-          }
-          .instructions-subtitle {
-            color: var(--text-secondary);
-            margin-top: var(--space-2);
-          }
-          .instructions-card {
-            padding: var(--space-6) var(--space-8);
-          }
-          .instructions-card h2 {
-            font-size: 1.1rem;
-            margin-bottom: var(--space-5);
-          }
-          .rules-list {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-3);
-          }
-          .rules-list li {
-            padding-left: var(--space-5);
-            position: relative;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            line-height: 1.6;
-          }
-          .rules-list li::before {
-            content: '•';
-            position: absolute;
-            left: 0;
-            color: var(--primary-400);
-            font-weight: bold;
-          }
-          .seb-notice {
-            border-color: rgba(245, 158, 11, 0.3);
-            background: rgba(245, 158, 11, 0.05);
-          }
-          .seb-download {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: var(--space-3);
-          }
-          .instructions-actions {
-            text-align: center;
-            padding: var(--space-4) 0;
-          }
-          .start-note {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-top: var(--space-3);
-          }
-        `}</style>
+                
             </div>
         </AuthGuard>
     );

@@ -116,27 +116,7 @@ export default function ResultsPage() {
                     </div>
                 )}
 
-                <style jsx>{`
-          .results-list { display: flex; flex-direction: column; gap: var(--space-6); }
-          .result-card { padding: var(--space-6) var(--space-8); }
-          .result-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: var(--space-6);
-          }
-          .result-body { display: flex; align-items: center; gap: var(--space-10); }
-          .result-score-ring { width: 120px; height: 120px; flex-shrink: 0; }
-          .ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-          .ring-svg text { transform: rotate(90deg); transform-origin: 50% 50%; }
-          .result-stats { display: flex; gap: var(--space-8); }
-          .result-stat { display: flex; flex-direction: column; }
-          .result-stat-value {
-            font-size: 1.3rem; font-weight: 800;
-            background: var(--gradient-brand);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text;
-          }
-          .result-stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
-        `}</style>
+                
             </main>
         </AuthGuard>
     );

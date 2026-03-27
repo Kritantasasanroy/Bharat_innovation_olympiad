@@ -43,4 +43,14 @@ export class AttemptController {
     ) {
         return this.attemptService.submitAttempt(attemptId, userId);
     }
+
+    @Get('attempts/results')
+    async getResults(@CurrentUser('id') userId: string) {
+        return this.attemptService.getResults(userId);
+    }
+
+    @Get('attempts/recent')
+    async getRecentResults(@CurrentUser('id') userId: string) {
+        return this.attemptService.getRecentResults(userId);
+    }
 }

@@ -204,6 +204,73 @@ export class AttemptService {
         });
     }
 
+    async getResults(userId: string) {
+        const attempts = await this.prisma.attempt.findMany({
+            where: {
+                userId,
+                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                examInstance: {
+                    exam: {
+                        isResultReleased: true,
+                    },
+                },
+            },
+            include: {
+                examInstance: {
+                    include: {
+                        exam: true,
+                    },
+                },
+            },
+            orderBy: {
+                submittedAt: 'desc',
+            },
+        });
+
+        return attempts.map((attempt) => ({
+            id: attempt.id,
+            title: attempt.examInstance.exam.title,
+            score: attempt.totalScore || 0,
+            total: attempt.maxScore || attempt.examInstance.exam.totalMarks,
+            date: attempt.submittedAt,
+            percentage:
+                ((attempt.totalScore || 0) / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100,
+        }));
+    }
+
+    async getRecentResults(userId: string) {
+        const attempts = await this.prisma.attempt.findMany({
+            where: {
+                userId,
+                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                examInstance: {
+                    exam: {
+                        isResultReleased: true,
+                    },
+                },
+            },
+            include: {
+                examInstance: {
+                    include: {
+                        exam: true,
+                    },
+                },
+            },
+            orderBy: {
+                submittedAt: 'desc',
+            },
+            take: 5,
+        });
+
+        return attempts.map((attempt) => ({
+            id: attempt.id,
+            examTitle: attempt.examInstance.exam.title,
+            score: attempt.totalScore || 0,
+            totalMarks: attempt.maxScore || attempt.examInstance.exam.totalMarks,
+            completedAt: attempt.submittedAt,
+        }));
+    }
+
     async findById(id: string) {
         return this.prisma.attempt.findUnique({
             where: { id },

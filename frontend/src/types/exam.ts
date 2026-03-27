@@ -13,6 +13,7 @@ export interface Exam {
     durationMinutes: number;
     isPublished: boolean;
     sections: ExamSection[];
+    instances?: ExamInstance[];
     createdAt: string;
 }
 

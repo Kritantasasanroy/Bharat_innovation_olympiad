@@ -5,22 +5,19 @@ Built by **Lemon Ideas**.
 
 ## Architecture
 
-| Service | Tech | Port |
-|---------|------|------|
-| Frontend | Next.js 16 + TypeScript | 3000 |
-| Backend API | NestJS + TypeScript + Prisma | 4000 |
-| Database | PostgreSQL 16 | 5432 |
-| Cache | Redis 7 | 6379 |
+The platform has been modernized for maximum security and separation of concerns. The Admin portal runs as a completely independent application so that students have zero code proximity to administrative features.
+
+| Service | Tech | Port | Description |
+|---------|------|------|-------------|
+| **Frontend (Student)** | Next.js 14 | 3000 | The student portal for taking exams and viewing results. |
+| **Admin Frontend** | Next.js 14 | 3001 | The dedicated portal for managing tests and viewing analytics. |
+| **Backend API** | NestJS | 4000 | Core logic, timers, inline AI proctoring, and database access. |
+| **Database** | PostgreSQL 16 | 5432 | Relational data. |
+| **Cache** | Redis 7 | 6379 | Token blacklisting & session state. |
 
 > **Note:** AI proctoring (face detection, identity verification) runs **inline** inside the NestJS backend — no separate Python service is needed.
 
 ## Quick Start
-
-### Prerequisites
-- Node.js 20+
-- Docker & Docker Compose
-- PostgreSQL 16 (or use Docker)
-
 ### 1. Start Database Services
 
 ```bash
@@ -31,98 +28,56 @@ docker-compose up postgres redis -d
 
 ```bash
 # Backend
-cd backend
-npm install
+cd backend && npm install
 
-# Frontend
-cd ../frontend
-npm install
+# Student Frontend
+cd ../frontend && npm install
+
+# Admin Frontend
+cd ../admin-frontend && npm install
 ```
 
-### 3. Run Database Migrations (first time only)
+### 3. Initialize Database and Seed Admin
 
 ```bash
+# Apply database schema
 cd backend
-npx prisma migrate dev --name init
+npx prisma db push
+
+# Seed the admin account
+npm run seed
 ```
 
-### 4. Start the Backend API
+### 4. Start the Platform
 
 ```bash
-cd backend
-npm run start:dev
-```
+# Terminal 1: Backend API (http://localhost:4000)
+cd backend && npm run start:dev
 
-The API server starts at **http://localhost:4000**.
+# Terminal 2: Student App (http://localhost:3000)
+cd frontend && npm run dev
 
-### 5. Start the Frontend App
-
-```bash
-cd frontend
-npm run dev
-```
-
-The web app starts at **http://localhost:3000**.
-
-## Project Structure
-
-```
-├── frontend/           # Next.js App Router
-│   ├── src/
-│   │   ├── app/        # Page routes (dashboard, exams, admin, login, register, results)
-│   │   ├── components/ # AuthGuard, Navbar, ThemeProvider
-│   │   ├── hooks/      # useAuth, useWebcam, useDeviceCheck, etc.
-│   │   ├── store/      # Zustand stores (auth, exam, proctor, theme)
-│   │   └── lib/        # API client, Socket.io, constants
-│   └── package.json
-├── backend/            # NestJS + Prisma
-│   ├── prisma/         # Database schema (13 models)
-│   ├── src/
-│   │   ├── auth/       # JWT auth, refresh tokens, Passport
-│   │   ├── exam/       # CRUD, SEB config, analytics
-│   │   ├── attempt/    # Scoring, auto-submit
-│   │   ├── proctor/    # Inline AI proctoring (face detection, embeddings, risk)
-│   │   ├── timer/      # WebSocket gateway, server-authoritative timer
-│   │   └── common/     # Guards, decorators, interceptors
-│   └── package.json
-├── docker-compose.yml  # PostgreSQL + Redis
-└── README.md
+# Terminal 3: Admin App (http://localhost:3001)
+cd admin-frontend && npm run dev
 ```
 
 ## Key Features
 
-### Student Portal
+### Student Portal (Port 3000)
 - **Dashboard** — Overview of upcoming exams and recent results
 - **Exams** — Browse available exams filtered by class band
 - **Exam Player** — Timed questions with auto-save and fullscreen enforcement
 - **Results** — View scores and performance breakdown
 
-### Admin Portal
+### Admin Portal (Port 3001)
 - **Dashboard** — Platform statistics at a glance
 - **Exam Management** — Create exams, set duration/marks/target classes
 - **Student Analytics** — View all registered students, schools, and their exam scores
 - **Proctor Reports** — Review AI proctoring flags and risk scores per attempt
 
-### Security
+### Security & AI
 - **Fullscreen Monitoring** — Auto-pause on exit, tab-switch detection, violation tracking
 - **Server-Authoritative Timers** — Client only displays time; server controls expiry
-- **AI Proctoring** — Face detection, identity verification via cosine similarity
+- **Inline AI Proctoring** — Face detection, identity verification via cosine similarity running safely inside NestJS middleware.
+- **Physical Decoupling** — Admin Next.js app is totally separated from Student Next.js app to prevent any vulnerability chaining.
 - **JWT + RBAC** — Access tokens (15 min) + refresh token rotation (7 days)
-
-### Theming
-- **Dark/Light Mode** — Toggle button on every page, preference persisted to localStorage
-
-## TL;DR — Start the Project
-
-```bash
-# Terminal 1: Database
-docker-compose up postgres redis -d
-
-# Terminal 2: Backend API (http://localhost:4000)
-cd backend && npm run start:dev
-
-# Terminal 3: Frontend App (http://localhost:3000)
-cd frontend && npm run dev
-```
-
-That's it! Open **http://localhost:3000** in your browser.

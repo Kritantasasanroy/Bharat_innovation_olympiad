@@ -163,35 +163,7 @@ export default function StudentDashboard() {
                     </div>
                 </section>
 
-                <style jsx>{`
-          .dashboard { padding: var(--space-8) var(--space-6); }
-          .dashboard-header {
-            display: flex; justify-content: space-between; align-items: flex-start;
-            margin-bottom: var(--space-8);
-          }
-          .dashboard-subtitle { color: var(--text-secondary); margin-top: var(--space-2); }
-          .dashboard-stats { margin-bottom: var(--space-10); }
-          .dashboard-section { margin-bottom: var(--space-10); }
-          .dashboard-section h2 { margin-bottom: var(--space-5); }
-          .exam-list { display: flex; flex-direction: column; gap: var(--space-4); }
-          .exam-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: var(--space-5) var(--space-6);
-          }
-          .exam-item h3 { font-size: 1rem; margin-bottom: var(--space-2); }
-          .exam-meta {
-            display: flex; gap: var(--space-4); font-size: 0.85rem; color: var(--text-secondary);
-          }
-          .exam-item-actions { display: flex; align-items: center; gap: var(--space-4); }
-          .score-display { display: flex; align-items: baseline; gap: 2px; }
-          .score-value {
-            font-size: 1.5rem; font-weight: 800;
-            background: var(--gradient-brand);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text;
-          }
-          .score-total { font-size: 0.9rem; color: var(--text-muted); }
-        `}</style>
+                
             </main>
         </AuthGuard>
     );

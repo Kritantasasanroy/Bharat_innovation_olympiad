@@ -23,6 +23,12 @@ export class ExamController {
         return this.examService.findAvailableExams(classBand);
     }
 
+    @Get('exams/upcoming')
+    @UseGuards(JwtAuthGuard)
+    async listUpcomingExams(@CurrentUser('classBand') classBand: number) {
+        return this.examService.findAvailableExams(classBand);
+    }
+
     @Get('exams/:id')
     @UseGuards(JwtAuthGuard)
     async getExam(@Param('id') id: string) {
@@ -94,6 +100,20 @@ export class ExamController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async publishExam(@Param('id') id: string) {
         return this.examService.publishExam(id);
+    }
+
+    @Post('admin/exams/:id/release-question-paper')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async releaseQuestionPaper(@Param('id') id: string) {
+        return this.examService.releaseQuestionPaper(id);
+    }
+
+    @Post('admin/exams/:id/release-results')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async releaseResults(@Param('id') id: string) {
+        return this.examService.releaseResults(id);
     }
 
     @Get('admin/exams/:id/analytics')

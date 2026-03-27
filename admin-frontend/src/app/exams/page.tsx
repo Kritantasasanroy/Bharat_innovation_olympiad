@@ -14,11 +14,17 @@ interface Exam {
     totalMarks: number;
     durationMinutes: number;
     isPublished: boolean;
+    isResultReleased: boolean;
     createdAt: string;
     _count: {
         sections: number;
         instances: number;
     };
+}
+
+interface ScheduleForm {
+    startsAt: string;
+    endsAt: string;
 }
 
 export default function AdminExamsPage() {
@@ -27,6 +33,9 @@ export default function AdminExamsPage() {
     const [showModal, setShowModal] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [actionError, setActionError] = useState('');
+    const [activeExamAction, setActiveExamAction] = useState('');
+    const [scheduleForms, setScheduleForms] = useState<Record<string, ScheduleForm>>({});
 
     const [formData, setFormData] = useState({
         title: '',
@@ -36,11 +45,46 @@ export default function AdminExamsPage() {
         durationMinutes: 60,
     });
 
+    const getDefaultSchedule = (): ScheduleForm => {
+        const start = new Date();
+        start.setMinutes(start.getMinutes() + 10);
+        const end = new Date(start);
+        end.setMinutes(end.getMinutes() + 60);
+        return {
+            startsAt: start.toISOString().slice(0, 16),
+            endsAt: end.toISOString().slice(0, 16),
+        };
+    };
+
+    const getApiErrorMessage = (err: unknown, fallback: string) => {
+        const responseData =
+            typeof err === 'object' &&
+            err !== null &&
+            'response' in err &&
+            typeof (err as { response?: unknown }).response === 'object'
+                ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data
+                : undefined;
+        const message = responseData?.message;
+        if (Array.isArray(message)) {
+            return message.join(', ');
+        }
+        return message || fallback;
+    };
+
     const fetchExams = async () => {
         try {
             setLoading(true);
             const { data } = await api.get<Exam[]>('/admin/exams');
             setExams(data);
+            setScheduleForms((prev) => {
+                const next = { ...prev };
+                data.forEach((exam) => {
+                    if (!next[exam.id]) {
+                        next[exam.id] = getDefaultSchedule();
+                    }
+                });
+                return next;
+            });
         } catch (err) {
             console.error('Failed to fetch exams', err);
         } finally {
@@ -81,10 +125,73 @@ export default function AdminExamsPage() {
                 durationMinutes: 60,
             });
             fetchExams();
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to create exam. Please try again.');
+        } catch (err: unknown) {
+            setError(getApiErrorMessage(err, 'Failed to create exam. Please try again.'));
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const updateScheduleForm = (examId: string, field: keyof ScheduleForm, value: string) => {
+        setScheduleForms((prev) => ({
+            ...prev,
+            [examId]: {
+                ...(prev[examId] || getDefaultSchedule()),
+                [field]: value,
+            },
+        }));
+    };
+
+    const scheduleExam = async (examId: string) => {
+        const form = scheduleForms[examId] || getDefaultSchedule();
+        if (!form.startsAt || !form.endsAt) {
+            setActionError('Please provide both schedule start and end time.');
+            return;
+        }
+        if (new Date(form.endsAt) <= new Date(form.startsAt)) {
+            setActionError('Schedule end time must be after start time.');
+            return;
+        }
+
+        try {
+            setActionError('');
+            setActiveExamAction(`schedule-${examId}`);
+            await api.post(`/admin/exams/${examId}/instances`, {
+                startsAt: new Date(form.startsAt).toISOString(),
+                endsAt: new Date(form.endsAt).toISOString(),
+                requireSeb: false,
+            });
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to schedule test.'));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
+
+    const releaseQuestionPaper = async (examId: string) => {
+        try {
+            setActionError('');
+            setActiveExamAction(`question-${examId}`);
+            await api.post(`/admin/exams/${examId}/release-question-paper`);
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to release question paper.'));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
+
+    const releaseResults = async (examId: string) => {
+        try {
+            setActionError('');
+            setActiveExamAction(`result-${examId}`);
+            await api.post(`/admin/exams/${examId}/release-results`);
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to release results.'));
+        } finally {
+            setActiveExamAction('');
         }
     };
 
@@ -103,6 +210,12 @@ export default function AdminExamsPage() {
                         + Create Exam
                     </button>
                 </div>
+
+                {actionError && (
+                    <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>
+                        {actionError}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="loading-container" style={{ minHeight: '300px' }}>
@@ -132,13 +245,65 @@ export default function AdminExamsPage() {
 
                                 <div className="exam-footer">
                                     <span className={`badge ${exam.isPublished ? 'badge-primary' : 'badge-secondary'}`}>
-                                        {exam.isPublished ? 'Published' : 'Draft'}
+                                        {exam.isPublished ? 'Question Paper Released' : 'Question Paper Pending'}
                                     </span>
                                     <div className="exam-stats">
                                         <span>{exam._count.sections} Sections</span>
                                         <span>•</span>
                                         <span>{exam._count.instances} Instances</span>
                                     </div>
+                                </div>
+
+                                <div style={{ marginTop: 'var(--space-4)', display: 'grid', gap: 'var(--space-3)' }}>
+                                    <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 'var(--space-1)' }}>Start</label>
+                                            <input
+                                                type="datetime-local"
+                                                className="form-control"
+                                                value={scheduleForms[exam.id]?.startsAt || ''}
+                                                onChange={(e) => updateScheduleForm(exam.id, 'startsAt', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 'var(--space-1)' }}>End</label>
+                                            <input
+                                                type="datetime-local"
+                                                className="form-control"
+                                                value={scheduleForms[exam.id]?.endsAt || ''}
+                                                onChange={(e) => updateScheduleForm(exam.id, 'endsAt', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => scheduleExam(exam.id)}
+                                        disabled={activeExamAction === `schedule-${exam.id}`}
+                                    >
+                                        {activeExamAction === `schedule-${exam.id}` ? 'Scheduling...' : 'Schedule Class-wise Test'}
+                                    </button>
+                                    <a
+                                        href={`/questions?examId=${exam.id}`}
+                                        className="btn btn-secondary"
+                                        style={{ textAlign: 'center', display: 'inline-block' }}
+                                    >
+                                        Manage Questions
+                                    </a>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => releaseQuestionPaper(exam.id)}
+                                        disabled={exam.isPublished || activeExamAction === `question-${exam.id}`}
+                                    >
+                                        {exam.isPublished ? 'Question Paper Released' : activeExamAction === `question-${exam.id}` ? 'Releasing...' : 'Release Question Paper'}
+                                    </button>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => releaseResults(exam.id)}
+                                        disabled={exam.isResultReleased || activeExamAction === `result-${exam.id}`}
+                                    >
+                                        {exam.isResultReleased ? 'Results Released' : activeExamAction === `result-${exam.id}` ? 'Releasing...' : 'Release Results'}
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -148,12 +313,11 @@ export default function AdminExamsPage() {
                         <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📋</div>
                         <h3>No Exams Created</h3>
                         <p style={{ color: 'var(--text-muted)' }}>
-                            You haven't created any exams yet. Click the button above to get started.
+                            You have not created any exams yet. Click the button above to get started.
                         </p>
                     </div>
                 )}
 
-                {/* Create Exam Modal */}
                 {showModal && (
                     <div className="modal-overlay">
                         <div className="modal-content glass-card animate-fade-in">
@@ -253,91 +417,7 @@ export default function AdminExamsPage() {
                     </div>
                 )}
 
-                <style jsx>{`
-                    .page-content { padding: var(--space-8) var(--space-6); }
-                    .page-header {
-                        display: flex; justify-content: space-between; align-items: flex-start;
-                    }
-                    .exam-card {
-                        padding: var(--space-6);
-                        display: flex; flex-direction: column;
-                    }
-                    .exam-card h3 { margin-bottom: var(--space-2); font-size: 1.15rem; }
-                    .exam-desc {
-                        font-size: 0.85rem; color: var(--text-secondary);
-                        margin-bottom: var(--space-5); flex-grow: 1;
-                    }
-                    .exam-meta {
-                        display: flex; justify-content: space-between;
-                        padding: var(--space-3) 0;
-                        border-top: 1px solid var(--border-subtle);
-                        border-bottom: 1px solid var(--border-subtle);
-                        margin-bottom: var(--space-4);
-                    }
-                    .meta-item { display: flex; flex-direction: column; }
-                    .meta-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-                    .meta-value { font-size: 0.9rem; font-weight: 500; margin-top: 2px; }
-                    .exam-footer {
-                        display: flex; justify-content: space-between; align-items: center;
-                    }
-                    .exam-stats {
-                        display: flex; gap: var(--space-2);
-                        font-size: 0.8rem; color: var(--text-muted);
-                    }
-                    
-                    /* Empty State */
-                    .empty-state {
-                        padding: var(--space-12) var(--space-6);
-                        text-align: center; margin-top: var(--space-8);
-                    }
-                    
-                    /* Modal */
-                    .modal-overlay {
-                        position: fixed; inset: 0;
-                        background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-                        display: flex; align-items: center; justify-content: center;
-                        z-index: 1000; padding: var(--space-4);
-                    }
-                    .modal-content {
-                        width: 100%; max-width: 500px;
-                        padding: var(--space-8);
-                    }
-                    .exam-form { display: flex; flex-direction: column; gap: var(--space-4); }
-                    .form-group { display: flex; flex-direction: column; gap: var(--space-2); }
-                    .form-group label { font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); }
-                    .form-control {
-                        background: var(--bg-input); border: 1px solid var(--border-default);
-                        color: var(--text-primary); padding: var(--space-3);
-                        border-radius: var(--radius-md); transition: border-color var(--transition-fast);
-                    }
-                    .form-control:focus { outline: none; border-color: var(--primary-400); }
-                    .form-error {
-                        background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);
-                        color: var(--danger-400); padding: var(--space-3);
-                        border-radius: var(--radius-sm); font-size: 0.85rem;
-                        margin-bottom: var(--space-2);
-                    }
-                    
-                    /* Class Pills */
-                    .class-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-                    .class-pill {
-                        background: var(--bg-elevated); border: 1px solid var(--border-default);
-                        color: var(--text-secondary); padding: var(--space-2) var(--space-3);
-                        border-radius: var(--radius-full); font-size: 0.85rem;
-                        cursor: pointer; transition: all var(--transition-fast);
-                    }
-                    .class-pill:hover { border-color: var(--primary-500); }
-                    .class-pill.active {
-                        background: rgba(251, 197, 11, 0.15); border-color: var(--primary-500);
-                        color: var(--primary-400); font-weight: 500;
-                    }
-                    
-                    .modal-actions {
-                        display: flex; justify-content: flex-end; gap: var(--space-4);
-                        margin-top: var(--space-6); padding-top: var(--space-4);
-                        border-top: 1px solid var(--border-subtle);
-                    }
-                `}</style>
+                
             </main>
         </AuthGuard>
     );

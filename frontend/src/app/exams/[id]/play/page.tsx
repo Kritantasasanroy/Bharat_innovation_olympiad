@@ -2,8 +2,10 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import { useExamSession } from '@/hooks/useExamSession';
+import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import { useWebcam } from '@/hooks/useWebcam';
+import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
 import { use, useEffect, useState } from 'react';
 
@@ -143,12 +145,23 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             <div className="exam-player">
                 {/* ── Pause Overlay ── */}
                 {isPaused && (
-                    <div className="pause-overlay">
-                        <div className="pause-modal glass-card">
+                    <div className="pause-overlay" style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <div className="pause-modal glass-card" style={{ textAlign: 'center', padding: '2rem' }}>
                             <h2>⚠️ Exam Paused</h2>
                             <p>{pauseReason}</p>
                             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                                Return to fullscreen to resume.
+                                Click the button below to return to fullscreen and resume.
                             </p>
                             <p style={{ fontSize: '0.85rem', color: 'var(--warning-400)', marginTop: '12px' }}>
                                 Violations: {violationCount} / 3
@@ -156,6 +169,18 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             <p style={{ fontSize: '0.85rem', color: 'var(--danger-400)' }}>
                                 Exam will auto-submit if paused for more than 20 seconds.
                             </p>
+                            <button 
+                                className="btn btn-primary" 
+                                style={{ marginTop: '1rem' }}
+                                onClick={() => {
+                                    const elem = document.documentElement;
+                                    if (elem.requestFullscreen) {
+                                        elem.requestFullscreen();
+                                    }
+                                }}
+                            >
+                                Resume Exam
+                            </button>
                         </div>
                     </div>
                 )}
@@ -371,95 +396,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                <style jsx>{`
-          .pause-overlay {
-            position: fixed; inset: 0; z-index: 200;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(12px);
-            display: flex; align-items: center; justify-content: center;
-          }
-          .pause-modal {
-            padding: var(--space-8); max-width: 500px; width: 90%;
-            text-align: center;
-          }
-          .pause-modal h2 { margin-bottom: var(--space-4); color: var(--warning-400); }
-          .violation-badge {
-            display: flex; align-items: center; gap: var(--space-2);
-            padding: var(--space-2) var(--space-3);
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: var(--radius-full);
-            font-size: 0.85rem; font-weight: 600;
-            color: var(--danger-400);
-          }
-          .question-container { max-width: 800px; }
-          .question-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: var(--space-6);
-          }
-          .question-text {
-            font-size: 1.05rem; line-height: 1.8;
-            margin-bottom: var(--space-6);
-            padding: var(--space-5);
-            background: var(--bg-card);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-subtle);
-          }
-          .options-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); }
-          .option-item.disabled { opacity: 0.5; cursor: not-allowed; }
-          .option-content { display: flex; gap: var(--space-2); }
-          .option-label { font-weight: 600; color: var(--text-secondary); min-width: 24px; }
-          .question-nav { display: flex; justify-content: space-between; gap: var(--space-3); }
-          .progress-section { margin-top: var(--space-8); }
-          .sidebar-legend {
-            margin-top: var(--space-6);
-            display: flex; flex-direction: column; gap: var(--space-2);
-            font-size: 0.8rem; color: var(--text-secondary);
-          }
-          .sidebar-legend div { display: flex; align-items: center; gap: var(--space-2); }
-          .legend-dot {
-            width: 12px; height: 12px; border-radius: 3px;
-            background: var(--bg-card); border: 1px solid var(--border-default);
-          }
-          .legend-dot.current { background: rgba(59, 130, 246, 0.2); border-color: var(--primary-500); }
-          .legend-dot.answered { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
-          .legend-dot.flagged { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); }
-          .sidebar-submit { width: 100%; margin-top: var(--space-6); }
-          .xp-badge {
-            display: flex; align-items: center; gap: var(--space-2);
-            padding: var(--space-2) var(--space-3);
-            background: rgba(139, 92, 246, 0.1);
-            border: 1px solid rgba(139, 92, 246, 0.2);
-            border-radius: var(--radius-full);
-            font-size: 0.85rem; font-weight: 600;
-            color: var(--accent-400);
-          }
-          .streak-fire { margin-left: var(--space-1); }
-          .webcam-mini {
-            position: relative; width: 60px; height: 45px;
-            border-radius: var(--radius-sm); overflow: hidden;
-            border: 2px solid var(--border-default);
-          }
-          .webcam-mini video { width: 100%; height: 100%; object-fit: cover; }
-          .webcam-mini .webcam-indicator {
-            width: 6px; height: 6px; top: 3px; right: 3px;
-          }
-          .modal-overlay {
-            position: fixed; inset: 0; z-index: 100;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(8px);
-            display: flex; align-items: center; justify-content: center;
-          }
-          .modal {
-            padding: var(--space-8); max-width: 440px; width: 90%;
-            text-align: center;
-          }
-          .modal h2 { margin-bottom: var(--space-4); }
-          .modal-actions {
-            display: flex; gap: var(--space-4); justify-content: center;
-            margin-top: var(--space-6);
-          }
-        `}</style>
+                
             </div>
         </AuthGuard>
     );

@@ -33,6 +33,10 @@ export class ExamService {
         const exam = await this.prisma.exam.findUnique({
             where: { id },
             include: {
+                instances: {
+                    where: { endsAt: { gte: new Date() } },
+                    orderBy: { startsAt: 'asc' },
+                },
                 sections: {
                     orderBy: { sortOrder: 'asc' },
                     include: {
@@ -121,6 +125,20 @@ export class ExamService {
         return this.prisma.exam.update({
             where: { id },
             data: { isPublished: true },
+        });
+    }
+
+    async releaseQuestionPaper(id: string) {
+        return this.prisma.exam.update({
+            where: { id },
+            data: { isPublished: true },
+        });
+    }
+
+    async releaseResults(id: string) {
+        return this.prisma.exam.update({
+            where: { id },
+            data: { isResultReleased: true },
         });
     }
 

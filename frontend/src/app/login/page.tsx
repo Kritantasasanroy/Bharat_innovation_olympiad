@@ -102,77 +102,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <style jsx>{`
-        .auth-page {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: var(--space-6);
-        }
-        .auth-container {
-          width: 100%;
-          max-width: 440px;
-          padding: var(--space-10);
-          background: var(--glass-bg);
-          backdrop-filter: blur(var(--glass-blur));
-          border: 1px solid var(--glass-border);
-          border-radius: var(--radius-xl);
-          box-shadow: var(--shadow-xl);
-        }
-        .auth-header {
-          text-align: center;
-          margin-bottom: var(--space-8);
-        }
-        .auth-logo {
-          font-size: 3rem;
-          margin-bottom: var(--space-3);
-        }
-        .auth-title {
-          font-size: 1.5rem;
-          font-weight: 800;
-          background: var(--gradient-brand);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .auth-subtitle {
-          color: var(--text-secondary);
-          font-size: 0.95rem;
-          margin-top: var(--space-2);
-        }
-        .auth-company {
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: var(--text-muted);
-          margin-top: var(--space-1);
-          letter-spacing: 0.03em;
-        }
-        .auth-form {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-1);
-        }
-        .auth-error {
-          padding: var(--space-3) var(--space-4);
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          border-radius: var(--radius-md);
-          color: var(--danger-400);
-          font-size: 0.85rem;
-          margin-bottom: var(--space-4);
-        }
-        .auth-submit {
-          width: 100%;
-          margin-top: var(--space-4);
-        }
-        .auth-footer {
-          text-align: center;
-          margin-top: var(--space-6);
-          font-size: 0.9rem;
-          color: var(--text-secondary);
-        }
-      `}</style>
+      
     </div>
   );
 }

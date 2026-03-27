@@ -7,14 +7,16 @@
         "start": "nest start",
         "start:dev": "nest start --watch",
         "start:debug": "nest start --debug --watch",
-        "start:prod": "node dist/main",
+        "start:prod": "node dist/src/main.js",
+        "vercel-build": "prisma generate && nest build",
         "lint": "eslint \"{src,test}/**/*.ts\"",
         "test": "jest",
         "test:watch": "jest --watch",
         "test:e2e": "jest --config ./test/jest-e2e.json",
         "prisma:generate": "prisma generate",
         "prisma:migrate": "prisma migrate dev",
-        "prisma:studio": "prisma studio"
+        "prisma:studio": "prisma studio",
+        "seed": "node seed-admin.js"
     },
     "dependencies": {
         "@nestjs/common": "^10.3.0",
@@ -79,5 +81,8 @@
         "moduleNameMapper": {
             "^@/(.*)$": "<rootDir>/$1"
         }
+    },
+    "prisma": {
+        "seed": "node seed-admin.js"
     }
 }

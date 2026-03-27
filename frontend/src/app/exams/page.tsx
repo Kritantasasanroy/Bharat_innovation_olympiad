@@ -94,27 +94,6 @@ export default function StudentExamsPage() {
                     </div>
                 )}
 
-                <style jsx>{`
-                    .page-content { padding: var(--space-8) var(--space-6); min-height: calc(100vh - 72px); }
-                    .exam-card { padding: var(--space-6); display: flex; flex-direction: column; }
-                    .exam-card h3 { margin-bottom: var(--space-2); font-size: 1.15rem; color: var(--primary-400); }
-                    .exam-desc { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: var(--space-6); flex-grow: 1; min-height: 40px; }
-                    .exam-meta {
-                        display: flex; justify-content: space-between;
-                        padding: var(--space-4) 0;
-                        border-top: 1px solid var(--border-subtle);
-                        border-bottom: 1px solid var(--border-subtle);
-                        margin-bottom: var(--space-4);
-                    }
-                    .meta-item { display: flex; flex-direction: column; align-items: center; }
-                    .meta-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-                    .meta-value { font-size: 1rem; font-weight: 500; margin-top: 2px; }
-                    .exam-footer { margin-top: auto; }
-                    .empty-state {
-                        padding: var(--space-12) var(--space-6);
-                        text-align: center; margin-top: var(--space-8);
-                    }
-                `}</style>
             </main>
         </AuthGuard>
     );

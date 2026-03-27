@@ -24,10 +24,11 @@ export class AuthService {
         let schoolId: string | undefined;
         if (dto.schoolCode) {
             const school = await this.prisma.school.findUnique({ where: { code: dto.schoolCode } });
-            if (!school) {
+            if (school) {
+                schoolId = school.id;
+            } else {
                 throw new BadRequestException('Invalid school code');
             }
-            schoolId = school.id;
         }
 
         // Hash password

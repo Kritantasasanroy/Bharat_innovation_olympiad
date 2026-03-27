@@ -5,21 +5,37 @@ import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import { useEffect, useState } from 'react';
 
+interface ExamSummary {
+    _count?: {
+        sections?: number;
+    };
+}
+
 export default function AdminDashboard() {
     const [stats, setStats] = useState({ students: '—', exams: '—', questions: '—', uptime: '—' });
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const { data } = await api.get('/admin/stats');
+                const [usersRes, examsRes] = await Promise.all([
+                    api.get('/auth/admin/users'),
+                    api.get('/admin/exams'),
+                ]);
+                const students = usersRes.data?.length || 0;
+                const exams = examsRes.data?.length || 0;
+                const questions =
+                    (examsRes.data as ExamSummary[] | undefined)?.reduce(
+                        (count: number, exam: ExamSummary) => count + (exam._count?.sections || 0),
+                        0,
+                    ) || 0;
                 setStats({
-                    students: data.students?.toLocaleString() || '—',
-                    exams: data.exams?.toString() || '—',
-                    questions: data.questions?.toLocaleString() || '—',
-                    uptime: data.uptime || '—',
+                    students: students.toLocaleString(),
+                    exams: exams.toString(),
+                    questions: questions.toLocaleString(),
+                    uptime: 'Online',
                 });
             } catch {
-                // API may not exist yet — show placeholder
+                setStats({ students: '—', exams: '—', questions: '—', uptime: 'Offline' });
             }
         };
         fetchStats();
@@ -34,7 +50,6 @@ export default function AdminDashboard() {
                     Manage exams, question banks, and monitor student performance.
                 </p>
 
-                {/* Stats */}
                 <div className="grid-4 dashboard-stats" style={{ marginTop: 'var(--space-8)' }}>
                     <div className="stat-card">
                         <div className="stat-value">{stats.students}</div>
@@ -54,40 +69,28 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Quick Actions */}
                 <section className="dashboard-section" style={{ marginTop: 'var(--space-8)' }}>
                     <h2>Quick Actions</h2>
                     <div className="grid-3" style={{ marginTop: 'var(--space-5)' }}>
-                        <a href="/admin/questions" className="glass-card action-card">
+                        <a href="/exams" className="glass-card action-card">
                             <span className="action-icon">📝</span>
-                            <h3>Question Bank</h3>
-                            <p>Add, edit, and organize questions by topic and difficulty.</p>
+                            <h3>Question Release</h3>
+                            <p>Schedule class-wise tests and release question papers.</p>
                         </a>
-                        <a href="/admin/exams" className="glass-card action-card">
+                        <a href="/exams" className="glass-card action-card">
                             <span className="action-icon">📋</span>
-                            <h3>Create Exam</h3>
-                            <p>Build exam blueprints from question pools.</p>
+                            <h3>Exam Scheduling</h3>
+                            <p>Manage test windows by class and configure instances.</p>
                         </a>
-                        <a href="/admin/analytics" className="glass-card action-card">
+                        <a href="/analytics" className="glass-card action-card">
                             <span className="action-icon">📊</span>
-                            <h3>Analytics</h3>
-                            <p>View performance reports and proctor alerts.</p>
+                            <h3>Result Insights</h3>
+                            <p>Review student performance after results are released.</p>
                         </a>
                     </div>
                 </section>
 
-                <style jsx>{`
-          .dashboard { padding: var(--space-8) var(--space-6); }
-          .dashboard-stats { margin-bottom: var(--space-8); }
-          .dashboard-section h2 { margin-bottom: var(--space-4); }
-          .action-card {
-            padding: var(--space-6); text-align: center; text-decoration: none;
-            color: var(--text-primary); cursor: pointer;
-          }
-          .action-icon { font-size: 2rem; margin-bottom: var(--space-3); display: block; }
-          .action-card h3 { margin-bottom: var(--space-2); }
-          .action-card p { font-size: 0.85rem; color: var(--text-secondary); }
-        `}</style>
+                
             </main>
         </AuthGuard>
     );
