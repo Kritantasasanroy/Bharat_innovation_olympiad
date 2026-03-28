@@ -39,6 +39,8 @@ export interface Question {
     marks: number;
     negativeMarks: number;
     timeLimitSecs?: number;
+    mediaUrl?: string;
+    mediaType?: string;
     tags: string[];
     explanation?: string;
 }

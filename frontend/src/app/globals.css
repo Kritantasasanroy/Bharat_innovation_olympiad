@@ -1426,4 +1426,43 @@ h4 {
           color: var(--text-muted);
           text-transform: capitalize;
         }
+
+        .option-item {
+          display: flex;
+          align-items: center;
+          padding: 1rem;
+          margin-bottom: 0.5rem;
+          border: 2px solid var(--border-color);
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .option-item:hover {
+          background-color: var(--bg-elevated);
+        }
+        .option-item.selected {
+          border-color: var(--primary-500);
+          background-color: rgba(251, 197, 11, 0.1);
+        }
+        .option-item.selected .option-radio {
+          background-color: var(--primary-500);
+          border-color: var(--primary-500);
+        }
+        .option-radio {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          border: 2px solid var(--text-muted);
+          margin-right: 1rem;
+          transition: all var(--transition-fast);
+        }
+        .option-item.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
       

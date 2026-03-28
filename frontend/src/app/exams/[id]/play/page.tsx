@@ -19,7 +19,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const { id } = use(params);
     const {
         exam, attempt, questions, currentIndex, currentQuestion,
-        answers, flagged, xpEarned, streak,
+        answers, flagged, xpEarned, streak, error,
         startExam, saveAnswer, submitExam,
         goToQuestion, nextQuestion, prevQuestion, toggleFlag,
     } = useExamSession(id);
@@ -87,9 +87,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     useEffect(() => {
         // Start exam on mount
-        startExam().then(() => {
-            startWebcam().then(() => startProctoring());
-        });
+        startExam()
+            .then(() => {
+                startWebcam().then(() => startProctoring());
+            })
+            .catch(console.error);
     }, []);
 
     // Sync selected option when navigating
@@ -116,8 +118,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             } else {
                 window.location.href = '/results';
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Submit error:', err);
+            // If already submitted or other error, redirect so user is not stuck
+            window.location.href = '/results';
         } finally {
             setIsSubmitting(false);
         }
@@ -131,6 +135,20 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const answeredCount = Object.keys(answers).length;
     const progressPercent = questions.length > 0
         ? Math.round((answeredCount / questions.length) * 100) : 0;
+
+    if (error) {
+        return (
+            <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '500px' }}>
+                    <h2 style={{ color: 'var(--danger-400)', marginBottom: '1rem' }}>Failed to Load Exam</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>{error}</p>
+                    <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/dashboard'}>
+                        Go to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (!currentQuestion) {
         return (
@@ -254,29 +272,42 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </button>
                         </div>
 
-                        {/* Question text */}
+                        {/* Question text and media */}
                         <div className="question-text">
                             <p>{currentQuestion.text}</p>
+                            
+                            {currentQuestion.mediaUrl && currentQuestion.mediaType === 'IMAGE' && (
+                                <img src={currentQuestion.mediaUrl} alt="Question Media" style={{ maxWidth: '100%', maxHeight: '400px', marginTop: '1rem', borderRadius: 'var(--radius-md)' }} />
+                            )}
+                            {currentQuestion.mediaUrl && currentQuestion.mediaType === 'VIDEO' && (
+                                <video src={currentQuestion.mediaUrl} controls style={{ maxWidth: '100%', maxHeight: '400px', marginTop: '1rem', borderRadius: 'var(--radius-md)' }} />
+                            )}
+                            {currentQuestion.mediaUrl && currentQuestion.mediaType === 'AUDIO' && (
+                                <audio src={currentQuestion.mediaUrl} controls style={{ width: '100%', marginTop: '1rem' }} />
+                            )}
                         </div>
 
                         {/* Options */}
                         {currentQuestion.options && (
                             <div className="options-list">
-                                {currentQuestion.options.map((opt, i) => (
-                                    <div
-                                        key={opt.id}
-                                        className={`option-item ${selectedOption === opt.id ? 'selected' : ''} ${isPaused ? 'disabled' : ''}`}
-                                        onClick={() => handleSelectOption(opt.id)}
-                                    >
-                                        <div className="option-radio" />
-                                        <div className="option-content">
-                                            <span className="option-label">
-                                                {String.fromCharCode(65 + i)}.
-                                            </span>
-                                            <span>{opt.text}</span>
+                                {currentQuestion.options.map((opt, i) => {
+                                    const optId = opt.id || i.toString();
+                                    return (
+                                        <div
+                                            key={optId}
+                                            className={`option-item ${selectedOption === optId ? 'selected' : ''} ${isPaused ? 'disabled' : ''}`}
+                                            onClick={() => handleSelectOption(optId)}
+                                        >
+                                            <div className="option-radio" />
+                                            <div className="option-content">
+                                                <span className="option-label">
+                                                    {String.fromCharCode(65 + i)}.
+                                                </span>
+                                                <span>{opt.text}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
 

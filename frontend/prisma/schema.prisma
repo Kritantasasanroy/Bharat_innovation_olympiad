@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  role            Role           @default(STUDENT)
+  classBand       Int?
+  schoolId        String?
+  faceEmbedding   Bytes?
+  profileImageUrl String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  attempts        Attempt[]
+  refreshTokens   RefreshToken[]
+  school          School?        @relation(fields: [schoolId], references: [id])
+
+  @@index([email])
+  @@index([schoolId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model School {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  city      String
+  state     String
+  createdAt DateTime @default(now())
+  users     User[]
+
+  @@index([code])
+}
+
+model Exam {
+  id              String         @id @default(uuid())
+  title           String
+  description     String?
+  classBands      Int[]
+  totalMarks      Int
+  durationMinutes Int
+  isPublished     Boolean        @default(false)
+  isResultReleased Boolean       @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  instances       ExamInstance[]
+  sections        ExamSection[]
+
+  @@index([isPublished])
+}
+
+model ExamSection {
+  id        String     @id @default(uuid())
+  examId    String
+  title     String
+  sortOrder Int
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@index([examId])
+}
+
+model Question {
+  id            String        @id @default(uuid())
+  sectionId     String?
+  type          QuestionType
+  difficulty    Difficulty
+  text          String
+  options       Json?
+  correctAnswer String?
+  marks         Int           @default(1)
+  negativeMarks Float         @default(0)
+  timeLimitSecs Int?
+  mediaUrl      String?
+  mediaType     String?
+  tags          String[]
+  explanation   String?
+  createdAt     DateTime      @default(now())
+  attemptItems  AttemptItem[]
+  section       ExamSection?  @relation(fields: [sectionId], references: [id])
+
+  @@index([sectionId])
+  @@index([type])
+  @@index([difficulty])
+}
+
+model ExamInstance {
+  id             String    @id @default(uuid())
+  examId         String
+  startsAt       DateTime
+  endsAt         DateTime
+  requireSeb     Boolean   @default(false)
+  browserExamKey String?
+  configKey      String?
+  quitUrl        String?
+  maxAttempts    Int       @default(1)
+  createdAt      DateTime  @default(now())
+  attempts       Attempt[]
+  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+  @@index([startsAt, endsAt])
+}
+
+model Attempt {
+  id                String         @id @default(uuid())
+  userId            String
+  examInstanceId    String
+  status            AttemptStatus  @default(NOT_STARTED)
+  startedAt         DateTime?
+  submittedAt       DateTime?
+  totalScore        Float?
+  maxScore          Float?
+  ipAddress         String?
+  deviceFingerprint String?
+  riskScore         Float?         @default(0)
+  createdAt         DateTime       @default(now())
+  examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id])
+  user              User           @relation(fields: [userId], references: [id])
+  items             AttemptItem[]
+  proctorEvents     ProctorEvent[]
+
+  @@unique([userId, examInstanceId])
+  @@index([userId])
+  @@index([examInstanceId])
+  @@index([status])
+}
+
+model AttemptItem {
+  id         String    @id @default(uuid())
+  attemptId  String
+  questionId String
+  answer     Json?
+  isCorrect  Boolean?
+  score      Float?
+  answeredAt DateTime?
+  attempt    Attempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   Question  @relation(fields: [questionId], references: [id])
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+model ProctorEvent {
+  id        String           @id @default(uuid())
+  attemptId String
+  type      ProctorEventType
+  severity  Int              @default(1)
+  details   Json?
+  timestamp DateTime         @default(now())
+  attempt   Attempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@index([type])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum Role {
+  STUDENT
+  PARENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum QuestionType {
+  MCQ
+  MULTI_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  EXPIRED
+}
+
+enum ProctorEventType {
+  NO_FACE
+  MULTIPLE_FACES
+  FACE_MISMATCH
+  TAB_SWITCH
+  EXIT_FULLSCREEN
+  SCREEN_CAPTURE
+  NETWORK_DISCONNECT
+  IP_CHANGE
+}

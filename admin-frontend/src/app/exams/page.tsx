@@ -169,18 +169,7 @@ export default function AdminExamsPage() {
         }
     };
 
-    const releaseQuestionPaper = async (examId: string) => {
-        try {
-            setActionError('');
-            setActiveExamAction(`question-${examId}`);
-            await api.post(`/admin/exams/${examId}/release-question-paper`);
-            await fetchExams();
-        } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to release question paper.'));
-        } finally {
-            setActiveExamAction('');
-        }
-    };
+
 
     const releaseResults = async (examId: string) => {
         try {
@@ -190,6 +179,20 @@ export default function AdminExamsPage() {
             await fetchExams();
         } catch (err: unknown) {
             setActionError(getApiErrorMessage(err, 'Failed to release results.'));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
+
+    const deleteExam = async (examId: string) => {
+        if (!confirm('Are you sure you want to delete this exam? All data including questions, instances, and attempts will be permanently lost.')) return;
+        try {
+            setActionError('');
+            setActiveExamAction(`delete-${examId}`);
+            await api.delete(`/admin/exams/${examId}`);
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to delete exam.'));
         } finally {
             setActiveExamAction('');
         }
@@ -244,8 +247,8 @@ export default function AdminExamsPage() {
                                 </div>
 
                                 <div className="exam-footer">
-                                    <span className={`badge ${exam.isPublished ? 'badge-primary' : 'badge-secondary'}`}>
-                                        {exam.isPublished ? 'Question Paper Released' : 'Question Paper Pending'}
+                                    <span className="badge badge-primary">
+                                        Active
                                     </span>
                                     <div className="exam-stats">
                                         <span>{exam._count.sections} Sections</span>
@@ -291,18 +294,11 @@ export default function AdminExamsPage() {
                                         Manage Questions
                                     </a>
                                     <button
-                                        className="btn btn-primary"
-                                        onClick={() => releaseQuestionPaper(exam.id)}
-                                        disabled={exam.isPublished || activeExamAction === `question-${exam.id}`}
+                                        className="btn btn-danger"
+                                        onClick={() => deleteExam(exam.id)}
+                                        disabled={activeExamAction === `delete-${exam.id}`}
                                     >
-                                        {exam.isPublished ? 'Question Paper Released' : activeExamAction === `question-${exam.id}` ? 'Releasing...' : 'Release Question Paper'}
-                                    </button>
-                                    <button
-                                        className="btn btn-secondary"
-                                        onClick={() => releaseResults(exam.id)}
-                                        disabled={exam.isResultReleased || activeExamAction === `result-${exam.id}`}
-                                    >
-                                        {exam.isResultReleased ? 'Results Released' : activeExamAction === `result-${exam.id}` ? 'Releasing...' : 'Release Results'}
+                                        {activeExamAction === `delete-${exam.id}` ? 'Deleting...' : '🗑 Delete Exam'}
                                     </button>
                                 </div>
                             </div>

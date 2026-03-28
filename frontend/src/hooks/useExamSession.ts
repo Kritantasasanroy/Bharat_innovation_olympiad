@@ -9,28 +9,35 @@ export function useExamSession(instanceId: string) {
     const store = useExamStore();
 
     const startExam = useCallback(async () => {
-        // Find instance id first, because we only have exam id from route
-        // Assuming the route is /exams/[id] where id is the examId, not instanceId
-        const { data: examData } = await api.get<Exam>(`/exams/${instanceId}`);
-        const activeInstance = examData.instances?.[0]; // Get the first active instance
-        
-        if (!activeInstance) {
-            throw new Error('No active instance found for this exam');
+        store.setError(null);
+        try {
+            // Find instance id first, because we only have exam id from route
+            // Assuming the route is /exams/[id] where id is the examId, not instanceId
+            const { data: examData } = await api.get<Exam>(`/exams/${instanceId}`);
+            const activeInstance = examData.instances?.[0]; // Get the first active instance
+            
+            if (!activeInstance) {
+                throw new Error('No active instance found for this exam');
+            }
+
+            // Start attempt on server using the instance ID
+            const { data: attempt } = await api.post<Attempt>(`/exams/${activeInstance.id}/start`);
+
+            // Load full exam data including questions
+            const { data: exam } = await api.get<Exam>(`/exams/${examData.id}`);
+
+            // Flatten questions from sections
+            const questions: Question[] = exam.sections
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .flatMap((s) => s.questions);
+
+            store.setExamSession(exam, attempt, questions);
+            return attempt;
+        } catch (err: any) {
+            console.error('Failed to start exam:', err);
+            store.setError(err.response?.data?.message || err.message || 'Failed to load exam');
+            throw err;
         }
-
-        // Start attempt on server using the instance ID
-        const { data: attempt } = await api.post<Attempt>(`/exams/${activeInstance.id}/start`);
-
-        // Load full exam data including questions
-        const { data: exam } = await api.get<Exam>(`/exams/${examData.id}`);
-
-        // Flatten questions from sections
-        const questions: Question[] = exam.sections
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .flatMap((s) => s.questions);
-
-        store.setExamSession(exam, attempt, questions);
-        return attempt;
     }, [instanceId]);
 
     const saveAnswer = useCallback(
@@ -79,6 +86,7 @@ export function useExamSession(instanceId: string) {
         currentQuestion: store.questions[store.currentIndex] || null,
         answers: store.answers,
         flagged: store.flagged,
+        error: store.error,
         xpEarned: store.xpEarned,
         streak: store.streak,
         startExam,

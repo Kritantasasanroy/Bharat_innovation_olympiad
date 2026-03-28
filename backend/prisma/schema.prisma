@@ -97,7 +97,7 @@ model Question {
   explanation   String?
   createdAt     DateTime      @default(now())
   attemptItems  AttemptItem[]
-  section       ExamSection?  @relation(fields: [sectionId], references: [id])
+  section       ExamSection?  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@index([sectionId])
   @@index([type])
@@ -135,8 +135,8 @@ model Attempt {
   deviceFingerprint String?
   riskScore         Float?         @default(0)
   createdAt         DateTime       @default(now())
-  examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id])
-  user              User           @relation(fields: [userId], references: [id])
+  examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   items             AttemptItem[]
   proctorEvents     ProctorEvent[]
 
@@ -155,7 +155,7 @@ model AttemptItem {
   score      Float?
   answeredAt DateTime?
   attempt    Attempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question   Question  @relation(fields: [questionId], references: [id])
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
@@ -197,11 +197,9 @@ enum Role {
 
 enum QuestionType {
   MCQ
-  MULTI_SELECT
-  TRUE_FALSE
-  SHORT_ANSWER
-  NUMERIC
 }
+
+
 
 enum Difficulty {
   EASY

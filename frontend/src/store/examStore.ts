@@ -9,6 +9,7 @@ interface ExamState {
     currentIndex: number;
     answers: Record<string, any>;
     flagged: Set<string>;
+    error: string | null;
 
     // Timer
     remaining: number; // seconds remaining
@@ -21,6 +22,7 @@ interface ExamState {
 
     // Actions
     setExamSession: (exam: Exam, attempt: Attempt, questions: Question[]) => void;
+    setError: (error: string | null) => void;
     setCurrentIndex: (index: number) => void;
     saveAnswer: (questionId: string, answer: any) => void;
     toggleFlag: (questionId: string) => void;
@@ -40,6 +42,7 @@ export const useExamStore = create<ExamState>((set) => ({
     currentIndex: 0,
     answers: {},
     flagged: new Set(),
+    error: null,
     remaining: 0,
     questionRemaining: null,
     isExpired: false,
@@ -47,7 +50,9 @@ export const useExamStore = create<ExamState>((set) => ({
     streak: 0,
 
     setExamSession: (exam, attempt, questions) =>
-        set({ exam, attempt, questions, currentIndex: 0, answers: {}, flagged: new Set() }),
+        set({ exam, attempt, questions, currentIndex: 0, answers: {}, flagged: new Set(), error: null }),
+
+    setError: (error) => set({ error }),
 
     setCurrentIndex: (index) => set({ currentIndex: index }),
 
@@ -81,6 +86,7 @@ export const useExamStore = create<ExamState>((set) => ({
             currentIndex: 0,
             answers: {},
             flagged: new Set(),
+            error: null,
             remaining: 0,
             questionRemaining: null,
             isExpired: false,

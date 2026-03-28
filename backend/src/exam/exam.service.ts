@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AttemptStatus } from '@prisma/client';
 
 @Injectable()
 export class ExamService {
@@ -7,10 +8,9 @@ export class ExamService {
 
     // ── Student-facing ──
 
-    async findAvailableExams(classBand: number) {
-        return this.prisma.exam.findMany({
+    async findAvailableExams(classBand: number, userId: string) {
+        const exams = await this.prisma.exam.findMany({
             where: {
-                isPublished: true,
                 classBands: { has: classBand },
                 instances: {
                     some: {
@@ -23,10 +23,35 @@ export class ExamService {
                 instances: {
                     where: { endsAt: { gte: new Date() } },
                     orderBy: { startsAt: 'asc' },
+                    include: {
+                        attempts: {
+                            where: { userId }
+                        }
+                    }
                 },
             },
             orderBy: { createdAt: 'desc' },
         });
+
+        // Find if user already completed the exam in any instance (past or current)
+        const completedAttempts = await this.prisma.attempt.findMany({
+            where: {
+                userId,
+                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                examInstance: { examId: { in: exams.map(e => e.id) } }
+            },
+            include: { examInstance: { select: { examId: true } } }
+        });
+
+        const completedExamIds = new Set(completedAttempts.map(a => a.examInstance.examId));
+        console.log('User ID:', userId);
+        console.log('Completed Exam IDs Set:', Array.from(completedExamIds));
+        console.log('First exam ID in list:', exams[0]?.id);
+
+        return exams.map(exam => ({
+            ...exam,
+            isCompleted: completedExamIds.has(exam.id)
+        }));
     }
 
     async findExamById(id: string) {
@@ -93,7 +118,20 @@ export class ExamService {
         totalMarks: number;
         durationMinutes: number;
     }) {
-        return this.prisma.exam.create({ data });
+        return this.prisma.exam.create({ 
+            data: {
+                ...data,
+                isPublished: true,
+                isResultReleased: true,
+            }
+        });
+    }
+
+    async deleteExam(id: string) {
+        // Delete all related data via cascading, then delete the exam
+        await this.prisma.exam.delete({
+            where: { id },
+        });
     }
 
     async createSection(examId: string, data: { title: string; sortOrder: number }) {
@@ -105,6 +143,32 @@ export class ExamService {
     async createQuestion(sectionId: string, data: any) {
         return this.prisma.question.create({
             data: { ...data, sectionId },
+        });
+    }
+
+    async updateSection(id: string, data: any) {
+        return this.prisma.examSection.update({
+            where: { id },
+            data,
+        });
+    }
+
+    async deleteSection(id: string) {
+        return this.prisma.examSection.delete({
+            where: { id },
+        });
+    }
+
+    async updateQuestion(id: string, data: any) {
+        return this.prisma.question.update({
+            where: { id },
+            data,
+        });
+    }
+
+    async deleteQuestion(id: string) {
+        return this.prisma.question.delete({
+            where: { id },
         });
     }
 

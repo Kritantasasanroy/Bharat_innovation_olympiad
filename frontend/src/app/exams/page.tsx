@@ -12,7 +12,11 @@ interface Exam {
     description: string | null;
     totalMarks: number;
     durationMinutes: number;
+    isCompleted?: boolean;
     _count?: { sections: number };
+    instances?: {
+        attempts: { status: string }[];
+    }[];
 }
 
 export default function StudentExamsPage() {
@@ -24,7 +28,7 @@ export default function StudentExamsPage() {
         const fetchExams = async () => {
             try {
                 // The backend automatically filters by the student's classBand
-                const { data } = await api.get<Exam[]>('/exams');
+                const { data } = await api.get<Exam[]>(`/exams?t=${Date.now()}`);
                 setExams(data);
             } catch (err) {
                 console.error('Failed to fetch available exams', err);
@@ -52,37 +56,42 @@ export default function StudentExamsPage() {
                     </div>
                 ) : exams.length > 0 ? (
                     <div className="grid-3">
-                        {exams.map((exam) => (
-                            <div key={exam.id} className="glass-card exam-card">
-                                <h3>{exam.title}</h3>
-                                <p className="exam-desc">{exam.description || 'No description provided.'}</p>
-                                
-                                <div className="exam-meta">
-                                    <div className="meta-item">
-                                        <span className="meta-label">Duration</span>
-                                        <span className="meta-value">{exam.durationMinutes} min</span>
-                                    </div>
-                                    <div className="meta-item">
-                                        <span className="meta-label">Total Marks</span>
-                                        <span className="meta-value">{exam.totalMarks}</span>
-                                    </div>
-                                    <div className="meta-item">
-                                        <span className="meta-label">Sections</span>
-                                        <span className="meta-value">{exam._count?.sections || 0}</span>
-                                    </div>
-                                </div>
+                        {exams.map((exam) => {
+                            const isCompleted = exam.isCompleted || false;
 
-                                <div className="exam-footer">
-                                    <button 
-                                        className="btn btn-primary" 
-                                        style={{ width: '100%' }}
-                                        onClick={() => router.push(`/exams/${exam.id}/instructions`)}
-                                    >
-                                        Start Exam
-                                    </button>
+                            return (
+                                <div key={exam.id} className="glass-card exam-card" style={isCompleted ? { filter: 'grayscale(1)', opacity: 0.7 } : {}}>
+                                    <h3>{exam.title}</h3>
+                                    <p className="exam-desc">{exam.description || 'No description provided.'}</p>
+                                    
+                                    <div className="exam-meta">
+                                        <div className="meta-item">
+                                            <span className="meta-label">Duration</span>
+                                            <span className="meta-value">{exam.durationMinutes} min</span>
+                                        </div>
+                                        <div className="meta-item">
+                                            <span className="meta-label">Total Marks</span>
+                                            <span className="meta-value">{exam.totalMarks}</span>
+                                        </div>
+                                        <div className="meta-item">
+                                            <span className="meta-label">Sections</span>
+                                            <span className="meta-value">{exam._count?.sections || 0}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="exam-footer">
+                                        <button 
+                                            className={`btn ${isCompleted ? 'btn-secondary' : 'btn-primary'}`}
+                                            style={{ width: '100%', cursor: isCompleted ? 'not-allowed' : 'pointer' }}
+                                            disabled={isCompleted}
+                                            onClick={() => !isCompleted && router.push(`/exams/${exam.id}/instructions`)}
+                                        >
+                                            {isCompleted ? '✓ Completed' : 'Start Exam'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="glass-card empty-state">
