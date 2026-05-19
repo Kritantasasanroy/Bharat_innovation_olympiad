@@ -1,14 +1,19 @@
 'use client';
 
 import { useAuthStore } from '@/store/authStore';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function useAuth() {
     const store = useAuthStore();
+    const initialized = useRef(false);
 
     useEffect(() => {
-        store.loadUser();
-    }, []);
+        // Only run loadUser once on mount — prevents infinite loop
+        if (!initialized.current) {
+            initialized.current = true;
+            store.loadUser();
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return {
         user: store.user,

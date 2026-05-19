@@ -14,6 +14,7 @@ interface Exam {
     durationMinutes: number;
     isCompleted?: boolean;
     _count?: { sections: number };
+    sections?: any[];
     instances?: {
         attempts: { status: string }[];
     }[];
@@ -75,7 +76,7 @@ export default function StudentExamsPage() {
                                         </div>
                                         <div className="meta-item">
                                             <span className="meta-label">Sections</span>
-                                            <span className="meta-value">{exam._count?.sections || 0}</span>
+                                            <span className="meta-value">{exam.sections?.length || exam._count?.sections || 0}</span>
                                         </div>
                                     </div>
 

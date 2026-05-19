@@ -91,7 +91,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             .then(() => {
                 startWebcam().then(() => startProctoring());
             })
-            .catch(console.error);
+            .catch(err => console.warn('Exam init warning:', err));
     }, []);
 
     // Sync selected option when navigating

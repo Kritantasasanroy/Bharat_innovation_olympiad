@@ -32,7 +32,7 @@ export function useWebcam(attemptId?: string) {
 
             return stream;
         } catch (err) {
-            console.error('Webcam error:', err);
+            console.warn('Webcam error:', err);
             setDeviceCheck('webcam', false);
             return null;
         }

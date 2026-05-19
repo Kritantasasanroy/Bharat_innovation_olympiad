@@ -10,7 +10,7 @@ export interface User {
     role: Role;
     classBand?: number;
     schoolId?: string;
-    schoolName?: string;
+    school?: { name: string };
     profileImageUrl?: string;
     isActive: boolean;
     createdAt: string;

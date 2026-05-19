@@ -74,7 +74,7 @@ export default function StudentDashboard() {
                     <div>
                         <h1>Welcome back, {user?.firstName}! 👋</h1>
                         <p className="dashboard-subtitle">
-                            Class {user?.classBand} • {user?.schoolName || 'Independent Student'}
+                            Class {user?.classBand} • {user?.school?.name || 'Independent Student'}
                         </p>
                     </div>
                 </div>

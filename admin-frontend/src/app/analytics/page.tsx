@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 interface Attempt {
@@ -117,7 +118,7 @@ export default function AdminAnalyticsPage() {
                                             {student.attempts.length > 0 ? (
                                                 <div className="attempts-list">
                                                     {student.attempts.map(attempt => (
-                                                        <div key={attempt.id} className="attempt-badge">
+                                                        <Link href={`/analytics/attempt/${attempt.id}`} key={attempt.id} className="attempt-badge" style={{ textDecoration: 'none', cursor: 'pointer' }}>
                                                             <span className="exam-title" title={attempt.examInstance.exam.title}>
                                                                 {attempt.examInstance.exam.title.length > 25 
                                                                     ? attempt.examInstance.exam.title.substring(0, 25) + '...' 
@@ -128,7 +129,7 @@ export default function AdminAnalyticsPage() {
                                                                     ? `${attempt.totalScore || 0} / ${attempt.maxScore || 100}` 
                                                                     : attempt.status.replace('_', ' ')}
                                                             </span>
-                                                        </div>
+                                                        </Link>
                                                     ))}
                                                 </div>
                                             ) : (

@@ -1,13 +1,9 @@
+import { IsEmail, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Role } from '@prisma/client';
-import { IsEmail, IsEnum, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 
-export class RegisterDto {
+export class SyncUserDto {
     @IsEmail()
-    email: string;
-
-    @IsString()
-    @MinLength(8)
-    password: string;
+    email: string;  // ← email now comes in the body (no JwtAuthGuard needed)
 
     @IsString()
     firstName: string;
@@ -17,7 +13,7 @@ export class RegisterDto {
 
     @IsEnum(Role)
     @IsOptional()
-    role?: Role = Role.STUDENT;
+    role?: Role;
 
     @IsInt()
     @Min(6)
@@ -30,15 +26,23 @@ export class RegisterDto {
     schoolCode?: string;
 }
 
-export class LoginDto {
+export class LoginSyncDto {
     @IsEmail()
-    email: string;
-
-    @IsString()
-    password: string;
+    email: string;  // For login flow: just sync/retrieve by email and return our JWT
 }
 
-export class RefreshDto {
+export class UpdateProfileDto {
     @IsString()
-    refreshToken: string;
+    @IsOptional()
+    firstName?: string;
+
+    @IsString()
+    @IsOptional()
+    lastName?: string;
+
+    @IsInt()
+    @Min(6)
+    @Max(12)
+    @IsOptional()
+    classBand?: number;
 }

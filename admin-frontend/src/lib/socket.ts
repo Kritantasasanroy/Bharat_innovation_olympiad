@@ -20,11 +20,11 @@ export function getSocket(): Socket {
             console.log('[WS] Connected:', socket?.id);
         });
 
-        socket.on('disconnect', (reason) => {
+        socket.on('disconnect', (reason: string) => {
             console.log('[WS] Disconnected:', reason);
         });
 
-        socket.on('connect_error', (err) => {
+        socket.on('connect_error', (err: Error) => {
             console.error('[WS] Connection error:', err.message);
         });
     }

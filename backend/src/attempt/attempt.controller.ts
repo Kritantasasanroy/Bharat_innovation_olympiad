@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { AttemptService } from './attempt.service';
 
 @Controller()
@@ -52,6 +54,13 @@ export class AttemptController {
         @CurrentUser('id') userId: string,
     ) {
         return this.attemptService.submitAttempt(attemptId, userId);
+    }
+
+    @Get('admin/attempts/:id/report')
+    @UseGuards(RolesGuard)
+    @Roles('ADMIN', 'SUPER_ADMIN')
+    async getAttemptReportAdmin(@Param('id') id: string) {
+        return this.attemptService.getAttemptReportAdmin(id);
     }
 
 }

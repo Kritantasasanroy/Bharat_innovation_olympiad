@@ -8,7 +8,7 @@ export const api = axios.create({
     withCredentials: true,
 });
 
-// Attach access token to every request
+// Attach Neon Auth / admin access token to every request
 api.interceptors.request.use((config) => {
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem('accessToken');
@@ -19,26 +19,14 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// Auto-refresh on 401
+// On 401, clear local state and redirect to login
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
-        const original = error.config;
-        if (error.response?.status === 401 && !original._retry) {
-            original._retry = true;
-            try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken });
-                localStorage.setItem('accessToken', data.accessToken);
-                localStorage.setItem('refreshToken', data.refreshToken);
-                original.headers.Authorization = `Bearer ${data.accessToken}`;
-                return api(original);
-            } catch {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                if (typeof window !== 'undefined') {
-                    window.location.href = '/login';
-                }
+        if (error.response?.status === 401) {
+            localStorage.removeItem('accessToken');
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+                window.location.href = '/login';
             }
         }
         return Promise.reject(error);

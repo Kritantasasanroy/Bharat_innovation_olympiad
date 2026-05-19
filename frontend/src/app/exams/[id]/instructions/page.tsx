@@ -22,7 +22,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         // Ensure the video element plays the stream
         if (stream && videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(e => console.error("Error playing video:", e));
+            videoRef.current.play().catch(e => console.warn("Error playing video:", e));
         }
         
         setWebcamLoading(false);
@@ -119,13 +119,13 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     {/* Webcam Preview */}
                     <div className="glass-card instructions-card">
                         <h2>📷 Webcam Check</h2>
-                        {webcamStarted ? (
-                            <div className="webcam-preview">
-                                <video ref={videoRef} autoPlay muted playsInline />
-                                <div className="webcam-indicator" />
-                                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                            </div>
-                        ) : (
+                        <div className="webcam-preview" style={{ display: webcamStarted ? 'block' : 'none' }}>
+                            <video ref={videoRef} autoPlay muted playsInline />
+                            <div className="webcam-indicator" />
+                            <canvas ref={canvasRef} style={{ display: 'none' }} />
+                        </div>
+                        
+                        {!webcamStarted && (
                             <div>
                                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
                                     {deviceChecks.webcam === null

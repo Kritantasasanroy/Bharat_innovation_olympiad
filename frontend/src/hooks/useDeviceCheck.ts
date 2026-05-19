@@ -88,7 +88,7 @@ export function useDeviceCheck() {
             checkCamera();
             checkMicrophone();
         } else {
-            console.error('[DeviceCheck] navigator.mediaDevices not available — page must be served over HTTPS');
+            console.warn('[DeviceCheck] navigator.mediaDevices not available — page must be served over HTTPS');
             setDeviceCheck('webcam', false);
             setDeviceCheck('audio', false);
         }

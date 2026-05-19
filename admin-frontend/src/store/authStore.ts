@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import { AuthTokens, User } from '@/types/user';
+import { User } from '@/types/user';
 import { create } from 'zustand';
 
 interface AuthState {
@@ -7,7 +7,6 @@ interface AuthState {
     isLoading: boolean;
     isAuthenticated: boolean;
 
-    // Actions
     login: (email: string, password: string) => Promise<void>;
     register: (data: any) => Promise<void>;
     logout: () => void;
@@ -20,30 +19,26 @@ export const useAuthStore = create<AuthState>((set) => ({
     isLoading: true,
     isAuthenticated: false,
 
+    /**
+     * Admin login using hardcoded credentials.
+     * Calls /auth/admin-login which verifies credentials and returns a JWT.
+     */
     login: async (email: string, password: string) => {
-        const { data } = await api.post<{ user: User; tokens: AuthTokens }>('/auth/login', {
+        const { data } = await api.post<{ accessToken: string; user: User }>('/auth/admin-login', {
             email,
             password,
         });
-        localStorage.setItem('accessToken', data.tokens.accessToken);
-        localStorage.setItem('refreshToken', data.tokens.refreshToken);
+        localStorage.setItem('accessToken', data.accessToken);
         set({ user: data.user, isAuthenticated: true, isLoading: false });
     },
 
-    register: async (formData: any) => {
-        const { data } = await api.post<{ user: User; tokens: AuthTokens }>('/auth/register', formData);
-        localStorage.setItem('accessToken', data.tokens.accessToken);
-        localStorage.setItem('refreshToken', data.tokens.refreshToken);
-        set({ user: data.user, isAuthenticated: true, isLoading: false });
+    register: async () => {
+        // Not used in admin portal
+        throw new Error('Registration not available in admin portal');
     },
 
     logout: () => {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (refreshToken) {
-            api.post('/auth/logout', { refreshToken }).catch(() => { });
-        }
         localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
         set({ user: null, isAuthenticated: false, isLoading: false });
     },
 
@@ -57,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             const { data } = await api.get<User>('/auth/me');
             set({ user: data, isAuthenticated: true, isLoading: false });
         } catch {
+            localStorage.removeItem('accessToken');
             set({ user: null, isAuthenticated: false, isLoading: false });
         }
     },

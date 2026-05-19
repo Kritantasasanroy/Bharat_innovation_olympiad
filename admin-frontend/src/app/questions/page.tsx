@@ -12,6 +12,7 @@ function QuestionsContent() {
     const examId = searchParams.get('examId');
 
     const [loading, setLoading] = useState(true);
+    const [exam, setExam] = useState<any>(null);
     const [sections, setSections] = useState<any[]>([]);
     const [newSectionTitle, setNewSectionTitle] = useState('');
     const [error, setError] = useState('');
@@ -32,6 +33,7 @@ function QuestionsContent() {
         difficulty: 'MEDIUM',
         marks: 1,
         negativeMarks: 0,
+        explanation: '',
         options: [
             { text: '', isCorrect: true },
             { text: '', isCorrect: false },
@@ -47,6 +49,7 @@ function QuestionsContent() {
             difficulty: 'MEDIUM',
             marks: 1,
             negativeMarks: 0,
+            explanation: '',
             options: [
                 { text: '', isCorrect: true },
                 { text: '', isCorrect: false },
@@ -83,6 +86,7 @@ function QuestionsContent() {
             difficulty: question.difficulty || 'MEDIUM',
             marks: question.marks || 1,
             negativeMarks: question.negativeMarks || 0,
+            explanation: question.explanation || '',
             options: options
         });
         setIsQuestionModalOpen(true);
@@ -93,6 +97,7 @@ function QuestionsContent() {
         try {
             setLoading(true);
             const { data } = await api.get(`/exams/${examId}`);
+            setExam(data);
             setSections(data.sections || []);
         } catch (err) {
             console.error('Failed to fetch exam', err);
@@ -182,6 +187,7 @@ function QuestionsContent() {
             difficulty: qFormData.difficulty,
             marks: qFormData.marks,
             negativeMarks: qFormData.negativeMarks,
+            explanation: qFormData.explanation || null,
             options: validOptions
         };
 
@@ -208,13 +214,16 @@ function QuestionsContent() {
         );
     }
 
+    const totalQuestions = sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0);
+    const createdMarks = sections.reduce((sum, s) => sum + (s.questions?.reduce((qSum: number, q: any) => qSum + (q.marks || 0), 0) || 0), 0);
+
     return (
         <main className="container page-content animate-fade-in">
             <div className="page-header">
                 <div>
                     <h1>Manage Questions</h1>
                     <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)' }}>
-                        Organize your sections and question bank for this exam.
+                        {exam ? `Exam: ${exam.title}` : 'Organize your sections and question bank for this exam.'}
                     </p>
                 </div>
                 <button className="btn btn-secondary" onClick={() => window.location.href = '/exams'}>
@@ -229,8 +238,92 @@ function QuestionsContent() {
                     <div className="spinner" />
                 </div>
             ) : (
-                <div style={{ marginTop: 'var(--space-6)' }}>
-                    <div className="glass-card" style={{ marginBottom: 'var(--space-6)' }}>
+                <div style={{ marginTop: 'var(--space-6)', display: 'grid', gap: 'var(--space-6)' }}>
+                    
+                    {/* Detailed Question Statistics */}
+                    {exam && (
+                        <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+                            {/* High-level Counters */}
+                            <div className="grid-4">
+                                <div className="stat-card glass-card">
+                                    <div className="stat-value">{sections.length}</div>
+                                    <div className="stat-label">Total Sections</div>
+                                </div>
+                                <div className="stat-card glass-card">
+                                    <div className="stat-value">{totalQuestions}</div>
+                                    <div className="stat-label">Total Questions</div>
+                                </div>
+                                <div className="stat-card glass-card">
+                                    <div className="stat-value">{exam.totalMarks}</div>
+                                    <div className="stat-label">Max Marks (Target)</div>
+                                </div>
+                                <div className="stat-card glass-card">
+                                    <div className="stat-value" style={{ 
+                                        color: createdMarks === exam.totalMarks ? 'var(--success-400)' : createdMarks > exam.totalMarks ? 'var(--danger-400)' : 'var(--warning-400)'
+                                    }}>
+                                        {createdMarks} / {exam.totalMarks}
+                                    </div>
+                                    <div className="stat-label">Created Marks Worth</div>
+                                </div>
+                            </div>
+
+                            {/* Section breakdown table */}
+                            <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
+                                <h3 style={{ marginBottom: 'var(--space-4)' }}>Section Weightage & Details</h3>
+                                {sections.length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)' }}>No sections created yet. Add a section below to get started.</p>
+                                ) : (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
+                                                    <th style={{ padding: '0.75rem 1rem' }}>Section Name</th>
+                                                    <th style={{ padding: '0.75rem 1rem' }}>Questions</th>
+                                                    <th style={{ padding: '0.75rem 1rem' }}>Total Marks</th>
+                                                    <th style={{ padding: '0.75rem 1rem' }}>Weightage (Target)</th>
+                                                    <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sections.map((s: any) => {
+                                                    const qCount = s.questions?.length || 0;
+                                                    const sMarks = s.questions?.reduce((sum: number, q: any) => sum + (q.marks || 0), 0) || 0;
+                                                    const weightage = exam.totalMarks > 0 ? ((sMarks / exam.totalMarks) * 100).toFixed(1) : '0';
+                                                    return (
+                                                        <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.title}</td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>{qCount} qs</td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>{sMarks} marks</td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    <div className="progress-bar" style={{ width: '80px', height: '6px' }}>
+                                                                        <div 
+                                                                            className="progress-bar-fill" 
+                                                                            style={{ width: `${Math.min(100, parseFloat(weightage))}%` }} 
+                                                                        />
+                                                                    </div>
+                                                                    <span>{weightage}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>
+                                                                {qCount === 0 ? (
+                                                                    <span className="badge badge-warning">Empty</span>
+                                                                ) : (
+                                                                    <span className="badge badge-success">Configured</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
                         <h3>Add New Section</h3>
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                             <input
@@ -245,8 +338,8 @@ function QuestionsContent() {
                     </div>
 
                     {sections.map((section: any) => (
-                        <div key={section.id} className="glass-card" style={{ marginBottom: 'var(--space-4)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div key={section.id} className="glass-card" style={{ padding: 'var(--space-6)', display: 'grid', gap: 'var(--space-4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 'var(--space-4)' }}>
                                 {editingSectionId === section.id ? (
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                         <input 
@@ -260,7 +353,7 @@ function QuestionsContent() {
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                        <h3>{section.title}</h3>
+                                        <h3 style={{ margin: 0 }}>{section.title}</h3>
                                         <button className="btn btn-sm btn-secondary" onClick={() => { setEditingSectionId(section.id); setEditSectionTitle(section.title); }}>
                                             <Pencil size={14} />
                                         </button>
@@ -275,25 +368,117 @@ function QuestionsContent() {
                                 </button>
                             </div>
                             
-                            <div style={{ marginTop: '1.5rem' }}>
+                            <div>
                                 {section.questions?.length === 0 ? (
-                                    <p style={{ color: 'var(--text-muted)' }}>No questions in this section yet.</p>
+                                    <p style={{ color: 'var(--text-muted)', margin: 0, padding: 'var(--space-4) 0' }}>No questions in this section yet.</p>
                                 ) : (
-                                    <ul style={{ listStyleType: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <ul style={{ listStyleType: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                         {section.questions?.map((q: any, i: number) => (
-                                            <li key={q.id} className="question-item glass-card" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem' }}>
-                                                <div>
-                                                    <strong>Q{i + 1}:</strong> {q.text} 
-                                                    <span className="badge badge-secondary" style={{ marginLeft: '1rem' }}>MCQ</span>
+                                            <li key={q.id} className="question-item glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                                                            <strong style={{ fontSize: '1rem', color: 'var(--primary-400)' }}>Q{i + 1}</strong>
+                                                            <span className="badge badge-primary">MCQ</span>
+                                                            <span className={`badge ${
+                                                                q.difficulty === 'EASY' ? 'badge-success' : 
+                                                                q.difficulty === 'HARD' ? 'badge-danger' : 'badge-warning'
+                                                            }`}>
+                                                                {q.difficulty}
+                                                            </span>
+                                                            <span className="badge badge-primary" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)' }}>
+                                                                {q.marks} {q.marks === 1 ? 'Mark' : 'Marks'}
+                                                            </span>
+                                                            {q.negativeMarks > 0 ? (
+                                                                <span className="badge badge-danger">
+                                                                    -{q.negativeMarks} Penalty
+                                                                </span>
+                                                            ) : (
+                                                                <span className="badge badge-success" style={{ backgroundColor: 'rgba(34, 197, 94, 0.05)' }}>
+                                                                    No Penalty
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p style={{ fontSize: '1.05rem', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', margin: 0 }}>
+                                                            {q.text}
+                                                        </p>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
+                                                        <button className="btn btn-sm btn-secondary" onClick={() => openEditQuestionModal(section.id, q)}>
+                                                            <Pencil size={14} />
+                                                        </button>
+                                                        <button className="btn btn-sm btn-danger" onClick={() => deleteQuestion(q.id)}>
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <button className="btn btn-sm btn-secondary" onClick={() => openEditQuestionModal(section.id, q)}>
-                                                        <Pencil size={14} />
-                                                    </button>
-                                                    <button className="btn btn-sm btn-danger" onClick={() => deleteQuestion(q.id)}>
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
+
+                                                {/* MCQ Options list */}
+                                                {q.options && Array.isArray(q.options) && (
+                                                    <div style={{ 
+                                                        display: 'grid', 
+                                                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                                                        gap: '0.75rem',
+                                                        marginTop: '0.5rem' 
+                                                    }}>
+                                                        {q.options.map((opt: any, idx: number) => (
+                                                            <div 
+                                                                key={idx} 
+                                                                style={{ 
+                                                                    padding: '0.75rem 1rem', 
+                                                                    borderRadius: 'var(--radius-md)', 
+                                                                    backgroundColor: opt.isCorrect ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                                                                    border: opt.isCorrect ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid var(--border-subtle)',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.75rem'
+                                                                }}
+                                                            >
+                                                                <span style={{ 
+                                                                    fontWeight: 'bold', 
+                                                                    color: opt.isCorrect ? 'var(--success-400)' : 'var(--text-secondary)',
+                                                                    fontSize: '0.9rem'
+                                                                }}>
+                                                                    {String.fromCharCode(65 + idx)}.
+                                                                </span>
+                                                                <span style={{ 
+                                                                    color: opt.isCorrect ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                                                    fontSize: '0.95rem'
+                                                                }}>
+                                                                    {opt.text}
+                                                                </span>
+                                                                {opt.isCorrect && (
+                                                                    <span style={{ 
+                                                                        marginLeft: 'auto', 
+                                                                        fontSize: '0.7rem', 
+                                                                        backgroundColor: 'rgba(34, 197, 94, 0.15)', 
+                                                                        color: 'var(--success-400)',
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: 'var(--radius-full)',
+                                                                        fontWeight: 'bold'
+                                                                    }}>
+                                                                        Correct
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Explanation */}
+                                                {q.explanation && (
+                                                    <div style={{ 
+                                                        marginTop: '0.25rem', 
+                                                        padding: '0.75rem 1rem', 
+                                                        borderRadius: 'var(--radius-md)', 
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                                                        borderLeft: '3px solid var(--primary-400)',
+                                                        fontSize: '0.9rem',
+                                                        color: 'var(--text-secondary)'
+                                                    }}>
+                                                        <strong>Explanation:</strong> {q.explanation}
+                                                    </div>
+                                                )}
                                             </li>
                                         ))}
                                     </ul>
@@ -317,6 +502,7 @@ function QuestionsContent() {
                                 rows={3}
                                 value={qFormData.text}
                                 onChange={(e) => setQFormData({...qFormData, text: e.target.value})}
+                                placeholder="Enter the question text here..."
                             />
                         </div>
 
@@ -361,6 +547,18 @@ function QuestionsContent() {
                                     onChange={(e) => setQFormData({...qFormData, negativeMarks: Number(e.target.value)})}
                                 />
                             </div>
+                        </div>
+
+                        {/* Explanation Field */}
+                        <div className="form-group" style={{ marginTop: '1rem' }}>
+                            <label>Explanation (Optional)</label>
+                            <textarea 
+                                className="form-control" 
+                                rows={2}
+                                value={qFormData.explanation}
+                                onChange={(e) => setQFormData({...qFormData, explanation: e.target.value})}
+                                placeholder="Explain why the correct answer is correct (optional)..."
+                            />
                         </div>
 
                         {qFormData.type === 'MCQ' && (

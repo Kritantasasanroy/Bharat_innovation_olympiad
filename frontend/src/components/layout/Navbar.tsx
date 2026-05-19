@@ -96,6 +96,9 @@ export default function Navbar() {
                 </span>
                 <span className="user-role">{user.role}</span>
               </div>
+              <button className="btn btn-sm btn-secondary" onClick={() => router.push('/profile')} style={{ marginRight: '0.5rem' }}>
+                Profile
+              </button>
               <button className="btn btn-sm btn-secondary" onClick={handleLogout}>
                 Logout
               </button>

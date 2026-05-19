@@ -33,53 +33,70 @@ export class AttemptService {
     constructor(private prisma: PrismaService) { }
 
     async startAttempt(userId: string, instanceId: string, ipAddress?: string) {
-        // Check if instance exists and is within time window
-        const instance = await this.prisma.examInstance.findUnique({
-            where: { id: instanceId },
-            include: { exam: true },
-        });
+        try {
+            // Check if instance exists and is within time window
+            const instance = await this.prisma.examInstance.findUnique({
+                where: { id: instanceId },
+                include: { exam: true },
+            });
 
-        if (!instance) throw new NotFoundException('Exam instance not found');
+            if (!instance) throw new NotFoundException('Exam instance not found');
 
-        const now = new Date();
-        if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
-        if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
+            const now = new Date();
+            if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
+            if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
 
-        // Check for existing attempt
-        const existing = await this.prisma.attempt.findUnique({
-            where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-            include: { items: true },
-        });
+            // Check for existing attempt
+            const existing = await this.prisma.attempt.findUnique({
+                where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+                include: { items: true },
+            });
 
-        if (existing) {
-            if (existing.status === AttemptStatus.IN_PROGRESS) {
-                return existing; // Resume existing attempt
+            if (existing) {
+                if (existing.status === AttemptStatus.IN_PROGRESS) {
+                    return existing; // Resume existing attempt
+                }
+                if (existing.status !== AttemptStatus.NOT_STARTED) {
+                    throw new BadRequestException('You have already completed this exam');
+                }
             }
-            if (existing.status !== AttemptStatus.NOT_STARTED) {
-                throw new BadRequestException('You have already completed this exam');
+
+            // Create or update attempt
+            try {
+                const attempt = await this.prisma.attempt.upsert({
+                    where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+                    create: {
+                        userId,
+                        examInstanceId: instanceId,
+                        status: AttemptStatus.IN_PROGRESS,
+                        startedAt: now,
+                        ipAddress,
+                        maxScore: instance.exam.totalMarks,
+                    },
+                    update: {
+                        status: AttemptStatus.IN_PROGRESS,
+                        startedAt: now,
+                        ipAddress,
+                    },
+                    include: { items: true },
+                });
+                return attempt;
+            } catch (error: any) {
+                // If a concurrent request created the attempt first (P2002 Unique constraint failed),
+                // we can safely just fetch and return it.
+                if (error.code === 'P2002') {
+                    const concurrentExisting = await this.prisma.attempt.findUnique({
+                        where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+                        include: { items: true },
+                    });
+                    if (concurrentExisting) return concurrentExisting;
+                }
+                throw error;
             }
+        } catch (error: any) {
+            require('fs').writeFileSync('startAttempt_error.log', error.stack || error.toString());
+            throw error;
         }
-
-        // Create or update attempt
-        const attempt = await this.prisma.attempt.upsert({
-            where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-            create: {
-                userId,
-                examInstanceId: instanceId,
-                status: AttemptStatus.IN_PROGRESS,
-                startedAt: now,
-                ipAddress,
-                maxScore: instance.exam.totalMarks,
-            },
-            update: {
-                status: AttemptStatus.IN_PROGRESS,
-                startedAt: now,
-                ipAddress,
-            },
-            include: { items: true },
-        });
-
-        return attempt;
     }
 
     async saveAnswer(attemptId: string, userId: string, questionId: string, answer: any) {
@@ -265,7 +282,7 @@ export class AttemptService {
                 total: attempt.maxScore || attempt.examInstance.exam.totalMarks,
                 date: attempt.submittedAt,
                 percentage: ((score) / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100,
-                isReleased: true,
+                isReleased: attempt.examInstance.exam.isResultReleased,
                 rank: rankOutOf500,
                 totalStudents: 500,
                 radarData
@@ -300,6 +317,7 @@ export class AttemptService {
             score: attempt.totalScore || 0,
             totalMarks: attempt.maxScore || attempt.examInstance.exam.totalMarks,
             completedAt: attempt.submittedAt,
+            isReleased: attempt.examInstance.exam.isResultReleased,
         }));
     }
 
@@ -308,5 +326,61 @@ export class AttemptService {
             where: { id },
             include: { items: true, examInstance: { include: { exam: true } } },
         });
+    }
+
+    async getAttemptReportAdmin(attemptId: string) {
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            include: {
+                user: {
+                    include: { school: true }
+                },
+                examInstance: {
+                    include: {
+                        exam: {
+                            include: { sections: true }
+                        }
+                    }
+                },
+                items: {
+                    include: { question: true }
+                }
+            }
+        });
+
+        if (!attempt) throw new NotFoundException('Attempt not found');
+
+        const sectionScoresMap: Record<string, { total: number, scored: number, name: string }> = {};
+        attempt.examInstance.exam.sections.forEach(sec => {
+            sectionScoresMap[sec.id] = { total: 0, scored: 0, name: sec.title };
+        });
+
+        attempt.items.forEach(item => {
+            if (item.question.sectionId && sectionScoresMap[item.question.sectionId]) {
+                sectionScoresMap[item.question.sectionId].total += item.question.marks;
+                if (item.score) {
+                    sectionScoresMap[item.question.sectionId].scored += item.score;
+                }
+            }
+        });
+
+        const radarData = Object.values(sectionScoresMap).map(sec => ({
+            subject: sec.name,
+            A: sec.total > 0 ? Math.round((sec.scored / sec.total) * 100) : 0,
+            fullMark: 100
+        }));
+
+        if (radarData.length === 0) {
+            radarData.push(
+                { subject: 'Accuracy', A: ((attempt.totalScore || 0) / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100, fullMark: 100 },
+                { subject: 'Completion', A: (attempt.items.length / 10) * 100, fullMark: 100 },
+                { subject: 'Time', A: 80, fullMark: 100 }
+            );
+        }
+
+        return {
+            attempt,
+            radarData
+        };
     }
 }
