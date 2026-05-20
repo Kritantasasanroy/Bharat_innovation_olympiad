@@ -44,3 +44,7 @@ backend/prisma/*.db
 
 # ONNX models (large files)
 proctor-service/models/*.onnx
+
+# Claude Code Configuration & Cache
+.claude/
+
