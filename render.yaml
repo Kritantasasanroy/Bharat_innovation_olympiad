@@ -11,7 +11,7 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/src/main.js
     envVars:
       - key: NODE_ENV
