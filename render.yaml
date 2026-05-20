@@ -2,14 +2,14 @@ services:
   # ──────────────────────────────────────────────────────────────────────────
   # NestJS Backend — REST API + WebSocket (Socket.IO / Timer Gateway)
   # Region: Singapore matches your Neon ap-southeast-1 cluster for low latency
-  # Plan: starter keeps the process alive (required for persistent WebSockets).
-  #       The free plan spins down after 15 min and breaks socket connections.
+  # Plan: free — spins down after 15 min idle; warm up the URL before exams.
+  #       Upgrade to 'starter' ($7/mo) for persistent WebSocket connections.
   # ──────────────────────────────────────────────────────────────────────────
   - type: web
     name: olympiad-backend
     env: node
     region: singapore
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: npm ci && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/src/main.js
@@ -77,7 +77,7 @@ services:
     name: olympiad-proctor
     env: python
     region: singapore
-    plan: starter
+    plan: free
     rootDir: proctor-service
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
