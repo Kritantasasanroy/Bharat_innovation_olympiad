@@ -48,3 +48,6 @@ proctor-service/models/*.onnx
 # Claude Code Configuration & Cache
 .claude/
 
+# Vercel local project config (never commit — contains project IDs)
+**/.vercel/
+
