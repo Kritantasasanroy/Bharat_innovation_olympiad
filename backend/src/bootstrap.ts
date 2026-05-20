@@ -29,12 +29,7 @@ export function configureNestApp(app: INestApplication) {
         origin: parseAllowedOrigins(),
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-        allowedHeaders: [
-            'Content-Type',
-            'Authorization',
-            'X-SafeExamBrowser-RequestHash',
-            'X-SafeExamBrowser-ConfigKeyHash',
-        ],
+        allowedHeaders: ['Content-Type', 'Authorization'],
     });
     app.useGlobalPipes(
         new ValidationPipe({

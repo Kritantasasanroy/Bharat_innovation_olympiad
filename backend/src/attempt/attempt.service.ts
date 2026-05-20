@@ -33,68 +33,59 @@ export class AttemptService {
     constructor(private prisma: PrismaService) { }
 
     async startAttempt(userId: string, instanceId: string, ipAddress?: string) {
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: instanceId },
+            include: { exam: true },
+        });
+
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const now = new Date();
+        if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
+        if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
+
+        const existing = await this.prisma.attempt.findUnique({
+            where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+            include: { items: true },
+        });
+
+        if (existing) {
+            if (existing.status === AttemptStatus.IN_PROGRESS) {
+                return existing;
+            }
+            if (existing.status !== AttemptStatus.NOT_STARTED) {
+                throw new BadRequestException('You have already completed this exam');
+            }
+        }
+
         try {
-            // Check if instance exists and is within time window
-            const instance = await this.prisma.examInstance.findUnique({
-                where: { id: instanceId },
-                include: { exam: true },
-            });
-
-            if (!instance) throw new NotFoundException('Exam instance not found');
-
-            const now = new Date();
-            if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
-            if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
-
-            // Check for existing attempt
-            const existing = await this.prisma.attempt.findUnique({
+            const attempt = await this.prisma.attempt.upsert({
                 where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+                create: {
+                    userId,
+                    examInstanceId: instanceId,
+                    status: AttemptStatus.IN_PROGRESS,
+                    startedAt: now,
+                    ipAddress,
+                    maxScore: instance.exam.totalMarks,
+                },
+                update: {
+                    status: AttemptStatus.IN_PROGRESS,
+                    startedAt: now,
+                    ipAddress,
+                },
                 include: { items: true },
             });
-
-            if (existing) {
-                if (existing.status === AttemptStatus.IN_PROGRESS) {
-                    return existing; // Resume existing attempt
-                }
-                if (existing.status !== AttemptStatus.NOT_STARTED) {
-                    throw new BadRequestException('You have already completed this exam');
-                }
-            }
-
-            // Create or update attempt
-            try {
-                const attempt = await this.prisma.attempt.upsert({
+            return attempt;
+        } catch (error: any) {
+            // P2002: concurrent request already created the attempt — just return it
+            if (error.code === 'P2002') {
+                const concurrent = await this.prisma.attempt.findUnique({
                     where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-                    create: {
-                        userId,
-                        examInstanceId: instanceId,
-                        status: AttemptStatus.IN_PROGRESS,
-                        startedAt: now,
-                        ipAddress,
-                        maxScore: instance.exam.totalMarks,
-                    },
-                    update: {
-                        status: AttemptStatus.IN_PROGRESS,
-                        startedAt: now,
-                        ipAddress,
-                    },
                     include: { items: true },
                 });
-                return attempt;
-            } catch (error: any) {
-                // If a concurrent request created the attempt first (P2002 Unique constraint failed),
-                // we can safely just fetch and return it.
-                if (error.code === 'P2002') {
-                    const concurrentExisting = await this.prisma.attempt.findUnique({
-                        where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-                        include: { items: true },
-                    });
-                    if (concurrentExisting) return concurrentExisting;
-                }
-                throw error;
+                if (concurrent) return concurrent;
             }
-        } catch (error: any) {
-            require('fs').writeFileSync('startAttempt_error.log', error.stack || error.toString());
             throw error;
         }
     }

@@ -221,7 +221,24 @@ export class ProctorService implements OnModuleInit {
             // 2. Face embedding & identity matching
             if (numFaces >= 1) {
                 const embedding = await this.computeEmbedding(frameBuffer);
-                const enrolled = this.enrolledEmbeddings.get(userId);
+
+                // Load from DB if not cached (handles post-restart cold starts)
+                let enrolled = this.enrolledEmbeddings.get(userId);
+                if (!enrolled) {
+                    const user = await this.prisma.user.findUnique({
+                        where: { id: userId },
+                        select: { faceEmbedding: true },
+                    });
+                    if (user?.faceEmbedding) {
+                        const floatArr = new Float32Array(
+                            user.faceEmbedding.buffer,
+                            user.faceEmbedding.byteOffset,
+                            user.faceEmbedding.byteLength / Float32Array.BYTES_PER_ELEMENT,
+                        );
+                        enrolled = Array.from(floatArr);
+                        this.enrolledEmbeddings.set(userId, enrolled);
+                    }
+                }
 
                 if (enrolled) {
                     matchScore = this.cosineSimilarity(embedding, enrolled);
@@ -292,6 +309,15 @@ export class ProctorService implements OnModuleInit {
             }
 
             const embedding = await this.computeEmbedding(imageBuffer);
+
+            // Persist to DB so enrollment survives restarts/deploys
+            const embeddingBuffer = Buffer.from(new Float32Array(embedding).buffer);
+            await this.prisma.user.update({
+                where: { id: userId },
+                data: { faceEmbedding: embeddingBuffer },
+            });
+
+            // Also warm the in-memory cache
             this.enrolledEmbeddings.set(userId, embedding);
 
             this.logger.log(`[Enroll] user=${userId} embedding_dim=${embedding.length}`);

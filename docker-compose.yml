@@ -2,15 +2,14 @@ version: '3.8'
 
 services:
 
-
   # ── Redis ──
   redis:
     image: redis:7-alpine
     container_name: olympiad-redis
-    ports:
-      - '6379:6379'
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: [ 'CMD', 'redis-cli', 'ping' ]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,18 +22,15 @@ services:
     container_name: olympiad-backend
     ports:
       - '4000:4000'
+    env_file:
+      - .env
     environment:
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-jwt-secret-change-in-production
-      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-production
-      PROCTOR_SERVICE_URL: http://proctor:5000
-      PROCTOR_API_KEY: dev-proctor-key
-      PORT: 4000
     depends_on:
       redis:
         condition: service_healthy
 
-  # ── Next.js Frontend ──
+  # ── Next.js Student Frontend ──
   frontend:
     build:
       context: ./frontend
@@ -43,21 +39,23 @@ services:
     ports:
       - '3000:3000'
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_WS_URL: ws://localhost:4000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:4000}
     depends_on:
       - backend
 
-  # ── Python Proctor Service ──
-  proctor:
+  # ── Next.js Admin Frontend ──
+  admin-frontend:
     build:
-      context: ./proctor-service
+      context: ./admin-frontend
       dockerfile: Dockerfile
-    container_name: olympiad-proctor
+    container_name: olympiad-admin-frontend
     ports:
-      - '5000:5000'
+      - '3001:3001'
     environment:
-      PROCTOR_API_KEY: dev-proctor-key
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    depends_on:
+      - backend
 
-
-
+volumes:
+  redis_data:

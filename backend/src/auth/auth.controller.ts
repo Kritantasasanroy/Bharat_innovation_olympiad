@@ -5,9 +5,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { LoginSyncDto, SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 
-// Hardcoded admin credentials
-const ADMIN_EMAIL = 'admin@bharatolympiad.in';
-const ADMIN_PASSWORD = 'BIO@Admin2025';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 @Controller('auth')
 export class AuthController {
@@ -21,7 +20,7 @@ export class AuthController {
      */
     @Post('admin-login')
     async adminLogin(@Body() body: { email: string; password: string }) {
-        if (body.email !== ADMIN_EMAIL || body.password !== ADMIN_PASSWORD) {
+        if (!ADMIN_EMAIL || !ADMIN_PASSWORD || body.email !== ADMIN_EMAIL || body.password !== ADMIN_PASSWORD) {
             throw new UnauthorizedException('Invalid admin credentials');
         }
         const user = await this.authService.getOrCreateAdmin(ADMIN_EMAIL);
