@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AttemptModule } from './attempt/attempt.module';
 import { AuthModule } from './auth/auth.module';
 import { ExamModule } from './exam/exam.module';
+import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProctorModule } from './proctor/proctor.module';
 import { TimerModule } from './timer/timer.module';
@@ -19,5 +20,6 @@ import { UserModule } from './user/user.module';
         ProctorModule,
         TimerModule,
     ],
+    controllers: [HealthController],
 })
 export class AppModule { }
