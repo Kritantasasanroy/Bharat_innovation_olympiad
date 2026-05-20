@@ -258,7 +258,7 @@ export default function AttemptReportPage() {
                                     
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', backgroundColor: 'var(--bg-base)', padding: '1rem', borderRadius: '4px' }}>
                                         <div>
-                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Student's Answer:</div>
+                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Student&apos;s Answer:</div>
                                             <div style={{ fontWeight: 500, color: item.answer === null ? 'var(--text-muted)' : (item.isCorrect ? 'var(--success-400)' : 'var(--danger-400)') }}>
                                                 {item.answer === null ? 'Did not answer' : (studentOption?.text || String(item.answer))}
                                             </div>
