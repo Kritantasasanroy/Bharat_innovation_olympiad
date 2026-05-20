@@ -1,0 +1,87 @@
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # NestJS Backend — REST API + WebSocket (Socket.IO / Timer Gateway)
+  # Region: Singapore matches your Neon ap-southeast-1 cluster for low latency
+  # Plan: starter keeps the process alive (required for persistent WebSockets).
+  #       The free plan spins down after 15 min and breaks socket connections.
+  # ──────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: olympiad-backend
+    env: node
+    region: singapore
+    plan: starter
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/src/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Database ───────────────────────────────────────────────────────────
+      # DATABASE_URL  → Neon pooler URL  (pgbouncer=true, used by the app)
+      # DIRECT_URL    → Neon direct URL  (no pooler, used ONLY by prisma migrate deploy)
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+      # ── JWT ─────────────────────────────────────────────────────────────────
+      # generateValue: true — Render auto-generates a secure random secret.
+      # Copy the generated value from the Render dashboard if you ever need to
+      # rotate or share it.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      # ── Admin seed credentials ────────────────────────────────────────────
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # ── CORS / Frontend origins ───────────────────────────────────────────
+      # Set these to your exact Vercel production URLs (no trailing slash).
+      # bootstrap.ts and the WebSocket gateway both read these at startup.
+      - key: FRONTEND_URL
+        sync: false
+      - key: ADMIN_FRONTEND_URL
+        sync: false
+      # Optional: extra comma-separated origins (custom domains, preview URLs).
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # ── Proctor service ───────────────────────────────────────────────────
+      # Set PROCTOR_SERVICE_URL to the olympiad-proctor Render service URL
+      # after the proctor service is deployed, e.g.:
+      #   https://olympiad-proctor.onrender.com
+      - key: PROCTOR_SERVICE_URL
+        sync: false
+      - key: PROCTOR_API_KEY
+        sync: false
+
+      # ── Redis (optional) ─────────────────────────────────────────────────
+      # Required only if TimerService uses Redis for distributed state.
+      # Add a Render Redis instance and paste its Internal Redis URL here.
+      - key: REDIS_URL
+        sync: false
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # FastAPI Proctoring Service — Face detection / frame analysis
+  # Uses Render's native Python environment (Ubuntu).
+  # libgomp1 (required by onnxruntime) is pre-installed on Render's build image.
+  # The startCommand overrides the hardcoded port=5000 in main.py and binds to
+  # Render's dynamic $PORT instead.
+  # ──────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: olympiad-proctor
+    env: python
+    region: singapore
+    plan: starter
+    rootDir: proctor-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Must match PROCTOR_API_KEY set on the backend service above.
+      - key: PROCTOR_API_KEY
+        sync: false
