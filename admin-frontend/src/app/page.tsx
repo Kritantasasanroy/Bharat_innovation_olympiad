@@ -101,30 +101,19 @@ export default function AdminLoginPage() {
 
             <div className="auth-card glass-card" style={{ maxWidth: '420px', width: '100%', padding: 'var(--space-8)' }}>
                 <div className="auth-header" style={{ textAlign: 'center', marginBottom: 'var(--space-8)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-4)' }}>
-                        <img 
-                            src="/Lemon-Ideas-Final-Logo.png" 
-                            alt={COMPANY_NAME} 
-                            style={{ height: '50px', objectFit: 'contain' }} 
-                            onError={(e) => {
-                                // Fallback icon if logo not found in admin-frontend public dir
-                                (e.target as HTMLImageElement).style.display = 'none';
-                                (e.target as HTMLImageElement).nextElementSibling?.removeAttribute('hidden');
-                            }}
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
+                        <img
+                            src="/bio-logo.png"
+                            alt={APP_NAME}
+                            style={{ height: '76px', width: 'auto', objectFit: 'contain', filter: 'drop-shadow(0 6px 18px rgba(125, 200, 50, 0.3))' }}
                         />
-                        <div className="logo-placeholder" hidden style={{
-                            width: '48px', height: '48px', 
-                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600))',
-                            borderRadius: 'var(--radius-md)', display: 'flex', 
-                            alignItems: 'center', justifyContent: 'center',
-                            color: 'white', fontWeight: 700, fontSize: '1.5rem',
-                            boxShadow: 'var(--shadow-md)'
-                        }}>
-                            AI
-                        </div>
                     </div>
-                    <h1 style={{ fontSize: '1.5rem', marginBottom: 'var(--space-2)' }}>{APP_NAME}</h1>
-                    <p style={{ color: 'var(--primary-400)', fontWeight: 600, letterSpacing: '1px' }}>ADMIN PORTAL</p>
+                    <h1 style={{ fontSize: '1.5rem', marginBottom: 'var(--space-1)' }}>{APP_NAME}</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: 'var(--space-3)' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>by</span>
+                        <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '18px', width: 'auto', objectFit: 'contain' }} />
+                    </div>
+                    <p style={{ color: 'var(--primary-400)', fontWeight: 700, letterSpacing: '1.5px', fontSize: '0.8rem' }}>ADMIN PORTAL</p>
                 </div>
 
                 {error && (

@@ -105,9 +105,12 @@ export default function LoginPage() {
 
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
-                    <div className="auth-logo"><img src="/lemon-ideas-logo.png" alt="Lemon Ideas" style={{ height: '48px', width: 'auto' }} /></div>
+                    <div className="auth-logo"><img src="/bio-logo.png" alt={APP_NAME} style={{ height: '72px', width: 'auto' }} /></div>
                     <h1 className="auth-title">{APP_NAME}</h1>
-                    <p className="auth-company">by {COMPANY_NAME}</p>
+                    <p className="auth-company">
+                        <span>by</span>
+                        <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '18px', width: 'auto' }} />
+                    </p>
                     <p className="auth-subtitle">
                         {step === 'email' ? 'Sign in to your account' : 'Enter verification code'}
                     </p>

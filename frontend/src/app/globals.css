@@ -8,21 +8,22 @@
 
 /* ── CSS Custom Properties ── */
 :root {
-  /* Brand palette — Lemon Ideas */
-  --primary-50: #fef9e7;
-  --primary-100: #fef3c7;
-  --primary-200: #fde68a;
-  --primary-300: #fcd34d;
-  --primary-400: #fbc50b;
-  --primary-500: #f5b400;
-  --primary-600: #d99e00;
-  --primary-700: #b07d00;
-  --primary-800: #8a6200;
-  --primary-900: #6b4c00;
+  /* Brand palette — BIO logo: vivid lemon yellow + lime green */
+  --primary-50: #fffdeb;
+  --primary-100: #fff6c2;
+  --primary-200: #ffec8a;
+  --primary-300: #ffe04d;
+  --primary-400: #ffcb05;
+  --primary-500: #f0b800;
+  --primary-600: #cc9a00;
+  --primary-700: #a37a00;
+  --primary-800: #7d5e00;
+  --primary-900: #5c4500;
 
-  --accent-400: #00c261;
-  --accent-500: #009a4e;
-  --accent-600: #007a3e;
+  --accent-300: #9bd862;
+  --accent-400: #7dc832;
+  --accent-500: #63b81b;
+  --accent-600: #4f9a12;
 
   --success-400: #4ade80;
   --success-500: #22c55e;
@@ -51,10 +52,10 @@
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
 
-  /* Gradients — Lemon Yellow → Green */
-  --gradient-brand: linear-gradient(135deg, #fbc50b, #009a4e);
-  --gradient-card: linear-gradient(145deg, rgba(251, 197, 11, 0.05), rgba(0, 154, 78, 0.05));
-  --gradient-glow: linear-gradient(135deg, rgba(251, 197, 11, 0.15), rgba(0, 154, 78, 0.15));
+  /* Gradients — BIO lemon yellow → lime green */
+  --gradient-brand: linear-gradient(135deg, #ffd60a, #7dc832);
+  --gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.05), rgba(99, 184, 27, 0.05));
+  --gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.15), rgba(99, 184, 27, 0.15));
 
   /* Glassmorphism */
   --glass-bg: rgba(28, 28, 28, 0.75);
@@ -66,7 +67,7 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 30px rgba(251, 197, 11, 0.1);
+  --shadow-glow: 0 0 30px rgba(255, 203, 5, 0.1);
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -120,8 +121,8 @@
   --border-strong: rgba(0, 0, 0, 0.18);
 
   /* Gradients — same brand, lighter bg effect */
-  --gradient-card: linear-gradient(145deg, rgba(251, 197, 11, 0.04), rgba(0, 154, 78, 0.04));
-  --gradient-glow: linear-gradient(135deg, rgba(251, 197, 11, 0.08), rgba(0, 154, 78, 0.08));
+  --gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.04), rgba(99, 184, 27, 0.04));
+  --gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.08), rgba(99, 184, 27, 0.08));
 
   /* Glassmorphism */
   --glass-bg: rgba(255, 255, 255, 0.8);
@@ -132,14 +133,14 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  --shadow-glow: 0 0 30px rgba(251, 197, 11, 0.08);
+  --shadow-glow: 0 0 30px rgba(255, 203, 5, 0.08);
 
-  /* Darker primary shades for better contrast in light mode */
-  --primary-400: #d9a800;
-  --primary-500: #c49700;
+  /* Darker shades for better contrast in light mode */
+  --primary-400: #b88a00;
+  --primary-500: #9c7400;
 
-  --accent-400: #008c45;
-  --accent-500: #007a3e;
+  --accent-400: #4f9a12;
+  --accent-500: #3f7d0e;
 
   --success-400: #16a34a;
   --danger-400: #dc2626;
@@ -206,9 +207,9 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(251, 197, 11, 0.06), transparent),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(0, 154, 78, 0.05), transparent),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(255, 165, 0, 0.03), transparent);
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(255, 203, 5, 0.06), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(99, 184, 27, 0.05), transparent),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(255, 203, 5, 0.03), transparent);
   pointer-events: none;
   z-index: 0;
 }
@@ -317,11 +318,11 @@ h4 {
 .btn-primary {
   background: var(--gradient-brand);
   color: var(--text-on-primary);
-  box-shadow: 0 2px 12px rgba(251, 197, 11, 0.25);
+  box-shadow: 0 2px 12px rgba(255, 203, 5, 0.25);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 4px 20px rgba(251, 197, 11, 0.4);
+  box-shadow: 0 4px 20px rgba(255, 203, 5, 0.4);
   filter: brightness(1.1);
 }
 
@@ -376,7 +377,7 @@ h4 {
 
 .input-field:focus {
   border-color: var(--primary-400);
-  box-shadow: 0 0 0 3px rgba(251, 197, 11, 0.15);
+  box-shadow: 0 0 0 3px rgba(255, 203, 5, 0.15);
 }
 
 .input-label {
@@ -420,7 +421,7 @@ h4 {
 }
 
 .badge-primary {
-  background: rgba(251, 197, 11, 0.12);
+  background: rgba(255, 203, 5, 0.12);
   color: var(--primary-400);
 }
 
@@ -673,10 +674,10 @@ h4 {
 }
 
 .question-index-item.current {
-  background: rgba(251, 197, 11, 0.15);
+  background: rgba(255, 203, 5, 0.15);
   color: var(--primary-400);
   border-color: var(--primary-400);
-  box-shadow: 0 0 10px rgba(251, 197, 11, 0.15);
+  box-shadow: 0 0 10px rgba(255, 203, 5, 0.15);
 }
 
 .question-index-item.flagged {
@@ -704,9 +705,9 @@ h4 {
 }
 
 .option-item.selected {
-  background: rgba(251, 197, 11, 0.08);
+  background: rgba(255, 203, 5, 0.08);
   border-color: var(--primary-400);
-  box-shadow: 0 0 0 2px rgba(251, 197, 11, 0.12);
+  box-shadow: 0 0 0 2px rgba(255, 203, 5, 0.12);
 }
 
 .option-radio {
@@ -1096,10 +1097,14 @@ h4 {
           margin-top: var(--space-2);
         }
         .auth-company {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
           font-size: 0.8rem;
           font-weight: 500;
           color: var(--text-muted);
-          margin-top: var(--space-1);
+          margin-top: var(--space-2);
           letter-spacing: 0.03em;
         }
         .auth-form {
@@ -1141,9 +1146,9 @@ h4 {
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(ellipse 60% 50% at 50% 20%, rgba(251, 197, 11, 0.12), transparent),
-            radial-gradient(ellipse 40% 40% at 80% 60%, rgba(0, 154, 78, 0.08), transparent),
-            radial-gradient(ellipse 40% 40% at 20% 80%, rgba(255, 165, 0, 0.06), transparent);
+            radial-gradient(ellipse 60% 50% at 50% 20%, rgba(255, 203, 5, 0.12), transparent),
+            radial-gradient(ellipse 40% 40% at 80% 60%, rgba(99, 184, 27, 0.08), transparent),
+            radial-gradient(ellipse 40% 40% at 20% 80%, rgba(255, 203, 5, 0.06), transparent);
           animation: pulseGlow 8s ease-in-out infinite alternate;
         }
         @keyframes pulseGlow {
@@ -1160,8 +1165,8 @@ h4 {
           align-items: center;
           gap: var(--space-2);
           padding: var(--space-2) var(--space-4);
-          background: rgba(251, 197, 11, 0.1);
-          border: 1px solid rgba(251, 197, 11, 0.2);
+          background: rgba(255, 203, 5, 0.1);
+          border: 1px solid rgba(255, 203, 5, 0.2);
           border-radius: var(--radius-full);
           font-size: 0.85rem;
           font-weight: 600;
@@ -1278,7 +1283,7 @@ h4 {
           background-clip: text;
         }
         .auth-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: var(--space-2); }
-        .auth-company { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); margin-top: var(--space-1); letter-spacing: 0.03em; }
+        .auth-company { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.8rem; font-weight: 500; color: var(--text-muted); margin-top: var(--space-2); letter-spacing: 0.03em; }
         .auth-form { display: flex; flex-direction: column; }
         .auth-error {
           padding: var(--space-3) var(--space-4);
@@ -1352,14 +1357,15 @@ h4 {
           cursor: pointer;
         }
         .brand-logo {
-          height: 36px;
+          height: 42px;
           width: auto;
           object-fit: contain;
+          filter: drop-shadow(0 2px 8px rgba(125, 200, 50, 0.28));
         }
         .brand-text-group {
           display: flex;
           flex-direction: column;
-          line-height: 1.2;
+          line-height: 1.15;
         }
         .brand-text {
           font-weight: 800;
@@ -1369,11 +1375,22 @@ h4 {
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
-        .brand-sub {
-          font-size: 0.65rem;
+        .brand-byline {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          margin-top: 3px;
+        }
+        .brand-byline-by {
+          font-size: 0.62rem;
           font-weight: 500;
           color: var(--text-muted);
-          letter-spacing: 0.05em;
+          letter-spacing: 0.04em;
+        }
+        .brand-byline-logo {
+          height: 15px;
+          width: auto;
+          object-fit: contain;
         }
         .navbar-links {
           display: flex;
@@ -1394,7 +1411,7 @@ h4 {
         }
         .nav-link.active {
           color: var(--primary-400);
-          background: rgba(251, 197, 11, 0.1);
+          background: rgba(255, 203, 5, 0.1);
         }
         .navbar-user {
           display: flex;
@@ -1442,7 +1459,7 @@ h4 {
         }
         .option-item.selected {
           border-color: var(--primary-500);
-          background-color: rgba(251, 197, 11, 0.1);
+          background-color: rgba(255, 203, 5, 0.1);
         }
         .option-item.selected .option-radio {
           background-color: var(--primary-500);
@@ -1461,6 +1478,44 @@ h4 {
           cursor: not-allowed;
           pointer-events: none;
         }
+
+/* ── Brand Logo & Accessibility ── */
+.hero-logo {
+  display: block;
+  height: 104px;
+  width: auto;
+  margin: 0 auto var(--space-6);
+  filter: drop-shadow(0 8px 24px rgba(125, 200, 50, 0.32));
+  animation: heroLogoIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes heroLogoIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 768px) {
+  .hero-logo { height: 80px; }
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible,
+.theme-toggle:focus-visible,
+.input-field:focus-visible {
+  outline: 2px solid var(--primary-400);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 @tailwind base;
 @tailwind components;

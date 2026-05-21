@@ -32,3 +32,16 @@ This workspace is integrated with the `savethetokens` custom skill to optimize c
 2. **Session Hygiene:** Keep conversations task-scoped. Run `/clear` frequently between separate tasks to purge stale context.
 3. **Compaction:** Run `/compact` manually before reaching 80% context capacity. Create a checkpoint file describing files modified and next steps before compacting.
 4. **Lean Communication:** Prefer concise updates. Avoid printing massive logs or raw command outputs directly into the chat.
+
+## Integrated Design Skills & Custom Commands
+This repository has integrated top-tier design guidelines to ensure visual excellence and technical correctness in our frontends.
+
+### Integrated Skills
+1. **`frontend-design`** ([SKILL.md](file:///d:/lemon%20ideas%20work%20stuff/bharat%20Innovation%20Olympiad/.claude/skills/frontend-design/SKILL.md)): Aesthetic guidance for visual excellence. Creates premium typography, gradients, layouts, and animations, avoiding generic "AI slop" styles.
+2. **`web-design-guidelines`** ([SKILL.md](file:///d:/lemon%20ideas%20work%20stuff/bharat%20Innovation%20Olympiad/.claude/skills/web-design-guidelines/SKILL.md)): Compliance checks for technical design quality (accessibility, keyboard navigation, focus states, inputs, animations, performance).
+
+### Custom Slash Commands
+You can run these commands directly inside your Claude Code session:
+* **`/project:beautify <path-to-file>`**: Upgrades a component or page to a high-end, premium aesthetic.
+* **`/project:design-audit <path-to-file-or-dir>`**: Audits the specified frontend files against Vercel's Web Interface Guidelines.
+

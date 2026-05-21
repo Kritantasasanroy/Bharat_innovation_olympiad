@@ -20,10 +20,13 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="navbar-inner">
         <div className="navbar-brand" onClick={() => router.push('/')}>
-          <img src="/lemon-ideas-logo.png" alt="Lemon Ideas" className="brand-logo" />
+          <img src="/bio-logo.png" alt={APP_NAME} className="brand-logo" />
           <div className="brand-text-group">
             <span className="brand-text">{APP_NAME}</span>
-            <span className="brand-sub">by {COMPANY_NAME}</span>
+            <span className="brand-byline">
+              <span className="brand-byline-by">by</span>
+              <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} className="brand-byline-logo" />
+            </span>
           </div>
         </div>
 
