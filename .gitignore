@@ -1,20 +1,23 @@
-# Dependencies
+# ── Dependencies ──────────────────────────────────────────────
 node_modules/
 .pnp
 .pnp.js
+.yarn/install-state.gz
 
-# Build outputs
+# ── Build outputs ─────────────────────────────────────────────
 dist/
 build/
 .next/
 out/
+*.tsbuildinfo
 
-# Environment
+# ── Environment ───────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
+.env.*.local
 
-# Python
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,32 +25,62 @@ venv/
 .venv/
 *.egg-info/
 
-# IDE
+# ── IDE ───────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# OS
+# ── OS ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Logs
+# ── Logs ──────────────────────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Docker
+# ── Docker ────────────────────────────────────────────────────
 docker-compose.override.yml
 
-# Prisma
+# ── Prisma ────────────────────────────────────────────────────
 backend/prisma/*.db
 
-# ONNX models (large files)
+# ── ONNX / ML models (large binaries) ────────────────────────
 proctor-service/models/*.onnx
+*.onnx
 
-# Claude Code Configuration & Cache
+# ── Office documents (not source code) ───────────────────────
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pptx
+*.ppt
+
+# ── Source / raw image assets ─────────────────────────────────
+# Optimised copies live in */public/ — don't commit originals
+Bio logo.png
+innopreneurs-logo-BJ5i0_1X.png
+Lemon-Ideas-Final-Logo.png
+
+# ── Dev-only convenience scripts ──────────────────────────────
+start-dev.bat
+
+# ── Temp / scratch files committed by mistake ─────────────────
+backend/tmp_check.js
+backend/test_api.js
+backend/update_types.js
+backend/vercel.json
+frontend/db.js
+frontend/test.js
+frontend/prisma/
+FULLSCREEN_IMPLEMENTATION.md
+
+# ── Claude Code configuration & cache ────────────────────────
 .claude/
 
-# Vercel local project config (never commit — contains project IDs)
+# ── Vercel local project config (contains project IDs) ───────
 **/.vercel/
-
