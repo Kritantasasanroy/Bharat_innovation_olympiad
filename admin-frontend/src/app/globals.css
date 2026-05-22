@@ -1136,6 +1136,52 @@ h4 {
           text-transform: capitalize;
         }
 
+/* ── Brand Tagline ── */
+.brand-tagline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  max-width: 100%;
+  margin: 0 auto var(--space-5);
+}
+.brand-tagline span {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.brand-tagline::before,
+.brand-tagline::after {
+  content: '';
+  height: 1px;
+  flex: 1 1 0;
+  min-width: 0.5rem;
+  max-width: 2.2rem;
+  background: linear-gradient(90deg, transparent, var(--accent-400));
+}
+.brand-tagline::after {
+  background: linear-gradient(90deg, var(--accent-400), transparent);
+}
+
+/* Tagline — navbar variant */
+.brand-tagline-nav {
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.045em;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  margin-top: 2px;
+}
+@media (max-width: 768px) {
+  .brand-tagline-nav { display: none; }
+}
+
 /* ── Accessibility ── */
 .btn:focus-visible,
 .nav-link:focus-visible,

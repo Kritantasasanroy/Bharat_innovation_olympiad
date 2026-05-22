@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isDemoExam } from '../common/demo-exams';
 
 // ── Scoring strategies ──
 
@@ -54,7 +55,12 @@ export class AttemptService {
                 return existing;
             }
             if (existing.status !== AttemptStatus.NOT_STARTED) {
-                throw new BadRequestException('You have already completed this exam');
+                if (!isDemoExam(instance.examId)) {
+                    throw new BadRequestException('You have already completed this exam');
+                }
+                // Demo exam — discard the finished attempt (cascades to its
+                // answers and proctor events) so the student can retake it.
+                await this.prisma.attempt.delete({ where: { id: existing.id } });
             }
         }
 

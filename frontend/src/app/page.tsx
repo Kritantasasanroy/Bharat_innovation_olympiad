@@ -20,6 +20,7 @@ export default function HomePage() {
         <div className="hero-bg" />
         <div className="container hero-content">
           <img src="/bio-logo.png" alt={APP_NAME} className="hero-logo" />
+          <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
           <h1 className="hero-title">
             <span className="gradient-text">{APP_NAME}</span>
           </h1>

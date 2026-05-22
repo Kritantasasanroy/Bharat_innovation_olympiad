@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptStatus } from '@prisma/client';
+import { isDemoExam } from '../common/demo-exams';
 
 @Injectable()
 export class ExamService {
@@ -44,13 +45,11 @@ export class ExamService {
         });
 
         const completedExamIds = new Set(completedAttempts.map(a => a.examInstance.examId));
-        console.log('User ID:', userId);
-        console.log('Completed Exam IDs Set:', Array.from(completedExamIds));
-        console.log('First exam ID in list:', exams[0]?.id);
 
         return exams.map(exam => ({
             ...exam,
-            isCompleted: completedExamIds.has(exam.id)
+            // Demo exams are never "completed" — they stay open for unlimited retakes
+            isCompleted: isDemoExam(exam.id) ? false : completedExamIds.has(exam.id)
         }));
     }
 

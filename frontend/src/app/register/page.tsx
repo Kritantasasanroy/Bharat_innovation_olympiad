@@ -150,6 +150,7 @@ export default function RegisterPage() {
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
                     <div className="auth-logo"><img src="/bio-logo.png" alt={APP_NAME} style={{ height: '72px', width: 'auto' }} /></div>
+                    <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
                     <h1 className="auth-title">{APP_NAME}</h1>
                     <p className="auth-company">
                         <span>by</span>

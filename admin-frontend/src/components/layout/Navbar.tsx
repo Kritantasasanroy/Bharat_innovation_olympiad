@@ -27,6 +27,7 @@ export default function Navbar() {
               <span className="brand-byline-by">by</span>
               <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} className="brand-byline-logo" />
             </span>
+            <span className="brand-tagline-nav">Where Young Minds Build the Future</span>
           </div>
         </div>
 
