@@ -101,10 +101,10 @@ async function api(method, pathSuffix, token, body) {
 
     // ── Update exam metadata ──
     await api('PUT', `/admin/exams/${DEMO_EXAM_ID}`, token, {
-        durationMinutes: 60,
+        durationMinutes: 30,
         totalMarks,
     });
-    console.log(`Updated exam: durationMinutes=60, totalMarks=${totalMarks}`);
+    console.log(`Updated exam: durationMinutes=30, totalMarks=${totalMarks}`);
 
     // ── Create sections + questions ──
     for (let i = 0; i < sectionsOrder.length; i++) {
