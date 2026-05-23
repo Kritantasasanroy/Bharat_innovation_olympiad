@@ -130,6 +130,20 @@ export class ExamController {
 
     // ── Admin: questions & bank ──
 
+    @Post('admin/questions')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async createBankQuestion(@Body() body: any) {
+        return this.examService.createBankQuestion(body);
+    }
+
+    @Post('admin/questions/bulk')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async bulkCreateBankQuestions(@Body() body: { questions: any[] }) {
+        return this.examService.bulkCreateBankQuestions(body.questions || []);
+    }
+
     @Get('admin/questions')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)

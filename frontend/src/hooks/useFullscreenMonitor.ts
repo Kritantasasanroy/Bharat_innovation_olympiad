@@ -3,180 +3,131 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface FullscreenMonitorOptions {
-  onViolation: (type: 'exit_fullscreen' | 'tab_switch', count: number) => void;
-  onPause: () => void;
-  onResume: () => void;
-  onAutoSubmit: (reason: string) => void;
+  onViolation?: (type: 'exit_fullscreen' | 'tab_switch', count: number) => void;
+  onAutoSubmit?: (reason: string) => void;
   maxViolations?: number;
   pauseTimeoutSec?: number;
 }
 
 export function useFullscreenMonitor({
   onViolation,
-  onPause,
-  onResume,
   onAutoSubmit,
   maxViolations = 3,
   pauseTimeoutSec = 20,
 }: FullscreenMonitorOptions) {
-  const [isPaused, setIsPaused] = useState(false);
-  const [violationCount, setViolationCount] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  
-  const pauseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [violationCount, setViolationCount] = useState(0);
+  // isGated = true means the exam is blocked and fullscreen must be entered
+  const [isGated, setIsGated] = useState(true);
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const violationCountRef = useRef(0);
+  // Ref mirror of isGated so event handlers always see current value without re-registering
+  const isGatedRef = useRef(true);
 
-  // Request fullscreen on mount
-  const requestFullscreen = async () => {
-    try {
-      const elem = document.documentElement;
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      } else if ((elem as any).webkitRequestFullscreen) {
-        await (elem as any).webkitRequestFullscreen();
-      } else if ((elem as any).mozRequestFullScreen) {
-        await (elem as any).mozRequestFullScreen();
-      } else if ((elem as any).msRequestFullscreen) {
-        await (elem as any).msRequestFullscreen();
-      }
-    } catch (err) {
-      console.error('[Fullscreen] Request failed:', err);
-    }
-  };
-
-  // Check if currently in fullscreen
-  const checkFullscreen = () => {
-    return !!(
+  const checkFs = (): boolean =>
+    !!(
       document.fullscreenElement ||
       (document as any).webkitFullscreenElement ||
       (document as any).mozFullScreenElement ||
       (document as any).msFullscreenElement
     );
+
+  const requestFullscreen = async () => {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if ((el as any).webkitRequestFullscreen) await (el as any).webkitRequestFullscreen();
+      else if ((el as any).mozRequestFullScreen) await (el as any).mozRequestFullScreen();
+      else if ((el as any).msRequestFullscreen) await (el as any).msRequestFullscreen();
+    } catch (e) {
+      console.warn('[Fullscreen] request failed:', e);
+    }
   };
 
-  // Handle violation
-  const handleViolation = (type: 'exit_fullscreen' | 'tab_switch') => {
-    violationCountRef.current += 1;
-    setViolationCount(violationCountRef.current);
-    onViolation(type, violationCountRef.current);
-
-    // Check if max violations reached
-    if (violationCountRef.current >= maxViolations) {
-      onAutoSubmit(`Maximum violations reached (${maxViolations})`);
-      return;
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+  };
 
-    // Pause the exam
-    setIsPaused(true);
-    onPause();
-
-    // Clear existing pause timer
-    if (pauseTimerRef.current) {
-      clearTimeout(pauseTimerRef.current);
-    }
-
-    // Set timeout for auto-submit
-    pauseTimerRef.current = setTimeout(() => {
-      onAutoSubmit(`Exam paused for more than ${pauseTimeoutSec} seconds`);
+  const startTimer = () => {
+    clearTimer();
+    timerRef.current = setTimeout(() => {
+      onAutoSubmit?.(`Exam paused for more than ${pauseTimeoutSec} seconds`);
     }, pauseTimeoutSec * 1000);
   };
 
-  // Handle resume
-  const handleResume = () => {
-    if (pauseTimerRef.current) {
-      clearTimeout(pauseTimerRef.current);
-      pauseTimerRef.current = null;
-    }
-    setIsPaused(false);
-    onResume();
-  };
-
   useEffect(() => {
-    // Request fullscreen on mount if we're not already in fullscreen
-    // Wrap in a user interaction event listener or just attempt and catch the warning silently
-    // since browsers require user gesture to enter fullscreen.
-    const attemptFullscreen = async () => {
-      try {
-        if (!checkFullscreen()) {
-          await requestFullscreen();
+    // On mount (including page refresh): check whether we are actually in fullscreen.
+    // Browsers never restore fullscreen on reload so this will almost always be false.
+    const inFs = checkFs();
+    setIsFullscreen(inFs);
+    setIsGated(!inFs);
+    isGatedRef.current = !inFs;
+
+    const onFsChange = () => {
+      const inFs = checkFs();
+      setIsFullscreen(inFs);
+
+      if (inFs) {
+        // User (re-)entered fullscreen — lift the gate
+        setIsGated(false);
+        isGatedRef.current = false;
+        clearTimer();
+      } else if (!isGatedRef.current) {
+        // Left fullscreen while the exam was active (gate was not already showing)
+        violationCountRef.current += 1;
+        const count = violationCountRef.current;
+        setViolationCount(count);
+        onViolation?.('exit_fullscreen', count);
+
+        if (count >= maxViolations) {
+          onAutoSubmit?.(`Maximum violations reached (${maxViolations})`);
+          return;
         }
-      } catch (e) {
-        console.warn('Fullscreen request blocked by browser policy. User needs to interact with page first.');
-      }
-    };
-    
-    attemptFullscreen();
 
-    // Fullscreen change handler
-    const handleFullscreenChange = () => {
-      const inFullscreen = checkFullscreen();
-      setIsFullscreen(inFullscreen);
-
-      if (!inFullscreen) {
-        // User exited fullscreen
-        handleViolation('exit_fullscreen');
-      } else if (isPaused) {
-        // User returned to fullscreen
-        handleResume();
+        setIsGated(true);
+        isGatedRef.current = true;
+        startTimer();
       }
     };
 
-    // Visibility change handler (tab switching)
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // User switched tabs or minimized
-        handleViolation('tab_switch');
-      } else if (isPaused && checkFullscreen()) {
-        // User returned and is in fullscreen
-        handleResume();
+    const onVisibility = () => {
+      if (document.hidden && !isGatedRef.current) {
+        // Tab switched while exam was active
+        violationCountRef.current += 1;
+        const count = violationCountRef.current;
+        setViolationCount(count);
+        onViolation?.('tab_switch', count);
+
+        if (count >= maxViolations) {
+          onAutoSubmit?.(`Maximum violations reached (${maxViolations})`);
+          return;
+        }
+
+        setIsGated(true);
+        isGatedRef.current = true;
+        startTimer();
       }
     };
 
-    // Blur handler (window lost focus)
-    const handleBlur = () => {
-      if (!document.hidden && checkFullscreen()) {
-        // Window lost focus but tab is still visible and in fullscreen
-        // This could be Alt+Tab or clicking outside
-        handleViolation('tab_switch');
-      }
-    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    document.addEventListener('mozfullscreenchange', onFsChange);
+    document.addEventListener('MSFullscreenChange', onFsChange);
+    document.addEventListener('visibilitychange', onVisibility);
 
-    // Focus handler
-    const handleFocus = () => {
-      if (isPaused && !document.hidden && checkFullscreen()) {
-        handleResume();
-      }
-    };
-
-    // Add event listeners
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
-
-    // Cleanup
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-
-      if (pauseTimerRef.current) {
-        clearTimeout(pauseTimerRef.current);
-      }
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+      document.removeEventListener('mozfullscreenchange', onFsChange);
+      document.removeEventListener('MSFullscreenChange', onFsChange);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearTimer();
     };
-  }, [isPaused]);
+  }, []); // Empty deps — all mutable values go through refs
 
-  return {
-    isPaused,
-    violationCount,
-    isFullscreen,
-    requestFullscreen,
-  };
+  return { isFullscreen, violationCount, isGated, requestFullscreen };
 }

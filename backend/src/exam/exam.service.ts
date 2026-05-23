@@ -221,6 +221,23 @@ export class ExamService {
 
     // ── Admin: questions (bank + section) ──
 
+    async createBankQuestion(data: any) {
+        const { sortOrder: _a, sectionId: _b, ...payload } = data;
+        return this.prisma.question.create({ data: payload });
+    }
+
+    async bulkCreateBankQuestions(items: any[]) {
+        const created: { id: string }[] = [];
+        await this.prisma.$transaction(async (tx) => {
+            for (const item of items) {
+                const { sortOrder: _a, sectionId: _b, ...payload } = item;
+                const q = await tx.question.create({ data: payload, select: { id: true } });
+                created.push(q);
+            }
+        });
+        return { count: created.length };
+    }
+
     async createQuestion(sectionId: string, data: any) {
         // Create a new bank question AND attach it to this section.
         const { sortOrder: _ignored, sectionId: _ignored2, ...questionData } = data;

@@ -16,30 +16,7 @@ interface Exam {
     isPublished: boolean;
     isResultReleased: boolean;
     createdAt: string;
-    _count: {
-        sections: number;
-        instances: number;
-    };
-}
-
-interface ScheduleForm {
-    startsAt: string;
-    endsAt: string;
-}
-
-interface ExamInstance {
-    id: string;
-    examId: string;
-    startsAt: string;
-    endsAt: string;
-    requireSeb: boolean;
-    _count?: { attempts: number };
-}
-
-interface InstanceEdit {
-    startsAt: string;
-    endsAt: string;
-    requireSeb: boolean;
+    _count: { sections: number; instances: number };
 }
 
 export default function AdminExamsPage() {
@@ -51,10 +28,6 @@ export default function AdminExamsPage() {
     const [error, setError] = useState('');
     const [actionError, setActionError] = useState('');
     const [activeExamAction, setActiveExamAction] = useState('');
-    const [scheduleForms, setScheduleForms] = useState<Record<string, ScheduleForm>>({});
-    const [instancesByExam, setInstancesByExam] = useState<Record<string, ExamInstance[]>>({});
-    const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null);
-    const [instanceEditForm, setInstanceEditForm] = useState<InstanceEdit>({ startsAt: '', endsAt: '', requireSeb: false });
 
     const blankFormData = {
         title: '',
@@ -65,29 +38,14 @@ export default function AdminExamsPage() {
     };
     const [formData, setFormData] = useState(blankFormData);
 
-    const getDefaultSchedule = (): ScheduleForm => {
-        const start = new Date();
-        start.setMinutes(start.getMinutes() + 10);
-        const end = new Date(start);
-        end.setMinutes(end.getMinutes() + 60);
-        return {
-            startsAt: start.toISOString().slice(0, 16),
-            endsAt: end.toISOString().slice(0, 16),
-        };
-    };
-
     const getApiErrorMessage = (err: unknown, fallback: string) => {
         const responseData =
-            typeof err === 'object' &&
-            err !== null &&
-            'response' in err &&
+            typeof err === 'object' && err !== null && 'response' in err &&
             typeof (err as { response?: unknown }).response === 'object'
                 ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data
                 : undefined;
         const message = responseData?.message;
-        if (Array.isArray(message)) {
-            return message.join(', ');
-        }
+        if (Array.isArray(message)) return message.join(', ');
         return message || fallback;
     };
 
@@ -96,23 +54,6 @@ export default function AdminExamsPage() {
             setLoading(true);
             const { data } = await api.get<Exam[]>('/admin/exams');
             setExams(data);
-            setScheduleForms((prev) => {
-                const next = { ...prev };
-                data.forEach((exam) => {
-                    if (!next[exam.id]) {
-                        next[exam.id] = getDefaultSchedule();
-                    }
-                });
-                return next;
-            });
-            const results = await Promise.allSettled(
-                data.map((exam) => api.get<ExamInstance[]>(`/admin/exams/${exam.id}/instances`))
-            );
-            const next: Record<string, ExamInstance[]> = {};
-            results.forEach((r, i) => {
-                if (r.status === 'fulfilled') next[data[i].id] = r.value.data;
-            });
-            setInstancesByExam(next);
         } catch (err) {
             console.error('Failed to fetch exams', err);
         } finally {
@@ -120,62 +61,7 @@ export default function AdminExamsPage() {
         }
     };
 
-    useEffect(() => {
-        fetchExams();
-    }, []);
-
-    const toLocalInputValue = (iso: string) => {
-        const d = new Date(iso);
-        const pad = (n: number) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
-
-    const openInstanceEdit = (inst: ExamInstance) => {
-        setEditingInstanceId(inst.id);
-        setInstanceEditForm({
-            startsAt: toLocalInputValue(inst.startsAt),
-            endsAt: toLocalInputValue(inst.endsAt),
-            requireSeb: inst.requireSeb,
-        });
-    };
-
-    const saveInstanceEdit = async (examId: string, instanceId: string) => {
-        if (new Date(instanceEditForm.endsAt) <= new Date(instanceEditForm.startsAt)) {
-            setActionError('Instance end time must be after start time.');
-            return;
-        }
-        try {
-            setActionError('');
-            setActiveExamAction(`inst-save-${instanceId}`);
-            await api.put(`/admin/instances/${instanceId}`, {
-                startsAt: new Date(instanceEditForm.startsAt).toISOString(),
-                endsAt: new Date(instanceEditForm.endsAt).toISOString(),
-                requireSeb: instanceEditForm.requireSeb,
-            });
-            const { data } = await api.get<ExamInstance[]>(`/admin/exams/${examId}/instances`);
-            setInstancesByExam((prev) => ({ ...prev, [examId]: data }));
-            setEditingInstanceId(null);
-        } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to update instance.'));
-        } finally {
-            setActiveExamAction('');
-        }
-    };
-
-    const deleteInstance = async (examId: string, instanceId: string) => {
-        if (!confirm('Delete this scheduled instance? All attempts on it will be deleted too.')) return;
-        try {
-            setActionError('');
-            setActiveExamAction(`inst-del-${instanceId}`);
-            await api.delete(`/admin/instances/${instanceId}`);
-            const { data } = await api.get<ExamInstance[]>(`/admin/exams/${examId}/instances`);
-            setInstancesByExam((prev) => ({ ...prev, [examId]: data }));
-        } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to delete instance.'));
-        } finally {
-            setActiveExamAction('');
-        }
-    };
+    useEffect(() => { fetchExams(); }, []);
 
     const handleClassBandToggle = (band: number) => {
         setFormData((prev) => ({
@@ -218,7 +104,6 @@ export default function AdminExamsPage() {
             setError('Please select at least one class band.');
             return;
         }
-
         try {
             setSubmitting(true);
             setError('');
@@ -230,7 +115,7 @@ export default function AdminExamsPage() {
             closeModal();
             fetchExams();
         } catch (err: unknown) {
-            setError(getApiErrorMessage(err, editingExamId ? 'Failed to update exam.' : 'Failed to create exam. Please try again.'));
+            setError(getApiErrorMessage(err, editingExamId ? 'Failed to update exam.' : 'Failed to create exam.'));
         } finally {
             setSubmitting(false);
         }
@@ -256,68 +141,14 @@ export default function AdminExamsPage() {
             await api.put(`/admin/exams/${exam.id}`, { isResultReleased: !exam.isResultReleased });
             await fetchExams();
         } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to toggle result release.'));
-        } finally {
-            setActiveExamAction('');
-        }
-    };
-
-    const updateScheduleForm = (examId: string, field: keyof ScheduleForm, value: string) => {
-        setScheduleForms((prev) => ({
-            ...prev,
-            [examId]: {
-                ...(prev[examId] || getDefaultSchedule()),
-                [field]: value,
-            },
-        }));
-    };
-
-    const scheduleExam = async (examId: string) => {
-        const form = scheduleForms[examId] || getDefaultSchedule();
-        if (!form.startsAt || !form.endsAt) {
-            setActionError('Please provide both schedule start and end time.');
-            return;
-        }
-        if (new Date(form.endsAt) <= new Date(form.startsAt)) {
-            setActionError('Schedule end time must be after start time.');
-            return;
-        }
-
-        try {
-            setActionError('');
-            setActiveExamAction(`schedule-${examId}`);
-            await api.post(`/admin/exams/${examId}/instances`, {
-                startsAt: new Date(form.startsAt).toISOString(),
-                endsAt: new Date(form.endsAt).toISOString(),
-                requireSeb: false,
-            });
-            const { data } = await api.get<ExamInstance[]>(`/admin/exams/${examId}/instances`);
-            setInstancesByExam((prev) => ({ ...prev, [examId]: data }));
-            await fetchExams();
-        } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to schedule test.'));
-        } finally {
-            setActiveExamAction('');
-        }
-    };
-
-
-
-    const releaseResults = async (examId: string) => {
-        try {
-            setActionError('');
-            setActiveExamAction(`result-${examId}`);
-            await api.post(`/admin/exams/${examId}/release-results`);
-            await fetchExams();
-        } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to release results.'));
+            setActionError(getApiErrorMessage(err, 'Failed to toggle results.'));
         } finally {
             setActiveExamAction('');
         }
     };
 
     const deleteExam = async (examId: string) => {
-        if (!confirm('Are you sure you want to delete this exam? All data including questions, instances, and attempts will be permanently lost.')) return;
+        if (!confirm('Delete this exam? All questions, instances, and attempts will be permanently lost.')) return;
         try {
             setActionError('');
             setActiveExamAction(`delete-${examId}`);
@@ -347,9 +178,7 @@ export default function AdminExamsPage() {
                 </div>
 
                 {actionError && (
-                    <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>
-                        {actionError}
-                    </div>
+                    <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>{actionError}</div>
                 )}
 
                 {loading ? (
@@ -359,10 +188,16 @@ export default function AdminExamsPage() {
                 ) : exams.length > 0 ? (
                     <div className="grid-3" style={{ marginTop: 'var(--space-8)' }}>
                         {exams.map((exam) => (
-                            <div key={exam.id} className="glass-card exam-card">
-                                <h3>{exam.title}</h3>
-                                <p className="exam-desc">{exam.description || 'No description provided.'}</p>
-                                
+                            <div key={exam.id} className="glass-card exam-card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                                {/* Title + description */}
+                                <div>
+                                    <h3 style={{ marginBottom: 'var(--space-1)' }}>{exam.title}</h3>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0 }}>
+                                        {exam.description || 'No description provided.'}
+                                    </p>
+                                </div>
+
+                                {/* Meta row */}
                                 <div className="exam-meta">
                                     <div className="meta-item">
                                         <span className="meta-label">Classes</span>
@@ -378,21 +213,21 @@ export default function AdminExamsPage() {
                                     </div>
                                 </div>
 
-                                <div className="exam-footer">
+                                {/* Status badges */}
+                                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
                                     <span className={`badge ${exam.isPublished ? 'badge-success' : 'badge-warning'}`}>
                                         {exam.isPublished ? 'Published' : 'Draft'}
                                     </span>
                                     <span className={`badge ${exam.isResultReleased ? 'badge-success' : 'badge-warning'}`}>
                                         {exam.isResultReleased ? 'Results Released' : 'Results Hidden'}
                                     </span>
-                                    <div className="exam-stats">
-                                        <span>{exam._count.sections} Sections</span>
-                                        <span>•</span>
-                                        <span>{exam._count.instances} Instances</span>
-                                    </div>
+                                    <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        {exam._count.sections} sections · {exam._count.instances} instances
+                                    </span>
                                 </div>
 
-                                <div className="grid-2" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+                                {/* Action row 1: edit + publish */}
+                                <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => openEditModal(exam)}>
                                         ✎ Edit Details
                                     </button>
@@ -404,130 +239,35 @@ export default function AdminExamsPage() {
                                         {activeExamAction === `publish-${exam.id}` ? '...' : (exam.isPublished ? 'Unpublish' : 'Publish')}
                                     </button>
                                 </div>
+
+                                {/* Action row 2: results toggle */}
                                 <button
                                     className="btn btn-secondary btn-sm"
-                                    style={{ marginTop: 'var(--space-2)', width: '100%' }}
+                                    style={{ width: '100%' }}
                                     onClick={() => toggleResults(exam)}
                                     disabled={activeExamAction === `result-${exam.id}`}
                                 >
                                     {activeExamAction === `result-${exam.id}` ? '...' : (exam.isResultReleased ? 'Hide Results' : 'Release Results')}
                                 </button>
 
-                                <div style={{ marginTop: 'var(--space-4)', display: 'grid', gap: 'var(--space-3)' }}>
-                                    <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 'var(--space-1)' }}>Start</label>
-                                            <input
-                                                type="datetime-local"
-                                                className="form-control"
-                                                value={scheduleForms[exam.id]?.startsAt || ''}
-                                                onChange={(e) => updateScheduleForm(exam.id, 'startsAt', e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 'var(--space-1)' }}>End</label>
-                                            <input
-                                                type="datetime-local"
-                                                className="form-control"
-                                                value={scheduleForms[exam.id]?.endsAt || ''}
-                                                onChange={(e) => updateScheduleForm(exam.id, 'endsAt', e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
+                                {/* Manage Questions — primary CTA */}
+                                <a
+                                    href={`/questions?examId=${exam.id}`}
+                                    className="btn btn-primary"
+                                    style={{ textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}
+                                >
+                                    📚 Manage Questions &amp; Sections
+                                </a>
 
-                                    <button
-                                        className="btn btn-secondary"
-                                        onClick={() => scheduleExam(exam.id)}
-                                        disabled={activeExamAction === `schedule-${exam.id}`}
-                                    >
-                                        {activeExamAction === `schedule-${exam.id}` ? 'Scheduling...' : 'Schedule Class-wise Test'}
-                                    </button>
-
-                                    {(instancesByExam[exam.id]?.length || 0) > 0 && (
-                                        <div style={{ display: 'grid', gap: 'var(--space-2)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)' }}>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                                                Scheduled Instances
-                                            </div>
-                                            {instancesByExam[exam.id].map((inst) => (
-                                                <div key={inst.id} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-2)' }}>
-                                                    {editingInstanceId === inst.id ? (
-                                                        <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-                                                            <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
-                                                                <input
-                                                                    type="datetime-local"
-                                                                    className="form-control"
-                                                                    value={instanceEditForm.startsAt}
-                                                                    onChange={(e) => setInstanceEditForm((p) => ({ ...p, startsAt: e.target.value }))}
-                                                                />
-                                                                <input
-                                                                    type="datetime-local"
-                                                                    className="form-control"
-                                                                    value={instanceEditForm.endsAt}
-                                                                    onChange={(e) => setInstanceEditForm((p) => ({ ...p, endsAt: e.target.value }))}
-                                                                />
-                                                            </div>
-                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={instanceEditForm.requireSeb}
-                                                                    onChange={(e) => setInstanceEditForm((p) => ({ ...p, requireSeb: e.target.checked }))}
-                                                                />
-                                                                Require Safe Exam Browser
-                                                            </label>
-                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                <button
-                                                                    className="btn btn-sm btn-primary"
-                                                                    onClick={() => saveInstanceEdit(exam.id, inst.id)}
-                                                                    disabled={activeExamAction === `inst-save-${inst.id}`}
-                                                                >
-                                                                    {activeExamAction === `inst-save-${inst.id}` ? 'Saving…' : 'Save'}
-                                                                </button>
-                                                                <button className="btn btn-sm btn-secondary" onClick={() => setEditingInstanceId(null)}>
-                                                                    Cancel
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                            <div style={{ fontSize: '0.8rem' }}>
-                                                                <div>{new Date(inst.startsAt).toLocaleString()} → {new Date(inst.endsAt).toLocaleString()}</div>
-                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
-                                                                    {inst._count?.attempts || 0} attempts {inst.requireSeb ? '• SEB required' : ''}
-                                                                </div>
-                                                            </div>
-                                                            <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                                                <button className="btn btn-sm btn-secondary" onClick={() => openInstanceEdit(inst)}>
-                                                                    Edit
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-sm btn-danger"
-                                                                    onClick={() => deleteInstance(exam.id, inst.id)}
-                                                                    disabled={activeExamAction === `inst-del-${inst.id}`}
-                                                                >
-                                                                    {activeExamAction === `inst-del-${inst.id}` ? '…' : 'Delete'}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <a
-                                        href={`/questions?examId=${exam.id}`}
-                                        className="btn btn-secondary"
-                                        style={{ textAlign: 'center', display: 'inline-block' }}
-                                    >
-                                        Manage Questions
-                                    </a>
-                                    <button
-                                        className="btn btn-danger"
-                                        onClick={() => deleteExam(exam.id)}
-                                        disabled={activeExamAction === `delete-${exam.id}`}
-                                    >
-                                        {activeExamAction === `delete-${exam.id}` ? 'Deleting...' : '🗑 Delete Exam'}
-                                    </button>
-                                </div>
+                                {/* Danger zone */}
+                                <button
+                                    className="btn btn-danger btn-sm"
+                                    style={{ width: '100%' }}
+                                    onClick={() => deleteExam(exam.id)}
+                                    disabled={activeExamAction === `delete-${exam.id}`}
+                                >
+                                    {activeExamAction === `delete-${exam.id}` ? 'Deleting...' : '🗑 Delete Exam'}
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -536,11 +276,12 @@ export default function AdminExamsPage() {
                         <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📋</div>
                         <h3>No Exams Created</h3>
                         <p style={{ color: 'var(--text-muted)' }}>
-                            You have not created any exams yet. Click the button above to get started.
+                            Click the button above to create your first exam.
                         </p>
                     </div>
                 )}
 
+                {/* Create / Edit Modal */}
                 {showModal && (
                     <div className="modal-overlay">
                         <div className="modal-content glass-card animate-fade-in">
@@ -548,7 +289,7 @@ export default function AdminExamsPage() {
                             <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-6)', fontSize: '0.9rem' }}>
                                 {editingExamId
                                     ? 'Update the exam metadata. Total marks changes auto-rescale existing attempts.'
-                                    : 'Define the basic structure of the exam. You can add sections and questions later.'}
+                                    : 'Define the basic structure of the exam. Add sections and questions after creating it.'}
                             </p>
 
                             {error && <div className="form-error">{error}</div>}
@@ -621,28 +362,19 @@ export default function AdminExamsPage() {
                                 </div>
 
                                 <div className="modal-actions">
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        onClick={closeModal}
-                                        disabled={submitting}
-                                    >
+                                    <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
                                         Cancel
                                     </button>
-                                    <button
-                                        type="submit"
-                                        className="btn btn-primary"
-                                        disabled={submitting}
-                                    >
-                                        {submitting ? (editingExamId ? 'Saving...' : 'Creating...') : (editingExamId ? 'Save Changes' : 'Create Exam')}
+                                    <button type="submit" className="btn btn-primary" disabled={submitting}>
+                                        {submitting
+                                            ? (editingExamId ? 'Saving...' : 'Creating...')
+                                            : (editingExamId ? 'Save Changes' : 'Create Exam')}
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
                 )}
-
-                
             </main>
         </AuthGuard>
     );
