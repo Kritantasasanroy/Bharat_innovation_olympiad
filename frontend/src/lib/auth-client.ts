@@ -23,19 +23,35 @@ async function neonFetch(path: string, body: object) {
 
 /** OTP helper functions — call the Better Auth email-otp endpoints directly */
 export const emailOtp = {
-    /** Send a 6-digit OTP for sign-in to the given email */
+    /**
+     * Send a 6-digit OTP for sign-in to the given email.
+     * Works for both existing and new users (sign-in type is accepted regardless of user existence).
+     */
     sendSignInOtp: (email: string) =>
         neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' }),
 
-    /** Send a 6-digit OTP for new email verification (registration) */
+    /**
+     * Send a 6-digit OTP for new user registration.
+     * Uses 'sign-in' type (not 'email-verification') because 'email-verification'
+     * requires an existing Neon Auth session — which new users on a fresh device/incognito
+     * don't have, causing the OTP to never be sent.
+     */
     sendVerificationOtp: (email: string) =>
-        neonFetch('/email-otp/send-verification-otp', { email, type: 'email-verification' }),
+        neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' }),
 
-    /** Verify OTP and sign in — creates a session cookie */
+    /**
+     * Verify OTP and sign in — creates a session cookie.
+     * Used for both login and registration verification.
+     */
     signIn: (email: string, otp: string) =>
         neonFetch('/sign-in/email-otp', { email, otp }),
 
-    /** Verify OTP for email verification after sign-up */
+    /**
+     * @deprecated Use signIn() instead.
+     * verifyEmail() only works when a Neon Auth session already exists,
+     * so it fails for new users on fresh devices.
+     */
     verifyEmail: (email: string, otp: string) =>
-        neonFetch('/email-otp/verify-email', { email, otp }),
+        neonFetch('/sign-in/email-otp', { email, otp }),
 };
+
