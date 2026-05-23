@@ -133,6 +133,19 @@ export class ExamService {
         });
     }
 
+    async updateExam(id: string, data: {
+        title?: string;
+        description?: string | null;
+        classBands?: number[];
+        totalMarks?: number;
+        durationMinutes?: number;
+    }) {
+        return this.prisma.exam.update({
+            where: { id },
+            data,
+        });
+    }
+
     async createSection(examId: string, data: { title: string; sortOrder: number }) {
         return this.prisma.examSection.create({
             data: { ...data, examId },

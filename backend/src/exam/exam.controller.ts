@@ -96,6 +96,19 @@ export class ExamController {
         return this.examService.deleteQuestion(id);
     }
 
+    @Put('admin/exams/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async updateExam(@Param('id') id: string, @Body() body: {
+        title?: string;
+        description?: string | null;
+        classBands?: number[];
+        totalMarks?: number;
+        durationMinutes?: number;
+    }) {
+        return this.examService.updateExam(id, body);
+    }
+
     @Delete('admin/exams/:id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
