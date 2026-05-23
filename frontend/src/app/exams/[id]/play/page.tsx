@@ -40,6 +40,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const handleAutoSubmit = async (reason: string) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
+        try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
         try {
             const result = await submitExamRef.current();
             alert(`Exam auto-submitted: ${reason}`);
@@ -101,8 +102,13 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         }
     };
 
+    const clearViolationStorage = () => {
+        try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
+    };
+
     const handleSubmit = async () => {
         setIsSubmitting(true);
+        clearViolationStorage();
         try {
             const result = await submitExam();
             if (result?.redirectUrl) {
@@ -190,7 +196,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                 type="button"
                                 className="btn btn-primary"
                                 style={{ marginTop: '1.25rem', width: '100%', padding: '0.85rem', fontSize: '1rem' }}
-                                onClick={() => { void requestFullscreen(); }}
+                                onClick={requestFullscreen}
                             >
                                 {violationCount === 0 ? '▶ Enter Fullscreen & Start' : '↩ Re-enter Fullscreen'}
                             </button>

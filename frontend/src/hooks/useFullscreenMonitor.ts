@@ -11,15 +11,33 @@ interface FullscreenMonitorOptions {
   pauseTimeoutSec?: number;
 }
 
+// Derive a session-storage key from the current URL path so violation counts
+// survive page refreshes but are scoped to this specific exam attempt.
+function storageKey(): string {
+  if (typeof window === 'undefined') return 'violations_unknown';
+  return `violations_${window.location.pathname}`;
+}
+
+function readStoredViolations(): number {
+  try {
+    const raw = sessionStorage.getItem(storageKey());
+    return raw ? parseInt(raw, 10) : 0;
+  } catch { return 0; }
+}
+
+function writeStoredViolations(count: number): void {
+  try { sessionStorage.setItem(storageKey(), String(count)); } catch { /* ignore */ }
+}
+
 export function useFullscreenMonitor({
   onViolation,
   onAutoSubmit,
   maxViolations = 3,
   pauseTimeoutSec = 20,
 }: FullscreenMonitorOptions) {
+  // Restore violation count from sessionStorage so page refreshes don't reset it.
+  const [violationCount, setViolationCount] = useState<number>(() => readStoredViolations());
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [violationCount, setViolationCount] = useState(0);
-  // isGated = true means the exam is blocked behind the fullscreen overlay
   const [isGated, setIsGated] = useState(true);
   const [lastError, setLastError] = useState<string | null>(null);
 
@@ -30,8 +48,23 @@ export function useFullscreenMonitor({
   useEffect(() => { onAutoSubmitRef.current = onAutoSubmit; });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const violationCountRef = useRef(0);
+  const violationCountRef = useRef<number>(readStoredViolations());
   const isGatedRef = useRef(true);
+
+  // Blur events fire transiently when the browser transitions in/out of
+  // fullscreen mode. Ignoring them for 2 s after a successful fullscreen entry
+  // prevents the gate from immediately re-appearing after the user clicks
+  // "Re-enter Fullscreen".
+  const ignoreBlurRef = useRef(false);
+  const ignoreBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suppressBlurBriefly = () => {
+    ignoreBlurRef.current = true;
+    if (ignoreBlurTimerRef.current) clearTimeout(ignoreBlurTimerRef.current);
+    ignoreBlurTimerRef.current = setTimeout(() => {
+      ignoreBlurRef.current = false;
+    }, 2000);
+  };
 
   const checkFs = (): boolean =>
     typeof document === 'undefined'
@@ -43,8 +76,6 @@ export function useFullscreenMonitor({
           (document as any).msFullscreenElement
         );
 
-  // Must be invoked from a real user gesture (button onClick) — async/await
-  // works because the underlying call is dispatched synchronously.
   const requestFullscreen = useCallback(async () => {
     setLastError(null);
     if (typeof document === 'undefined') return;
@@ -59,6 +90,9 @@ export function useFullscreenMonitor({
         setLastError('Fullscreen API is not supported in this browser.');
         return;
       }
+      // Suppress blur noise that fires during the fullscreen transition so the
+      // gate doesn't immediately re-appear after the button is clicked.
+      suppressBlurBriefly();
       await reqFn.call(el);
     } catch (e: any) {
       const msg =
@@ -70,30 +104,23 @@ export function useFullscreenMonitor({
   }, []);
 
   const clearTimer = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   };
 
   const startTimer = () => {
     clearTimer();
     timerRef.current = setTimeout(() => {
-      onAutoSubmitRef.current?.(
-        `Exam paused for more than ${pauseTimeoutSec} seconds`,
-      );
+      onAutoSubmitRef.current?.(`Exam paused for more than ${pauseTimeoutSec} seconds`);
     }, pauseTimeoutSec * 1000);
   };
 
   const registerViolation = (type: ViolationType) => {
-    // If the gate is already up the user is already paying for a prior
-    // violation — don't double-count back-to-back signals (e.g. exit_fs +
-    // blur firing together).
-    if (isGatedRef.current) return;
+    if (isGatedRef.current) return; // already gated — don't double-count
 
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolationCount(count);
+    writeStoredViolations(count); // persist across refreshes
     onViolationRef.current?.(type, count);
 
     if (count >= maxViolations) {
@@ -109,25 +136,43 @@ export function useFullscreenMonitor({
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    // On mount (and after page refresh) browsers never restore fullscreen,
-    // so the gate will almost always be shown immediately.
+    // Restore violation ref from sessionStorage (state initialiser already set
+    // the UI count; the ref needs to match so registerViolation counts correctly).
+    violationCountRef.current = readStoredViolations();
+
     const inFs = checkFs();
     setIsFullscreen(inFs);
     setIsGated(!inFs);
     isGatedRef.current = !inFs;
 
+    // Attempt auto-fullscreen on mount. Browsers require a user gesture, so
+    // this typically succeeds only when the page was reached via a click (e.g.
+    // the "Start Exam" button on the instructions page). Silently ignore errors.
+    if (!inFs) {
+      suppressBlurBriefly();
+      const el: any = document.documentElement;
+      const reqFn =
+        el.requestFullscreen ||
+        el.webkitRequestFullscreen ||
+        el.mozRequestFullScreen ||
+        el.msRequestFullscreen;
+      if (reqFn) {
+        Promise.resolve(reqFn.call(el)).catch(() => { /* expected on page refresh */ });
+      }
+    }
+
     const onFsChange = () => {
       const inFsNow = checkFs();
       setIsFullscreen(inFsNow);
-
       if (inFsNow) {
-        // Successfully entered fullscreen — lift the gate
         setIsGated(false);
         isGatedRef.current = false;
         setLastError(null);
         clearTimer();
+        // Suppress blur that browsers fire when finishing the fullscreen
+        // transition — without this the gate immediately re-appears.
+        suppressBlurBriefly();
       } else {
-        // Exited fullscreen during an active exam
         registerViolation('exit_fullscreen');
       }
     };
@@ -137,8 +182,7 @@ export function useFullscreenMonitor({
     };
 
     const onBlur = () => {
-      // Catches Alt-Tab / Cmd-Tab / clicking another app even when the
-      // page stays "visible" per the Visibility API.
+      if (ignoreBlurRef.current) return; // within the post-fullscreen suppression window
       registerViolation('window_blur');
     };
 
@@ -157,8 +201,9 @@ export function useFullscreenMonitor({
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
       clearTimer();
+      if (ignoreBlurTimerRef.current) clearTimeout(ignoreBlurTimerRef.current);
     };
-  }, []); // Empty deps: listeners register once, refs keep state current
+  }, []);
 
   return {
     isFullscreen,

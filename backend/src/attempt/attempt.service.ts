@@ -270,7 +270,9 @@ export class AttemptService {
                             include: {
                                 sections: {
                                     include: {
-                                        sectionQuestions: { select: { questionId: true } },
+                                        sectionQuestions: {
+                                            include: { question: { select: { marks: true } } },
+                                        },
                                     },
                                 },
                             },
@@ -312,25 +314,28 @@ export class AttemptService {
                 sec.sectionQuestions.forEach(sq => { questionToSection[sq.questionId] = sec.id; });
             });
 
-            // Generate section-wise scores for Radar chart
+            // Generate section-wise scores for Radar chart.
+            // Pre-populate total from ALL questions in each section (not just
+            // the ones the student attempted) so a student who answers 1/10
+            // questions correctly shows 10%, not 100%.
             const sectionScoresMap: Record<string, { total: number, scored: number, name: string }> = {};
             attempt.examInstance.exam.sections.forEach(sec => {
-                sectionScoresMap[sec.id] = { total: 0, scored: 0, name: sec.title };
+                const totalMarks = sec.sectionQuestions.reduce(
+                    (sum, sq) => sum + (sq.question?.marks ?? 0), 0
+                );
+                sectionScoresMap[sec.id] = { total: totalMarks, scored: 0, name: sec.title };
             });
 
             attempt.items.forEach(item => {
                 const sid = questionToSection[item.questionId];
                 if (sid && sectionScoresMap[sid]) {
-                    sectionScoresMap[sid].total += item.question.marks;
-                    if (item.score) {
-                        sectionScoresMap[sid].scored += item.score;
-                    }
+                    sectionScoresMap[sid].scored += (item.score ?? 0);
                 }
             });
 
             const radarData = Object.values(sectionScoresMap).map(sec => ({
                 subject: sec.name,
-                A: sec.total > 0 ? Math.round((sec.scored / sec.total) * 100) : 0,
+                A: sec.total > 0 ? Math.round((Math.max(0, sec.scored) / sec.total) * 100) : 0,
                 fullMark: 100
             }));
 
@@ -412,7 +417,9 @@ export class AttemptService {
                             include: {
                                 sections: {
                                     include: {
-                                        sectionQuestions: { select: { questionId: true } },
+                                        sectionQuestions: {
+                                            include: { question: { select: { marks: true } } },
+                                        },
                                     },
                                 },
                             },
@@ -434,22 +441,22 @@ export class AttemptService {
 
         const sectionScoresMap: Record<string, { total: number, scored: number, name: string }> = {};
         attempt.examInstance.exam.sections.forEach(sec => {
-            sectionScoresMap[sec.id] = { total: 0, scored: 0, name: sec.title };
+            const totalMarks = sec.sectionQuestions.reduce(
+                (sum, sq) => sum + (sq.question?.marks ?? 0), 0
+            );
+            sectionScoresMap[sec.id] = { total: totalMarks, scored: 0, name: sec.title };
         });
 
         attempt.items.forEach(item => {
             const sid = questionToSection[item.questionId];
             if (sid && sectionScoresMap[sid]) {
-                sectionScoresMap[sid].total += item.question.marks;
-                if (item.score) {
-                    sectionScoresMap[sid].scored += item.score;
-                }
+                sectionScoresMap[sid].scored += (item.score ?? 0);
             }
         });
 
         const radarData = Object.values(sectionScoresMap).map(sec => ({
             subject: sec.name,
-            A: sec.total > 0 ? Math.round((sec.scored / sec.total) * 100) : 0,
+            A: sec.total > 0 ? Math.round((Math.max(0, sec.scored) / sec.total) * 100) : 0,
             fullMark: 100
         }));
 
