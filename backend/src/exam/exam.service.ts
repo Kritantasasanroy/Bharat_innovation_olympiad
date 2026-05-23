@@ -97,6 +97,7 @@ export class ExamService {
                     orderBy: { sortOrder: 'asc' },
                     include: {
                         questions: {
+                            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
                             select: {
                                 id: true,
                                 type: true,
@@ -107,7 +108,9 @@ export class ExamService {
                                 negativeMarks: true,
                                 timeLimitSecs: true,
                                 tags: true,
-                                // Exclude correctAnswer and explanation during exam
+                                explanation: true,
+                                sortOrder: true,
+                                // Exclude correctAnswer during exam
                             },
                         },
                     },
@@ -192,6 +195,8 @@ export class ExamService {
         classBands?: number[];
         totalMarks?: number;
         durationMinutes?: number;
+        isPublished?: boolean;
+        isResultReleased?: boolean;
     }) {
         // If totalMarks is changing, repeg every existing attempt of this
         // exam so their maxScore reflects the new total — otherwise old
@@ -213,6 +218,18 @@ export class ExamService {
         return this.prisma.examSection.create({
             data: { ...data, examId },
         });
+    }
+
+    async bulkCreateQuestions(sectionId: string, items: any[]) {
+        // Place new rows after any existing ones in the same section.
+        const existingCount = await this.prisma.question.count({ where: { sectionId } });
+        const data = items.map((q, i) => ({
+            ...q,
+            sectionId,
+            sortOrder: existingCount + i,
+        }));
+        await this.prisma.question.createMany({ data });
+        return { count: data.length };
     }
 
     async createQuestion(sectionId: string, data: any) {

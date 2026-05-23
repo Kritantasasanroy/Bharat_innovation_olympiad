@@ -4,8 +4,9 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Pencil, Trash2, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 function QuestionsContent() {
     const searchParams = useSearchParams();
@@ -27,12 +28,17 @@ function QuestionsContent() {
     const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
     const [editSectionTitle, setEditSectionTitle] = useState('');
 
-    const [qFormData, setQFormData] = useState({
+    const [bulkBusySection, setBulkBusySection] = useState<string | null>(null);
+    const [reorderBusy, setReorderBusy] = useState<string | null>(null);
+    const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+    const blankQForm = {
         text: '',
         type: 'MCQ',
         difficulty: 'MEDIUM',
         marks: 1,
         negativeMarks: 0,
+        timeLimitSecs: 0,
         explanation: '',
         options: [
             { text: '', isCorrect: true },
@@ -40,23 +46,11 @@ function QuestionsContent() {
             { text: '', isCorrect: false },
             { text: '', isCorrect: false }
         ]
-    });
+    };
+    const [qFormData, setQFormData] = useState(blankQForm);
 
     const resetForm = () => {
-        setQFormData({
-            text: '',
-            type: 'MCQ',
-            difficulty: 'MEDIUM',
-            marks: 1,
-            negativeMarks: 0,
-            explanation: '',
-            options: [
-                { text: '', isCorrect: true },
-                { text: '', isCorrect: false },
-                { text: '', isCorrect: false },
-                { text: '', isCorrect: false }
-            ]
-        });
+        setQFormData(blankQForm);
         setIsEditingQuestion(false);
         setEditingQuestionId(null);
     };
@@ -86,6 +80,7 @@ function QuestionsContent() {
             difficulty: question.difficulty || 'MEDIUM',
             marks: question.marks || 1,
             negativeMarks: question.negativeMarks || 0,
+            timeLimitSecs: question.timeLimitSecs || 0,
             explanation: question.explanation || '',
             options: options
         });
@@ -160,6 +155,94 @@ function QuestionsContent() {
         }
     };
 
+    const reorderSection = async (sectionId: string, direction: 'up' | 'down') => {
+        const idx = sections.findIndex((s: any) => s.id === sectionId);
+        const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (idx < 0 || targetIdx < 0 || targetIdx >= sections.length) return;
+        const a = sections[idx], b = sections[targetIdx];
+        try {
+            setReorderBusy(sectionId);
+            await Promise.all([
+                api.put(`/admin/sections/${a.id}`, { sortOrder: b.sortOrder }),
+                api.put(`/admin/sections/${b.id}`, { sortOrder: a.sortOrder }),
+            ]);
+            await fetchExamDetails();
+        } catch {
+            setError('Failed to reorder section.');
+        } finally {
+            setReorderBusy(null);
+        }
+    };
+
+    const reorderQuestion = async (sectionId: string, questionId: string, direction: 'up' | 'down') => {
+        const sec = sections.find((s: any) => s.id === sectionId);
+        if (!sec) return;
+        const qs = sec.questions || [];
+        const idx = qs.findIndex((q: any) => q.id === questionId);
+        const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (idx < 0 || targetIdx < 0 || targetIdx >= qs.length) return;
+        const a = qs[idx], b = qs[targetIdx];
+        try {
+            setReorderBusy(questionId);
+            await Promise.all([
+                api.put(`/admin/questions/${a.id}`, { sortOrder: b.sortOrder ?? targetIdx }),
+                api.put(`/admin/questions/${b.id}`, { sortOrder: a.sortOrder ?? idx }),
+            ]);
+            await fetchExamDetails();
+        } catch {
+            setError('Failed to reorder question.');
+        } finally {
+            setReorderBusy(null);
+        }
+    };
+
+    const moveQuestion = async (questionId: string, newSectionId: string) => {
+        try {
+            await api.put(`/admin/questions/${questionId}`, { sectionId: newSectionId });
+            await fetchExamDetails();
+        } catch {
+            setError('Failed to move question.');
+        }
+    };
+
+    // Excel format: Question | Option A | Option B | Option C | Option D |
+    // Right Answer (A-D) | Difficulty Level (Easy/Medium/Hard) | (optional) Marks | (optional) Negative Marks
+    const LETTER_TO_INDEX: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+    const bulkImportFromExcel = async (sectionId: string, file: File) => {
+        try {
+            setBulkBusySection(sectionId);
+            setError('');
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: null });
+            const questions = rows.map((row: any, i: number) => {
+                const letter = String(row['Right Answer'] || '').trim().toUpperCase();
+                const correctIdx = LETTER_TO_INDEX[letter];
+                if (correctIdx === undefined) throw new Error(`Row ${i + 1}: invalid "Right Answer" "${letter}" (expected A/B/C/D)`);
+                const text = String(row['Question'] || '').trim();
+                if (!text) throw new Error(`Row ${i + 1}: missing Question text`);
+                const diffRaw = String(row['Difficulty Level'] || 'MEDIUM').trim().toUpperCase();
+                const difficulty = ['EASY', 'MEDIUM', 'HARD'].includes(diffRaw) ? diffRaw : 'MEDIUM';
+                const marks = Number(row['Marks']) > 0 ? Number(row['Marks']) : (difficulty === 'HARD' ? 3 : difficulty === 'MEDIUM' ? 2 : 1);
+                const negativeMarks = Number(row['Negative Marks']) >= 0 ? Number(row['Negative Marks']) : 0;
+                const options = ['Option A', 'Option B', 'Option C', 'Option D'].map((col, idx) => ({
+                    text: String(row[col] ?? '').trim(),
+                    isCorrect: idx === correctIdx,
+                }));
+                return { type: 'MCQ', difficulty, text, options, marks, negativeMarks, correctAnswer: String(correctIdx) };
+            });
+            if (questions.length === 0) throw new Error('No rows found in the Excel sheet.');
+            await api.post(`/admin/sections/${sectionId}/questions/bulk`, { questions });
+            await fetchExamDetails();
+        } catch (err: any) {
+            setError(err?.message || 'Bulk import failed.');
+        } finally {
+            setBulkBusySection(null);
+            const input = fileInputRefs.current[sectionId];
+            if (input) input.value = '';
+        }
+    };
+
     const saveQuestion = async () => {
         if (!activeSectionId) return;
         
@@ -187,6 +270,7 @@ function QuestionsContent() {
             difficulty: qFormData.difficulty,
             marks: qFormData.marks,
             negativeMarks: qFormData.negativeMarks,
+            timeLimitSecs: qFormData.timeLimitSecs > 0 ? qFormData.timeLimitSecs : null,
             explanation: qFormData.explanation || null,
             options: validOptions
         };
@@ -352,8 +436,24 @@ function QuestionsContent() {
                                         <button className="btn btn-sm btn-secondary" onClick={() => setEditingSectionId(null)}>Cancel</button>
                                     </div>
                                 ) : (
-                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <h3 style={{ margin: 0 }}>{section.title}</h3>
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            disabled={reorderBusy === section.id || sections.findIndex((s: any) => s.id === section.id) === 0}
+                                            onClick={() => reorderSection(section.id, 'up')}
+                                            title="Move section up"
+                                        >
+                                            <ArrowUp size={14} />
+                                        </button>
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            disabled={reorderBusy === section.id || sections.findIndex((s: any) => s.id === section.id) === sections.length - 1}
+                                            onClick={() => reorderSection(section.id, 'down')}
+                                            title="Move section down"
+                                        >
+                                            <ArrowDown size={14} />
+                                        </button>
                                         <button className="btn btn-sm btn-secondary" onClick={() => { setEditingSectionId(section.id); setEditSectionTitle(section.title); }}>
                                             <Pencil size={14} />
                                         </button>
@@ -362,10 +462,31 @@ function QuestionsContent() {
                                         </button>
                                     </div>
                                 )}
-                                
-                                <button className="btn btn-sm btn-primary" onClick={() => openQuestionModal(section.id)}>
-                                    + Add Question
-                                </button>
+
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    <input
+                                        ref={(el) => { fileInputRefs.current[section.id] = el; }}
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const f = e.target.files?.[0];
+                                            if (f) bulkImportFromExcel(section.id, f);
+                                        }}
+                                    />
+                                    <button
+                                        className="btn btn-sm btn-secondary"
+                                        disabled={bulkBusySection === section.id}
+                                        onClick={() => fileInputRefs.current[section.id]?.click()}
+                                        title="Bulk import from Excel (Question | Option A-D | Right Answer | Difficulty Level | Marks | Negative Marks)"
+                                    >
+                                        <Upload size={14} style={{ marginRight: '0.35rem' }} />
+                                        {bulkBusySection === section.id ? 'Importing…' : 'Import Excel'}
+                                    </button>
+                                    <button className="btn btn-sm btn-primary" onClick={() => openQuestionModal(section.id)}>
+                                        + Add Question
+                                    </button>
+                                </div>
                             </div>
                             
                             <div>
@@ -403,7 +524,38 @@ function QuestionsContent() {
                                                             {q.text}
                                                         </p>
                                                     </div>
-                                                    <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem' }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            disabled={reorderBusy === q.id || i === 0}
+                                                            onClick={() => reorderQuestion(section.id, q.id, 'up')}
+                                                            title="Move question up"
+                                                        >
+                                                            <ArrowUp size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            disabled={reorderBusy === q.id || i === (section.questions?.length || 0) - 1}
+                                                            onClick={() => reorderQuestion(section.id, q.id, 'down')}
+                                                            title="Move question down"
+                                                        >
+                                                            <ArrowDown size={14} />
+                                                        </button>
+                                                        {sections.length > 1 && (
+                                                            <select
+                                                                className="form-control"
+                                                                style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', maxWidth: '140px' }}
+                                                                value={section.id}
+                                                                onChange={(e) => {
+                                                                    if (e.target.value !== section.id) moveQuestion(q.id, e.target.value);
+                                                                }}
+                                                                title="Move to another section"
+                                                            >
+                                                                {sections.map((s: any) => (
+                                                                    <option key={s.id} value={s.id}>{s.title}</option>
+                                                                ))}
+                                                            </select>
+                                                        )}
                                                         <button className="btn btn-sm btn-secondary" onClick={() => openEditQuestionModal(section.id, q)}>
                                                             <Pencil size={14} />
                                                         </button>
@@ -539,12 +691,23 @@ function QuestionsContent() {
                             </div>
                             <div className="form-group">
                                 <label>Negative Marks (Penalty)</label>
-                                <input 
-                                    type="number" 
+                                <input
+                                    type="number"
                                     step="0.1"
-                                    className="form-control" 
+                                    className="form-control"
                                     value={qFormData.negativeMarks}
                                     onChange={(e) => setQFormData({...qFormData, negativeMarks: Number(e.target.value)})}
+                                />
+                            </div>
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <label>Per-Question Time Limit (seconds, 0 = none)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="form-control"
+                                    value={qFormData.timeLimitSecs}
+                                    onChange={(e) => setQFormData({ ...qFormData, timeLimitSecs: Number(e.target.value) })}
+                                    placeholder="e.g. 60 for 1 minute"
                                 />
                             </div>
                         </div>

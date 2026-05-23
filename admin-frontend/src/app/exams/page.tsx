@@ -31,19 +31,21 @@ export default function AdminExamsPage() {
     const [exams, setExams] = useState<Exam[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [editingExamId, setEditingExamId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [actionError, setActionError] = useState('');
     const [activeExamAction, setActiveExamAction] = useState('');
     const [scheduleForms, setScheduleForms] = useState<Record<string, ScheduleForm>>({});
 
-    const [formData, setFormData] = useState({
+    const blankFormData = {
         title: '',
         description: '',
         classBands: [] as number[],
         totalMarks: 100,
         durationMinutes: 60,
-    });
+    };
+    const [formData, setFormData] = useState(blankFormData);
 
     const getDefaultSchedule = (): ScheduleForm => {
         const start = new Date();
@@ -105,6 +107,32 @@ export default function AdminExamsPage() {
         }));
     };
 
+    const openCreateModal = () => {
+        setEditingExamId(null);
+        setFormData(blankFormData);
+        setError('');
+        setShowModal(true);
+    };
+
+    const openEditModal = (exam: Exam) => {
+        setEditingExamId(exam.id);
+        setFormData({
+            title: exam.title,
+            description: exam.description || '',
+            classBands: [...exam.classBands],
+            totalMarks: exam.totalMarks,
+            durationMinutes: exam.durationMinutes,
+        });
+        setError('');
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingExamId(null);
+        setFormData(blankFormData);
+    };
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (formData.classBands.length === 0) {
@@ -115,20 +143,43 @@ export default function AdminExamsPage() {
         try {
             setSubmitting(true);
             setError('');
-            await api.post('/admin/exams', formData);
-            setShowModal(false);
-            setFormData({
-                title: '',
-                description: '',
-                classBands: [],
-                totalMarks: 100,
-                durationMinutes: 60,
-            });
+            if (editingExamId) {
+                await api.put(`/admin/exams/${editingExamId}`, formData);
+            } else {
+                await api.post('/admin/exams', formData);
+            }
+            closeModal();
             fetchExams();
         } catch (err: unknown) {
-            setError(getApiErrorMessage(err, 'Failed to create exam. Please try again.'));
+            setError(getApiErrorMessage(err, editingExamId ? 'Failed to update exam.' : 'Failed to create exam. Please try again.'));
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const togglePublish = async (exam: Exam) => {
+        try {
+            setActionError('');
+            setActiveExamAction(`publish-${exam.id}`);
+            await api.put(`/admin/exams/${exam.id}`, { isPublished: !exam.isPublished });
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to toggle publish state.'));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
+
+    const toggleResults = async (exam: Exam) => {
+        try {
+            setActionError('');
+            setActiveExamAction(`result-${exam.id}`);
+            await api.put(`/admin/exams/${exam.id}`, { isResultReleased: !exam.isResultReleased });
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to toggle result release.'));
+        } finally {
+            setActiveExamAction('');
         }
     };
 
@@ -209,7 +260,7 @@ export default function AdminExamsPage() {
                             Create and manage exams, set their duration, and target specific classes.
                         </p>
                     </div>
-                    <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                    <button className="btn btn-primary" onClick={openCreateModal}>
                         + Create Exam
                     </button>
                 </div>
@@ -247,8 +298,11 @@ export default function AdminExamsPage() {
                                 </div>
 
                                 <div className="exam-footer">
-                                    <span className="badge badge-primary">
-                                        Active
+                                    <span className={`badge ${exam.isPublished ? 'badge-success' : 'badge-warning'}`}>
+                                        {exam.isPublished ? 'Published' : 'Draft'}
+                                    </span>
+                                    <span className={`badge ${exam.isResultReleased ? 'badge-success' : 'badge-warning'}`}>
+                                        {exam.isResultReleased ? 'Results Released' : 'Results Hidden'}
                                     </span>
                                     <div className="exam-stats">
                                         <span>{exam._count.sections} Sections</span>
@@ -256,6 +310,27 @@ export default function AdminExamsPage() {
                                         <span>{exam._count.instances} Instances</span>
                                     </div>
                                 </div>
+
+                                <div className="grid-2" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+                                    <button className="btn btn-secondary btn-sm" onClick={() => openEditModal(exam)}>
+                                        ✎ Edit Details
+                                    </button>
+                                    <button
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => togglePublish(exam)}
+                                        disabled={activeExamAction === `publish-${exam.id}`}
+                                    >
+                                        {activeExamAction === `publish-${exam.id}` ? '...' : (exam.isPublished ? 'Unpublish' : 'Publish')}
+                                    </button>
+                                </div>
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ marginTop: 'var(--space-2)', width: '100%' }}
+                                    onClick={() => toggleResults(exam)}
+                                    disabled={activeExamAction === `result-${exam.id}`}
+                                >
+                                    {activeExamAction === `result-${exam.id}` ? '...' : (exam.isResultReleased ? 'Hide Results' : 'Release Results')}
+                                </button>
 
                                 <div style={{ marginTop: 'var(--space-4)', display: 'grid', gap: 'var(--space-3)' }}>
                                     <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
@@ -317,9 +392,11 @@ export default function AdminExamsPage() {
                 {showModal && (
                     <div className="modal-overlay">
                         <div className="modal-content glass-card animate-fade-in">
-                            <h2>Create New Exam</h2>
+                            <h2>{editingExamId ? 'Edit Exam Details' : 'Create New Exam'}</h2>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-6)', fontSize: '0.9rem' }}>
-                                Define the basic structure of the exam. You can add sections and questions later.
+                                {editingExamId
+                                    ? 'Update the exam metadata. Total marks changes auto-rescale existing attempts.'
+                                    : 'Define the basic structure of the exam. You can add sections and questions later.'}
                             </p>
 
                             {error && <div className="form-error">{error}</div>}
@@ -395,7 +472,7 @@ export default function AdminExamsPage() {
                                     <button
                                         type="button"
                                         className="btn btn-secondary"
-                                        onClick={() => setShowModal(false)}
+                                        onClick={closeModal}
                                         disabled={submitting}
                                     >
                                         Cancel
@@ -405,7 +482,7 @@ export default function AdminExamsPage() {
                                         className="btn btn-primary"
                                         disabled={submitting}
                                     >
-                                        {submitting ? 'Creating...' : 'Create Exam'}
+                                        {submitting ? (editingExamId ? 'Saving...' : 'Creating...') : (editingExamId ? 'Save Changes' : 'Create Exam')}
                                     </button>
                                 </div>
                             </form>

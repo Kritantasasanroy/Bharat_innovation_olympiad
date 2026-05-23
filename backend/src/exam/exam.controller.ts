@@ -70,6 +70,13 @@ export class ExamController {
         return this.examService.createQuestion(sectionId, body);
     }
 
+    @Post('admin/sections/:id/questions/bulk')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async bulkCreateQuestions(@Param('id') sectionId: string, @Body() body: { questions: any[] }) {
+        return this.examService.bulkCreateQuestions(sectionId, body.questions || []);
+    }
+
     @Put('admin/sections/:id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
@@ -107,6 +114,8 @@ export class ExamController {
         classBands?: number[];
         totalMarks?: number;
         durationMinutes?: number;
+        isPublished?: boolean;
+        isResultReleased?: boolean;
     }) {
         return this.examService.updateExam(id, body);
     }

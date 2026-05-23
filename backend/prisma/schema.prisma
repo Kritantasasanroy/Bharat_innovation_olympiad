@@ -96,11 +96,13 @@ model Question {
   timeLimitSecs Int?
   tags          String[]
   explanation   String?
+  sortOrder     Int           @default(0)
   createdAt     DateTime      @default(now())
   attemptItems  AttemptItem[]
   section       ExamSection?  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@index([sectionId])
+  @@index([sectionId, sortOrder])
   @@index([type])
   @@index([difficulty])
 }
