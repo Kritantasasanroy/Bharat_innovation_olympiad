@@ -11,8 +11,6 @@ interface FullscreenMonitorOptions {
   pauseTimeoutSec?: number;
 }
 
-// Derive a session-storage key from the current URL path so violation counts
-// survive page refreshes but are scoped to this specific exam attempt.
 function storageKey(): string {
   if (typeof window === 'undefined') return 'violations_unknown';
   return `violations_${window.location.pathname}`;
@@ -29,19 +27,26 @@ function writeStoredViolations(count: number): void {
   try { sessionStorage.setItem(storageKey(), String(count)); } catch { /* ignore */ }
 }
 
+// Module-level debounce: survives component re-mounts and React StrictMode
+// double-effects. A single Escape / Windows-key press fires up to 6 browser
+// events simultaneously (fullscreenchange, webkitfullscreenchange, blur,
+// visibilitychange …). Only the first event within DEBOUNCE_MS registers a
+// violation; every subsequent event is silently ignored until the window
+// expires OR the student re-enters fullscreen (which resets the timestamp to 0).
+let _lastViolationTimestamp = 0;
+const DEBOUNCE_MS = 3000;
+
 export function useFullscreenMonitor({
   onViolation,
   onAutoSubmit,
   maxViolations = 3,
   pauseTimeoutSec = 20,
 }: FullscreenMonitorOptions) {
-  // Restore violation count from sessionStorage so page refreshes don't reset it.
   const [violationCount, setViolationCount] = useState<number>(() => readStoredViolations());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isGated, setIsGated] = useState(true);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  // Latest-ref pattern: keep callbacks fresh without re-registering listeners
   const onViolationRef = useRef(onViolation);
   const onAutoSubmitRef = useRef(onAutoSubmit);
   useEffect(() => { onViolationRef.current = onViolation; });
@@ -50,16 +55,7 @@ export function useFullscreenMonitor({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const violationCountRef = useRef<number>(readStoredViolations());
   const isGatedRef = useRef(true);
-  // Debounce timestamp: a single user action (Escape, Windows key, Alt+Tab)
-  // can fire several browser events at once (fullscreenchange +
-  // webkitfullscreenchange + window.blur + visibilitychange). Only the first
-  // event within a 2-second window counts as one violation.
-  const lastViolationTimeRef = useRef<number>(0);
 
-  // Blur events fire transiently when the browser transitions in/out of
-  // fullscreen mode. Ignoring them for 2 s after a successful fullscreen entry
-  // prevents the gate from immediately re-appearing after the user clicks
-  // "Re-enter Fullscreen".
   const ignoreBlurRef = useRef(false);
   const ignoreBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -85,14 +81,13 @@ export function useFullscreenMonitor({
     setLastError(null);
     if (typeof document === 'undefined') return;
 
-    // Already in fullscreen (e.g. Windows key blur while browser stays fullscreen).
-    // No fullscreenchange event will fire, so un-gate directly instead of
-    // calling requestFullscreen() which would be a silent no-op.
+    // Browser is already fullscreen (e.g. Windows-key blur). No fullscreenchange
+    // will fire, so un-gate directly and reset the debounce window.
     if (checkFs()) {
       suppressBlurBriefly();
       setIsGated(false);
       isGatedRef.current = false;
-      lastViolationTimeRef.current = 0; // allow next distinct action to count
+      _lastViolationTimestamp = 0; // allow next distinct action to count
       clearTimer();
       return;
     }
@@ -108,8 +103,6 @@ export function useFullscreenMonitor({
         setLastError('Fullscreen API is not supported in this browser.');
         return;
       }
-      // Suppress blur noise that fires during the fullscreen transition so the
-      // gate doesn't immediately re-appear after the button is clicked.
       suppressBlurBriefly();
       await reqFn.call(el);
     } catch (e: any) {
@@ -133,20 +126,18 @@ export function useFullscreenMonitor({
   };
 
   const registerViolation = (type: ViolationType) => {
-    if (isGatedRef.current) return; // already gated — don't double-count
+    if (isGatedRef.current) return; // already gated — skip
 
-    // Debounce: ignore any duplicate events within 2 s of the last violation.
-    // This ensures 1 Escape press = 1 violation even when the browser fires
-    // fullscreenchange + webkitfullscreenchange + blur + visibilitychange
-    // all at once for the same physical key press.
+    // Module-level debounce: the first event in a DEBOUNCE_MS window wins;
+    // every other event from the same physical keypress is discarded.
     const now = Date.now();
-    if (now - lastViolationTimeRef.current < 2000) return;
-    lastViolationTimeRef.current = now;
+    if (now - _lastViolationTimestamp < DEBOUNCE_MS) return;
+    _lastViolationTimestamp = now;
 
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolationCount(count);
-    writeStoredViolations(count); // persist across refreshes
+    writeStoredViolations(count);
     onViolationRef.current?.(type, count);
 
     if (count >= maxViolations) {
@@ -162,8 +153,6 @@ export function useFullscreenMonitor({
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    // Restore violation ref from sessionStorage (state initialiser already set
-    // the UI count; the ref needs to match so registerViolation counts correctly).
     violationCountRef.current = readStoredViolations();
 
     const inFs = checkFs();
@@ -171,9 +160,6 @@ export function useFullscreenMonitor({
     setIsGated(!inFs);
     isGatedRef.current = !inFs;
 
-    // Attempt auto-fullscreen on mount. Browsers require a user gesture, so
-    // this typically succeeds only when the page was reached via a click (e.g.
-    // the "Start Exam" button on the instructions page). Silently ignore errors.
     if (!inFs) {
       suppressBlurBriefly();
       const el: any = document.documentElement;
@@ -193,11 +179,9 @@ export function useFullscreenMonitor({
       if (inFsNow) {
         setIsGated(false);
         isGatedRef.current = false;
-        lastViolationTimeRef.current = 0; // allow next distinct action to count
+        _lastViolationTimestamp = 0; // reset debounce so next exit counts fresh
         setLastError(null);
         clearTimer();
-        // Suppress blur that browsers fire when finishing the fullscreen
-        // transition — without this the gate immediately re-appears.
         suppressBlurBriefly();
       } else {
         registerViolation('exit_fullscreen');
@@ -209,7 +193,7 @@ export function useFullscreenMonitor({
     };
 
     const onBlur = () => {
-      if (ignoreBlurRef.current) return; // within the post-fullscreen suppression window
+      if (ignoreBlurRef.current) return;
       registerViolation('window_blur');
     };
 
