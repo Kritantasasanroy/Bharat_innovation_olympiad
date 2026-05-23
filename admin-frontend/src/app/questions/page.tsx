@@ -33,6 +33,26 @@ function parseExcelRows(rows: any[]): any[] {
 }
 
 // ── Global Question Bank View (no examId) ──
+type QFormShape = {
+    text: string;
+    type: 'MCQ';
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    marks: number;
+    negativeMarks: number;
+    timeLimitSecs: number;
+    explanation: string;
+    options: { text: string; isCorrect: boolean }[];
+};
+
+const BLANK_Q_FORM: QFormShape = {
+    text: '', type: 'MCQ', difficulty: 'MEDIUM', marks: 1, negativeMarks: 0,
+    timeLimitSecs: 0, explanation: '',
+    options: [
+        { text: '', isCorrect: true }, { text: '', isCorrect: false },
+        { text: '', isCorrect: false }, { text: '', isCorrect: false },
+    ],
+};
+
 function GlobalBankView() {
     const [questions, setQuestions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -42,6 +62,13 @@ function GlobalBankView() {
     const [difficulty, setDifficulty] = useState('');
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Add/Edit modal state
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [qForm, setQForm] = useState<QFormShape>(BLANK_Q_FORM);
+    const [saving, setSaving] = useState(false);
+    const [modalError, setModalError] = useState('');
 
     const load = async (q?: string, diff?: string) => {
         try {
@@ -94,6 +121,84 @@ function GlobalBankView() {
         }
     };
 
+    const openAddModal = () => {
+        setEditingId(null);
+        setQForm(BLANK_Q_FORM);
+        setModalError('');
+        setModalOpen(true);
+    };
+
+    const openEditModal = (q: any) => {
+        const opts = Array.isArray(q.options) && q.options.length > 0
+            ? q.options.map((o: any) => ({ text: o.text || '', isCorrect: !!o.isCorrect }))
+            : BLANK_Q_FORM.options;
+        // Pad to at least 4 options for the form
+        while (opts.length < 4) opts.push({ text: '', isCorrect: false });
+        setEditingId(q.id);
+        setQForm({
+            text: q.text || '',
+            type: 'MCQ',
+            difficulty: (q.difficulty as QFormShape['difficulty']) || 'MEDIUM',
+            marks: q.marks ?? 1,
+            negativeMarks: q.negativeMarks ?? 0,
+            timeLimitSecs: q.timeLimitSecs ?? 0,
+            explanation: q.explanation || '',
+            options: opts,
+        });
+        setModalError('');
+        setModalOpen(true);
+    };
+
+    const saveQuestion = async () => {
+        const text = qForm.text.trim();
+        if (!text) { setModalError('Question text is required.'); return; }
+        const validOptions = qForm.options.filter((o) => o.text.trim());
+        if (validOptions.length < 2) { setModalError('At least two options are required.'); return; }
+        if (!validOptions.some((o) => o.isCorrect)) { setModalError('Mark at least one option as correct.'); return; }
+
+        const payload = {
+            text,
+            type: 'MCQ',
+            difficulty: qForm.difficulty,
+            marks: qForm.marks,
+            negativeMarks: qForm.negativeMarks,
+            timeLimitSecs: qForm.timeLimitSecs > 0 ? qForm.timeLimitSecs : null,
+            explanation: qForm.explanation || null,
+            options: validOptions,
+        };
+
+        try {
+            setSaving(true);
+            setModalError('');
+            if (editingId) {
+                await api.put(`/admin/questions/${editingId}`, payload);
+            } else {
+                await api.post('/admin/questions', payload);
+            }
+            setModalOpen(false);
+            await load(search, difficulty);
+        } catch (err: any) {
+            setModalError(err?.response?.data?.message || err?.message || 'Failed to save question.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const updateOption = (idx: number, patch: Partial<{ text: string; isCorrect: boolean }>) => {
+        setQForm((prev) => {
+            const next = [...prev.options];
+            next[idx] = { ...next[idx], ...patch };
+            return { ...prev, options: next };
+        });
+    };
+
+    const setCorrectOption = (idx: number) => {
+        setQForm((prev) => ({
+            ...prev,
+            options: prev.options.map((o, i) => ({ ...o, isCorrect: i === idx })),
+        }));
+    };
+
     return (
         <main className="container page-content animate-fade-in">
             <div className="page-header">
@@ -103,7 +208,7 @@ function GlobalBankView() {
                         All questions available across your exams. Import or manage here, then attach to specific exam sections.
                     </p>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
                     <a href="/exams" className="btn btn-secondary">← Back to Exams</a>
                     <input
                         ref={fileInputRef}
@@ -113,13 +218,20 @@ function GlobalBankView() {
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) importFromExcel(f); }}
                     />
                     <button
-                        className="btn btn-primary"
+                        className="btn btn-secondary"
                         disabled={importing}
                         onClick={() => fileInputRef.current?.click()}
                         title="Import questions from Excel into the bank (no section attached — you can attach them later)"
                     >
                         <Upload size={16} style={{ marginRight: '0.5rem' }} />
                         {importing ? 'Importing…' : 'Import from Excel'}
+                    </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={openAddModal}
+                        title="Create a new question manually and add it to the bank"
+                    >
+                        + Add Question
                     </button>
                 </div>
             </div>
@@ -199,18 +311,165 @@ function GlobalBankView() {
                                         )}
                                     </div>
                                     <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.5 }}>{q.text}</p>
+
+                                    {/* Inline option preview */}
+                                    {Array.isArray(q.options) && q.options.length > 0 && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.4rem', marginTop: '0.6rem' }}>
+                                            {q.options.map((opt: any, idx: number) => (
+                                                <div key={idx} style={{
+                                                    padding: '0.4rem 0.6rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    backgroundColor: opt.isCorrect ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)',
+                                                    border: opt.isCorrect ? '1px solid rgba(34,197,94,0.3)' : '1px solid var(--border-subtle)',
+                                                    display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem',
+                                                }}>
+                                                    <span style={{ fontWeight: 600, color: opt.isCorrect ? 'var(--success-400)' : 'var(--text-secondary)' }}>
+                                                        {String.fromCharCode(65 + idx)}.
+                                                    </span>
+                                                    <span style={{ color: opt.isCorrect ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{opt.text}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                                <button
-                                    className="btn btn-sm btn-danger"
-                                    onClick={() => deleteQuestion(q.id)}
-                                    disabled={deleteId === q.id}
-                                    title="Permanently delete from bank"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                                    <button
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={() => openEditModal(q)}
+                                        title="Edit question"
+                                    >
+                                        <Pencil size={14} />
+                                    </button>
+                                    <button
+                                        className="btn btn-sm btn-danger"
+                                        onClick={() => deleteQuestion(q.id)}
+                                        disabled={deleteId === q.id}
+                                        title="Permanently delete from bank"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Add/Edit Question Modal */}
+            {modalOpen && (
+                <div className="modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                    <div className="modal-content glass-card" style={{ width: '100%', maxWidth: '650px', maxHeight: '92vh', overflowY: 'auto', padding: 'var(--space-6)' }}>
+                        <h2 style={{ marginBottom: '0.25rem' }}>{editingId ? 'Edit Question' : 'Add Question to Bank'}</h2>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                            {editingId
+                                ? 'Changes apply everywhere this question is used.'
+                                : 'Question will be saved to the bank — you can attach it to any exam section later.'}
+                        </p>
+
+                        {modalError && <div className="form-error" style={{ marginBottom: '1rem' }}>{modalError}</div>}
+
+                        <div className="form-group">
+                            <label>Question Text *</label>
+                            <textarea
+                                className="form-control"
+                                rows={3}
+                                value={qForm.text}
+                                onChange={(e) => setQForm({ ...qForm, text: e.target.value })}
+                                placeholder="Enter the question text…"
+                            />
+                        </div>
+
+                        <div className="grid-2" style={{ gap: '1rem', marginTop: '1rem' }}>
+                            <div className="form-group">
+                                <label>Difficulty</label>
+                                <select
+                                    className="form-control"
+                                    value={qForm.difficulty}
+                                    onChange={(e) => setQForm({ ...qForm, difficulty: e.target.value as QFormShape['difficulty'] })}
+                                >
+                                    <option value="EASY">Easy</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="HARD">Hard</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Marks</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    className="form-control"
+                                    value={qForm.marks}
+                                    onChange={(e) => setQForm({ ...qForm, marks: Number(e.target.value) })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Negative Marks (Penalty)</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min={0}
+                                    className="form-control"
+                                    value={qForm.negativeMarks}
+                                    onChange={(e) => setQForm({ ...qForm, negativeMarks: Number(e.target.value) })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Per-Question Time Limit (s, 0 = none)</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    className="form-control"
+                                    value={qForm.timeLimitSecs}
+                                    onChange={(e) => setQForm({ ...qForm, timeLimitSecs: Number(e.target.value) })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginTop: '1rem' }}>
+                            <label>Explanation (Optional)</label>
+                            <textarea
+                                className="form-control"
+                                rows={2}
+                                value={qForm.explanation}
+                                onChange={(e) => setQForm({ ...qForm, explanation: e.target.value })}
+                                placeholder="Why is the correct answer correct?"
+                            />
+                        </div>
+
+                        <div style={{ marginTop: '1.25rem' }}>
+                            <h4 style={{ marginBottom: '0.5rem' }}>
+                                MCQ Options
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal', marginLeft: '0.5rem' }}>
+                                    — pick the radio button next to the correct answer
+                                </span>
+                            </h4>
+                            {qForm.options.map((opt, idx) => (
+                                <div key={idx} style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', alignItems: 'center' }}>
+                                    <input
+                                        type="radio"
+                                        name="bank_correct_option"
+                                        checked={opt.isCorrect}
+                                        onChange={() => setCorrectOption(idx)}
+                                        style={{ cursor: 'pointer', transform: 'scale(1.2)', flexShrink: 0 }}
+                                    />
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                                        value={opt.text}
+                                        onChange={(e) => updateOption(idx, { text: e.target.value })}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="modal-actions" style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</button>
+                            <button className="btn btn-primary" onClick={saveQuestion} disabled={saving}>
+                                {saving ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save Changes' : 'Create Question')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </main>

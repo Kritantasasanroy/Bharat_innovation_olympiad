@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur';
 
 interface FullscreenMonitorOptions {
-  onViolation?: (type: 'exit_fullscreen' | 'tab_switch', count: number) => void;
+  onViolation?: (type: ViolationType, count: number) => void;
   onAutoSubmit?: (reason: string) => void;
   maxViolations?: number;
   pauseTimeoutSec?: number;
@@ -17,33 +19,55 @@ export function useFullscreenMonitor({
 }: FullscreenMonitorOptions) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [violationCount, setViolationCount] = useState(0);
-  // isGated = true means the exam is blocked and fullscreen must be entered
+  // isGated = true means the exam is blocked behind the fullscreen overlay
   const [isGated, setIsGated] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
+
+  // Latest-ref pattern: keep callbacks fresh without re-registering listeners
+  const onViolationRef = useRef(onViolation);
+  const onAutoSubmitRef = useRef(onAutoSubmit);
+  useEffect(() => { onViolationRef.current = onViolation; });
+  useEffect(() => { onAutoSubmitRef.current = onAutoSubmit; });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const violationCountRef = useRef(0);
-  // Ref mirror of isGated so event handlers always see current value without re-registering
   const isGatedRef = useRef(true);
 
   const checkFs = (): boolean =>
-    !!(
-      document.fullscreenElement ||
-      (document as any).webkitFullscreenElement ||
-      (document as any).mozFullScreenElement ||
-      (document as any).msFullscreenElement
-    );
+    typeof document === 'undefined'
+      ? false
+      : !!(
+          document.fullscreenElement ||
+          (document as any).webkitFullscreenElement ||
+          (document as any).mozFullScreenElement ||
+          (document as any).msFullscreenElement
+        );
 
-  const requestFullscreen = async () => {
+  // Must be invoked from a real user gesture (button onClick) — async/await
+  // works because the underlying call is dispatched synchronously.
+  const requestFullscreen = useCallback(async () => {
+    setLastError(null);
+    if (typeof document === 'undefined') return;
     try {
-      const el = document.documentElement;
-      if (el.requestFullscreen) await el.requestFullscreen();
-      else if ((el as any).webkitRequestFullscreen) await (el as any).webkitRequestFullscreen();
-      else if ((el as any).mozRequestFullScreen) await (el as any).mozRequestFullScreen();
-      else if ((el as any).msRequestFullscreen) await (el as any).msRequestFullscreen();
-    } catch (e) {
+      const el: any = document.documentElement;
+      const reqFn =
+        el.requestFullscreen ||
+        el.webkitRequestFullscreen ||
+        el.mozRequestFullScreen ||
+        el.msRequestFullscreen;
+      if (!reqFn) {
+        setLastError('Fullscreen API is not supported in this browser.');
+        return;
+      }
+      await reqFn.call(el);
+    } catch (e: any) {
+      const msg =
+        e?.message ||
+        'Browser blocked the fullscreen request. Please click the button again.';
+      setLastError(msg);
       console.warn('[Fullscreen] request failed:', e);
     }
-  };
+  }, []);
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -55,62 +79,67 @@ export function useFullscreenMonitor({
   const startTimer = () => {
     clearTimer();
     timerRef.current = setTimeout(() => {
-      onAutoSubmit?.(`Exam paused for more than ${pauseTimeoutSec} seconds`);
+      onAutoSubmitRef.current?.(
+        `Exam paused for more than ${pauseTimeoutSec} seconds`,
+      );
     }, pauseTimeoutSec * 1000);
   };
 
+  const registerViolation = (type: ViolationType) => {
+    // If the gate is already up the user is already paying for a prior
+    // violation — don't double-count back-to-back signals (e.g. exit_fs +
+    // blur firing together).
+    if (isGatedRef.current) return;
+
+    violationCountRef.current += 1;
+    const count = violationCountRef.current;
+    setViolationCount(count);
+    onViolationRef.current?.(type, count);
+
+    if (count >= maxViolations) {
+      onAutoSubmitRef.current?.(`Maximum violations reached (${maxViolations})`);
+      return;
+    }
+
+    setIsGated(true);
+    isGatedRef.current = true;
+    startTimer();
+  };
+
   useEffect(() => {
-    // On mount (including page refresh): check whether we are actually in fullscreen.
-    // Browsers never restore fullscreen on reload so this will almost always be false.
+    if (typeof document === 'undefined') return;
+
+    // On mount (and after page refresh) browsers never restore fullscreen,
+    // so the gate will almost always be shown immediately.
     const inFs = checkFs();
     setIsFullscreen(inFs);
     setIsGated(!inFs);
     isGatedRef.current = !inFs;
 
     const onFsChange = () => {
-      const inFs = checkFs();
-      setIsFullscreen(inFs);
+      const inFsNow = checkFs();
+      setIsFullscreen(inFsNow);
 
-      if (inFs) {
-        // User (re-)entered fullscreen — lift the gate
+      if (inFsNow) {
+        // Successfully entered fullscreen — lift the gate
         setIsGated(false);
         isGatedRef.current = false;
+        setLastError(null);
         clearTimer();
-      } else if (!isGatedRef.current) {
-        // Left fullscreen while the exam was active (gate was not already showing)
-        violationCountRef.current += 1;
-        const count = violationCountRef.current;
-        setViolationCount(count);
-        onViolation?.('exit_fullscreen', count);
-
-        if (count >= maxViolations) {
-          onAutoSubmit?.(`Maximum violations reached (${maxViolations})`);
-          return;
-        }
-
-        setIsGated(true);
-        isGatedRef.current = true;
-        startTimer();
+      } else {
+        // Exited fullscreen during an active exam
+        registerViolation('exit_fullscreen');
       }
     };
 
     const onVisibility = () => {
-      if (document.hidden && !isGatedRef.current) {
-        // Tab switched while exam was active
-        violationCountRef.current += 1;
-        const count = violationCountRef.current;
-        setViolationCount(count);
-        onViolation?.('tab_switch', count);
+      if (document.hidden) registerViolation('tab_switch');
+    };
 
-        if (count >= maxViolations) {
-          onAutoSubmit?.(`Maximum violations reached (${maxViolations})`);
-          return;
-        }
-
-        setIsGated(true);
-        isGatedRef.current = true;
-        startTimer();
-      }
+    const onBlur = () => {
+      // Catches Alt-Tab / Cmd-Tab / clicking another app even when the
+      // page stays "visible" per the Visibility API.
+      registerViolation('window_blur');
     };
 
     document.addEventListener('fullscreenchange', onFsChange);
@@ -118,6 +147,7 @@ export function useFullscreenMonitor({
     document.addEventListener('mozfullscreenchange', onFsChange);
     document.addEventListener('MSFullscreenChange', onFsChange);
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
 
     return () => {
       document.removeEventListener('fullscreenchange', onFsChange);
@@ -125,9 +155,17 @@ export function useFullscreenMonitor({
       document.removeEventListener('mozfullscreenchange', onFsChange);
       document.removeEventListener('MSFullscreenChange', onFsChange);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
       clearTimer();
     };
-  }, []); // Empty deps — all mutable values go through refs
+  }, []); // Empty deps: listeners register once, refs keep state current
 
-  return { isFullscreen, violationCount, isGated, requestFullscreen };
+  return {
+    isFullscreen,
+    violationCount,
+    isGated,
+    lastError,
+    maxViolations,
+    requestFullscreen,
+  };
 }

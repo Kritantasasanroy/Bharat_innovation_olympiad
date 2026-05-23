@@ -17,14 +17,9 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const handleStartWebcam = async () => {
         setWebcamLoading(true);
         const stream = await startWebcam();
+        // useWebcam attaches the stream to the <video> internally via a
+        // callback ref, so no manual srcObject assignment is needed here.
         setWebcamStarted(!!stream);
-        
-        // Ensure the video element plays the stream
-        if (stream && videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(e => console.warn("Error playing video:", e));
-        }
-        
         setWebcamLoading(false);
     };
 

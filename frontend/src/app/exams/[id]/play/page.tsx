@@ -7,7 +7,7 @@ import { useTimer } from '@/hooks/useTimer';
 import { useWebcam } from '@/hooks/useWebcam';
 import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -32,11 +32,16 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const { remaining } = useTimer(attemptId);
     const { videoRef, canvasRef, startWebcam, startProctoring } = useWebcam(attemptId);
 
+    // Latest-ref for submit so the auto-submit callback (registered once with
+    // empty deps in the fullscreen hook) always calls the freshest version.
+    const submitExamRef = useRef(submitExam);
+    useEffect(() => { submitExamRef.current = submitExam; });
+
     const handleAutoSubmit = async (reason: string) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
-            const result = await submitExam();
+            const result = await submitExamRef.current();
             alert(`Exam auto-submitted: ${reason}`);
             if (result?.redirectUrl) {
                 window.location.href = result.redirectUrl;
@@ -48,27 +53,36 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         }
     };
 
-    const { isFullscreen, violationCount, isGated, requestFullscreen } = useFullscreenMonitor({
+    const {
+        isFullscreen, violationCount, isGated, lastError, maxViolations, requestFullscreen,
+    } = useFullscreenMonitor({
         onViolation: async (type, count) => {
-            if (attemptId) {
-                try {
-                    await api.post('/proctor/events', {
-                        attemptId,
-                        type: type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN' : 'TAB_SWITCH',
-                        details: { violationCount: count },
-                    });
-                } catch { /* best-effort */ }
-            }
+            if (!attemptId) return;
+            try {
+                const backendType =
+                    type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN'
+                    : type === 'tab_switch'     ? 'TAB_SWITCH'
+                    :                              'WINDOW_BLUR';
+                await api.post('/proctor/events', {
+                    attemptId,
+                    type: backendType,
+                    details: { violationCount: count, source: type },
+                });
+            } catch { /* best-effort */ }
         },
         onAutoSubmit: handleAutoSubmit,
         maxViolations: 3,
         pauseTimeoutSec: 20,
     });
 
+    // Kick off the exam once on mount; start webcam + proctoring as soon as
+    // the attempt is created so the camera is live from the very first frame.
     useEffect(() => {
         startExam()
             .then(() => {
-                startWebcam().then(() => startProctoring());
+                startWebcam().then((stream) => {
+                    if (stream) startProctoring();
+                });
             })
             .catch(err => console.warn('Exam init warning:', err));
     }, []);
@@ -147,33 +161,42 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         backgroundColor: 'rgba(0, 0, 0, 0.92)', zIndex: 9999,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '420px', width: '90%' }}>
+                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '460px', width: '90%' }}>
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🖥️</div>
                             <h2 style={{ marginBottom: '0.75rem' }}>
                                 {violationCount === 0 ? 'Fullscreen Required' : 'Return to Fullscreen'}
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                                 {violationCount === 0
-                                    ? 'This exam must be taken in fullscreen mode. Click below to begin.'
-                                    : `Fullscreen exited — violation ${violationCount} of 3. Re-enter fullscreen to continue.`}
+                                    ? 'This exam must be taken in fullscreen mode. Click below to begin — your camera will activate automatically.'
+                                    : `Violation ${violationCount} of ${maxViolations} — re-enter fullscreen to continue your exam.`}
                             </p>
                             {violationCount > 0 && (
                                 <p style={{ color: 'var(--danger-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
                                     Exam will auto-submit if fullscreen is not restored within 20 seconds.
                                 </p>
                             )}
-                            {violationCount >= 2 && (
+                            {violationCount >= maxViolations - 1 && violationCount < maxViolations && (
                                 <p style={{ color: 'var(--warning-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
                                     ⚠️ One more violation will auto-submit your exam.
                                 </p>
                             )}
+                            {lastError && (
+                                <p style={{ color: 'var(--danger-400)', fontSize: '0.8rem', marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(239,68,68,0.08)', borderRadius: '6px' }}>
+                                    {lastError}
+                                </p>
+                            )}
                             <button
+                                type="button"
                                 className="btn btn-primary"
-                                style={{ marginTop: '1.25rem', width: '100%', padding: '0.75rem' }}
-                                onClick={requestFullscreen}
+                                style={{ marginTop: '1.25rem', width: '100%', padding: '0.85rem', fontSize: '1rem' }}
+                                onClick={() => { void requestFullscreen(); }}
                             >
-                                {violationCount === 0 ? '▶ Enter Fullscreen &amp; Start' : '↩ Re-enter Fullscreen'}
+                                {violationCount === 0 ? '▶ Enter Fullscreen & Start' : '↩ Re-enter Fullscreen'}
                             </button>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                                Do not switch tabs, minimise, or open other apps during the exam.
+                            </p>
                         </div>
                     </div>
                 )}
@@ -193,13 +216,22 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
 
                     <div className="flex items-center gap-4">
-                        {violationCount > 0 && (
-                            <div className="violation-badge">⚠️ {violationCount} / 3</div>
-                        )}
+                        {/* Always-visible violation counter so the student knows the score */}
+                        <div
+                            className="violation-badge"
+                            style={{
+                                color: violationCount === 0 ? 'var(--text-secondary)' : 'var(--danger-400)',
+                                background: violationCount === 0 ? 'rgba(148,163,184,0.08)' : 'rgba(239,68,68,0.1)',
+                                borderColor: violationCount === 0 ? 'var(--border-subtle)' : 'rgba(239,68,68,0.3)',
+                            }}
+                            title="Violations: leaving fullscreen, switching tabs, or losing focus all count toward this limit"
+                        >
+                            ⚠️ {violationCount} / {maxViolations}
+                        </div>
                         <div className={`timer-display ${timerClass}`}>
                             ⏱ {formatTime(remaining)}
                         </div>
-                        <div className="webcam-mini">
+                        <div className="webcam-mini" title="Live proctoring feed">
                             <video ref={videoRef} autoPlay muted playsInline />
                             <div className="webcam-indicator" />
                             <canvas ref={canvasRef} style={{ display: 'none' }} />
