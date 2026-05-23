@@ -45,6 +45,10 @@ export class AttemptService {
         if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
         if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
 
+        if (isDemoExam(instance.examId)) {
+            return this.startDemoAttempt(userId, instance, now, ipAddress);
+        }
+
         const existing = await this.prisma.attempt.findUnique({
             where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
             include: { items: true },
@@ -55,12 +59,7 @@ export class AttemptService {
                 return existing;
             }
             if (existing.status !== AttemptStatus.NOT_STARTED) {
-                if (!isDemoExam(instance.examId)) {
-                    throw new BadRequestException('You have already completed this exam');
-                }
-                // Demo exam — discard the finished attempt (cascades to its
-                // answers and proctor events) so the student can retake it.
-                await this.prisma.attempt.delete({ where: { id: existing.id } });
+                throw new BadRequestException('You have already completed this exam');
             }
         }
 
@@ -94,6 +93,64 @@ export class AttemptService {
             }
             throw error;
         }
+    }
+
+    // Demo exams keep at most one attempt per (user, exam): any stale
+    // attempts on other instances of the same exam are pruned, and a
+    // finished attempt on the current instance is reset in place so its
+    // ID — and therefore the student's single result row — persists.
+    private async startDemoAttempt(
+        userId: string,
+        instance: { id: string; examId: string; exam: { totalMarks: number } },
+        now: Date,
+        ipAddress?: string,
+    ) {
+        const prior = await this.prisma.attempt.findMany({
+            where: { userId, examInstance: { examId: instance.examId } },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        const current = prior.find(a => a.examInstanceId === instance.id);
+        const staleIds = prior
+            .filter(a => a.examInstanceId !== instance.id)
+            .map(a => a.id);
+        if (staleIds.length) {
+            await this.prisma.attempt.deleteMany({ where: { id: { in: staleIds } } });
+        }
+
+        if (current) {
+            if (current.status === AttemptStatus.IN_PROGRESS) {
+                return this.prisma.attempt.findUnique({
+                    where: { id: current.id },
+                    include: { items: true },
+                });
+            }
+            await this.prisma.attemptItem.deleteMany({ where: { attemptId: current.id } });
+            await this.prisma.proctorEvent.deleteMany({ where: { attemptId: current.id } });
+            return this.prisma.attempt.update({
+                where: { id: current.id },
+                data: {
+                    status: AttemptStatus.IN_PROGRESS,
+                    startedAt: now,
+                    submittedAt: null,
+                    totalScore: null,
+                    ipAddress,
+                },
+                include: { items: true },
+            });
+        }
+
+        return this.prisma.attempt.create({
+            data: {
+                userId,
+                examInstanceId: instance.id,
+                status: AttemptStatus.IN_PROGRESS,
+                startedAt: now,
+                ipAddress,
+                maxScore: instance.exam.totalMarks,
+            },
+            include: { items: true },
+        });
     }
 
     async saveAnswer(attemptId: string, userId: string, questionId: string, answer: any) {

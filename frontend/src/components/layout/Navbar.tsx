@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
-import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
+import { APP_NAME } from '@/lib/constants';
 import { useThemeStore } from '@/store/themeStore';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -19,14 +19,10 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-inner">
-        <div className="navbar-brand" onClick={() => router.push('/')}>
+        <div className="navbar-brand" style={{ cursor: 'default' }}>
           <img src="/bio-logo.png" alt={APP_NAME} className="brand-logo" />
           <div className="brand-text-group">
             <span className="brand-text">{APP_NAME}</span>
-            <span className="brand-byline">
-              <span className="brand-byline-by">by</span>
-              <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} className="brand-byline-logo" />
-            </span>
             <span className="brand-tagline-nav">Where Young Minds Build the Future</span>
           </div>
         </div>

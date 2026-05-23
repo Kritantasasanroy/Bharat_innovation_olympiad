@@ -39,72 +39,8 @@ export default function HomePage() {
               Student Login
             </Link>
           </div>
-          <div className="hero-stats">
-            <div className="hero-stat">
-              <span className="stat-value">50K+</span>
-              <span className="stat-label">Students</span>
-            </div>
-            <div className="hero-stat">
-              <span className="stat-value">1,200+</span>
-              <span className="stat-label">Schools</span>
-            </div>
-            <div className="hero-stat">
-              <span className="stat-value">7</span>
-              <span className="stat-label">Class Bands</span>
-            </div>
-            <div className="hero-stat">
-              <span className="stat-value">AI</span>
-              <span className="stat-label">Proctored</span>
-            </div>
-          </div>
         </div>
       </section>
-
-      {/* Features */}
-      <section className="features container">
-        <h2 className="section-title">Why Choose Us</h2>
-        <div className="grid-3 features-grid">
-          <div className="glass-card feature-card">
-            <div className="feature-icon">🚀</div>
-            <h3>Ignite Entrepreneurship</h3>
-            <p>Step into the startup world early. Validate your creative visions, build school projects into business models, and learn the fundamentals of venture creation.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <div className="feature-icon">💡</div>
-            <h3>Innovation by EveryONE</h3>
-            <p>Guided by Lemon Ideas&apos; core mission to cultivate a mindset of co-creation, self-reliance, and sustainable living for the next generation of problem solvers.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <div className="feature-icon">🤝</div>
-            <h3>Mentorship &amp; Ecosystem</h3>
-            <p>Don&apos;t just test your knowledge. Gain access to a self-sustaining ecosystem of active mentors, domain experts, and real-world founders.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <div className="feature-icon">🏆</div>
-            <h3>Innopreneurs Platform</h3>
-            <p>Your stepping stone to the prestigious Innopreneurs Global Startup Contest—a premier stage offering incubation, networking, and acceleration.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <div className="feature-icon">🎓</div>
-            <h3>Experiential Learning</h3>
-            <p>Moving beyond traditional textbook metrics, our AI-evaluated platform tests real-world application, critical thinking, and “learning by doing”.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <div className="feature-icon">🤖</div>
-            <h3>Fair &amp; AI Proctored</h3>
-            <p>100% fair, transparent, and secure evaluations powered by advanced face detection, ensuring merit and integrity across the nation.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="footer">
-        <div className="container">
-          <p>&copy; 2026 {COMPANY_NAME} &mdash; {APP_NAME}. All rights reserved.</p>
-        </div>
-      </footer>
-
-      
     </div>
   );
 }
