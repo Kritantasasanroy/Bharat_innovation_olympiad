@@ -140,9 +140,19 @@ export class ExamService {
         totalMarks?: number;
         durationMinutes?: number;
     }) {
-        return this.prisma.exam.update({
-            where: { id },
-            data,
+        // If totalMarks is changing, repeg every existing attempt of this
+        // exam so their maxScore reflects the new total — otherwise old
+        // results keep showing "score / oldTotalMarks" and the result-page
+        // percentage breaks (e.g. 26 / 10 = 260%).
+        return this.prisma.$transaction(async (tx) => {
+            const updated = await tx.exam.update({ where: { id }, data });
+            if (data.totalMarks !== undefined) {
+                await tx.attempt.updateMany({
+                    where: { examInstance: { examId: id } },
+                    data: { maxScore: data.totalMarks },
+                });
+            }
+            return updated;
         });
     }
 

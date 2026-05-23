@@ -134,6 +134,10 @@ export class AttemptService {
                     startedAt: now,
                     submittedAt: null,
                     totalScore: null,
+                    // Re-peg to the exam's current totalMarks so the result
+                    // page reflects any totalMarks edits since the original
+                    // attempt was created.
+                    maxScore: instance.exam.totalMarks,
                     ipAddress,
                 },
                 include: { items: true },
