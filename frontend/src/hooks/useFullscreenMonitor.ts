@@ -50,6 +50,11 @@ export function useFullscreenMonitor({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const violationCountRef = useRef<number>(readStoredViolations());
   const isGatedRef = useRef(true);
+  // Debounce timestamp: a single user action (Escape, Windows key, Alt+Tab)
+  // can fire several browser events at once (fullscreenchange +
+  // webkitfullscreenchange + window.blur + visibilitychange). Only the first
+  // event within a 2-second window counts as one violation.
+  const lastViolationTimeRef = useRef<number>(0);
 
   // Blur events fire transiently when the browser transitions in/out of
   // fullscreen mode. Ignoring them for 2 s after a successful fullscreen entry
@@ -87,6 +92,7 @@ export function useFullscreenMonitor({
       suppressBlurBriefly();
       setIsGated(false);
       isGatedRef.current = false;
+      lastViolationTimeRef.current = 0; // allow next distinct action to count
       clearTimer();
       return;
     }
@@ -128,6 +134,14 @@ export function useFullscreenMonitor({
 
   const registerViolation = (type: ViolationType) => {
     if (isGatedRef.current) return; // already gated — don't double-count
+
+    // Debounce: ignore any duplicate events within 2 s of the last violation.
+    // This ensures 1 Escape press = 1 violation even when the browser fires
+    // fullscreenchange + webkitfullscreenchange + blur + visibilitychange
+    // all at once for the same physical key press.
+    const now = Date.now();
+    if (now - lastViolationTimeRef.current < 2000) return;
+    lastViolationTimeRef.current = now;
 
     violationCountRef.current += 1;
     const count = violationCountRef.current;
@@ -179,6 +193,7 @@ export function useFullscreenMonitor({
       if (inFsNow) {
         setIsGated(false);
         isGatedRef.current = false;
+        lastViolationTimeRef.current = 0; // allow next distinct action to count
         setLastError(null);
         clearTimer();
         // Suppress blur that browsers fire when finishing the fullscreen
