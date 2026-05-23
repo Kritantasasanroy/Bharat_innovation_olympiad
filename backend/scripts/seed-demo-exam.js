@@ -19,6 +19,15 @@ const XLSX_PATH = path.resolve(__dirname, '..', '..', 'Innovation_Olympiad_25Q_M
 const MARKS_BY_DIFFICULTY = { Easy: 1, Medium: 2, Hard: 3 };
 const LETTER_TO_INDEX = { A: 0, B: 1, C: 2, D: 3 };
 
+// Collapse near-duplicate Excel categories into a single section.
+// Keyed by the Excel "Question Category" value; the value is the
+// canonical section title we want to end up with.
+const CATEGORY_ALIASES = {
+    'AI / STEM': 'STEM',
+    'Entrepreneurship / Startup Trends': 'Entrepreneurship',
+    'Startup Trends': 'Entrepreneurship',
+};
+
 // Per-row overrides for questions that don't fit the single-correct MCQ
 // schema. Keyed by the original Excel question text.
 const QUESTION_OVERRIDES = {
@@ -57,10 +66,12 @@ async function api(method, pathSuffix, token, body) {
     if (rows.length !== 25) console.warn(`Expected 25 rows, got ${rows.length}`);
 
     // Build sections in order of first appearance, by category
+    // (after collapsing aliases so near-duplicates become one section)
     const sectionsOrder = [];
     const bySection = new Map();
     for (const row of rows) {
-        const cat = row['Question Category'] || 'General';
+        const rawCat = row['Question Category'] || 'General';
+        const cat = CATEGORY_ALIASES[rawCat] ?? rawCat;
         if (!bySection.has(cat)) {
             bySection.set(cat, []);
             sectionsOrder.push(cat);
