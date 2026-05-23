@@ -3,6 +3,38 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptStatus } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
 
+// ── Deterministic seeded shuffle (Fisher-Yates) ──
+// Uses a simple mulberry32 PRNG seeded from the userId hash so each
+// student gets a unique but repeatable question order.
+function hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
+}
+
+function mulberry32(seed: number) {
+    return function () {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+function seededShuffle<T>(array: T[], seed: number): T[] {
+    const shuffled = [...array];
+    const rng = mulberry32(seed);
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
 @Injectable()
 export class ExamService {
     constructor(private prisma: PrismaService) { }
@@ -53,7 +85,7 @@ export class ExamService {
         }));
     }
 
-    async findExamById(id: string) {
+    async findExamById(id: string, userId?: string) {
         const exam = await this.prisma.exam.findUnique({
             where: { id },
             include: {
@@ -84,6 +116,27 @@ export class ExamService {
         });
 
         if (!exam) throw new NotFoundException('Exam not found');
+
+        // If a userId is provided (student context), shuffle all questions
+        // across sections into a single flat order unique to each student.
+        if (userId) {
+            const allQuestions = exam.sections.flatMap(s => s.questions);
+            const seed = hashString(userId + exam.id);
+            const shuffledQuestions = seededShuffle(allQuestions, seed);
+
+            // Return a single virtual section with all shuffled questions
+            return {
+                ...exam,
+                sections: [{
+                    id: 'shuffled',
+                    title: 'All Questions',
+                    sortOrder: 0,
+                    examId: exam.id,
+                    questions: shuffledQuestions,
+                }],
+            };
+        }
+
         return exam;
     }
 

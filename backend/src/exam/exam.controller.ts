@@ -28,8 +28,10 @@ export class ExamController {
 
     @Get('exams/:id')
     @UseGuards(JwtAuthGuard)
-    async getExam(@Param('id') id: string) {
-        return this.examService.findExamById(id);
+    async getExam(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
+        // Only shuffle questions for students, not for admin users
+        const shuffleUserId = role === 'STUDENT' ? userId : undefined;
+        return this.examService.findExamById(id, shuffleUserId);
     }
 
     // ── Admin routes ──

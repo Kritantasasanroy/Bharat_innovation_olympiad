@@ -225,11 +225,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </div>
                         )}
 
-                        {/* XP Badge */}
-                        <div className="xp-badge">
-                            ⚡ {xpEarned} XP
-                            {streak >= 3 && <span className="streak-fire">🔥 {streak}</span>}
-                        </div>
+                        {/* XP Badge — hidden for now */}
 
                         {/* Overall Timer */}
                         <div className={`timer-display ${timerClass}`}>
@@ -251,16 +247,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         {/* Question header */}
                         <div className="question-header">
                             <div className="flex items-center gap-3">
-                                <span className="badge badge-primary">{currentQuestion.type}</span>
-                                <span className={`badge ${currentQuestion.difficulty === 'EASY' ? 'badge-success' :
-                                    currentQuestion.difficulty === 'MEDIUM' ? 'badge-warning' : 'badge-danger'
-                                    }`}>
-                                    {currentQuestion.difficulty}
-                                </span>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                    {currentQuestion.marks} mark{currentQuestion.marks > 1 ? 's' : ''}
-                                    {currentQuestion.negativeMarks > 0 && ` (-${currentQuestion.negativeMarks})`}
-                                </span>
+                                {/* Question type, difficulty, and marks hidden from student view */}
                             </div>
 
                             <button
@@ -268,7 +255,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                 onClick={() => !isPaused && toggleFlag(currentQuestion.id)}
                                 disabled={isPaused}
                             >
-                                {flagged.has(currentQuestion.id) ? '🚩 Flagged' : '🏳 Flag'}
+                                {flagged.has(currentQuestion.id) ? '🔖 Marked for later' : '🔖 Mark for later'}
                             </button>
                         </div>
 
@@ -386,7 +373,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div className="sidebar-legend">
                         <div><span className="legend-dot current" /> Current</div>
                         <div><span className="legend-dot answered" /> Answered</div>
-                        <div><span className="legend-dot flagged" /> Flagged</div>
+                        <div><span className="legend-dot flagged" /> Marked for later</div>
                         <div><span className="legend-dot" /> Not Visited</div>
                     </div>
 
