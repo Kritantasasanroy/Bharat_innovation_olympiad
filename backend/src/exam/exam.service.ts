@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttemptStatus } from '@prisma/client';
+import { AttemptStatus, Prisma } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
@@ -11,7 +11,7 @@ function hashString(str: string): number {
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
-        hash |= 0; // Convert to 32-bit integer
+        hash |= 0;
     }
     return Math.abs(hash);
 }
@@ -35,6 +35,20 @@ function seededShuffle<T>(array: T[], seed: number): T[] {
     return shuffled;
 }
 
+// Project SectionQuestion rows into the legacy `section.questions` shape
+// so admin UI doesn't need to know about the join model.
+function flattenSection(section: any, includeAnswer = true) {
+    const questions = (section.sectionQuestions || [])
+        .sort((a: any, b: any) => a.sortOrder - b.sortOrder)
+        .map((sq: any) => ({
+            ...sq.question,
+            sortOrder: sq.sortOrder,
+            ...(includeAnswer ? {} : { correctAnswer: undefined }),
+        }));
+    const { sectionQuestions, ...rest } = section;
+    return { ...rest, questions };
+}
+
 @Injectable()
 export class ExamService {
     constructor(private prisma: PrismaService) { }
@@ -45,43 +59,33 @@ export class ExamService {
         const exams = await this.prisma.exam.findMany({
             where: {
                 classBands: { has: classBand },
-                instances: {
-                    some: {
-                        endsAt: { gte: new Date() },
-                    },
-                },
+                instances: { some: { endsAt: { gte: new Date() } } },
             },
             include: {
                 sections: { select: { id: true, title: true, sortOrder: true } },
                 instances: {
                     where: { endsAt: { gte: new Date() } },
                     orderBy: { startsAt: 'asc' },
-                    include: {
-                        attempts: {
-                            where: { userId }
-                        }
-                    }
+                    include: { attempts: { where: { userId } } },
                 },
             },
             orderBy: { createdAt: 'desc' },
         });
 
-        // Find if user already completed the exam in any instance (past or current)
         const completedAttempts = await this.prisma.attempt.findMany({
             where: {
                 userId,
                 status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
-                examInstance: { examId: { in: exams.map(e => e.id) } }
+                examInstance: { examId: { in: exams.map(e => e.id) } },
             },
-            include: { examInstance: { select: { examId: true } } }
+            include: { examInstance: { select: { examId: true } } },
         });
 
         const completedExamIds = new Set(completedAttempts.map(a => a.examInstance.examId));
 
         return exams.map(exam => ({
             ...exam,
-            // Demo exams are never "completed" — they stay open for unlimited retakes
-            isCompleted: isDemoExam(exam.id) ? false : completedExamIds.has(exam.id)
+            isCompleted: isDemoExam(exam.id) ? false : completedExamIds.has(exam.id),
         }));
     }
 
@@ -96,21 +100,26 @@ export class ExamService {
                 sections: {
                     orderBy: { sortOrder: 'asc' },
                     include: {
-                        questions: {
-                            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-                            select: {
-                                id: true,
-                                type: true,
-                                difficulty: true,
-                                text: true,
-                                options: true,
-                                marks: true,
-                                negativeMarks: true,
-                                timeLimitSecs: true,
-                                tags: true,
-                                explanation: true,
-                                sortOrder: true,
-                                // Exclude correctAnswer during exam
+                        sectionQuestions: {
+                            orderBy: { sortOrder: 'asc' },
+                            include: {
+                                question: {
+                                    select: {
+                                        id: true,
+                                        type: true,
+                                        difficulty: true,
+                                        text: true,
+                                        options: true,
+                                        marks: true,
+                                        negativeMarks: true,
+                                        timeLimitSecs: true,
+                                        tags: true,
+                                        explanation: true,
+                                        // correctAnswer always excluded at the
+                                        // student-facing layer; admin reads it via
+                                        // GET /admin/questions
+                                    },
+                                },
                             },
                         },
                     },
@@ -120,14 +129,12 @@ export class ExamService {
 
         if (!exam) throw new NotFoundException('Exam not found');
 
-        // If a userId is provided (student context), shuffle all questions
-        // across sections into a single flat order unique to each student.
+        const flattenedSections = exam.sections.map(s => flattenSection(s));
+
         if (userId) {
-            const allQuestions = exam.sections.flatMap(s => s.questions);
+            const allQuestions = flattenedSections.flatMap(s => s.questions);
             const seed = hashString(userId + exam.id);
             const shuffledQuestions = seededShuffle(allQuestions, seed);
-
-            // Return a single virtual section with all shuffled questions
             return {
                 ...exam,
                 sections: [{
@@ -140,7 +147,7 @@ export class ExamService {
             };
         }
 
-        return exam;
+        return { ...exam, sections: flattenedSections };
     }
 
     async findInstanceById(instanceId: string) {
@@ -150,17 +157,12 @@ export class ExamService {
         });
     }
 
-    // ── Admin operations ──
+    // ── Admin: exams ──
 
     async findAllExamsForAdmin() {
         return this.prisma.exam.findMany({
             include: {
-                _count: {
-                    select: {
-                        sections: true,
-                        instances: true,
-                    },
-                },
+                _count: { select: { sections: true, instances: true } },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -173,20 +175,13 @@ export class ExamService {
         totalMarks: number;
         durationMinutes: number;
     }) {
-        return this.prisma.exam.create({ 
-            data: {
-                ...data,
-                isPublished: true,
-                isResultReleased: true,
-            }
+        return this.prisma.exam.create({
+            data: { ...data, isPublished: true, isResultReleased: true },
         });
     }
 
     async deleteExam(id: string) {
-        // Delete all related data via cascading, then delete the exam
-        await this.prisma.exam.delete({
-            where: { id },
-        });
+        await this.prisma.exam.delete({ where: { id } });
     }
 
     async updateExam(id: string, data: {
@@ -198,10 +193,6 @@ export class ExamService {
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {
-        // If totalMarks is changing, repeg every existing attempt of this
-        // exam so their maxScore reflects the new total — otherwise old
-        // results keep showing "score / oldTotalMarks" and the result-page
-        // percentage breaks (e.g. 26 / 10 = 260%).
         return this.prisma.$transaction(async (tx) => {
             const updated = await tx.exam.update({ where: { id }, data });
             if (data.totalMarks !== undefined) {
@@ -214,53 +205,142 @@ export class ExamService {
         });
     }
 
+    // ── Admin: sections ──
+
     async createSection(examId: string, data: { title: string; sortOrder: number }) {
-        return this.prisma.examSection.create({
-            data: { ...data, examId },
+        return this.prisma.examSection.create({ data: { ...data, examId } });
+    }
+
+    async updateSection(id: string, data: any) {
+        return this.prisma.examSection.update({ where: { id }, data });
+    }
+
+    async deleteSection(id: string) {
+        return this.prisma.examSection.delete({ where: { id } });
+    }
+
+    // ── Admin: questions (bank + section) ──
+
+    async createQuestion(sectionId: string, data: any) {
+        // Create a new bank question AND attach it to this section.
+        const { sortOrder: _ignored, sectionId: _ignored2, ...questionData } = data;
+        const existingCount = await this.prisma.sectionQuestion.count({ where: { sectionId } });
+        return this.prisma.$transaction(async (tx) => {
+            const question = await tx.question.create({ data: questionData });
+            await tx.sectionQuestion.create({
+                data: { sectionId, questionId: question.id, sortOrder: existingCount },
+            });
+            return question;
         });
     }
 
     async bulkCreateQuestions(sectionId: string, items: any[]) {
-        // Place new rows after any existing ones in the same section.
-        const existingCount = await this.prisma.question.count({ where: { sectionId } });
-        const data = items.map((q, i) => ({
-            ...q,
-            sectionId,
-            sortOrder: existingCount + i,
-        }));
-        await this.prisma.question.createMany({ data });
-        return { count: data.length };
-    }
-
-    async createQuestion(sectionId: string, data: any) {
-        return this.prisma.question.create({
-            data: { ...data, sectionId },
+        const existingCount = await this.prisma.sectionQuestion.count({ where: { sectionId } });
+        const created: { id: string }[] = [];
+        // createMany doesn't return rows; loop so we can wire up SectionQuestion.
+        await this.prisma.$transaction(async (tx) => {
+            for (let i = 0; i < items.length; i++) {
+                const { sortOrder: _a, sectionId: _b, ...payload } = items[i];
+                const q = await tx.question.create({ data: payload, select: { id: true } });
+                await tx.sectionQuestion.create({
+                    data: { sectionId, questionId: q.id, sortOrder: existingCount + i },
+                });
+                created.push(q);
+            }
         });
-    }
-
-    async updateSection(id: string, data: any) {
-        return this.prisma.examSection.update({
-            where: { id },
-            data,
-        });
-    }
-
-    async deleteSection(id: string) {
-        return this.prisma.examSection.delete({
-            where: { id },
-        });
+        return { count: created.length };
     }
 
     async updateQuestion(id: string, data: any) {
-        return this.prisma.question.update({
-            where: { id },
-            data,
-        });
+        // Editing a question edits the bank entry. sortOrder/sectionId are
+        // ignored here — those live on SectionQuestion.
+        const { sortOrder: _a, sectionId: _b, ...payload } = data;
+        return this.prisma.question.update({ where: { id }, data: payload });
     }
 
     async deleteQuestion(id: string) {
-        return this.prisma.question.delete({
-            where: { id },
+        // Cascades to SectionQuestion rows.
+        return this.prisma.question.delete({ where: { id } });
+    }
+
+    async listBankQuestions(filters: { q?: string; difficulty?: string; examId?: string }) {
+        const where: Prisma.QuestionWhereInput = {};
+        if (filters.q) where.text = { contains: filters.q, mode: 'insensitive' };
+        if (filters.difficulty && ['EASY', 'MEDIUM', 'HARD'].includes(filters.difficulty)) {
+            where.difficulty = filters.difficulty as any;
+        }
+        if (filters.examId) {
+            where.sectionLinks = { some: { section: { examId: filters.examId } } };
+        }
+        return this.prisma.question.findMany({
+            where,
+            include: {
+                sectionLinks: {
+                    select: {
+                        sectionId: true,
+                        sortOrder: true,
+                        section: { select: { id: true, title: true, examId: true, exam: { select: { id: true, title: true } } } },
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 500,
+        });
+    }
+
+    async attachQuestionToSection(sectionId: string, questionId: string) {
+        const existing = await this.prisma.sectionQuestion.findUnique({
+            where: { sectionId_questionId: { sectionId, questionId } },
+        });
+        if (existing) throw new BadRequestException('Question already attached to this section');
+        const count = await this.prisma.sectionQuestion.count({ where: { sectionId } });
+        return this.prisma.sectionQuestion.create({
+            data: { sectionId, questionId, sortOrder: count },
+        });
+    }
+
+    async detachQuestionFromSection(sectionId: string, questionId: string) {
+        return this.prisma.sectionQuestion.delete({
+            where: { sectionId_questionId: { sectionId, questionId } },
+        });
+    }
+
+    async reorderSectionQuestion(sectionId: string, questionId: string, sortOrder: number) {
+        return this.prisma.sectionQuestion.update({
+            where: { sectionId_questionId: { sectionId, questionId } },
+            data: { sortOrder },
+        });
+    }
+
+    async moveQuestionAcrossSections(
+        sourceSectionId: string,
+        questionId: string,
+        targetSectionId: string,
+    ) {
+        if (sourceSectionId === targetSectionId) return { moved: false };
+        return this.prisma.$transaction(async (tx) => {
+            await tx.sectionQuestion.delete({
+                where: { sectionId_questionId: { sectionId: sourceSectionId, questionId } },
+            });
+            const existing = await tx.sectionQuestion.findUnique({
+                where: { sectionId_questionId: { sectionId: targetSectionId, questionId } },
+            });
+            if (existing) return { moved: true, alreadyAttached: true };
+            const count = await tx.sectionQuestion.count({ where: { sectionId: targetSectionId } });
+            await tx.sectionQuestion.create({
+                data: { sectionId: targetSectionId, questionId, sortOrder: count },
+            });
+            return { moved: true };
+        });
+    }
+
+    // ── Admin: instances ──
+
+    async listInstances(examId: string) {
+        return this.prisma.examInstance.findMany({
+            where: { examId },
+            orderBy: { startsAt: 'asc' },
+            include: { _count: { select: { attempts: true } } },
         });
     }
 
@@ -272,30 +352,34 @@ export class ExamService {
         configKey?: string;
         quitUrl?: string;
     }) {
-        return this.prisma.examInstance.create({
-            data: { ...data, examId },
-        });
+        return this.prisma.examInstance.create({ data: { ...data, examId } });
+    }
+
+    async updateInstance(id: string, data: {
+        startsAt?: Date;
+        endsAt?: Date;
+        requireSeb?: boolean;
+        browserExamKey?: string;
+        configKey?: string;
+        quitUrl?: string;
+    }) {
+        return this.prisma.examInstance.update({ where: { id }, data });
+    }
+
+    async deleteInstance(id: string) {
+        return this.prisma.examInstance.delete({ where: { id } });
     }
 
     async publishExam(id: string) {
-        return this.prisma.exam.update({
-            where: { id },
-            data: { isPublished: true },
-        });
+        return this.prisma.exam.update({ where: { id }, data: { isPublished: true } });
     }
 
     async releaseQuestionPaper(id: string) {
-        return this.prisma.exam.update({
-            where: { id },
-            data: { isPublished: true },
-        });
+        return this.prisma.exam.update({ where: { id }, data: { isPublished: true } });
     }
 
     async releaseResults(id: string) {
-        return this.prisma.exam.update({
-            where: { id },
-            data: { isResultReleased: true },
-        });
+        return this.prisma.exam.update({ where: { id }, data: { isResultReleased: true } });
     }
 
     // ── Admin analytics ──

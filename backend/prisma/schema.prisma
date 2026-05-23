@@ -73,38 +73,48 @@ model Exam {
 }
 
 model ExamSection {
-  id        String     @id @default(uuid())
-  examId    String
-  title     String
-  sortOrder Int
-  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
-  questions Question[]
+  id               String            @id @default(uuid())
+  examId           String
+  title            String
+  sortOrder        Int
+  exam             Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  sectionQuestions SectionQuestion[]
 
   @@index([examId])
 }
 
 model Question {
-  id            String        @id @default(uuid())
-  sectionId     String?
+  id            String            @id @default(uuid())
   type          QuestionType
   difficulty    Difficulty
   text          String
   options       Json?
   correctAnswer String?
-  marks         Int           @default(1)
-  negativeMarks Float         @default(0)
+  marks         Int               @default(1)
+  negativeMarks Float             @default(0)
   timeLimitSecs Int?
   tags          String[]
   explanation   String?
-  sortOrder     Int           @default(0)
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime          @default(now())
   attemptItems  AttemptItem[]
-  section       ExamSection?  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sectionLinks  SectionQuestion[]
 
-  @@index([sectionId])
-  @@index([sectionId, sortOrder])
   @@index([type])
   @@index([difficulty])
+}
+
+model SectionQuestion {
+  id         String      @id @default(uuid())
+  sectionId  String
+  questionId String
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+  section    ExamSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, questionId])
+  @@index([sectionId, sortOrder])
+  @@index([questionId])
 }
 
 model ExamInstance {

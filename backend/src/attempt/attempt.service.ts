@@ -267,7 +267,13 @@ export class AttemptService {
                 examInstance: {
                     include: {
                         exam: {
-                            include: { sections: true }
+                            include: {
+                                sections: {
+                                    include: {
+                                        sectionQuestions: { select: { questionId: true } },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
@@ -300,6 +306,12 @@ export class AttemptService {
             // If exam has no attempts somehow, default to 1/1. But count includes this student so minimum is 1.
             const rank = rankCount + 1;
 
+            // Build questionId -> sectionId map from this exam's SectionQuestion rows.
+            const questionToSection: Record<string, string> = {};
+            attempt.examInstance.exam.sections.forEach(sec => {
+                sec.sectionQuestions.forEach(sq => { questionToSection[sq.questionId] = sec.id; });
+            });
+
             // Generate section-wise scores for Radar chart
             const sectionScoresMap: Record<string, { total: number, scored: number, name: string }> = {};
             attempt.examInstance.exam.sections.forEach(sec => {
@@ -307,10 +319,11 @@ export class AttemptService {
             });
 
             attempt.items.forEach(item => {
-                if (item.question.sectionId && sectionScoresMap[item.question.sectionId]) {
-                    sectionScoresMap[item.question.sectionId].total += item.question.marks;
+                const sid = questionToSection[item.questionId];
+                if (sid && sectionScoresMap[sid]) {
+                    sectionScoresMap[sid].total += item.question.marks;
                     if (item.score) {
-                        sectionScoresMap[item.question.sectionId].scored += item.score;
+                        sectionScoresMap[sid].scored += item.score;
                     }
                 }
             });
@@ -396,9 +409,15 @@ export class AttemptService {
                 examInstance: {
                     include: {
                         exam: {
-                            include: { sections: true }
-                        }
-                    }
+                            include: {
+                                sections: {
+                                    include: {
+                                        sectionQuestions: { select: { questionId: true } },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
                 items: {
                     include: { question: true }
@@ -408,16 +427,22 @@ export class AttemptService {
 
         if (!attempt) throw new NotFoundException('Attempt not found');
 
+        const questionToSection: Record<string, string> = {};
+        attempt.examInstance.exam.sections.forEach(sec => {
+            sec.sectionQuestions.forEach(sq => { questionToSection[sq.questionId] = sec.id; });
+        });
+
         const sectionScoresMap: Record<string, { total: number, scored: number, name: string }> = {};
         attempt.examInstance.exam.sections.forEach(sec => {
             sectionScoresMap[sec.id] = { total: 0, scored: 0, name: sec.title };
         });
 
         attempt.items.forEach(item => {
-            if (item.question.sectionId && sectionScoresMap[item.question.sectionId]) {
-                sectionScoresMap[item.question.sectionId].total += item.question.marks;
+            const sid = questionToSection[item.questionId];
+            if (sid && sectionScoresMap[sid]) {
+                sectionScoresMap[sid].total += item.question.marks;
                 if (item.score) {
-                    sectionScoresMap[item.question.sectionId].scored += item.score;
+                    sectionScoresMap[sid].scored += item.score;
                 }
             }
         });

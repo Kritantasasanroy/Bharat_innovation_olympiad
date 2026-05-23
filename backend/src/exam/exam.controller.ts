@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -29,12 +29,11 @@ export class ExamController {
     @Get('exams/:id')
     @UseGuards(JwtAuthGuard)
     async getExam(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
-        // Only shuffle questions for students, not for admin users
         const shuffleUserId = role === 'STUDENT' ? userId : undefined;
         return this.examService.findExamById(id, shuffleUserId);
     }
 
-    // ── Admin routes ──
+    // ── Admin: exams ──
 
     @Get('admin/exams')
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -54,55 +53,6 @@ export class ExamController {
         durationMinutes: number;
     }) {
         return this.examService.createExam(body);
-    }
-
-    @Post('admin/exams/:id/sections')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async createSection(@Param('id') examId: string, @Body() body: { title: string; sortOrder: number }) {
-        return this.examService.createSection(examId, body);
-    }
-
-    @Post('admin/sections/:id/questions')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async createQuestion(@Param('id') sectionId: string, @Body() body: any) {
-        return this.examService.createQuestion(sectionId, body);
-    }
-
-    @Post('admin/sections/:id/questions/bulk')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async bulkCreateQuestions(@Param('id') sectionId: string, @Body() body: { questions: any[] }) {
-        return this.examService.bulkCreateQuestions(sectionId, body.questions || []);
-    }
-
-    @Put('admin/sections/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async updateSection(@Param('id') id: string, @Body() body: any) {
-        return this.examService.updateSection(id, body);
-    }
-
-    @Delete('admin/sections/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async deleteSection(@Param('id') id: string) {
-        return this.examService.deleteSection(id);
-    }
-
-    @Put('admin/questions/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async updateQuestion(@Param('id') id: string, @Body() body: any) {
-        return this.examService.updateQuestion(id, body);
-    }
-
-    @Delete('admin/questions/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async deleteQuestion(@Param('id') id: string) {
-        return this.examService.deleteQuestion(id);
     }
 
     @Put('admin/exams/:id')
@@ -125,20 +75,6 @@ export class ExamController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async deleteExam(@Param('id') id: string) {
         return this.examService.deleteExam(id);
-    }
-
-    @Post('admin/exams/:id/instances')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async createInstance(@Param('id') examId: string, @Body() body: {
-        startsAt: Date;
-        endsAt: Date;
-        requireSeb?: boolean;
-        browserExamKey?: string;
-        configKey?: string;
-        quitUrl?: string;
-    }) {
-        return this.examService.createInstance(examId, body);
     }
 
     @Post('admin/exams/:id/publish')
@@ -167,5 +103,152 @@ export class ExamController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async getAnalytics(@Param('id') id: string) {
         return this.examService.getExamAnalytics(id);
+    }
+
+    // ── Admin: sections ──
+
+    @Post('admin/exams/:id/sections')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async createSection(@Param('id') examId: string, @Body() body: { title: string; sortOrder: number }) {
+        return this.examService.createSection(examId, body);
+    }
+
+    @Put('admin/sections/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async updateSection(@Param('id') id: string, @Body() body: any) {
+        return this.examService.updateSection(id, body);
+    }
+
+    @Delete('admin/sections/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async deleteSection(@Param('id') id: string) {
+        return this.examService.deleteSection(id);
+    }
+
+    // ── Admin: questions & bank ──
+
+    @Get('admin/questions')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listBankQuestions(
+        @Query('q') q?: string,
+        @Query('difficulty') difficulty?: string,
+        @Query('examId') examId?: string,
+    ) {
+        return this.examService.listBankQuestions({ q, difficulty, examId });
+    }
+
+    @Post('admin/sections/:id/questions')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async createQuestion(@Param('id') sectionId: string, @Body() body: any) {
+        return this.examService.createQuestion(sectionId, body);
+    }
+
+    @Post('admin/sections/:id/questions/bulk')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async bulkCreateQuestions(@Param('id') sectionId: string, @Body() body: { questions: any[] }) {
+        return this.examService.bulkCreateQuestions(sectionId, body.questions || []);
+    }
+
+    @Post('admin/sections/:id/questions/attach')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async attachQuestion(@Param('id') sectionId: string, @Body() body: { questionId: string }) {
+        return this.examService.attachQuestionToSection(sectionId, body.questionId);
+    }
+
+    @Delete('admin/sections/:sectionId/questions/:questionId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async detachQuestion(
+        @Param('sectionId') sectionId: string,
+        @Param('questionId') questionId: string,
+    ) {
+        return this.examService.detachQuestionFromSection(sectionId, questionId);
+    }
+
+    @Put('admin/sections/:sectionId/questions/:questionId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async reorderSectionQuestion(
+        @Param('sectionId') sectionId: string,
+        @Param('questionId') questionId: string,
+        @Body() body: { sortOrder: number },
+    ) {
+        return this.examService.reorderSectionQuestion(sectionId, questionId, body.sortOrder);
+    }
+
+    @Post('admin/sections/:sectionId/questions/:questionId/move')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async moveQuestion(
+        @Param('sectionId') sourceSectionId: string,
+        @Param('questionId') questionId: string,
+        @Body() body: { targetSectionId: string },
+    ) {
+        return this.examService.moveQuestionAcrossSections(sourceSectionId, questionId, body.targetSectionId);
+    }
+
+    @Put('admin/questions/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async updateQuestion(@Param('id') id: string, @Body() body: any) {
+        return this.examService.updateQuestion(id, body);
+    }
+
+    @Delete('admin/questions/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async deleteQuestion(@Param('id') id: string) {
+        return this.examService.deleteQuestion(id);
+    }
+
+    // ── Admin: instances (Pack C) ──
+
+    @Get('admin/exams/:id/instances')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listInstances(@Param('id') examId: string) {
+        return this.examService.listInstances(examId);
+    }
+
+    @Post('admin/exams/:id/instances')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async createInstance(@Param('id') examId: string, @Body() body: {
+        startsAt: Date;
+        endsAt: Date;
+        requireSeb?: boolean;
+        browserExamKey?: string;
+        configKey?: string;
+        quitUrl?: string;
+    }) {
+        return this.examService.createInstance(examId, body);
+    }
+
+    @Put('admin/instances/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async updateInstance(@Param('id') id: string, @Body() body: {
+        startsAt?: Date;
+        endsAt?: Date;
+        requireSeb?: boolean;
+        browserExamKey?: string;
+        configKey?: string;
+        quitUrl?: string;
+    }) {
+        return this.examService.updateInstance(id, body);
+    }
+
+    @Delete('admin/instances/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async deleteInstance(@Param('id') id: string) {
+        return this.examService.deleteInstance(id);
     }
 }

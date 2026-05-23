@@ -32,6 +32,15 @@ function QuestionsContent() {
     const [reorderBusy, setReorderBusy] = useState<string | null>(null);
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+    // Question Bank attach modal
+    const [bankModalSection, setBankModalSection] = useState<string | null>(null);
+    const [bankLoading, setBankLoading] = useState(false);
+    const [bankQuestions, setBankQuestions] = useState<any[]>([]);
+    const [bankSearch, setBankSearch] = useState('');
+    const [bankDifficulty, setBankDifficulty] = useState('');
+    const [bankSelected, setBankSelected] = useState<Record<string, boolean>>({});
+    const [bankAttaching, setBankAttaching] = useState(false);
+
     const blankQForm = {
         text: '',
         type: 'MCQ',
@@ -144,8 +153,19 @@ function QuestionsContent() {
         }
     };
 
-    const deleteQuestion = async (questionId: string) => {
-        if (!confirm('Are you sure you want to delete this question?')) return;
+    const detachQuestion = async (sectionId: string, questionId: string) => {
+        if (!confirm('Remove this question from the section? It stays in the question bank and can be re-attached.')) return;
+        try {
+            await api.delete(`/admin/sections/${sectionId}/questions/${questionId}`);
+            fetchExamDetails();
+        } catch (err) {
+            console.error('Failed to detach question', err);
+            setError('Failed to remove question from section.');
+        }
+    };
+
+    const deleteQuestionFromBank = async (questionId: string) => {
+        if (!confirm('Permanently delete this question from the bank? It will be removed from every exam that uses it.')) return;
         try {
             await api.delete(`/admin/questions/${questionId}`);
             fetchExamDetails();
@@ -185,8 +205,8 @@ function QuestionsContent() {
         try {
             setReorderBusy(questionId);
             await Promise.all([
-                api.put(`/admin/questions/${a.id}`, { sortOrder: b.sortOrder ?? targetIdx }),
-                api.put(`/admin/questions/${b.id}`, { sortOrder: a.sortOrder ?? idx }),
+                api.put(`/admin/sections/${sectionId}/questions/${a.id}`, { sortOrder: b.sortOrder ?? targetIdx }),
+                api.put(`/admin/sections/${sectionId}/questions/${b.id}`, { sortOrder: a.sortOrder ?? idx }),
             ]);
             await fetchExamDetails();
         } catch {
@@ -196,12 +216,58 @@ function QuestionsContent() {
         }
     };
 
-    const moveQuestion = async (questionId: string, newSectionId: string) => {
+    const moveQuestion = async (sourceSectionId: string, questionId: string, targetSectionId: string) => {
         try {
-            await api.put(`/admin/questions/${questionId}`, { sectionId: newSectionId });
+            await api.post(`/admin/sections/${sourceSectionId}/questions/${questionId}/move`, { targetSectionId });
             await fetchExamDetails();
         } catch {
             setError('Failed to move question.');
+        }
+    };
+
+    const openBankModal = async (sectionId: string) => {
+        setBankModalSection(sectionId);
+        setBankSelected({});
+        setBankSearch('');
+        setBankDifficulty('');
+        await loadBank('', '');
+    };
+
+    const loadBank = async (q: string, difficulty: string) => {
+        try {
+            setBankLoading(true);
+            const params: Record<string, string> = {};
+            if (q) params.q = q;
+            if (difficulty) params.difficulty = difficulty;
+            const { data } = await api.get('/admin/questions', { params });
+            setBankQuestions(data);
+        } catch {
+            setError('Failed to load bank questions.');
+        } finally {
+            setBankLoading(false);
+        }
+    };
+
+    const attachSelectedFromBank = async () => {
+        if (!bankModalSection) return;
+        const ids = Object.entries(bankSelected).filter(([, v]) => v).map(([k]) => k);
+        if (ids.length === 0) return;
+        try {
+            setBankAttaching(true);
+            for (const questionId of ids) {
+                try {
+                    await api.post(`/admin/sections/${bankModalSection}/questions/attach`, { questionId });
+                } catch (err: any) {
+                    // Skip already-attached without failing the whole batch
+                    if (err?.response?.status !== 400) throw err;
+                }
+            }
+            setBankModalSection(null);
+            await fetchExamDetails();
+        } catch {
+            setError('Failed to attach some questions from the bank.');
+        } finally {
+            setBankAttaching(false);
         }
     };
 
@@ -483,6 +549,13 @@ function QuestionsContent() {
                                         <Upload size={14} style={{ marginRight: '0.35rem' }} />
                                         {bulkBusySection === section.id ? 'Importing…' : 'Import Excel'}
                                     </button>
+                                    <button
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={() => openBankModal(section.id)}
+                                        title="Attach existing questions from the bank"
+                                    >
+                                        Attach from Bank
+                                    </button>
                                     <button className="btn btn-sm btn-primary" onClick={() => openQuestionModal(section.id)}>
                                         + Add Question
                                     </button>
@@ -547,7 +620,7 @@ function QuestionsContent() {
                                                                 style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', maxWidth: '140px' }}
                                                                 value={section.id}
                                                                 onChange={(e) => {
-                                                                    if (e.target.value !== section.id) moveQuestion(q.id, e.target.value);
+                                                                    if (e.target.value !== section.id) moveQuestion(section.id, q.id, e.target.value);
                                                                 }}
                                                                 title="Move to another section"
                                                             >
@@ -559,7 +632,18 @@ function QuestionsContent() {
                                                         <button className="btn btn-sm btn-secondary" onClick={() => openEditQuestionModal(section.id, q)}>
                                                             <Pencil size={14} />
                                                         </button>
-                                                        <button className="btn btn-sm btn-danger" onClick={() => deleteQuestion(q.id)}>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            onClick={() => detachQuestion(section.id, q.id)}
+                                                            title="Remove from this section (keeps in bank)"
+                                                        >
+                                                            Detach
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-danger"
+                                                            onClick={() => deleteQuestionFromBank(q.id)}
+                                                            title="Permanently delete from bank"
+                                                        >
                                                             <Trash2 size={14} />
                                                         </button>
                                                     </div>
@@ -763,6 +847,104 @@ function QuestionsContent() {
                         <div className="modal-actions" style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button className="btn btn-secondary" onClick={() => setIsQuestionModalOpen(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={saveQuestion}>{isEditingQuestion ? 'Save Changes' : 'Create Question'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Question Bank attach modal */}
+            {bankModalSection && (
+                <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className="modal-content glass-card" style={{ width: '92%', maxWidth: '900px', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+                        <h2 style={{ margin: 0 }}>Attach from Question Bank</h2>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 1rem' }}>
+                            Pick existing bank questions to attach to this section. Questions stay in the bank and can be re-used across exams.
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                            <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Search question text…"
+                                value={bankSearch}
+                                onChange={(e) => setBankSearch(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') loadBank(bankSearch, bankDifficulty); }}
+                                style={{ flex: 1, minWidth: '200px' }}
+                            />
+                            <select
+                                className="form-control"
+                                value={bankDifficulty}
+                                onChange={(e) => { setBankDifficulty(e.target.value); loadBank(bankSearch, e.target.value); }}
+                                style={{ maxWidth: '150px' }}
+                            >
+                                <option value="">All difficulties</option>
+                                <option value="EASY">Easy</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HARD">Hard</option>
+                            </select>
+                            <button className="btn btn-secondary" onClick={() => loadBank(bankSearch, bankDifficulty)} disabled={bankLoading}>
+                                {bankLoading ? '…' : 'Search'}
+                            </button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.5rem' }}>
+                            {bankLoading ? (
+                                <div className="loading-container"><div className="spinner" /></div>
+                            ) : bankQuestions.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)', padding: '1rem', textAlign: 'center', margin: 0 }}>
+                                    No bank questions match. Create one inline with "+ Add Question".
+                                </p>
+                            ) : (
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {bankQuestions.map((q: any) => {
+                                        const alreadyAttached = (q.sectionLinks || []).some((l: any) => l.sectionId === bankModalSection);
+                                        return (
+                                            <li key={q.id} style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: alreadyAttached ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    disabled={alreadyAttached}
+                                                    checked={!!bankSelected[q.id]}
+                                                    onChange={(e) => setBankSelected((p) => ({ ...p, [q.id]: e.target.checked }))}
+                                                    style={{ marginTop: '0.25rem', transform: 'scale(1.2)', cursor: alreadyAttached ? 'not-allowed' : 'pointer' }}
+                                                />
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                                                        <span className={`badge ${q.difficulty === 'EASY' ? 'badge-success' : q.difficulty === 'HARD' ? 'badge-danger' : 'badge-warning'}`}>
+                                                            {q.difficulty}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{q.marks} marks</span>
+                                                        {alreadyAttached && <span className="badge badge-success">Already in this section</span>}
+                                                        {(q.sectionLinks || []).length > 0 && !alreadyAttached && (
+                                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                                Used in {q.sectionLinks.length} other section{q.sectionLinks.length !== 1 ? 's' : ''}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                                        {q.text}
+                                                    </div>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </div>
+
+                        <div className="modal-actions" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                {Object.values(bankSelected).filter(Boolean).length} selected
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-secondary" onClick={() => setBankModalSection(null)} disabled={bankAttaching}>Cancel</button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={attachSelectedFromBank}
+                                    disabled={bankAttaching || Object.values(bankSelected).filter(Boolean).length === 0}
+                                >
+                                    {bankAttaching ? 'Attaching…' : 'Attach Selected'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
