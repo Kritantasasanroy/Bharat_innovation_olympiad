@@ -170,12 +170,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '460px', width: '90%' }}>
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🖥️</div>
                             <h2 style={{ marginBottom: '0.75rem' }}>
-                                {violationCount === 0 ? 'Fullscreen Required' : 'Return to Fullscreen'}
+                                {violationCount === 0 ? 'Fullscreen Required' : isFullscreen ? 'Exam Paused' : 'Return to Fullscreen'}
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                                 {violationCount === 0
                                     ? 'This exam must be taken in fullscreen mode. Click below to begin — your camera will activate automatically.'
-                                    : `Violation ${violationCount} of ${maxViolations} — re-enter fullscreen to continue your exam.`}
+                                    : isFullscreen
+                                        ? `Violation ${violationCount} of ${maxViolations} recorded. Click below to resume your exam.`
+                                        : `Violation ${violationCount} of ${maxViolations} — re-enter fullscreen to continue your exam.`}
                             </p>
                             {violationCount > 0 && (
                                 <p style={{ color: 'var(--danger-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
@@ -198,7 +200,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                 style={{ marginTop: '1.25rem', width: '100%', padding: '0.85rem', fontSize: '1rem' }}
                                 onClick={requestFullscreen}
                             >
-                                {violationCount === 0 ? '▶ Enter Fullscreen & Start' : '↩ Re-enter Fullscreen'}
+                                {violationCount === 0 ? '▶ Enter Fullscreen & Start' : isFullscreen ? '▶ Resume Exam' : '↩ Re-enter Fullscreen'}
                             </button>
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
                                 Do not switch tabs, minimise, or open other apps during the exam.

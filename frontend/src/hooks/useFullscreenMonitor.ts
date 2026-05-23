@@ -79,6 +79,18 @@ export function useFullscreenMonitor({
   const requestFullscreen = useCallback(async () => {
     setLastError(null);
     if (typeof document === 'undefined') return;
+
+    // Already in fullscreen (e.g. Windows key blur while browser stays fullscreen).
+    // No fullscreenchange event will fire, so un-gate directly instead of
+    // calling requestFullscreen() which would be a silent no-op.
+    if (checkFs()) {
+      suppressBlurBriefly();
+      setIsGated(false);
+      isGatedRef.current = false;
+      clearTimer();
+      return;
+    }
+
     try {
       const el: any = document.documentElement;
       const reqFn =

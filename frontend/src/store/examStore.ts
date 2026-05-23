@@ -49,8 +49,14 @@ export const useExamStore = create<ExamState>((set) => ({
     xpEarned: 0,
     streak: 0,
 
-    setExamSession: (exam, attempt, questions) =>
-        set({ exam, attempt, questions, currentIndex: 0, answers: {}, flagged: new Set(), error: null }),
+    setExamSession: (exam, attempt, questions) => {
+        // Restore any answers already saved server-side (e.g. after a page refresh)
+        const answers: Record<string, any> = {};
+        for (const item of attempt.items ?? []) {
+            if (item.answer != null) answers[item.questionId] = item.answer;
+        }
+        set({ exam, attempt, questions, currentIndex: 0, answers, flagged: new Set(), error: null });
+    },
 
     setError: (error) => set({ error }),
 
