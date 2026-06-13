@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { AttemptStatus } from '@prisma/client';
+import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 
@@ -14,19 +14,56 @@ function scoreMcq(question: any, answer: string): ScoringResult {
     const options = question.options as { id?: string; text: string; isCorrect: boolean }[];
     const correctIdx = options?.findIndex((o) => o.isCorrect);
     if (correctIdx === -1 || correctIdx === undefined) return { isCorrect: false, score: 0 };
-    
-    // Fallback to stringified index since options might not have a hardcoded 'id' property
     const correctId = options[correctIdx]?.id || correctIdx.toString();
     const isCorrect = correctId === answer;
-    return {
-        isCorrect,
-        score: isCorrect ? question.marks : -question.negativeMarks,
-    };
+    return { isCorrect, score: isCorrect ? question.marks : -question.negativeMarks };
+}
+
+function scoreMultiSelect(question: any, answer: string[]): ScoringResult {
+    const options = question.options as { id: string; isCorrect: boolean }[];
+    const correctIds = options?.filter((o) => o.isCorrect).map((o) => o.id) || [];
+    const selected = Array.isArray(answer) ? answer : [];
+    const allCorrect = correctIds.every((id) => selected.includes(id));
+    const noExtra = selected.every((id) => correctIds.includes(id));
+    const isCorrect = allCorrect && noExtra && correctIds.length > 0;
+    return { isCorrect, score: isCorrect ? question.marks : -question.negativeMarks };
+}
+
+function scoreTrueFalse(question: any, answer: string): ScoringResult {
+    // correctAnswer stored as 'true' or 'false' string
+    const isCorrect = String(answer).toLowerCase() === String(question.correctAnswer).toLowerCase();
+    return { isCorrect, score: isCorrect ? question.marks : -question.negativeMarks };
+}
+
+function scoreShortAnswer(question: any, answer: string): ScoringResult {
+    const isCorrect =
+        String(answer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
+    return { isCorrect, score: isCorrect ? question.marks : 0 };
+}
+
+function scoreNumeric(question: any, answer: string): ScoringResult {
+    const tolerance = question.tolerance ?? 0;
+    const submitted = parseFloat(String(answer));
+    const correct = parseFloat(String(question.correctAnswer));
+    const isCorrect = !isNaN(submitted) && Math.abs(submitted - correct) <= tolerance;
+    return { isCorrect, score: isCorrect ? question.marks : 0 };
 }
 
 function scoreQuestion(question: any, answer: any): ScoringResult {
-    // Only MCQ is supported
-    return scoreMcq(question, answer);
+    switch (question.type as QuestionType) {
+        case QuestionType.MCQ:
+            return scoreMcq(question, answer);
+        case QuestionType.TRUE_FALSE:
+            return scoreTrueFalse(question, answer);
+        case QuestionType.MULTI_SELECT:
+            return scoreMultiSelect(question, answer);
+        case QuestionType.SHORT_ANSWER:
+            return scoreShortAnswer(question, answer);
+        case QuestionType.NUMERIC:
+            return scoreNumeric(question, answer);
+        default:
+            return scoreMcq(question, answer);
+    }
 }
 
 @Injectable()
@@ -44,6 +81,27 @@ export class AttemptService {
         const now = new Date();
         if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
         if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
+
+        // Slot booking gate — skip for demo exams; skip if exam has no slots
+        if (!isDemoExam(instance.examId)) {
+            const hasSlots = await this.prisma.examSlot.count({ where: { examInstanceId: instanceId } });
+            if (hasSlots > 0) {
+                const booking = await this.prisma.booking.findFirst({
+                    where: {
+                        userId,
+                        status: BookingStatus.CONFIRMED,
+                        slot: { examInstanceId: instanceId },
+                    },
+                    include: { slot: true },
+                });
+                if (!booking) {
+                    throw new ForbiddenException('You need a confirmed slot booking to start this exam');
+                }
+                if (now < booking.slot.startsAt || now > booking.slot.endsAt) {
+                    throw new ForbiddenException('You are outside your booked slot window');
+                }
+            }
+        }
 
         if (isDemoExam(instance.examId)) {
             return this.startDemoAttempt(userId, instance, now, ipAddress);

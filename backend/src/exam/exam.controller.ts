@@ -51,6 +51,7 @@ export class ExamController {
         classBands: number[];
         totalMarks: number;
         durationMinutes: number;
+        feeAmount?: number;
     }) {
         return this.examService.createExam(body);
     }
@@ -64,6 +65,7 @@ export class ExamController {
         classBands?: number[];
         totalMarks?: number;
         durationMinutes?: number;
+        feeAmount?: number | null;
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {

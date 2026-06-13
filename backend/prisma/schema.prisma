@@ -25,6 +25,8 @@ model User {
   attempts        Attempt[]
   refreshTokens   RefreshToken[]
   school          School?        @relation(fields: [schoolId], references: [id])
+  bookings        Booking[]
+  payments        Payment[]
 
   @@index([email])
   @@index([schoolId])
@@ -56,18 +58,19 @@ model School {
 }
 
 model Exam {
-  id              String         @id @default(uuid())
-  title           String
-  description     String?
-  classBands      Int[]
-  totalMarks      Int
-  durationMinutes Int
-  isPublished     Boolean        @default(false)
-  isResultReleased Boolean       @default(false)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  instances       ExamInstance[]
-  sections        ExamSection[]
+  id               String         @id @default(uuid())
+  title            String
+  description      String?
+  classBands       Int[]
+  totalMarks       Int
+  durationMinutes  Int
+  isPublished      Boolean        @default(false)
+  isResultReleased Boolean        @default(false)
+  feeAmount        Int?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  instances        ExamInstance[]
+  sections         ExamSection[]
 
   @@index([isPublished])
 }
@@ -118,18 +121,19 @@ model SectionQuestion {
 }
 
 model ExamInstance {
-  id             String    @id @default(uuid())
+  id             String     @id @default(uuid())
   examId         String
   startsAt       DateTime
   endsAt         DateTime
-  requireSeb     Boolean   @default(false)
+  requireSeb     Boolean    @default(false)
   browserExamKey String?
   configKey      String?
   quitUrl        String?
-  maxAttempts    Int       @default(1)
-  createdAt      DateTime  @default(now())
+  maxAttempts    Int        @default(1)
+  createdAt      DateTime   @default(now())
   attempts       Attempt[]
-  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  slots          ExamSlot[]
+  exam           Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@index([examId])
   @@index([startsAt, endsAt])
@@ -210,6 +214,10 @@ enum Role {
 
 enum QuestionType {
   MCQ
+  MULTI_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
 }
 
 
@@ -236,5 +244,89 @@ enum ProctorEventType {
   EXIT_FULLSCREEN
   SCREEN_CAPTURE
   NETWORK_DISCONNECT
+  SEB_VIOLATION
   IP_CHANGE
+}
+
+// ── Slot booking & payment models ────────────────────────────────────────────
+
+model ExamSlot {
+  id             String       @id @default(uuid())
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  label          String?
+  startsAt       DateTime
+  endsAt         DateTime
+  capacity       Int
+  booked         Int          @default(0)
+  createdAt      DateTime     @default(now())
+  bookings       Booking[]
+
+  @@index([examInstanceId])
+  @@index([startsAt])
+}
+
+model Booking {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slotId    String
+  slot      ExamSlot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  paymentId String?       @unique
+  payment   Payment?      @relation(fields: [paymentId], references: [id])
+  status    BookingStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, slotId])
+  @@index([userId])
+  @@index([slotId])
+  @@index([status])
+}
+
+model Payment {
+  id                  String        @id @default(uuid())
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayOrderId     String        @unique
+  razorpayPaymentId   String?       @unique
+  razorpaySignature   String?
+  amount              Int
+  currency            String        @default("INR")
+  status              PaymentStatus @default(CREATED)
+  couponId            String?
+  coupon              Coupon?       @relation(fields: [couponId], references: [id])
+  booking             Booking?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([razorpayOrderId])
+}
+
+model Coupon {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  discountPct Int
+  maxUses     Int
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  payments    Payment[]
+  createdAt   DateTime  @default(now())
+
+  @@index([code])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
 }

@@ -174,6 +174,7 @@ export class ExamService {
         classBands: number[];
         totalMarks: number;
         durationMinutes: number;
+        feeAmount?: number;
     }) {
         return this.prisma.exam.create({
             data: { ...data, isPublished: true, isResultReleased: true },
@@ -190,6 +191,7 @@ export class ExamService {
         classBands?: number[];
         totalMarks?: number;
         durationMinutes?: number;
+        feeAmount?: number | null;
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {
