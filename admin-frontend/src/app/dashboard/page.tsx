@@ -71,16 +71,21 @@ export default function AdminDashboard() {
 
                 <section className="dashboard-section" style={{ marginTop: 'var(--space-8)' }}>
                     <h2>Quick Actions</h2>
-                    <div className="grid-3" style={{ marginTop: 'var(--space-5)' }}>
-                        <a href="/exams" className="glass-card action-card">
-                            <span className="action-icon">📝</span>
-                            <h3>Question Release</h3>
-                            <p>Schedule class-wise tests and release question papers.</p>
-                        </a>
+                    <div className="grid-4" style={{ marginTop: 'var(--space-5)' }}>
                         <a href="/exams" className="glass-card action-card">
                             <span className="action-icon">📋</span>
                             <h3>Exam Scheduling</h3>
                             <p>Manage test windows by class and configure instances.</p>
+                        </a>
+                        <a href="/slots" className="glass-card action-card">
+                            <span className="action-icon">🗓️</span>
+                            <h3>Slot Management</h3>
+                            <p>Create time slots and monitor seat availability for exams.</p>
+                        </a>
+                        <a href="/payments" className="glass-card action-card">
+                            <span className="action-icon">💳</span>
+                            <h3>Payments & Revenue</h3>
+                            <p>Track transactions, issue refunds, and manage coupons.</p>
                         </a>
                         <a href="/analytics" className="glass-card action-card">
                             <span className="action-icon">📊</span>

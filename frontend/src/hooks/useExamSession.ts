@@ -11,28 +11,22 @@ export function useExamSession(instanceId: string) {
     const startExam = useCallback(async () => {
         store.setError(null);
         try {
-            // Find instance id first, because we only have exam id from route
-            // Assuming the route is /exams/[id] where id is the examId, not instanceId
+            // Get exam metadata + the active instance ID in one call
             const { data: examData } = await api.get<Exam>(`/exams/${instanceId}`);
-            const activeInstance = examData.instances?.[0]; // Get the first active instance
-            
+            const activeInstance = examData.instances?.[0];
+
             if (!activeInstance) {
                 throw new Error('No active instance found for this exam');
             }
 
-            // Start attempt on server using the instance ID
-            const { data: attempt } = await api.post<Attempt>(`/exams/${activeInstance.id}/start`);
+            // Start/resume attempt — server now returns { attempt, questions }
+            // where questions are the student's seeded, difficulty-selected subset
+            const { data: result } = await api.post<{ attempt: Attempt; questions: Question[] }>(
+                `/exams/${activeInstance.id}/start`,
+            );
 
-            // Load full exam data including questions
-            const { data: exam } = await api.get<Exam>(`/exams/${examData.id}`);
-
-            // Flatten questions from sections
-            const questions: Question[] = exam.sections
-                .sort((a, b) => a.sortOrder - b.sortOrder)
-                .flatMap((s) => s.questions);
-
-            store.setExamSession(exam, attempt, questions);
-            return attempt;
+            store.setExamSession(examData, result.attempt, result.questions);
+            return result.attempt;
         } catch (err: any) {
             console.error('Failed to start exam:', err);
             store.setError(err.response?.data?.message || err.message || 'Failed to load exam');

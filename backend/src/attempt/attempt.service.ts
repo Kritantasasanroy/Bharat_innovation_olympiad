@@ -3,6 +3,22 @@ import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 
+// Fields returned to students — correctAnswer intentionally excluded
+const QUESTION_SELECT = {
+    id: true,
+    type: true,
+    difficulty: true,
+    text: true,
+    options: true,
+    marks: true,
+    negativeMarks: true,
+    timeLimitSecs: true,
+    mediaUrl: true,
+    mediaType: true,
+    tags: true,
+    explanation: true,
+} as const;
+
 // ── Scoring strategies ──
 
 interface ScoringResult {
@@ -70,6 +86,149 @@ function scoreQuestion(question: any, answer: any): ScoringResult {
 export class AttemptService {
     constructor(private prisma: PrismaService) { }
 
+    // ── Seeded PRNG helpers ─────────────────────────────────────────────────
+
+    // FNV-1a 32-bit — stable string → unsigned int
+    private fnvHash(str: string): number {
+        let h = 2166136261;
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+    }
+
+    // Deterministic Fisher-Yates using xorshift32 seeded from fnvHash
+    private seededShuffle<T>(arr: T[], seed: string): T[] {
+        let s = this.fnvHash(seed);
+        const out = [...arr];
+        for (let i = out.length - 1; i > 0; i--) {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0;
+            const j = s % (i + 1);
+            [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+    }
+
+    // Builds the per-student ordered question list from exam sections.
+    //
+    // Pool model: each section contains the full question pool (e.g. 100 Qs).
+    // questionsToAssign (e.g. 50) tells how many each student actually gets.
+    // Selection is seeded with userId+examId+sectionId so:
+    //   - Same student always gets the same subset (stable across refreshes)
+    //   - Different students get different subsets from the same pool
+    //   - A final cross-section shuffle ensures unique ordering even when two
+    //     students receive identical question subsets.
+    //
+    // Difficulty-bucket selection:
+    //   - Targets easyPct% / mediumPct% / hardPct% of questionsToAssign
+    //   - Any deficit (bucket too small) is filled from the shuffled leftover pool
+    private buildQuestionSet(
+        sections: Array<{
+            id: string;
+            questionsToAssign: number;
+            sectionQuestions: Array<{ sortOrder: number; question: any }>;
+        }>,
+        examId: string,
+        userId: string,
+        easyPct: number,
+        mediumPct: number,
+        hardPct: number,
+    ): any[] {
+        const result: any[] = [];
+
+        for (const section of sections) {
+            const all = section.sectionQuestions
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map((sq) => sq.question)
+                .filter(Boolean);
+
+            if (all.length === 0) continue;
+
+            const seed = `${userId}:${examId}:${section.id}`;
+
+            // questionsToAssign=0 means "assign all" (backward-compatible default)
+            const target = section.questionsToAssign > 0
+                ? Math.min(section.questionsToAssign, all.length)
+                : all.length;
+
+            const easy   = all.filter((q: any) => q.difficulty === 'EASY');
+            const medium = all.filter((q: any) => q.difficulty === 'MEDIUM');
+            const hard   = all.filter((q: any) => q.difficulty === 'HARD');
+
+            const easyN   = Math.min(Math.round(easyPct   / 100 * target), easy.length);
+            const mediumN = Math.min(Math.round(mediumPct / 100 * target), medium.length);
+            const hardN   = Math.min(Math.round(hardPct   / 100 * target), hard.length);
+
+            const selected: any[] = [
+                ...this.seededShuffle(easy,   seed + ':e').slice(0, easyN),
+                ...this.seededShuffle(medium, seed + ':m').slice(0, mediumN),
+                ...this.seededShuffle(hard,   seed + ':h').slice(0, hardN),
+            ];
+
+            // Fill any deficit (bucket too small) from the shuffled leftover pool
+            const selectedIds = new Set(selected.map((q: any) => q.id));
+            const leftover = this.seededShuffle(
+                all.filter((q: any) => !selectedIds.has(q.id)),
+                seed + ':fill',
+            );
+            const deficit = target - selected.length;
+            if (deficit > 0) selected.push(...leftover.slice(0, deficit));
+
+            result.push(...selected);
+        }
+
+        // Final cross-section shuffle: ensures no two students see questions
+        // in the same order even when they receive the same subset from each pool.
+        return this.seededShuffle(result, `${userId}:${examId}:order`);
+    }
+
+    // Fetches exam sections, runs buildQuestionSet, then pre-creates AttemptItems
+    // with sortOrder so the question set is fixed for the lifetime of the attempt.
+    private async initializeQuestionSet(
+        attemptId: string,
+        examId: string,
+        userId: string,
+    ): Promise<any[]> {
+        const exam = await this.prisma.exam.findUnique({
+            where: { id: examId },
+            include: {
+                sections: {
+                    orderBy: { sortOrder: 'asc' },
+                    include: {
+                        sectionQuestions: {
+                            orderBy: { sortOrder: 'asc' },
+                            include: { question: { select: QUESTION_SELECT } },
+                        },
+                        // questionsToAssign is on ExamSection — included automatically
+                    },
+                },
+            },
+        });
+
+        if (!exam) throw new NotFoundException('Exam not found');
+
+        const questions = this.buildQuestionSet(
+            exam.sections,
+            examId,
+            userId,
+            exam.easyPct,
+            exam.mediumPct,
+            exam.hardPct,
+        );
+
+        await this.prisma.attemptItem.createMany({
+            data: questions.map((q: any, idx: number) => ({
+                attemptId,
+                questionId: q.id,
+                sortOrder: idx,
+            })),
+            skipDuplicates: true,
+        });
+
+        return questions;
+    }
+
     async startAttempt(userId: string, instanceId: string, ipAddress?: string) {
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: instanceId },
@@ -107,20 +266,39 @@ export class AttemptService {
             return this.startDemoAttempt(userId, instance, now, ipAddress);
         }
 
+        // ── Resume an in-progress attempt ──
         const existing = await this.prisma.attempt.findUnique({
             where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-            include: { items: true },
+            include: {
+                items: {
+                    orderBy: { sortOrder: 'asc' },
+                    include: { question: { select: QUESTION_SELECT } },
+                },
+            },
         });
 
         if (existing) {
             if (existing.status === AttemptStatus.IN_PROGRESS) {
-                return existing;
+                if (existing.items.length > 0) {
+                    // Normal resume — derive questions from pre-stored items
+                    const questions = existing.items.map((i) => i.question).filter(Boolean);
+                    const items = existing.items.map(({ question: _q, ...rest }) => rest);
+                    return { attempt: { ...existing, items }, questions };
+                }
+                // Legacy attempt (created before question-set feature) — initialize now
+                const questions = await this.initializeQuestionSet(existing.id, instance.examId, userId);
+                const items = await this.prisma.attemptItem.findMany({
+                    where: { attemptId: existing.id },
+                    orderBy: { sortOrder: 'asc' },
+                });
+                return { attempt: { ...existing, items }, questions };
             }
             if (existing.status !== AttemptStatus.NOT_STARTED) {
                 throw new BadRequestException('You have already completed this exam');
             }
         }
 
+        // ── Create (or re-activate NOT_STARTED) attempt ──
         try {
             const attempt = await this.prisma.attempt.upsert({
                 where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
@@ -139,15 +317,26 @@ export class AttemptService {
                 },
                 include: { items: true },
             });
-            return attempt;
+
+            const questions = await this.initializeQuestionSet(attempt.id, instance.examId, userId);
+            return { attempt, questions };
         } catch (error: any) {
-            // P2002: concurrent request already created the attempt — just return it
+            // P2002: concurrent request already created the attempt
             if (error.code === 'P2002') {
                 const concurrent = await this.prisma.attempt.findUnique({
                     where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
-                    include: { items: true },
+                    include: {
+                        items: {
+                            orderBy: { sortOrder: 'asc' },
+                            include: { question: { select: QUESTION_SELECT } },
+                        },
+                    },
                 });
-                if (concurrent) return concurrent;
+                if (concurrent) {
+                    const questions = concurrent.items.map((i) => i.question).filter(Boolean);
+                    const items = concurrent.items.map(({ question: _q, ...rest }) => rest);
+                    return { attempt: { ...concurrent, items }, questions };
+                }
             }
             throw error;
         }
@@ -176,43 +365,65 @@ export class AttemptService {
             await this.prisma.attempt.deleteMany({ where: { id: { in: staleIds } } });
         }
 
-        if (current) {
-            if (current.status === AttemptStatus.IN_PROGRESS) {
-                return this.prisma.attempt.findUnique({
-                    where: { id: current.id },
-                    include: { items: true },
-                });
+        // ── Resume in-progress demo attempt ──
+        if (current && current.status === AttemptStatus.IN_PROGRESS) {
+            const items = await this.prisma.attemptItem.findMany({
+                where: { attemptId: current.id },
+                orderBy: { sortOrder: 'asc' },
+                include: { question: { select: QUESTION_SELECT } },
+            });
+            const questions = items.map((i) => i.question).filter(Boolean);
+            const plainItems = items.map(({ question: _q, ...rest }) => rest);
+
+            if (questions.length > 0) {
+                return { attempt: { ...current, items: plainItems }, questions };
             }
+            // Legacy demo attempt with no pre-stored items — initialize now
+            const generatedQs = await this.initializeQuestionSet(current.id, instance.examId, userId);
+            const freshItems = await this.prisma.attemptItem.findMany({
+                where: { attemptId: current.id },
+                orderBy: { sortOrder: 'asc' },
+            });
+            return { attempt: { ...current, items: freshItems }, questions: generatedQs };
+        }
+
+        // ── Reset a finished demo attempt ──
+        let attemptId: string;
+        if (current) {
             await this.prisma.attemptItem.deleteMany({ where: { attemptId: current.id } });
             await this.prisma.proctorEvent.deleteMany({ where: { attemptId: current.id } });
-            return this.prisma.attempt.update({
+            const reset = await this.prisma.attempt.update({
                 where: { id: current.id },
                 data: {
                     status: AttemptStatus.IN_PROGRESS,
                     startedAt: now,
                     submittedAt: null,
                     totalScore: null,
-                    // Re-peg to the exam's current totalMarks so the result
-                    // page reflects any totalMarks edits since the original
-                    // attempt was created.
                     maxScore: instance.exam.totalMarks,
                     ipAddress,
                 },
-                include: { items: true },
             });
+            attemptId = reset.id;
+        } else {
+            const created = await this.prisma.attempt.create({
+                data: {
+                    userId,
+                    examInstanceId: instance.id,
+                    status: AttemptStatus.IN_PROGRESS,
+                    startedAt: now,
+                    ipAddress,
+                    maxScore: instance.exam.totalMarks,
+                },
+            });
+            attemptId = created.id;
         }
 
-        return this.prisma.attempt.create({
-            data: {
-                userId,
-                examInstanceId: instance.id,
-                status: AttemptStatus.IN_PROGRESS,
-                startedAt: now,
-                ipAddress,
-                maxScore: instance.exam.totalMarks,
-            },
-            include: { items: true },
+        const questions = await this.initializeQuestionSet(attemptId, instance.examId, userId);
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            include: { items: { orderBy: { sortOrder: 'asc' } } },
         });
+        return { attempt, questions };
     }
 
     async saveAnswer(attemptId: string, userId: string, questionId: string, answer: any) {

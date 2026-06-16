@@ -11,6 +11,9 @@
 |---|---|
 | 2026-06-10 | Phase 2.5 (Slot Booking Module) + Phase 2.6 (Payment/Razorpay Module) fully implemented. Frontend pages for slot selection, payment, and success added. Schema extended with ExamSlot, Booking, Payment, Coupon models + BookingStatus/PaymentStatus enums. `feeAmount` added to Exam. Slot booking gate added to `startAttempt()`. **Pending: run migration, add real Razorpay keys to .env, build admin slot UI.** |
 | 2026-06-13 | PRD pass-2 alignment complete. Cloned `bharat-innovation-olympiad/Bharat_innovation_olympiad` reference repo. Read all architecture PRDs (bio-core, bio-portal, bio-proctor phases P0–P7). Implemented: `QuestionType` extended to MCQ/MULTI_SELECT/TRUE_FALSE/SHORT_ANSWER/NUMERIC; `ProctorEventType` extended with SEB_VIOLATION; `SebGuard` created (HMAC SHA-256 Browser Exam Key + Config Key validation); `SebConfigService` created (SEB JSON config generation + seb:// launch URL); `GET /seb/config/:instanceId` + `GET /seb/launch/:instanceId` endpoints added; SebGuard wired to `POST /exams/:instanceId/start`; multi-question-type scoring strategies added to `attempt.service.ts` (MULTI_SELECT, TRUE_FALSE, SHORT_ANSWER, NUMERIC); schema pushed to Neon DB + Prisma client regenerated in both backend and frontend. |
+| 2026-06-13 | Admin frontend Phase 3.2 (partial) — built `admin-frontend/src/app/slots/page.tsx` (slot CRUD + bookings modal) and `admin-frontend/src/app/payments/page.tsx` (revenue dashboard + payments table + refund + coupon CRUD). Added Slots and Payments nav links to Navbar. Updated Dashboard quick-action cards. |
+| 2026-06-13 | Step 2.7 — Unique Question Set Generation. Schema: added `easyPct/mediumPct/hardPct` to `Exam`, `sortOrder` to `AttemptItem`. Backend: FNV-1a seeded shuffle + difficulty-bucket selection in `attempt.service.ts`; `startAttempt` now pre-creates all `AttemptItem` rows with `sortOrder` and returns `{ attempt, questions }`. Frontend: `useExamSession.startExam` consumes new response (one fewer GET /exams/:id call). **Pending: run `npx prisma migrate dev --name add_question_set_selection` in backend.** |
+| 2026-06-16 | Step 2.1 (S3 File Upload Service) + Step 2.X (Rich Media Questions + Question Pool System). Schema: added `MediaType` enum (`IMAGE/VIDEO/AUDIO/DIAGRAM`), `mediaUrl`/`mediaType` to `Question`, `questionsToAssign` to `ExamSection`. Backend: `S3Service` + `S3Module` created (`backend/src/common/services/`), registered globally in `AppModule`; `buildQuestionSet` fixed to use `questionsToAssign` as pool target (not section size), final cross-section seeded shuffle added for unique question ordering; `QUESTION_SELECT` updated to include media fields; `getQuestionMediaUploadUrl` endpoint added (`GET /admin/questions/media-upload-url`). Frontend: `MediaType` union type added, `ExamSection.questionsToAssign` typed, `Question.mediaType` narrowed. Student player already renders IMAGE/VIDEO/AUDIO. **Pending: run `npx prisma migrate dev --name add_media_questions_pool` in backend; set `AWS_*` env vars.** |
 
 ---
 
@@ -104,9 +107,9 @@
 
 **Add these fields to existing `Exam` model:**
 - [x] `feeAmount Int?` — registration fee in paise (null = free) ✅ done 2026-06-10
-- [ ] `easyPct Int @default(30)` — % of easy questions per student set
-- [ ] `mediumPct Int @default(50)`
-- [ ] `hardPct Int @default(20)`
+- [x] `easyPct Int @default(30)` — % of easy questions per student set ✅ 2026-06-13
+- [x] `mediumPct Int @default(50)` ✅ 2026-06-13
+- [x] `hardPct Int @default(20)` ✅ 2026-06-13
 
 **Add these NEW models:**
 - [x] `ExamSlot` — scheduled slot for students to book ✅ done 2026-06-10
@@ -200,16 +203,13 @@ npx prisma generate
 
 ## Phase 2 — Backend Modules
 
-### Step 2.1 — S3 File Upload Service
+### Step 2.1 — S3 File Upload Service ✅ COMPLETE (2026-06-16)
 **File:** `backend/src/common/services/s3.service.ts`  
 **File:** `backend/src/common/services/s3.module.ts`  
 
-**Install:**
-```bash
-cd backend && npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
-```
+**Install:** ✅ `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` already in `package.json`
 
-**Add to `.env`:**
+**Add to `.env`:** ✅ Added to `backend/.env.example`
 ```
 AWS_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=
@@ -217,11 +217,21 @@ AWS_SECRET_ACCESS_KEY=
 AWS_S3_BUCKET=bio-olympiad-prod
 ```
 
-**Methods to implement:**
-- [ ] `getPresignedPutUrl(key, contentType, expiresIn?)` → string — for client direct uploads
-- [ ] `getPresignedGetUrl(key, expiresIn?)` → string — for time-limited downloads
-- [ ] `uploadBuffer(key, buffer, contentType)` → void — for server-side uploads (webcam frames, PDFs)
-- [ ] `deleteObject(key)` → void
+**Methods implemented:**
+- [x] `getPresignedPutUrl(key, contentType, expiresIn?)` → string — for client direct uploads
+- [x] `getPresignedGetUrl(key, expiresIn?)` → string — for time-limited downloads
+- [x] `uploadBuffer(key, buffer, contentType)` → void — for server-side uploads (webcam frames, PDFs)
+- [x] `deleteObject(key)` → void
+- [x] `publicUrl(key)` → string — permanent public URL for question media
+
+**Static key generators:**
+- [x] `S3Service.profilePhotoKey(userId)`
+- [x] `S3Service.documentKey(userId, docType, filename)`
+- [x] `S3Service.proctorSnapshotKey(attemptId, timestamp)`
+- [x] `S3Service.invoiceKey(paymentId)`
+- [x] `S3Service.admitCardKey(userId, slotId)`
+- [x] `S3Service.questionMediaKey(questionId, filename)` ← NEW for question media
+- [x] `S3Service.exportKey(filename)`
 
 **S3 bucket folder structure:**
 ```
@@ -231,11 +241,12 @@ bio-olympiad-prod/
   proctoring/        → webcam snapshots (proctoring/{attemptId}/{timestamp}.jpg)
   invoices/          → payment PDFs (invoices/{paymentId}.pdf)
   admit-cards/       → admit card PDFs (admit-cards/{userId}/{slotId}.pdf)
+  questions/         → question media (questions/{questionId}/{filename}) ← NEW
   exports/           → merit lists, school reports
 ```
 
 **Import `S3Module` in:**
-- [ ] `AppModule` (global: true)
+- [x] `AppModule` (global: true) ✅
 
 ---
 
@@ -429,48 +440,50 @@ RAZORPAY_WEBHOOK_SECRET=...
 - [x] `POST /api/slots/:id/book`
 
 **Invoice PDF generation:**
-- [ ] `invoice.service.generateInvoice(payment)` → HTML template with GST breakdown → Puppeteer → S3 — ⚠️ BLOCKED on Phase 2.1 (S3 service)
+- [ ] `invoice.service.generateInvoice(payment)` → HTML template with GST breakdown → Puppeteer → S3 — S3 service now available; needs Puppeteer install + invoice template
 
 ---
 
-### Step 2.7 — Unique Question Set Generation
-**Modify:** `backend/src/attempt/attempt.service.ts`
+### Step 2.7 — Unique Question Set Generation ✅ COMPLETE (2026-06-13)
+**Modified:** `backend/src/attempt/attempt.service.ts`, `schema.prisma`, `frontend/src/hooks/useExamSession.ts`
 
-- [ ] Replace current question fetch in `startAttempt()` with seeded selection:
-  ```typescript
-  private seededShuffle<T>(arr: T[], seed: string): T[] {
-    // Mulberry32 PRNG seeded with FNV hash of seed string
-    const h = this.fnvHash(seed);
-    let s = h >>> 0;
-    const shuffled = [...arr];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      s ^= s << 13; s ^= s >> 7; s ^= s << 17;
-      const j = (s >>> 0) % (i + 1);
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }
+- [x] Added `easyPct Int @default(30)`, `mediumPct Int @default(50)`, `hardPct Int @default(20)` to `Exam` model
+- [x] Added `sortOrder Int @default(0)` to `AttemptItem` model
+- [x] `fnvHash()` + xorshift32 `seededShuffle()` + `buildQuestionSet()` methods in `AttemptService`
+  - Per-section: selects easyPct% easy / mediumPct% medium / hardPct% hard
+  - Deficit fill: any unselected questions fill remaining slots from a seeded shuffle
+  - Deterministic: same userId + examId + sectionId always produces the same selection
+- [x] `initializeQuestionSet()` — fetches exam sections, runs selection, pre-creates `AttemptItem` rows with `sortOrder`
+- [x] `startAttempt()` returns `{ attempt, questions }` — questions are the ordered student subset, correctAnswer excluded
+- [x] Resume path: questions derived from existing `AttemptItem` rows (ordered by `sortOrder`) — stable across question-bank edits
+- [x] Legacy attempt fallback: IN_PROGRESS attempt with no items gets initialized on resume
+- [x] `startDemoAttempt()` updated to same `{ attempt, questions }` shape
+- [x] `exam.service.createExam/updateExam` accept `easyPct/mediumPct/hardPct`
+- [x] Frontend `useExamSession.startExam()` uses questions from `startAttempt` response (one fewer API call)
+- [ ] **Migration pending:** `cd backend && npx prisma migrate dev --name add_question_set_selection`
 
-  async generateQuestionSet(exam: Exam, userId: string): Promise<Question[]> {
-    const result: Question[] = [];
-    for (const section of exam.sections) {
-      const questions = section.sectionQuestions.map(sq => sq.question);
-      const easy   = questions.filter(q => q.difficulty === 'EASY');
-      const medium = questions.filter(q => q.difficulty === 'MEDIUM');
-      const hard   = questions.filter(q => q.difficulty === 'HARD');
-      const seed = `${userId}-${exam.id}-${section.id}`;
-      const n = section.sectionQuestions.length;
-      result.push(
-        ...this.seededShuffle(easy, seed + 'e').slice(0, Math.round(exam.easyPct / 100 * n)),
-        ...this.seededShuffle(medium, seed + 'm').slice(0, Math.round(exam.mediumPct / 100 * n)),
-        ...this.seededShuffle(hard, seed + 'h').slice(0, Math.round(exam.hardPct / 100 * n)),
-      );
-    }
-    return result;
-  }
-  ```
-- [ ] Store generated question IDs in `AttemptItem` rows at attempt start
-- [ ] Question order is deterministic on refresh (same seed = same order)
+---
+
+### Step 2.X — Rich Media Questions + Question Pool System ✅ COMPLETE (2026-06-16)
+**Modified:** `backend/prisma/schema.prisma`, `backend/src/attempt/attempt.service.ts`, `backend/src/exam/exam.service.ts`, `backend/src/exam/exam.controller.ts`, `frontend/src/types/exam.ts`
+
+**Rich Media Questions:**
+- [x] Added `mediaUrl String?` to `Question` — S3 URL or public URL for attached media
+- [x] Added `mediaType MediaType?` to `Question` — enum: `IMAGE | VIDEO | AUDIO | DIAGRAM`
+- [x] `QUESTION_SELECT` constant updated to include `mediaUrl` and `mediaType`
+- [x] `findExamById` question select updated to include `mediaUrl` and `mediaType`
+- [x] `GET /admin/questions/media-upload-url?filename=&contentType=` — returns presigned S3 PUT URL + permanent public URL
+- [x] Student exam player renders all types: `IMAGE/DIAGRAM` → `<img>`, `VIDEO` → `<video controls>`, `AUDIO` → `<audio controls>`
+- [x] Frontend `MediaType` union type added to `frontend/src/types/exam.ts`
+
+**Question Pool System (per-section):**
+- [x] Added `questionsToAssign Int @default(0)` to `ExamSection` — `0` = use all (backward-compatible)
+- [x] `buildQuestionSet` fixed: uses `questionsToAssign` as pool selection target instead of section size
+  - Example: 100 questions in pool, `questionsToAssign=50` → each student gets 50
+- [x] Final cross-section seeded shuffle added (`seed: userId:examId:order`) — ensures unique ordering even when two students receive identical subsets
+- [x] `POST /admin/exams/:id/sections` body accepts optional `questionsToAssign`
+- [x] Frontend `ExamSection.questionsToAssign` typed
+- [ ] **Migration pending:** `cd backend && npx prisma migrate dev --name add_media_questions_pool`
 
 ---
 
@@ -656,17 +669,21 @@ npm install react-dropzone
 - [ ] `admin-frontend/src/app/schools/[id]/page.tsx`
   - School detail: students list, messages thread, stats cards
 
-- [ ] `admin-frontend/src/app/slots/page.tsx` — ⚠️ NEXT PRIORITY (backend API ready)
-  - Per-exam slot list — calls `GET /admin/slots`
-  - Create slot form (date/time picker, capacity) — calls `POST /admin/slots`
-  - Booking count progress bar per slot
-  - View bookings per slot — calls `GET /admin/slots/:id/bookings`
+- [x] `admin-frontend/src/app/slots/page.tsx` ✅ done 2026-06-13
+  - All slots grouped by exam — calls `GET /admin/slots`
+  - Create slot form (exam → instance → label/times/capacity) — calls `POST /admin/slots`
+  - Edit slot — calls `PUT /admin/slots/:id`
+  - Delete slot (blocked if booked > 0)
+  - Booking count progress bar (green/amber/red) per slot
+  - View bookings modal per slot — calls `GET /admin/slots/:id/bookings`
 
-- [ ] `admin-frontend/src/app/payments/page.tsx` — ⚠️ NEXT PRIORITY (backend API ready)
-  - Payments table: student, amount, status, date — calls `GET /admin/payments`
+- [x] `admin-frontend/src/app/payments/page.tsx` ✅ done 2026-06-13
+  - Revenue summary cards (total ₹, paid, pending, refunded)
+  - Payments table: student, exam/slot, amount, status, coupon, order ID, date — calls `GET /admin/payments`
+  - Search + status filter
   - Refund button → confirmation → `POST /admin/payments/:id/refund`
+  - Coupon list with usage progress bar and active/expired/exhausted status
   - Coupon creation form — calls `POST /admin/coupons`
-  - Revenue summary cards
 
 - [ ] `admin-frontend/src/app/proctor/page.tsx` — live monitoring
   - Grid of flagged students (last 5 min)

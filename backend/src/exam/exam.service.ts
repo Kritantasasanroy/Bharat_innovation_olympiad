@@ -2,6 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptStatus, Prisma } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
+import { S3Service } from '../common/services/s3.service';
+import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
 // Uses a simple mulberry32 PRNG seeded from the userId hash so each
@@ -51,7 +54,11 @@ function flattenSection(section: any, includeAnswer = true) {
 
 @Injectable()
 export class ExamService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private s3: S3Service,
+        private config: ConfigService,
+    ) { }
 
     // ── Student-facing ──
 
@@ -113,6 +120,8 @@ export class ExamService {
                                         marks: true,
                                         negativeMarks: true,
                                         timeLimitSecs: true,
+                                        mediaUrl: true,
+                                        mediaType: true,
                                         tags: true,
                                         explanation: true,
                                         // correctAnswer always excluded at the
@@ -175,6 +184,9 @@ export class ExamService {
         totalMarks: number;
         durationMinutes: number;
         feeAmount?: number;
+        easyPct?: number;
+        mediumPct?: number;
+        hardPct?: number;
     }) {
         return this.prisma.exam.create({
             data: { ...data, isPublished: true, isResultReleased: true },
@@ -192,6 +204,9 @@ export class ExamService {
         totalMarks?: number;
         durationMinutes?: number;
         feeAmount?: number | null;
+        easyPct?: number;
+        mediumPct?: number;
+        hardPct?: number;
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {
@@ -209,8 +224,20 @@ export class ExamService {
 
     // ── Admin: sections ──
 
-    async createSection(examId: string, data: { title: string; sortOrder: number }) {
+    async createSection(examId: string, data: { title: string; sortOrder: number; questionsToAssign?: number }) {
         return this.prisma.examSection.create({ data: { ...data, examId } });
+    }
+
+    // Returns a presigned S3 PUT URL so admin can upload question media directly.
+    // Also returns the permanent public URL to store as Question.mediaUrl.
+    async getQuestionMediaUploadUrl(
+        filename: string,
+        contentType: string,
+    ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+        const key = S3Service.questionMediaKey(randomUUID(), filename);
+        const uploadUrl = await this.s3.getPresignedPutUrl(key, contentType, 600);
+        const publicUrl = this.s3.publicUrl(key);
+        return { uploadUrl, publicUrl, key };
     }
 
     async updateSection(id: string, data: any) {

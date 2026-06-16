@@ -52,6 +52,9 @@ export class ExamController {
         totalMarks: number;
         durationMinutes: number;
         feeAmount?: number;
+        easyPct?: number;
+        mediumPct?: number;
+        hardPct?: number;
     }) {
         return this.examService.createExam(body);
     }
@@ -66,6 +69,9 @@ export class ExamController {
         totalMarks?: number;
         durationMinutes?: number;
         feeAmount?: number | null;
+        easyPct?: number;
+        mediumPct?: number;
+        hardPct?: number;
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {
@@ -112,8 +118,23 @@ export class ExamController {
     @Post('admin/exams/:id/sections')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async createSection(@Param('id') examId: string, @Body() body: { title: string; sortOrder: number }) {
+    async createSection(
+        @Param('id') examId: string,
+        @Body() body: { title: string; sortOrder: number; questionsToAssign?: number },
+    ) {
         return this.examService.createSection(examId, body);
+    }
+
+    // ── Admin: question media upload ──
+
+    @Get('admin/questions/media-upload-url')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async getQuestionMediaUploadUrl(
+        @Query('filename') filename: string,
+        @Query('contentType') contentType: string,
+    ) {
+        return this.examService.getQuestionMediaUploadUrl(filename, contentType);
     }
 
     @Put('admin/sections/:id')

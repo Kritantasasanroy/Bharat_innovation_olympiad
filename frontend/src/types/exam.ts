@@ -3,6 +3,7 @@
 export type QuestionType = 'MCQ' | 'MULTI_SELECT' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'NUMERIC';
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type AttemptStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'AUTO_SUBMITTED' | 'EXPIRED';
+export type MediaType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DIAGRAM';
 
 export interface Exam {
     id: string;
@@ -12,6 +13,9 @@ export interface Exam {
     totalMarks: number;
     durationMinutes: number;
     isPublished: boolean;
+    easyPct: number;
+    mediumPct: number;
+    hardPct: number;
     sections: ExamSection[];
     instances?: ExamInstance[];
     createdAt: string;
@@ -21,6 +25,7 @@ export interface ExamSection {
     id: string;
     title: string;
     sortOrder: number;
+    questionsToAssign: number; // 0 = assign all from pool; N = pick N per student
     questions: Question[];
 }
 
@@ -40,7 +45,7 @@ export interface Question {
     negativeMarks: number;
     timeLimitSecs?: number;
     mediaUrl?: string;
-    mediaType?: string;
+    mediaType?: MediaType;
     tags: string[];
     explanation?: string;
 }
@@ -70,6 +75,7 @@ export interface Attempt {
 export interface AttemptItem {
     id: string;
     questionId: string;
+    sortOrder: number;
     answer: any;
     isCorrect?: boolean;
     score?: number;

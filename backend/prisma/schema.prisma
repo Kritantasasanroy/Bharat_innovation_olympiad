@@ -67,6 +67,9 @@ model Exam {
   isPublished      Boolean        @default(false)
   isResultReleased Boolean        @default(false)
   feeAmount        Int?
+  easyPct          Int            @default(30)
+  mediumPct        Int            @default(50)
+  hardPct          Int            @default(20)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   instances        ExamInstance[]
@@ -76,12 +79,13 @@ model Exam {
 }
 
 model ExamSection {
-  id               String            @id @default(uuid())
-  examId           String
-  title            String
-  sortOrder        Int
-  exam             Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
-  sectionQuestions SectionQuestion[]
+  id                String            @id @default(uuid())
+  examId            String
+  title             String
+  sortOrder         Int
+  questionsToAssign Int               @default(0) // 0 = assign all from pool; N = pick N per student
+  exam              Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  sectionQuestions  SectionQuestion[]
 
   @@index([examId])
 }
@@ -96,6 +100,8 @@ model Question {
   marks         Int               @default(1)
   negativeMarks Float             @default(0)
   timeLimitSecs Int?
+  mediaUrl      String?           // S3 URL or external URL for attached media
+  mediaType     MediaType?        // IMAGE | VIDEO | AUDIO | DIAGRAM
   tags          String[]
   explanation   String?
   createdAt     DateTime          @default(now())
@@ -167,6 +173,7 @@ model AttemptItem {
   id         String    @id @default(uuid())
   attemptId  String
   questionId String
+  sortOrder  Int       @default(0)
   answer     Json?
   isCorrect  Boolean?
   score      Float?
@@ -175,7 +182,7 @@ model AttemptItem {
   question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
-  @@index([attemptId])
+  @@index([attemptId, sortOrder])
 }
 
 model ProctorEvent {
@@ -218,6 +225,13 @@ enum QuestionType {
   TRUE_FALSE
   SHORT_ANSWER
   NUMERIC
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DIAGRAM
 }
 
 

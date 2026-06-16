@@ -54,6 +54,18 @@ export default function Navbar() {
                 Exams
               </a>
               <a
+                className={`nav-link ${pathname?.startsWith('/slots') ? 'active' : ''}`}
+                onClick={() => router.push('/slots')}
+              >
+                Slots
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/payments') ? 'active' : ''}`}
+                onClick={() => router.push('/payments')}
+              >
+                Payments
+              </a>
+              <a
                 className={`nav-link ${pathname === '/analytics' ? 'active' : ''}`}
                 onClick={() => router.push('/analytics')}
               >

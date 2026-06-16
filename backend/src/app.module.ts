@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AttemptModule } from './attempt/attempt.module';
 import { AuthModule } from './auth/auth.module';
+import { S3Module } from './common/services/s3.module';
 import { ExamModule } from './exam/exam.module';
 import { HealthController } from './health.controller';
 import { PaymentModule } from './payment/payment.module';
@@ -15,6 +16,7 @@ import { UserModule } from './user/user.module';
     imports: [
         ConfigModule.forRoot({ isGlobal: true }),
         PrismaModule,
+        S3Module,
         AuthModule,
         UserModule,
         ExamModule,

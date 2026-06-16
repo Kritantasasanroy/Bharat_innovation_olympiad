@@ -1,7 +1,7 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: June 2026 (PRD pass-2 alignment)  
-> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · Python FastAPI · Razorpay · Vercel · Render  
+> Last updated: June 2026 (media questions · question pool system · S3 service)  
+> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · Python FastAPI · Razorpay · AWS S3 · Vercel · Render  
 > Architecture reference: `prd-reference/docs/all-prds-re-arch-pass-2/` — bio-core · bio-portal · bio-proctor
 
 ---
@@ -93,6 +93,9 @@ bharat Innovation Olympiad/
 │   │   ├── common/
 │   │   │   ├── guards/
 │   │   │   │   ├── seb.guard.ts    # ★ SEB HMAC validation (PRD EXAM-06)
+│   │   │   ├── services/
+│   │   │   │   ├── s3.service.ts   # ★ AWS S3 — presigned PUT/GET URLs, uploadBuffer, deleteObject
+│   │   │   │   └── s3.module.ts    # ★ @Global() module — S3Service injected anywhere
 │   │   │
 │   │   ├── payment/                # Razorpay payment module
 │   │   │   ├── payment.module.ts
@@ -194,9 +197,11 @@ bharat Innovation Olympiad/
 │       │   ├── layout.tsx
 │       │   ├── page.tsx            # Redirects to /dashboard
 │       │   ├── login/page.tsx      # Admin login — calls POST /auth/admin-login
-│       │   ├── dashboard/page.tsx  # Stats overview — exams, students, attempts
+│       │   ├── dashboard/page.tsx  # Stats overview — exams, students, attempts + quick actions
 │       │   ├── exams/page.tsx      # Exam list + create/edit/delete + question bank
 │       │   ├── questions/page.tsx  # Global question bank management
+│       │   ├── slots/page.tsx      # ★ Slot management — create/edit/delete slots + view bookings per slot
+│       │   ├── payments/page.tsx   # ★ Payments dashboard — revenue summary, transactions, refunds, coupon CRUD
 │       │   ├── analytics/
 │       │   │   ├── page.tsx        # Exam analytics — score distribution, completion rate
 │       │   │   └── attempt/[attemptId]/page.tsx  # Per-student attempt detail + proctor events
@@ -307,6 +312,10 @@ Student Browser
 | `RAZORPAY_KEY_ID` | Razorpay API key ID (test: `rzp_test_...`) | from Razorpay dashboard |
 | `RAZORPAY_KEY_SECRET` | Razorpay API key secret | from Razorpay dashboard |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | from Razorpay dashboard |
+| `AWS_REGION` | AWS region for S3 and other services | `ap-south-1` |
+| `AWS_ACCESS_KEY_ID` | IAM access key ID | from AWS console |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret access key | from AWS console |
+| `AWS_S3_BUCKET` | S3 bucket name | `bio-olympiad-prod` |
 
 ### Student Frontend (`frontend/.env`)
 
@@ -401,6 +410,7 @@ Logical sections within an exam (e.g. Physics, Chemistry, Math).
 | `examId` | FK → Exam | — |
 | `title` | String | Section name |
 | `sortOrder` | Int | Display order |
+| `questionsToAssign` | Int | Questions each student receives from this section's pool (0 = all) |
 
 **Relations:** `sectionQuestions[]` (SectionQuestion)
 
@@ -420,6 +430,8 @@ Global question bank — questions exist independently of exams.
 | `marks` | Int | Points for correct answer (default 1) |
 | `negativeMarks` | Float | Deduction for wrong answer (default 0) |
 | `timeLimitSecs` | Int? | Per-question time limit if set |
+| `mediaUrl` | String? | S3 URL or public URL of attached media (image/video/audio) |
+| `mediaType` | Enum MediaType? | `IMAGE` / `VIDEO` / `AUDIO` / `DIAGRAM` |
 | `tags` | String[] | Searchable tags |
 | `explanation` | String? | Post-exam explanation text |
 
@@ -613,6 +625,7 @@ Stores issued refresh tokens for rotation.
 Role:             STUDENT | PARENT | ADMIN | SUPER_ADMIN
 QuestionType:     MCQ | MULTI_SELECT | TRUE_FALSE | SHORT_ANSWER | NUMERIC
 Difficulty:       EASY | MEDIUM | HARD
+MediaType:        IMAGE | VIDEO | AUDIO | DIAGRAM
 AttemptStatus:    NOT_STARTED | IN_PROGRESS | SUBMITTED | AUTO_SUBMITTED | EXPIRED
 ProctorEventType: NO_FACE | MULTIPLE_FACES | FACE_MISMATCH | TAB_SWITCH |
                   EXIT_FULLSCREEN | SCREEN_CAPTURE | NETWORK_DISCONNECT | SEB_VIOLATION | IP_CHANGE
@@ -749,17 +762,31 @@ All require `JWT + ADMIN`.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/admin/questions` | Search global bank (`?q=keyword&difficulty=EASY&examId=`) |
+| GET | `/admin/questions/media-upload-url` | Get presigned S3 PUT URL for question media upload |
 | POST | `/admin/questions` | Create standalone bank question |
 | POST | `/admin/questions/bulk` | Bulk create bank questions |
 | PUT | `/admin/questions/:id` | Update question |
 | DELETE | `/admin/questions/:id` | Delete question from bank |
 
-**Question body:**
+**`GET /admin/questions/media-upload-url?filename=diagram.png&contentType=image/png` response:**
+```json
+{
+  "uploadUrl": "https://bio-olympiad-prod.s3.ap-south-1.amazonaws.com/questions/uuid/diagram.png?X-Amz-...",
+  "publicUrl": "https://bio-olympiad-prod.s3.ap-south-1.amazonaws.com/questions/uuid/diagram.png",
+  "key": "questions/uuid/diagram.png"
+}
+```
+
+**Workflow:** Admin calls `GET media-upload-url` → uploads file directly to S3 via `uploadUrl` → stores `publicUrl` as `mediaUrl` on the question body sent to `POST /admin/questions`.
+
+**Question body (with optional media):**
 ```json
 {
   "type": "MCQ",
   "difficulty": "MEDIUM",
   "text": "What is the speed of light?",
+  "mediaUrl": "https://bio-olympiad-prod.s3.ap-south-1.amazonaws.com/questions/uuid/diagram.png",
+  "mediaType": "IMAGE",
   "options": [
     {"id": "a", "text": "3×10⁸ m/s"},
     {"id": "b", "text": "3×10⁶ m/s"},
@@ -773,6 +800,13 @@ All require `JWT + ADMIN`.
   "explanation": "Speed of light in vacuum is approximately 3×10⁸ m/s"
 }
 ```
+
+**Supported `mediaType` values:** `IMAGE` · `VIDEO` · `AUDIO` · `DIAGRAM`
+
+The student exam player renders each type automatically:
+- `IMAGE` / `DIAGRAM` → `<img>` tag, max 400px height
+- `VIDEO` → `<video controls>`, max 400px height
+- `AUDIO` → `<audio controls>`, full width
 
 ---
 
@@ -826,6 +860,32 @@ All require `JWT + ADMIN`.
 | `MULTI_SELECT` | All correct options selected, no extras | `marks` | `-negativeMarks` |
 | `SHORT_ANSWER` | Case-insensitive string match on `correctAnswer` | `marks` | `0` |
 | `NUMERIC` | `abs(submitted - correctAnswer) ≤ tolerance` | `marks` | `0` |
+
+---
+
+### Question Pool System
+
+Each `ExamSection` contains a **pool** of questions (e.g. 100). The field `questionsToAssign` (default 0 = all) controls how many each student receives from that pool (e.g. 50).
+
+**Selection algorithm (`AttemptService.buildQuestionSet`):**
+
+1. **Difficulty-bucket selection** — from the section pool, shuffle each bucket (EASY / MEDIUM / HARD) independently using a deterministic `FNV-1a + xorshift32` PRNG seeded with `userId:examId:sectionId:[e|m|h]`. Pick `easyPct%`, `mediumPct%`, `hardPct%` of `questionsToAssign` from each bucket.
+2. **Deficit fill** — if any bucket is undersized (fewer questions than the percentage requires), the shortfall is filled from the remaining pool using a `seed:fill` shuffle.
+3. **Cross-section order shuffle** — after assembling all sections, the final list is shuffled with seed `userId:examId:order`, ensuring no two students share the same question ordering even if they received identical subsets.
+4. **Stability** — the resulting ordered list is pre-persisted as `AttemptItem` rows with `sortOrder`. All subsequent page refreshes read these rows — the question set never changes after attempt start.
+
+**Properties:**
+- Same student → identical subset on every resume (deterministic by userId + examId)
+- Different students → statistically unique subsets from the same pool
+- No two students share question order, even for identical subsets
+- Question-bank edits after attempt start do not affect the student's assigned set
+
+**Admin setup:**
+```
+POST /admin/exams/:id/sections  { title, sortOrder, questionsToAssign: 50 }
+POST /admin/sections/:id/questions  ← add all 100 pool questions here
+PUT  /admin/exams/:id           { easyPct: 30, mediumPct: 50, hardPct: 20 }
+```
 
 ---
 
@@ -1128,6 +1188,25 @@ submitExam()
 - Question bank: create, bulk import (JSON), attach from bank, edit, delete
 - Publish/unpublish toggle
 - Release results toggle
+
+#### `/slots` — Slot Management ★ NEW
+- Lists all exam slots grouped by exam title
+- Filter by exam dropdown
+- Per-slot: label, start/end time, capacity/booked progress bar, instance window
+- Create slot: select exam → select instance → fill label/times/capacity
+- Edit slot: update timing/capacity/label via `PUT /admin/slots/:id`
+- Delete slot (blocked if any bookings exist)
+- View bookings per slot: modal table with student name, email, booking status, payment amount
+
+#### `/payments` — Payments & Revenue ★ NEW
+- Revenue summary cards: total revenue (₹), paid count, pending count, refunded count
+- Transactions table: student, exam/slot, amount, status badge, coupon applied, order ID, date
+- Search by student name/email/exam title/order ID
+- Status filter (Paid / Pending / Failed / Refunded)
+- Refund button with confirmation → calls `POST /admin/payments/:id/refund`
+- Coupon management section:
+  - List all coupons with code, discount %, used/max progress bar, expiry, active/expired/exhausted status
+  - Create coupon modal (code, discount %, max uses, optional expiry)
 
 #### `/analytics` — Exam Analytics
 - Score distribution chart (Recharts)
