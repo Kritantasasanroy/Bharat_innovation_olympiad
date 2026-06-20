@@ -891,13 +891,34 @@ PUT  /admin/exams/:id           { easyPct: 30, mediumPct: 50, hardPct: 20 }
 
 ### Proctor Routes (`/proctor`)
 
+**Provider:** Meazure Learning / ProctorU (via `proctor-service` Python bridge)
+
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/proctor/analyze-frame` | JWT | Upload webcam frame (multipart) → face analysis |
-| POST | `/proctor/enroll` | JWT | Enroll face for identity verification |
+| POST | `/proctor/sessions` | JWT | Create Meazure proctoring session → `{ sessionId, launchUrl, status }` |
+| GET | `/proctor/sessions/:sessionId` | JWT | Poll Meazure session status |
 | POST | `/proctor/events` | JWT | Log client-side event (tab switch, fullscreen exit) |
+| POST | `/proctor/meazure-event` | API key | Internal callback from proctor-service bridge (Meazure webhooks) |
 | GET | `/proctor/report/:attemptId` | JWT + ADMIN | Full proctor event timeline |
-| GET | `/proctor/health` | JWT | Service health check |
+| GET | `/proctor/health` | Public | Service health check |
+
+**`POST /proctor/sessions` body:**
+```json
+{
+  "attemptId": "attempt-uuid",
+  "examTitle": "National Science Olympiad 2026",
+  "durationMinutes": 90
+}
+```
+
+**`POST /proctor/sessions` response:**
+```json
+{
+  "sessionId": "meazure-session-uuid",
+  "launchUrl": "https://guardian.meazurelearning.com/launch?session_id=...",
+  "status": "SCHEDULED"
+}
+```
 
 **`POST /proctor/events` body:**
 ```json
@@ -1066,29 +1087,85 @@ const socket = io(NEXT_PUBLIC_WS_URL, {
 
 ---
 
-## 8. Python Proctor Service
+## 8. Python Proctor Service — Meazure Learning Bridge
 
 **Location:** `proctor-service/`  
 **URL:** `http://localhost:5000` (dev) / configured via `PROCTOR_SERVICE_URL`  
 **Framework:** FastAPI + Uvicorn  
-**AI:** ONNX Runtime for face detection model
+**Provider:** [Meazure Learning](https://www.meazurelearning.com) / ProctorU (3rd-party AI proctoring)
+
+This service acts as a bridge between the NestJS backend and the Meazure Learning proctoring platform. All webcam analysis, face detection, and screen monitoring is performed by Meazure's Guardian browser on the student's device — not by this service.
 
 ### Routes
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/analyze` | Accepts image buffer → detects faces → returns count + embedding |
-| POST | `/enroll` | Accepts image → stores face embedding for user |
-| GET | `/health` | Service health check |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | — | Health check; reports whether `MEAZURE_API_KEY` is configured |
+| POST | `/sessions/create` | `x-api-key` | Create a Meazure exam session → returns `{ session_id, launch_url, status }` |
+| GET | `/sessions/{session_id}` | `x-api-key` | Poll session status from Meazure |
+| POST | `/webhook` | HMAC-SHA256 | Receive Meazure violation events, validate signature, forward to NestJS |
 
-**Note:** The NestJS `ProctorService` calls this service internally via HTTP. Frontend never calls the proctor service directly.
+### Proctoring Flow (Meazure Integration)
 
-### Face Detection Flow
-1. Student's webcam snapshot sent to `POST /proctor/analyze-frame` (NestJS)
-2. NestJS ProctorService forwards image buffer to Python service `POST /analyze`
-3. ONNX model detects faces and returns count
-4. NestJS creates `ProctorEvent` based on result (NO_FACE, MULTIPLE_FACES)
-5. Risk score on Attempt updated
+```
+1. Student clicks "Start Exam" in the frontend
+2. NestJS: POST /exams/:instanceId/start → creates Attempt row
+3. NestJS: POST /proctor/sessions { attemptId, examTitle, durationMinutes }
+   → calls proctor-service POST /sessions/create
+   → proctor-service calls Meazure API POST /exam-sessions
+   → returns { sessionId, launchUrl }
+4. Frontend displays "Launch Meazure Guardian" banner with launchUrl
+5. Student clicks launch → opens Meazure Guardian browser
+6. Meazure monitors: webcam (face detection), screen (recording/sharing), audio
+7. Meazure sends violation events to proctor-service POST /webhook:
+   - Validates X-Meazure-Signature HMAC header
+   - Maps incident type → ProctorEventType
+   - Forwards to NestJS POST /proctor/meazure-event
+8. NestJS stores as ProctorEvent → recalculates Attempt.riskScore
+```
+
+### Meazure Incident → ProctorEventType Mapping
+
+| Meazure Incident Type | Our ProctorEventType |
+|---|---|
+| `no_face_detected` / `face_not_visible` | `NO_FACE` |
+| `multiple_people` / `multiple_faces` | `MULTIPLE_FACES` |
+| `face_mismatch` / `identity_verification_failed` | `FACE_MISMATCH` |
+| `screen_share` / `screen_recording` / `virtual_machine` | `SCREEN_CAPTURE` |
+| `network_disconnected` | `NETWORK_DISCONNECT` |
+| `unusual_eye_movement` / `looking_away` | `FACE_MISMATCH` |
+| `session.terminated` | `NETWORK_DISCONNECT` |
+
+### Environment Variables (`proctor-service/.env`)
+
+| Variable | Description |
+|---|---|
+| `PROCTOR_API_KEY` | Shared key NestJS presents when calling this service |
+| `MEAZURE_API_KEY` | API key from Meazure dashboard → Settings → API |
+| `MEAZURE_BASE_URL` | Meazure REST API base URL (default: `https://api.meazurelearning.com/api/v2`) |
+| `MEAZURE_WEBHOOK_SECRET` | Webhook signing secret from Meazure dashboard → Settings → Webhooks |
+| `NESTJS_CALLBACK_URL` | NestJS backend URL for forwarding webhook events |
+| `NESTJS_CALLBACK_KEY` | Key this service presents when calling NestJS callback |
+
+### Webhook Configuration (Meazure Dashboard)
+
+1. Log in at `https://dashboard.meazurelearning.com`
+2. Go to **Settings → Webhooks → Add Endpoint**
+3. Set URL to: `https://proctor.bharatolympiad.in/webhook` (or your proctor-service URL)
+4. Copy the signing secret → set as `MEAZURE_WEBHOOK_SECRET` in `.env`
+5. Subscribe to events: `incident.detected`, `session.terminated`, `session.started`, `session.completed`
+
+### Dev Mode (No Meazure Credentials)
+
+When `MEAZURE_API_KEY` is empty, the service returns a mock session:
+```json
+{
+  "session_id": "dev-session-{attemptId}",
+  "launch_url": "https://guardian.meazurelearning.com/launch?dev=true",
+  "status": "SCHEDULED"
+}
+```
+This lets you develop and test the full exam flow without real Meazure credentials.
 
 ---
 
@@ -1438,17 +1515,32 @@ useSocket() → { socket, isConnected }
 **Layer 2 — Tab/Window Monitoring**
 - `visibilitychange` event: switching tabs → violation
 - `window.blur` event: window losing focus → violation (suppressed for 2s after fullscreen transitions)
+- All violations stored as `ProctorEvent` rows via `POST /proctor/events`
 
-**Layer 3 — Webcam AI Proctoring**
-- Webcam captures frame every 30 seconds
-- Python ONNX service detects faces
-- Events logged: NO_FACE, MULTIPLE_FACES, FACE_MISMATCH
-- Admin can review full proctor timeline per attempt
+**Layer 3 — Meazure Learning AI Proctoring (3rd Party)**
+- After exam starts, NestJS creates a Meazure session and returns a `launchUrl`
+- Student opens the `launchUrl` in the Meazure Guardian browser
+- Meazure monitors: webcam (face detection/liveness), screen recording/sharing detection, audio
+- Meazure posts violation webhooks to the proctor-service bridge
+- Bridge validates HMAC signature → maps to `ProctorEventType` → forwards to NestJS
+- Events logged: `NO_FACE`, `MULTIPLE_FACES`, `FACE_MISMATCH`, `SCREEN_CAPTURE`, `NETWORK_DISCONNECT`
+- Admin reviews full proctor timeline (Layers 1 + 2 + 3 combined) per attempt
+
+### New Proctor API Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/proctor/sessions` | JWT | Create Meazure session → returns `{ sessionId, launchUrl, status }` |
+| GET | `/proctor/sessions/:sessionId` | JWT | Poll session status |
+| POST | `/proctor/events` | JWT | Log client-side violation (fullscreen/tab) |
+| POST | `/proctor/meazure-event` | API key | Internal: receive Meazure events from bridge service |
+| GET | `/proctor/report/:attemptId` | JWT + ADMIN | Full event timeline for attempt |
 
 ### Violation Persistence
-- Violations stored in `sessionStorage['violations_/exams/:id/play']`
+- Fullscreen/tab violations stored in `sessionStorage['violations_/exams/:id/play']`
 - Survives page refresh (intentional — prevents cheat via refresh)
 - Cleared only on exam submit or auto-submit
+- Meazure violations are stored permanently in `ProctorEvent` table (no sessionStorage)
 
 ---
 

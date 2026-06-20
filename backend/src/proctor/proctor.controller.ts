@@ -1,15 +1,14 @@
 import {
-    BadRequestException,
     Body,
     Controller,
     Get,
+    Headers,
+    HttpCode,
     Param,
     Post,
-    UploadedFile,
+    UnauthorizedException,
     UseGuards,
-    UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -18,70 +17,98 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { ProctorService } from './proctor.service';
 
 @Controller('proctor')
-@UseGuards(JwtAuthGuard)
 export class ProctorController {
     constructor(private proctorService: ProctorService) {}
 
+    // ── Session Endpoints (student-facing) ──
+
     /**
-     * Analyze a webcam frame for face detection & identity verification.
+     * Create a Meazure proctoring session for the current student's attempt.
+     * Called by the exam player immediately after startAttempt() succeeds.
+     *
+     * Returns { sessionId, launchUrl, status } — the frontend opens launchUrl
+     * in a new tab so the student can launch the Meazure Guardian browser.
      */
-    @Post('analyze-frame')
-    @UseInterceptors(FileInterceptor('frame'))
-    async analyzeFrame(
-        @UploadedFile() file: Express.Multer.File,
-        @Body('attemptId') attemptId: string,
+    @Post('sessions')
+    @UseGuards(JwtAuthGuard)
+    async createSession(
+        @Body() body: { attemptId: string; examTitle: string; durationMinutes: number },
         @CurrentUser('id') userId: string,
     ) {
-        if (!file) {
-            throw new BadRequestException('No frame uploaded');
-        }
-        return this.proctorService.analyzeFrame(attemptId, userId, file.buffer);
+        return this.proctorService.createSession(
+            body.attemptId,
+            userId,
+            body.examTitle,
+            body.durationMinutes,
+        );
     }
 
     /**
-     * Enroll a student's face for identity verification during exams.
+     * Poll the current status of a Meazure proctoring session.
+     * Used by the frontend to confirm the student has launched the session.
      */
-    @Post('enroll')
-    @UseInterceptors(FileInterceptor('image'))
-    async enrollFace(
-        @UploadedFile() file: Express.Multer.File,
-        @CurrentUser('id') userId: string,
-    ) {
-        if (!file) {
-            throw new BadRequestException('No image uploaded');
-        }
-        return this.proctorService.enrollFace(userId, file.buffer);
+    @Get('sessions/:sessionId')
+    @UseGuards(JwtAuthGuard)
+    async getSessionStatus(@Param('sessionId') sessionId: string) {
+        return this.proctorService.getSessionStatus(sessionId);
     }
 
+    // ── Event Endpoints ──
+
     /**
-     * Log a client-side proctoring event (e.g., tab switch, fullscreen exit).
+     * Log a client-side proctoring event (fullscreen exit, tab switch, window blur).
+     * These are Layer 1 & 2 anti-cheat violations detected by useFullscreenMonitor.
      */
     @Post('events')
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(200)
     async createEvent(
-        @Body() body: { attemptId: string; type: string; details?: any },
+        @Body() body: { attemptId: string; type: string; details?: Record<string, any> },
     ) {
         return this.proctorService.createEvent(body.attemptId, body.type as any, body.details);
     }
 
     /**
-     * Get the proctoring report for an attempt (Admin only).
+     * Internal callback — receives Meazure events forwarded by the proctor-service bridge.
+     * NOT exposed to students; protected by the shared PROCTOR_API_KEY secret.
+     *
+     * The proctor-service (Python) validates the Meazure HMAC signature then
+     * calls this endpoint with the mapped ProctorEventType.
+     */
+    @Post('meazure-event')
+    @HttpCode(200)
+    async handleMeazureEvent(
+        @Body() body: { attemptId: string; type: string; details?: Record<string, any> },
+        @Headers('x-api-key') apiKey: string,
+    ) {
+        const expected = process.env.PROCTOR_API_KEY || 'dev-proctor-key';
+        if (apiKey !== expected) {
+            throw new UnauthorizedException('Invalid API key');
+        }
+        return this.proctorService.createEvent(body.attemptId, body.type as any, body.details);
+    }
+
+    // ── Admin Endpoints ──
+
+    /**
+     * Full proctoring event timeline for an attempt (Admin only).
      */
     @Get('report/:attemptId')
-    @UseGuards(RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async getReport(@Param('attemptId') attemptId: string) {
         return this.proctorService.getReport(attemptId);
     }
 
     /**
-     * Health check for the proctoring subsystem.
+     * Health check — confirms the proctoring subsystem is up.
      */
     @Get('health')
     async health() {
         return {
             status: 'ok',
-            mode: 'inline',
-            message: 'AI proctoring is running inside the NestJS backend',
+            provider: 'meazure-learning',
+            bridge: process.env.PROCTOR_SERVICE_URL || 'http://localhost:5000',
         };
     }
 }

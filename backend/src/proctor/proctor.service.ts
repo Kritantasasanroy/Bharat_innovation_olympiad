@@ -1,353 +1,143 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ProctorEventType } from '@prisma/client';
-import * as sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
+import axios from 'axios';
+
+export interface ProctorSession {
+    sessionId: string;
+    launchUrl: string;
+    status: string;
+}
 
 /**
- * AI Proctoring Service — Inline Implementation
+ * ProctorService — Meazure Learning / ProctorU Integration
  *
- * Performs face detection & identity verification directly in the NestJS backend,
- * eliminating the need for a separate Python microservice.
+ * Delegates all AI proctoring (webcam, face, screen monitoring) to the
+ * Meazure Learning platform via the proctor-service Python bridge.
  *
- * Model stack (when ONNX models are present):
- *   - Face Detection:   SCRFD 500M (ONNX, ~2 MB)
- *   - Face Embedding:   ArcFace MobileFaceNet (ONNX, ~5 MB)
+ * Responsibility boundary:
+ *   - This service: session lifecycle, event storage, risk scoring
+ *   - proctor-service (Python): Meazure API calls, webhook validation
+ *   - Meazure: actual webcam/face/screen monitoring on student device
  *
- * Dev mode (when models are absent):
- *   - Uses image-dimension heuristics for face detection
- *   - Uses deterministic pseudo-embeddings for identity matching
- *
- * Privacy:
- *   - NEVER stores raw frames or video
- *   - Only stores face embeddings + event flags
+ * Layer 1 & 2 anti-cheat (fullscreen + tab monitoring) remain in the
+ * frontend (useFullscreenMonitor) and are stored via createEvent().
  */
-
-interface FaceDetection {
-    bbox: number[];
-    score: number;
-}
-
-export interface FrameAnalysisResult {
-    facePresent: boolean;
-    numFaces: number;
-    matchScore: number | null;
-    riskScore: number;
-    flags: string[];
-}
-
 @Injectable()
-export class ProctorService implements OnModuleInit {
+export class ProctorService {
     private readonly logger = new Logger('ProctorService');
+    private readonly proctorServiceUrl: string;
+    private readonly proctorApiKey: string;
 
-    // ONNX model sessions (null if models not found)
-    private faceDetector: any = null;
-    private faceEmbedder: any = null;
-
-    // In-memory enrollment store (userId -> embedding vector)
-    // In production, these should be stored encrypted in the database
-    private enrolledEmbeddings: Map<string, number[]> = new Map();
-
-    constructor(private prisma: PrismaService) {}
-
-    async onModuleInit() {
-        await this.loadModels();
+    constructor(private prisma: PrismaService) {
+        this.proctorServiceUrl = process.env.PROCTOR_SERVICE_URL || 'http://localhost:5000';
+        this.proctorApiKey = process.env.PROCTOR_API_KEY || 'dev-proctor-key';
     }
 
-    // ── Model Loading ──
+    // ── Session Management ──
 
-    private async loadModels() {
-        try {
-            // @ts-ignore — onnxruntime-node is an optional dependency
-            const ort = await import('onnxruntime-node').catch(() => null);
-            if (!ort) {
-                this.logger.warn(
-                    'onnxruntime-node not installed — running in DEV MODE with heuristic face detection',
-                );
-                return;
-            }
-
-            const path = await import('path');
-            const fs = await import('fs');
-            const modelsDir = path.join(process.cwd(), 'models');
-
-            const detectorPath = path.join(modelsDir, 'scrfd_500m.onnx');
-            const embedderPath = path.join(modelsDir, 'arcface_mobilefacenet.onnx');
-
-            if (fs.existsSync(detectorPath)) {
-                this.faceDetector = await ort.InferenceSession.create(detectorPath);
-                this.logger.log('Loaded SCRFD face detector model');
-            } else {
-                this.logger.warn(`Face detector model not found at ${detectorPath}`);
-            }
-
-            if (fs.existsSync(embedderPath)) {
-                this.faceEmbedder = await ort.InferenceSession.create(embedderPath);
-                this.logger.log('Loaded ArcFace embedder model');
-            } else {
-                this.logger.warn(`Face embedder model not found at ${embedderPath}`);
-            }
-        } catch (err) {
-            this.logger.error('Error loading ONNX models:', err);
-        }
-    }
-
-    // ── Face Detection ──
-
-    private async detectFaces(imageBuffer: Buffer): Promise<FaceDetection[]> {
-        const metadata = await sharp(imageBuffer).metadata();
-        const w = metadata.width || 0;
-        const h = metadata.height || 0;
-
-        if (this.faceDetector) {
-            // Real ONNX inference would go here
-            // For now, fall through to heuristic if model parsing is complex
-            this.logger.debug('Using ONNX face detector');
-        }
-
-        // Dev-mode heuristic: analyze image brightness/skin-tone regions
-        // This is the same approach the Python service uses when models aren't loaded
-        if (w > 50 && h > 50) {
-            // Extract raw pixel data from the center region for basic analysis
-            const centerRegion = await sharp(imageBuffer)
-                .extract({
-                    left: Math.floor(w * 0.2),
-                    top: Math.floor(h * 0.15),
-                    width: Math.floor(w * 0.6),
-                    height: Math.floor(h * 0.7),
-                })
-                .resize(64, 64)
-                .raw()
-                .toBuffer();
-
-            // Simple skin-tone detection heuristic
-            let skinPixels = 0;
-            const totalPixels = 64 * 64;
-            for (let i = 0; i < centerRegion.length; i += 3) {
-                const r = centerRegion[i];
-                const g = centerRegion[i + 1];
-                const b = centerRegion[i + 2];
-                // Basic skin color range (works for various skin tones)
-                if (r > 60 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 15) {
-                    skinPixels++;
-                }
-            }
-            const skinRatio = skinPixels / totalPixels;
-
-            if (skinRatio > 0.15) {
-                // Likely a face present
-                return [{ bbox: [w / 4, h / 4, (3 * w) / 4, (3 * h) / 4], score: 0.85 }];
-            }
-            // No clear face detected
-            return [];
-        }
-
-        return [];
-    }
-
-    // ── Face Embedding ──
-
-    private async computeEmbedding(imageBuffer: Buffer): Promise<number[]> {
-        if (this.faceEmbedder) {
-            // Real ArcFace inference would go here
-            this.logger.debug('Using ONNX face embedder');
-        }
-
-        // Dev-mode: generate a deterministic pseudo-embedding from image content
-        const resized = await sharp(imageBuffer).resize(32, 32).raw().toBuffer();
-
-        const embedding: number[] = new Array(128).fill(0);
-        for (let i = 0; i < resized.length && i < 128 * 3; i++) {
-            embedding[i % 128] += resized[i] / 255.0;
-        }
-
-        // Normalize the embedding
-        const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
-        if (norm > 0) {
-            for (let i = 0; i < embedding.length; i++) {
-                embedding[i] /= norm;
-            }
-        }
-
-        return embedding;
-    }
-
-    // ── Similarity ──
-
-    private cosineSimilarity(a: number[], b: number[]): number {
-        let dot = 0,
-            normA = 0,
-            normB = 0;
-        for (let i = 0; i < a.length; i++) {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-        normA = Math.sqrt(normA);
-        normB = Math.sqrt(normB);
-        if (normA === 0 || normB === 0) return 0;
-        return dot / (normA * normB);
-    }
-
-    // ── Risk Scoring ──
-
-    private computeRisk(numFaces: number, matchScore: number | null): number {
-        let risk = 0;
-        if (numFaces === 0) risk += 0.4;
-        else if (numFaces > 1) risk += 0.3;
-        if (matchScore !== null && matchScore < 0.5) risk += 0.3;
-        return Math.min(risk, 1.0);
-    }
-
-    // ── Public API: Analyze Frame ──
-
-    async analyzeFrame(
+    /**
+     * Create a Meazure proctoring session for a student exam attempt.
+     * Called immediately after startAttempt() creates the Attempt row.
+     * Returns a launch_url the student opens in the Meazure Guardian browser.
+     */
+    async createSession(
         attemptId: string,
         userId: string,
-        frameBuffer: Buffer,
-    ): Promise<FrameAnalysisResult> {
+        examTitle: string,
+        durationMinutes: number,
+    ): Promise<ProctorSession> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { firstName: true, lastName: true, email: true },
+        });
+
+        if (!user) {
+            throw new Error(`User ${userId} not found`);
+        }
+
         try {
-            // 1. Detect faces
-            const faces = await this.detectFaces(frameBuffer);
-            const numFaces = faces.length;
-            const flags: string[] = [];
-            let matchScore: number | null = null;
-
-            if (numFaces === 0) {
-                flags.push('NO_FACE');
-            } else if (numFaces > 1) {
-                flags.push('MULTIPLE_FACES');
-            }
-
-            // 2. Face embedding & identity matching
-            if (numFaces >= 1) {
-                const embedding = await this.computeEmbedding(frameBuffer);
-
-                // Load from DB if not cached (handles post-restart cold starts)
-                let enrolled = this.enrolledEmbeddings.get(userId);
-                if (!enrolled) {
-                    const user = await this.prisma.user.findUnique({
-                        where: { id: userId },
-                        select: { faceEmbedding: true },
-                    });
-                    if (user?.faceEmbedding) {
-                        const floatArr = new Float32Array(
-                            user.faceEmbedding.buffer,
-                            user.faceEmbedding.byteOffset,
-                            user.faceEmbedding.byteLength / Float32Array.BYTES_PER_ELEMENT,
-                        );
-                        enrolled = Array.from(floatArr);
-                        this.enrolledEmbeddings.set(userId, enrolled);
-                    }
-                }
-
-                if (enrolled) {
-                    matchScore = this.cosineSimilarity(embedding, enrolled);
-                    if (matchScore < 0.5) {
-                        flags.push('FACE_MISMATCH');
-                    }
-                }
-            }
-
-            // 3. Risk scoring
-            const riskScore = this.computeRisk(numFaces, matchScore);
-
-            this.logger.log(
-                `[Frame] attempt=${attemptId} user=${userId} faces=${numFaces} ` +
-                    `match=${matchScore?.toFixed(2) ?? 'N/A'} risk=${riskScore.toFixed(2)} flags=[${flags.join(',')}]`,
+            const { data } = await axios.post(
+                `${this.proctorServiceUrl}/sessions/create`,
+                {
+                    attempt_id: attemptId,
+                    user_id: userId,
+                    exam_title: examTitle,
+                    duration_minutes: durationMinutes,
+                    student_name: `${user.firstName} ${user.lastName}`.trim(),
+                    student_email: user.email,
+                },
+                {
+                    headers: { 'x-api-key': this.proctorApiKey },
+                    timeout: 15_000,
+                },
             );
 
-            // 4. Save proctor events based on flags
-            if (flags.length > 0) {
-                for (const flag of flags) {
-                    await this.createEvent(attemptId, flag as ProctorEventType, {
-                        numFaces,
-                        matchScore,
-                        riskScore,
-                    });
-                }
-            }
-
-            // 5. Update attempt risk score
-            await this.updateRiskScore(attemptId);
+            this.logger.log(
+                `[Session] attempt=${attemptId} session=${data.session_id} status=${data.status}`,
+            );
 
             return {
-                facePresent: numFaces > 0,
-                numFaces,
-                matchScore,
-                riskScore,
-                flags,
+                sessionId: data.session_id,
+                launchUrl: data.launch_url,
+                status: data.status,
             };
-        } catch (err) {
-            this.logger.error('[Frame] Analysis error:', err);
+        } catch (err: any) {
+            this.logger.error(
+                `[Session] Failed to create Meazure session for attempt=${attemptId}: ${err.message}`,
+            );
+            // Non-fatal — exam can still proceed; student won't have proctored session
             return {
-                facePresent: false,
-                numFaces: 0,
-                matchScore: null,
-                riskScore: 0.5,
-                flags: ['ANALYSIS_ERROR'],
+                sessionId: '',
+                launchUrl: '',
+                status: 'ERROR',
             };
         }
     }
 
-    // ── Public API: Enroll Face ──
-
-    async enrollFace(
-        userId: string,
-        imageBuffer: Buffer,
-    ): Promise<{ success: boolean; message: string }> {
-        try {
-            const faces = await this.detectFaces(imageBuffer);
-
-            if (faces.length === 0) {
-                return { success: false, message: 'No face detected in the image' };
-            }
-            if (faces.length > 1) {
-                return {
-                    success: false,
-                    message: 'Multiple faces detected — only one face allowed for enrollment',
-                };
-            }
-
-            const embedding = await this.computeEmbedding(imageBuffer);
-
-            // Persist to DB so enrollment survives restarts/deploys
-            const embeddingBuffer = Buffer.from(new Float32Array(embedding).buffer);
-            await this.prisma.user.update({
-                where: { id: userId },
-                data: { faceEmbedding: embeddingBuffer },
-            });
-
-            // Also warm the in-memory cache
-            this.enrolledEmbeddings.set(userId, embedding);
-
-            this.logger.log(`[Enroll] user=${userId} embedding_dim=${embedding.length}`);
-
-            return { success: true, message: 'Face enrolled successfully' };
-        } catch (err) {
-            this.logger.error('[Enroll] Error:', err);
-            return { success: false, message: 'Face enrollment failed' };
-        }
+    /**
+     * Get current status of a Meazure proctoring session.
+     */
+    async getSessionStatus(sessionId: string): Promise<ProctorSession> {
+        const { data } = await axios.get(
+            `${this.proctorServiceUrl}/sessions/${sessionId}`,
+            { headers: { 'x-api-key': this.proctorApiKey }, timeout: 10_000 },
+        );
+        return { sessionId: data.session_id, launchUrl: data.launch_url, status: data.status };
     }
 
-    // ── Proctor Events ──
+    // ── Event Handling ──
 
+    /**
+     * Store a proctoring event.
+     * Called by:
+     *   - Frontend (fullscreen/tab violations via POST /proctor/events)
+     *   - NestJS webhook receiver (Meazure events forwarded by proctor-service)
+     */
     async createEvent(
         attemptId: string,
         type: ProctorEventType,
         details?: Record<string, any>,
         severity?: number,
     ) {
-        return this.prisma.proctorEvent.create({
+        const event = await this.prisma.proctorEvent.create({
             data: {
                 attemptId,
                 type,
-                severity: severity || this.getSeverity(type),
-                details: details || {},
+                severity: severity ?? this.getSeverity(type),
+                details: details ?? {},
             },
         });
+
+        await this.updateRiskScore(attemptId);
+        return event;
     }
 
-    async updateRiskScore(attemptId: string) {
+    /**
+     * Recalculate and persist the risk score on the Attempt row.
+     * Called after every new ProctorEvent.
+     */
+    async updateRiskScore(attemptId: string): Promise<number> {
         const events = await this.prisma.proctorEvent.findMany({
             where: { attemptId },
         });
@@ -366,28 +156,34 @@ export class ProctorService implements OnModuleInit {
         return risk;
     }
 
+    /**
+     * Build the full proctoring report for an attempt (admin view).
+     */
     async getReport(attemptId: string) {
-        const events = await this.prisma.proctorEvent.findMany({
-            where: { attemptId },
-            orderBy: { timestamp: 'asc' },
-        });
-
-        const attempt = await this.prisma.attempt.findUnique({
-            where: { id: attemptId },
-            select: { riskScore: true },
-        });
+        const [events, attempt] = await Promise.all([
+            this.prisma.proctorEvent.findMany({
+                where: { attemptId },
+                orderBy: { timestamp: 'asc' },
+            }),
+            this.prisma.attempt.findUnique({
+                where: { id: attemptId },
+                select: { riskScore: true },
+            }),
+        ]);
 
         return {
             attemptId,
             totalEvents: events.length,
-            riskScore: attempt?.riskScore || 0,
+            riskScore: attempt?.riskScore ?? 0,
             events,
             summary: this.summarizeEvents(events),
         };
     }
 
+    // ── Severity Map ──
+
     private getSeverity(type: ProctorEventType): number {
-        const map: Record<string, number> = {
+        const map: Partial<Record<ProctorEventType, number>> = {
             NO_FACE: 3,
             MULTIPLE_FACES: 4,
             FACE_MISMATCH: 5,
@@ -396,14 +192,15 @@ export class ProctorService implements OnModuleInit {
             SCREEN_CAPTURE: 5,
             NETWORK_DISCONNECT: 2,
             IP_CHANGE: 2,
+            SEB_VIOLATION: 5,
         };
-        return map[type] || 1;
+        return map[type] ?? 1;
     }
 
-    private summarizeEvents(events: any[]) {
+    private summarizeEvents(events: { type: string }[]) {
         const counts: Record<string, number> = {};
         for (const e of events) {
-            counts[e.type] = (counts[e.type] || 0) + 1;
+            counts[e.type] = (counts[e.type] ?? 0) + 1;
         }
         return counts;
     }
