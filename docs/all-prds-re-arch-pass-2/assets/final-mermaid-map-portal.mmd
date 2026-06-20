@@ -1,0 +1,13 @@
+flowchart TB
+  repo["bio-portal — marketing + student portal + commerce"]
+  repo --> portal_P0["<b>P0 Foundation</b><br/>PLAT-01 ★ — Repo Scaffold<br/>PLAT-02 ★ — Contracts + Events<br/>PLAT-03 ★ — Infrastructure<br/>PLAT-04 ★ — Observability + Audit<br/>PLAT-05 ★ — Security Baseline"]
+  portal_P0 --> portal_P1["<b>P1 Identity + Auth</b><br/>AUTH-01 ★ — Mobile OTP<br/>AUTH-02 ★ — Registration Profile<br/>AUTH-03 ★ — DPDP Consent<br/>AUTH-05 ★ — Sessions Tokens"]
+  portal_P1 --> portal_P2["<b>P2 Admin Authoring + Scheduling</b><br/>ADMIN-03 ★ — Slots Pricing<br/>ADMIN-04 ★ — Publishing Snapshots<br/>ADMIN-05 ★ — User School Mgmt"]
+  portal_P2 --> portal_P3["<b>P3 Portal + Commerce</b><br/>PORTAL-01 — Marketing Discovery<br/>PORTAL-02 ★ — Slot Catalog<br/>PORTAL-03 — Booking Holds<br/>PORTAL-04 — Razorpay Payments<br/>PORTAL-05 ★ — Admit Card Notify<br/>PORTAL-06 ★ — Refunds Cancels<br/>PORTAL-07 ★ — Entitlement Sync<br/>PORTAL-08 ★ — Pricing Coupons"]
+  portal_P3 --> portal_P4["<b>P4 Exam Runtime</b><br/>EXAM-00 ★ — Dashboard Handoff<br/>EXAM-02 ★ — Attempt Gate"]
+  portal_P4 --> portal_P5["<b>P5 Scoring + Results</b><br/>SCORE-02 ★ — Results Ranking"]
+  portal_P5 --> portal_P7["<b>P7 Ops + Analytics</b><br/>OPS-01 ★ — Exam-Day Ops"]
+  classDef repo fill:#111827,color:#fff,stroke:#334155,stroke-width:2px;
+  classDef phase fill:#f8fafc,color:#0f172a,stroke:#2563eb,stroke-width:1px;
+  class repo repo;
+  class portal_P0,portal_P1,portal_P2,portal_P3,portal_P4,portal_P5,portal_P7 phase;

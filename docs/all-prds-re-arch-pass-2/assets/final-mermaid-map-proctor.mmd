@@ -1,0 +1,11 @@
+flowchart TB
+  repo["bio-proctor — proctor API + workers + model runtime"]
+  repo --> proctor_P0["<b>P0 Foundation</b><br/>PLAT-01 ★ — Repo Scaffold<br/>PLAT-02 ★ — Contracts + Events<br/>PLAT-03 ★ — Infrastructure<br/>PLAT-04 ★ — Observability + Audit<br/>PLAT-05 ★ — Security Baseline"]
+  proctor_P0 --> proctor_P1["<b>P1 Identity + Auth</b><br/>AUTH-03 ★ — DPDP Consent"]
+  proctor_P1 --> proctor_P4["<b>P4 Exam Runtime</b><br/>EXAM-01 ★ — Device Identity"]
+  proctor_P4 --> proctor_P6["<b>P6 Proctoring</b><br/>PROCTOR-01 ★ — Face Enrollment<br/>PROCTOR-02 ★ — Frame Analysis<br/>PROCTOR-03 ★ — Risk Events<br/>PROCTOR-04 ★ — Review Console<br/>PROCTOR-05 ★ — Biometric Retention"]
+  proctor_P6 --> proctor_P7["<b>P7 Ops + Analytics</b><br/>OPS-01 ★ — Exam-Day Ops"]
+  classDef repo fill:#111827,color:#fff,stroke:#334155,stroke-width:2px;
+  classDef phase fill:#f8fafc,color:#0f172a,stroke:#2563eb,stroke-width:1px;
+  class repo repo;
+  class proctor_P0,proctor_P1,proctor_P4,proctor_P6,proctor_P7 phase;

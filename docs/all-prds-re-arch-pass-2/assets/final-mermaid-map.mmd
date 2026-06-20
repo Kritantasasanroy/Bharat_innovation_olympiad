@@ -1,0 +1,139 @@
+flowchart LR
+  root(["BIO Pass-2 PRD Map<br/><small>cross-repo PRDs repeated at same phase level</small>"])
+  root --> core["bio-core<br/><small>admin + exam runtime + scoring</small>"]
+  root --> portal["bio-portal<br/><small>marketing + student portal + commerce</small>"]
+  root --> proctor["bio-proctor<br/><small>proctor API + workers + model runtime</small>"]
+
+  core --> core_P0["P0 Foundation"]
+  core_P0 --> core_PLAT01["PLAT-01 ★<br/><small>Repo Scaffold</small>"]
+  core_P0 --> core_PLAT02["PLAT-02 ★<br/><small>Contracts + Events</small>"]
+  core_P0 --> core_PLAT03["PLAT-03 ★<br/><small>Infrastructure</small>"]
+  core_P0 --> core_PLAT04["PLAT-04 ★<br/><small>Observability + Audit</small>"]
+  core_P0 --> core_PLAT05["PLAT-05 ★<br/><small>Security Baseline</small>"]
+
+  core --> core_P1["P1 Identity + Auth"]
+  core_P1 --> core_AUTH01["AUTH-01 ★<br/><small>Mobile OTP</small>"]
+  core_P1 --> core_AUTH02["AUTH-02 ★<br/><small>Registration Profile</small>"]
+  core_P1 --> core_AUTH03["AUTH-03 ★<br/><small>DPDP Consent</small>"]
+  core_P1 --> core_AUTH04["AUTH-04<br/><small>Admin Auth RBAC</small>"]
+  core_P1 --> core_AUTH05["AUTH-05 ★<br/><small>Sessions Tokens</small>"]
+
+  core --> core_P2["P2 Admin Authoring + Scheduling"]
+  core_P2 --> core_ADMIN01["ADMIN-01<br/><small>Question Bank</small>"]
+  core_P2 --> core_ADMIN02["ADMIN-02<br/><small>Paper Builder</small>"]
+  core_P2 --> core_ADMIN03["ADMIN-03 ★<br/><small>Slots Pricing</small>"]
+  core_P2 --> core_ADMIN04["ADMIN-04 ★<br/><small>Publishing Snapshots</small>"]
+  core_P2 --> core_ADMIN05["ADMIN-05 ★<br/><small>User School Mgmt</small>"]
+
+  core --> core_P3["P3 Portal + Commerce"]
+  core_P3 --> core_PORTAL02["PORTAL-02 ★<br/><small>Slot Catalog</small>"]
+  core_P3 --> core_PORTAL05["PORTAL-05 ★<br/><small>Admit Card Notify</small>"]
+  core_P3 --> core_PORTAL06["PORTAL-06 ★<br/><small>Refunds Cancels</small>"]
+  core_P3 --> core_PORTAL07["PORTAL-07 ★<br/><small>Entitlement Sync</small>"]
+  core_P3 --> core_PORTAL08["PORTAL-08 ★<br/><small>Pricing Coupons</small>"]
+
+  core --> core_P4["P4 Exam Runtime"]
+  core_P4 --> core_EXAM00["EXAM-00 ★<br/><small>Dashboard Handoff</small>"]
+  core_P4 --> core_EXAM01["EXAM-01 ★<br/><small>Device Identity</small>"]
+  core_P4 --> core_EXAM02["EXAM-02 ★<br/><small>Attempt Gate</small>"]
+  core_P4 --> core_EXAM03["EXAM-03<br/><small>Player Autosave</small>"]
+  core_P4 --> core_EXAM04["EXAM-04<br/><small>Durable Timer</small>"]
+  core_P4 --> core_EXAM05["EXAM-05<br/><small>Submission Flow</small>"]
+  core_P4 --> core_EXAM06["EXAM-06<br/><small>SEB Lockdown</small>"]
+
+  core --> core_P5["P5 Scoring + Results"]
+  core_P5 --> core_SCORE01["SCORE-01<br/><small>Async Scoring</small>"]
+  core_P5 --> core_SCORE02["SCORE-02 ★<br/><small>Results Ranking</small>"]
+
+  core --> core_P6["P6 Proctoring"]
+  core_P6 --> core_PROCTOR01["PROCTOR-01 ★<br/><small>Face Enrollment</small>"]
+  core_P6 --> core_PROCTOR02["PROCTOR-02 ★<br/><small>Frame Analysis</small>"]
+  core_P6 --> core_PROCTOR03["PROCTOR-03 ★<br/><small>Risk Events</small>"]
+  core_P6 --> core_PROCTOR04["PROCTOR-04 ★<br/><small>Review Console</small>"]
+  core_P6 --> core_PROCTOR05["PROCTOR-05 ★<br/><small>Biometric Retention</small>"]
+
+  core --> core_P7["P7 Ops + Analytics"]
+  core_P7 --> core_ADMIN06["ADMIN-06<br/><small>Dashboard Analytics</small>"]
+  core_P7 --> core_OPS01["OPS-01 ★<br/><small>Exam-Day Ops</small>"]
+
+  portal --> portal_P0["P0 Foundation"]
+  portal_P0 --> portal_PLAT01["PLAT-01 ★<br/><small>Repo Scaffold</small>"]
+  portal_P0 --> portal_PLAT02["PLAT-02 ★<br/><small>Contracts + Events</small>"]
+  portal_P0 --> portal_PLAT03["PLAT-03 ★<br/><small>Infrastructure</small>"]
+  portal_P0 --> portal_PLAT04["PLAT-04 ★<br/><small>Observability + Audit</small>"]
+  portal_P0 --> portal_PLAT05["PLAT-05 ★<br/><small>Security Baseline</small>"]
+
+  portal --> portal_P1["P1 Identity + Auth"]
+  portal_P1 --> portal_AUTH01["AUTH-01 ★<br/><small>Mobile OTP</small>"]
+  portal_P1 --> portal_AUTH02["AUTH-02 ★<br/><small>Registration Profile</small>"]
+  portal_P1 --> portal_AUTH03["AUTH-03 ★<br/><small>DPDP Consent</small>"]
+  portal_P1 --> portal_AUTH05["AUTH-05 ★<br/><small>Sessions Tokens</small>"]
+
+  portal --> portal_P2["P2 Admin Authoring + Scheduling"]
+  portal_P2 --> portal_ADMIN03["ADMIN-03 ★<br/><small>Slots Pricing</small>"]
+  portal_P2 --> portal_ADMIN04["ADMIN-04 ★<br/><small>Publishing Snapshots</small>"]
+  portal_P2 --> portal_ADMIN05["ADMIN-05 ★<br/><small>User School Mgmt</small>"]
+
+  portal --> portal_P3["P3 Portal + Commerce"]
+  portal_P3 --> portal_PORTAL01["PORTAL-01<br/><small>Marketing Discovery</small>"]
+  portal_P3 --> portal_PORTAL02["PORTAL-02 ★<br/><small>Slot Catalog</small>"]
+  portal_P3 --> portal_PORTAL03["PORTAL-03<br/><small>Booking Holds</small>"]
+  portal_P3 --> portal_PORTAL04["PORTAL-04<br/><small>Razorpay Payments</small>"]
+  portal_P3 --> portal_PORTAL05["PORTAL-05 ★<br/><small>Admit Card Notify</small>"]
+  portal_P3 --> portal_PORTAL06["PORTAL-06 ★<br/><small>Refunds Cancels</small>"]
+  portal_P3 --> portal_PORTAL07["PORTAL-07 ★<br/><small>Entitlement Sync</small>"]
+  portal_P3 --> portal_PORTAL08["PORTAL-08 ★<br/><small>Pricing Coupons</small>"]
+
+  portal --> portal_P4["P4 Exam Runtime"]
+  portal_P4 --> portal_EXAM00["EXAM-00 ★<br/><small>Dashboard Handoff</small>"]
+  portal_P4 --> portal_EXAM02["EXAM-02 ★<br/><small>Attempt Gate</small>"]
+
+  portal --> portal_P5["P5 Scoring + Results"]
+  portal_P5 --> portal_SCORE02["SCORE-02 ★<br/><small>Results Ranking</small>"]
+
+  portal --> portal_P7["P7 Ops + Analytics"]
+  portal_P7 --> portal_OPS01["OPS-01 ★<br/><small>Exam-Day Ops</small>"]
+
+  proctor --> proctor_P0["P0 Foundation"]
+  proctor_P0 --> proctor_PLAT01["PLAT-01 ★<br/><small>Repo Scaffold</small>"]
+  proctor_P0 --> proctor_PLAT02["PLAT-02 ★<br/><small>Contracts + Events</small>"]
+  proctor_P0 --> proctor_PLAT03["PLAT-03 ★<br/><small>Infrastructure</small>"]
+  proctor_P0 --> proctor_PLAT04["PLAT-04 ★<br/><small>Observability + Audit</small>"]
+  proctor_P0 --> proctor_PLAT05["PLAT-05 ★<br/><small>Security Baseline</small>"]
+
+  proctor --> proctor_P1["P1 Identity + Auth"]
+  proctor_P1 --> proctor_AUTH03["AUTH-03 ★<br/><small>DPDP Consent</small>"]
+
+  proctor --> proctor_P4["P4 Exam Runtime"]
+  proctor_P4 --> proctor_EXAM01["EXAM-01 ★<br/><small>Device Identity</small>"]
+
+  proctor --> proctor_P6["P6 Proctoring"]
+  proctor_P6 --> proctor_PROCTOR01["PROCTOR-01 ★<br/><small>Face Enrollment</small>"]
+  proctor_P6 --> proctor_PROCTOR02["PROCTOR-02 ★<br/><small>Frame Analysis</small>"]
+  proctor_P6 --> proctor_PROCTOR03["PROCTOR-03 ★<br/><small>Risk Events</small>"]
+  proctor_P6 --> proctor_PROCTOR04["PROCTOR-04 ★<br/><small>Review Console</small>"]
+  proctor_P6 --> proctor_PROCTOR05["PROCTOR-05 ★<br/><small>Biometric Retention</small>"]
+
+  proctor --> proctor_P7["P7 Ops + Analytics"]
+  proctor_P7 --> proctor_OPS01["OPS-01 ★<br/><small>Exam-Day Ops</small>"]
+
+  root --> O3{{"O3 locked<br/><small>signed claims + introspection</small>"}}
+  root --> O4{{"O4 locked<br/><small>outbox + consumers</small>"}}
+  O3 -. constrains .-> core_PLAT02
+  O3 -. constrains .-> core_PLAT05
+  O3 -. constrains .-> core_AUTH05
+  O3 -. constrains .-> core_EXAM02
+  O4 -. constrains .-> core_PLAT02
+  O4 -. constrains .-> portal_PORTAL07
+  O4 -. constrains .-> proctor_PROCTOR03
+
+  classDef root fill:#020617,color:#fff,stroke:#475569,stroke-width:2px;
+  classDef repo fill:#111827,color:#fff,stroke:#334155,stroke-width:2px;
+  classDef phase fill:#dbeafe,color:#0f172a,stroke:#2563eb,stroke-width:1px;
+  classDef prd fill:#f8fafc,color:#0f172a,stroke:#94a3b8,stroke-width:1px;
+  classDef decision fill:#fef3c7,color:#713f12,stroke:#f59e0b,stroke-width:2px;
+  class root root;
+  class core,portal,proctor repo;
+  class core_P0,core_P1,core_P2,core_P3,core_P4,core_P5,core_P6,core_P7,portal_P0,portal_P1,portal_P2,portal_P3,portal_P4,portal_P5,portal_P7,proctor_P0,proctor_P1,proctor_P4,proctor_P6,proctor_P7 phase;
+  class core_PLAT01,core_PLAT02,core_PLAT03,core_PLAT04,core_PLAT05,core_AUTH01,core_AUTH02,core_AUTH03,core_AUTH04,core_AUTH05,core_ADMIN01,core_ADMIN02,core_ADMIN03,core_ADMIN04,core_ADMIN05,core_ADMIN06,core_PORTAL02,core_PORTAL05,core_PORTAL06,core_PORTAL07,core_PORTAL08,core_EXAM00,core_EXAM01,core_EXAM02,core_EXAM03,core_EXAM04,core_EXAM05,core_EXAM06,core_SCORE01,core_SCORE02,core_PROCTOR01,core_PROCTOR02,core_PROCTOR03,core_PROCTOR04,core_PROCTOR05,core_OPS01,portal_PLAT01,portal_PLAT02,portal_PLAT03,portal_PLAT04,portal_PLAT05,portal_AUTH01,portal_AUTH02,portal_AUTH03,portal_AUTH05,portal_ADMIN03,portal_ADMIN04,portal_ADMIN05,portal_PORTAL01,portal_PORTAL02,portal_PORTAL03,portal_PORTAL04,portal_PORTAL05,portal_PORTAL06,portal_PORTAL07,portal_PORTAL08,portal_EXAM00,portal_EXAM02,portal_SCORE02,portal_OPS01,proctor_PLAT01,proctor_PLAT02,proctor_PLAT03,proctor_PLAT04,proctor_PLAT05,proctor_AUTH03,proctor_EXAM01,proctor_PROCTOR01,proctor_PROCTOR02,proctor_PROCTOR03,proctor_PROCTOR04,proctor_PROCTOR05,proctor_OPS01 prd;
+  class O3,O4 decision;

@@ -1,0 +1,14 @@
+flowchart TB
+  repo["bio-core — admin + exam runtime + scoring"]
+  repo --> core_P0["<b>P0 Foundation</b><br/>PLAT-01 ★ — Repo Scaffold<br/>PLAT-02 ★ — Contracts + Events<br/>PLAT-03 ★ — Infrastructure<br/>PLAT-04 ★ — Observability + Audit<br/>PLAT-05 ★ — Security Baseline"]
+  core_P0 --> core_P1["<b>P1 Identity + Auth</b><br/>AUTH-01 ★ — Mobile OTP<br/>AUTH-02 ★ — Registration Profile<br/>AUTH-03 ★ — DPDP Consent<br/>AUTH-04 — Admin Auth RBAC<br/>AUTH-05 ★ — Sessions Tokens"]
+  core_P1 --> core_P2["<b>P2 Admin Authoring + Scheduling</b><br/>ADMIN-01 — Question Bank<br/>ADMIN-02 — Paper Builder<br/>ADMIN-03 ★ — Slots Pricing<br/>ADMIN-04 ★ — Publishing Snapshots<br/>ADMIN-05 ★ — User School Mgmt"]
+  core_P2 --> core_P3["<b>P3 Portal + Commerce</b><br/>PORTAL-02 ★ — Slot Catalog<br/>PORTAL-05 ★ — Admit Card Notify<br/>PORTAL-06 ★ — Refunds Cancels<br/>PORTAL-07 ★ — Entitlement Sync<br/>PORTAL-08 ★ — Pricing Coupons"]
+  core_P3 --> core_P4["<b>P4 Exam Runtime</b><br/>EXAM-00 ★ — Dashboard Handoff<br/>EXAM-01 ★ — Device Identity<br/>EXAM-02 ★ — Attempt Gate<br/>EXAM-03 — Player Autosave<br/>EXAM-04 — Durable Timer<br/>EXAM-05 — Submission Flow<br/>EXAM-06 — SEB Lockdown"]
+  core_P4 --> core_P5["<b>P5 Scoring + Results</b><br/>SCORE-01 — Async Scoring<br/>SCORE-02 ★ — Results Ranking"]
+  core_P5 --> core_P6["<b>P6 Proctoring</b><br/>PROCTOR-01 ★ — Face Enrollment<br/>PROCTOR-02 ★ — Frame Analysis<br/>PROCTOR-03 ★ — Risk Events<br/>PROCTOR-04 ★ — Review Console<br/>PROCTOR-05 ★ — Biometric Retention"]
+  core_P6 --> core_P7["<b>P7 Ops + Analytics</b><br/>ADMIN-06 — Dashboard Analytics<br/>OPS-01 ★ — Exam-Day Ops"]
+  classDef repo fill:#111827,color:#fff,stroke:#334155,stroke-width:2px;
+  classDef phase fill:#f8fafc,color:#0f172a,stroke:#2563eb,stroke-width:1px;
+  class repo repo;
+  class core_P0,core_P1,core_P2,core_P3,core_P4,core_P5,core_P6,core_P7 phase;
