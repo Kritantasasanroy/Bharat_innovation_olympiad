@@ -14,6 +14,7 @@
 | 2026-06-13 | Admin frontend Phase 3.2 (partial) — built `admin-frontend/src/app/slots/page.tsx` (slot CRUD + bookings modal) and `admin-frontend/src/app/payments/page.tsx` (revenue dashboard + payments table + refund + coupon CRUD). Added Slots and Payments nav links to Navbar. Updated Dashboard quick-action cards. |
 | 2026-06-13 | Step 2.7 — Unique Question Set Generation. Schema: added `easyPct/mediumPct/hardPct` to `Exam`, `sortOrder` to `AttemptItem`. Backend: FNV-1a seeded shuffle + difficulty-bucket selection in `attempt.service.ts`; `startAttempt` now pre-creates all `AttemptItem` rows with `sortOrder` and returns `{ attempt, questions }`. Frontend: `useExamSession.startExam` consumes new response (one fewer GET /exams/:id call). **Pending: run `npx prisma migrate dev --name add_question_set_selection` in backend.** |
 | 2026-06-16 | Step 2.1 (S3 File Upload Service) + Step 2.X (Rich Media Questions + Question Pool System). Schema: added `MediaType` enum (`IMAGE/VIDEO/AUDIO/DIAGRAM`), `mediaUrl`/`mediaType` to `Question`, `questionsToAssign` to `ExamSection`. Backend: `S3Service` + `S3Module` created (`backend/src/common/services/`), registered globally in `AppModule`; `buildQuestionSet` fixed to use `questionsToAssign` as pool target (not section size), final cross-section seeded shuffle added for unique question ordering; `QUESTION_SELECT` updated to include media fields; `getQuestionMediaUploadUrl` endpoint added (`GET /admin/questions/media-upload-url`). Frontend: `MediaType` union type added, `ExamSection.questionsToAssign` typed, `Question.mediaType` narrowed. Student player already renders IMAGE/VIDEO/AUDIO. **Pending: run `npx prisma migrate dev --name add_media_questions_pool` in backend; set `AWS_*` env vars.** |
+| 2026-06-26 | **Meazure Learning → face-api.js migration (fully free, client-side AI proctoring).** Removed: `proctor-service/` Python directory (Meazure Learning bridge), `PROCTOR_SERVICE_URL`/`PROCTOR_API_KEY` env vars, `POST /proctor/sessions`, `GET /proctor/sessions/:sessionId`, `POST /proctor/meazure-event` endpoints. Added: `useFaceProctor.ts` hook (TensorFlow.js browser inference via tinyFaceDetector + faceLandmark68TinyNet + faceRecognitionNet), `admin-frontend/src/app/proctor/page.tsx` (live monitoring dashboard, polls every 15s), `POST /proctor/enroll`, `GET /proctor/enrollment`, `POST /proctor/verify`, `GET /proctor/live` endpoints. Added `LOOKING_AWAY` to `ProctorEventType` enum + severity map. Identity verification via 128-D Euclidean distance (threshold 0.5) against `User.faceEmbedding`. Gaze detection via 68-point landmarks (nose deviation threshold 0.25, 2 consecutive ticks). Inference runs every 5s via `requestIdleCallback` — zero student lag. **Pending: run `npx prisma migrate dev --name add_looking_away_event`; `npm install face-api.js` in frontend; download model weights to `frontend/public/models/`.** |
 
 ---
 
@@ -74,10 +75,10 @@
 - [ ] SCORE-01 async — Decouple scoring from submit into background job (BullMQ)
 
 ### P6 Proctoring
-- [x] PROCTOR-01 — Face Enrollment (`POST /proctor/enroll`, faceEmbedding stored) ✅
-- [x] PROCTOR-02 — Frame Analysis (`POST /proctor/analyze-frame` → Python ONNX service) ✅
-- [x] PROCTOR-03 — Risk Events (`POST /proctor/events`, riskScore aggregation) ✅
-- [x] PROCTOR-04 — Review Console (`GET /proctor/report/:attemptId` for admins) ✅
+- [x] PROCTOR-01 — Face Enrollment ✅ `POST /proctor/enroll` — stores 128-D descriptor (Float32Array → Buffer) in `User.faceEmbedding`; `GET /proctor/enrollment` checks status; identity verified at exam start via `POST /proctor/verify` (Euclidean distance < 0.5)
+- [x] PROCTOR-02 — Client-Side Frame Analysis ✅ `useFaceProctor.ts` — face-api.js runs in browser (WebGL); detects NO_FACE, MULTIPLE_FACES, LOOKING_AWAY, FACE_MISMATCH every 5s via `requestIdleCallback`; zero server processing; models served from `frontend/public/models/` (~6.5 MB, browser-cached) *(replaces Python ONNX service — removed)*
+- [x] PROCTOR-03 — Risk Events ✅ `POST /proctor/events`, riskScore aggregation (severity-weighted)
+- [x] PROCTOR-04 — Review Console ✅ `GET /proctor/report/:attemptId` for admins; `GET /proctor/live` for live dashboard — all IN_PROGRESS attempts + recent events; admin-frontend `/proctor` page polls every 15s
 - [ ] PROCTOR-05 — Biometric Retention (DPDP-compliant auto-delete of face embeddings after exam)
 
 ### P7 Ops + Analytics
@@ -535,28 +536,18 @@ npm install @types/speakeasy -D
 
 ---
 
-### Step 2.10 — AWS Rekognition Integration
-**Extend:** `backend/src/proctor/proctor.service.ts`
+### ~~Step 2.10 — AWS Rekognition Integration~~ — SUPERSEDED
 
-**Install:**
-```bash
-npm install @aws-sdk/client-rekognition
-```
+> **Removed 2026-06-26.** AWS Rekognition is no longer needed.
+> Face detection, multi-face detection, gaze estimation, and identity matching are all handled
+> client-side by face-api.js (`useFaceProctor.ts`) — free, no API costs, no server processing.
+> Live admin monitoring is implemented via `GET /proctor/live` + admin-frontend `/proctor` page.
 
-**Methods to add:**
-- [ ] `analyzeSnapshotAsync(s3Key, attemptId)` — background job after snapshot uploaded to S3
-  - `DetectFaces` API → 0 faces = NO_FACE event, >1 = MULTIPLE_FACES
-- [ ] `matchFaceAtExamStart(webcamS3Key, userId)` — compare vs profile photo
-  - `CompareFaces` API → similarity < 80% = FACE_MISMATCH event
-
-**New endpoints:**
-- [ ] `POST /proctor/snapshot` — STUDENT, reports S3 key of uploaded snapshot → triggers async analysis
-- [ ] `GET /admin/proctor/live` — ADMIN, recent flags from last 5 minutes (for live monitoring)
-- [ ] `GET /admin/proctor/flags` — ADMIN, paginated flag list with severity filter
-- [ ] `PATCH /admin/proctor/events/:id` — ADMIN, override/dismiss a flag
-
-**Replace Python proctor service dependency** (optional — Rekognition removes need for local Python service for face detection):
-- [ ] Decide: keep Python service for custom models OR use Rekognition for simplicity
+**What was implemented instead (2026-06-26):**
+- [x] `POST /proctor/enroll` + `GET /proctor/enrollment` + `POST /proctor/verify` (face enrollment + identity)
+- [x] `GET /proctor/live` — all IN_PROGRESS attempts with recent events (admin live monitoring)
+- [x] `useFaceProctor.ts` — browser-side: NO_FACE, MULTIPLE_FACES, LOOKING_AWAY, FACE_MISMATCH
+- [x] Admin live dashboard at `admin-frontend/src/app/proctor/page.tsx`
 
 ---
 
@@ -685,10 +676,12 @@ npm install react-dropzone
   - Coupon list with usage progress bar and active/expired/exhausted status
   - Coupon creation form — calls `POST /admin/coupons`
 
-- [ ] `admin-frontend/src/app/proctor/page.tsx` — live monitoring
-  - Grid of flagged students (last 5 min)
-  - Each card: student name, violation type, severity badge, "Review" link
-  - Auto-refreshes every 30s
+- [x] `admin-frontend/src/app/proctor/page.tsx` ✅ done 2026-06-26 — live monitoring
+  - Summary bar: total active, high risk (≥50%), medium risk, low risk
+  - Student card grid: name, email, exam, elapsed time, risk score bar (green/amber/red), event pills
+  - "Full Report →" links to `/analytics/attempt/[attemptId]`
+  - Auto-refreshes every 15s via `GET /proctor/live?since=10`
+  - Linked from admin navbar ("Live Proctor")
 
 - [ ] `admin-frontend/src/app/students/page.tsx`
   - Pending profile verifications queue
@@ -773,7 +766,7 @@ Add `SCHOOL_ADMIN` role check to `admin-frontend/src/components/layout/AuthGuard
   - Apply at resident.uidai.gov.in/aua-kua-license
   - ETA: 4–8 weeks (govt process)
 
-- [ ] **AWS Rekognition** — Enable in `ap-south-1` region (instant, no approval needed)
+- [x] ~~**AWS Rekognition**~~ — Not needed; replaced by face-api.js (free, client-side) ✅ 2026-06-26
 
 - [ ] **Domain purchase** — Buy `bharatinnovationolympiad.in` or chosen name
 
@@ -915,7 +908,7 @@ These have external wait times — start today, code the UI while waiting for ap
 | Apply for UIDAI AUA license | resident.uidai.gov.in | 4–8 weeks |
 | Buy domain name | GoDaddy / Google Domains | Today |
 | Create AWS production account | aws.amazon.com | Today |
-| Enable AWS Rekognition in ap-south-1 | AWS Console | Instant |
+| ~~Enable AWS Rekognition in ap-south-1~~ | Not needed — face-api.js replaces Rekognition | — |
 
 ---
 
@@ -991,13 +984,12 @@ Student answers
   → POST /attempts/:id/answer
   → attempt.service.saveAnswer() → AttemptItem.upsert
 
-Webcam snapshot
-  → useWebcam.startProctoring() every 30s
-  → canvas.toBlob() → FormData
-  → POST /proctor/analyze-frame (multipart)
-  → proctor.service.analyzeFrame() → calls Python proctor service
-  → Python returns face count
-  → Creates ProctorEvent if anomaly
+Face proctoring (client-side, every 5s)
+  → useFaceProctor setInterval → requestIdleCallback → runDetection()
+  → face-api.js (WebGL): tinyFaceDetector + faceLandmark68TinyNet + faceRecognitionNet
+  → NO_FACE / MULTIPLE_FACES / LOOKING_AWAY / FACE_MISMATCH detected
+  → POST /proctor/events { attemptId, type, details }
+  → proctor.service.createEvent() → ProctorEvent.create → updateRiskScore()
 
 Violation detected
   → useFullscreenMonitor — fullscreenchange / blur / visibilitychange

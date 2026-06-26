@@ -1,119 +1,56 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProctorEventType } from '@prisma/client';
+import { AttemptStatus, ProctorEventType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import axios from 'axios';
 
-export interface ProctorSession {
-    sessionId: string;
-    launchUrl: string;
-    status: string;
-}
-
-/**
- * ProctorService — Meazure Learning / ProctorU Integration
- *
- * Delegates all AI proctoring (webcam, face, screen monitoring) to the
- * Meazure Learning platform via the proctor-service Python bridge.
- *
- * Responsibility boundary:
- *   - This service: session lifecycle, event storage, risk scoring
- *   - proctor-service (Python): Meazure API calls, webhook validation
- *   - Meazure: actual webcam/face/screen monitoring on student device
- *
- * Layer 1 & 2 anti-cheat (fullscreen + tab monitoring) remain in the
- * frontend (useFullscreenMonitor) and are stored via createEvent().
- */
 @Injectable()
 export class ProctorService {
     private readonly logger = new Logger('ProctorService');
-    private readonly proctorServiceUrl: string;
-    private readonly proctorApiKey: string;
 
-    constructor(private prisma: PrismaService) {
-        this.proctorServiceUrl = process.env.PROCTOR_SERVICE_URL || 'http://localhost:5000';
-        this.proctorApiKey = process.env.PROCTOR_API_KEY || 'dev-proctor-key';
+    constructor(private prisma: PrismaService) {}
+
+    // ── Face Enrollment ──
+
+    async enrollFace(userId: string, descriptor: number[]): Promise<void> {
+        const buffer = Buffer.from(new Float32Array(descriptor).buffer);
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { faceEmbedding: buffer },
+        });
+        this.logger.log(`[Enroll] userId=${userId} descriptor(${descriptor.length}d) stored`);
     }
 
-    // ── Session Management ──
-
-    /**
-     * Create a Meazure proctoring session for a student exam attempt.
-     * Called immediately after startAttempt() creates the Attempt row.
-     * Returns a launch_url the student opens in the Meazure Guardian browser.
-     */
-    async createSession(
-        attemptId: string,
-        userId: string,
-        examTitle: string,
-        durationMinutes: number,
-    ): Promise<ProctorSession> {
+    async getEnrollmentStatus(userId: string): Promise<{ enrolled: boolean }> {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { firstName: true, lastName: true, email: true },
+            select: { faceEmbedding: true },
         });
-
-        if (!user) {
-            throw new Error(`User ${userId} not found`);
-        }
-
-        try {
-            const { data } = await axios.post(
-                `${this.proctorServiceUrl}/sessions/create`,
-                {
-                    attempt_id: attemptId,
-                    user_id: userId,
-                    exam_title: examTitle,
-                    duration_minutes: durationMinutes,
-                    student_name: `${user.firstName} ${user.lastName}`.trim(),
-                    student_email: user.email,
-                },
-                {
-                    headers: { 'x-api-key': this.proctorApiKey },
-                    timeout: 15_000,
-                },
-            );
-
-            this.logger.log(
-                `[Session] attempt=${attemptId} session=${data.session_id} status=${data.status}`,
-            );
-
-            return {
-                sessionId: data.session_id,
-                launchUrl: data.launch_url,
-                status: data.status,
-            };
-        } catch (err: any) {
-            this.logger.error(
-                `[Session] Failed to create Meazure session for attempt=${attemptId}: ${err.message}`,
-            );
-            // Non-fatal — exam can still proceed; student won't have proctored session
-            return {
-                sessionId: '',
-                launchUrl: '',
-                status: 'ERROR',
-            };
-        }
+        return { enrolled: !!user?.faceEmbedding };
     }
 
-    /**
-     * Get current status of a Meazure proctoring session.
-     */
-    async getSessionStatus(sessionId: string): Promise<ProctorSession> {
-        const { data } = await axios.get(
-            `${this.proctorServiceUrl}/sessions/${sessionId}`,
-            { headers: { 'x-api-key': this.proctorApiKey }, timeout: 10_000 },
-        );
-        return { sessionId: data.session_id, launchUrl: data.launch_url, status: data.status };
+    async verifyFace(
+        userId: string,
+        descriptor: number[],
+    ): Promise<{ match: boolean; distance: number }> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { faceEmbedding: true },
+        });
+
+        if (!user?.faceEmbedding) {
+            return { match: false, distance: 1.0 };
+        }
+
+        const stored = new Float32Array(user.faceEmbedding.buffer);
+        const live = new Float32Array(descriptor);
+        const distance = this.euclideanDistance(stored, live);
+        const match = distance < 0.5;
+
+        this.logger.log(`[Verify] userId=${userId} distance=${distance.toFixed(3)} match=${match}`);
+        return { match, distance };
     }
 
     // ── Event Handling ──
 
-    /**
-     * Store a proctoring event.
-     * Called by:
-     *   - Frontend (fullscreen/tab violations via POST /proctor/events)
-     *   - NestJS webhook receiver (Meazure events forwarded by proctor-service)
-     */
     async createEvent(
         attemptId: string,
         type: ProctorEventType,
@@ -133,10 +70,6 @@ export class ProctorService {
         return event;
     }
 
-    /**
-     * Recalculate and persist the risk score on the Attempt row.
-     * Called after every new ProctorEvent.
-     */
     async updateRiskScore(attemptId: string): Promise<number> {
         const events = await this.prisma.proctorEvent.findMany({
             where: { attemptId },
@@ -156,9 +89,6 @@ export class ProctorService {
         return risk;
     }
 
-    /**
-     * Build the full proctoring report for an attempt (admin view).
-     */
     async getReport(attemptId: string) {
         const [events, attempt] = await Promise.all([
             this.prisma.proctorEvent.findMany({
@@ -180,13 +110,58 @@ export class ProctorService {
         };
     }
 
-    // ── Severity Map ──
+    // ── Admin Live Monitoring ──
+
+    async getLiveMonitoring(sinceMinutes = 5) {
+        const since = new Date(Date.now() - sinceMinutes * 60 * 1000);
+
+        const attempts = await this.prisma.attempt.findMany({
+            where: { status: AttemptStatus.IN_PROGRESS },
+            include: {
+                user: { select: { id: true, firstName: true, lastName: true, email: true } },
+                examInstance: {
+                    include: { exam: { select: { title: true } } },
+                },
+                proctorEvents: {
+                    where: { timestamp: { gte: since } },
+                    orderBy: { timestamp: 'desc' },
+                    take: 20,
+                },
+            },
+            orderBy: { startedAt: 'asc' },
+        });
+
+        return attempts.map((a) => ({
+            attemptId: a.id,
+            userId: a.userId,
+            studentName: `${a.user.firstName} ${a.user.lastName}`.trim(),
+            studentEmail: a.user.email,
+            examTitle: a.examInstance.exam.title,
+            startedAt: a.startedAt,
+            riskScore: a.riskScore ?? 0,
+            recentEvents: a.proctorEvents,
+            eventCounts: this.summarizeEvents(a.proctorEvents),
+        }));
+    }
+
+    // ── Helpers ──
+
+    private euclideanDistance(a: Float32Array, b: Float32Array): number {
+        let sum = 0;
+        const len = Math.min(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+            const diff = a[i] - b[i];
+            sum += diff * diff;
+        }
+        return Math.sqrt(sum);
+    }
 
     private getSeverity(type: ProctorEventType): number {
         const map: Partial<Record<ProctorEventType, number>> = {
             NO_FACE: 3,
             MULTIPLE_FACES: 4,
             FACE_MISMATCH: 5,
+            LOOKING_AWAY: 2,
             TAB_SWITCH: 4,
             EXIT_FULLSCREEN: 4,
             SCREEN_CAPTURE: 5,

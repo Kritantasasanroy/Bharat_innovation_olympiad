@@ -2,11 +2,10 @@ import {
     Body,
     Controller,
     Get,
-    Headers,
     HttpCode,
     Param,
     Post,
-    UnauthorizedException,
+    Query,
     UseGuards,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
@@ -20,44 +19,55 @@ import { ProctorService } from './proctor.service';
 export class ProctorController {
     constructor(private proctorService: ProctorService) {}
 
-    // ── Session Endpoints (student-facing) ──
+    // ── Face Enrollment (student) ──
 
     /**
-     * Create a Meazure proctoring session for the current student's attempt.
-     * Called by the exam player immediately after startAttempt() succeeds.
-     *
-     * Returns { sessionId, launchUrl, status } — the frontend opens launchUrl
-     * in a new tab so the student can launch the Meazure Guardian browser.
+     * Store a student's 128-D face descriptor (from face-api.js faceRecognitionNet).
+     * Called once during profile setup or before the first exam.
+     * Descriptor is stored as binary in User.faceEmbedding.
      */
-    @Post('sessions')
+    @Post('enroll')
     @UseGuards(JwtAuthGuard)
-    async createSession(
-        @Body() body: { attemptId: string; examTitle: string; durationMinutes: number },
+    @HttpCode(200)
+    async enrollFace(
+        @Body() body: { descriptor: number[] },
         @CurrentUser('id') userId: string,
     ) {
-        return this.proctorService.createSession(
-            body.attemptId,
-            userId,
-            body.examTitle,
-            body.durationMinutes,
-        );
+        await this.proctorService.enrollFace(userId, body.descriptor);
+        return { enrolled: true };
     }
 
     /**
-     * Poll the current status of a Meazure proctoring session.
-     * Used by the frontend to confirm the student has launched the session.
+     * Check if the current student has a face descriptor stored.
+     * Used by the exam instructions page to decide whether to show the enrollment prompt.
      */
-    @Get('sessions/:sessionId')
+    @Get('enrollment')
     @UseGuards(JwtAuthGuard)
-    async getSessionStatus(@Param('sessionId') sessionId: string) {
-        return this.proctorService.getSessionStatus(sessionId);
+    async getEnrollmentStatus(@CurrentUser('id') userId: string) {
+        return this.proctorService.getEnrollmentStatus(userId);
     }
 
-    // ── Event Endpoints ──
+    /**
+     * Verify a live face descriptor against the stored enrollment.
+     * Called by useFaceProctor at exam start to confirm identity.
+     * Returns { match: boolean, distance: number }.
+     */
+    @Post('verify')
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(200)
+    async verifyFace(
+        @Body() body: { descriptor: number[] },
+        @CurrentUser('id') userId: string,
+    ) {
+        return this.proctorService.verifyFace(userId, body.descriptor);
+    }
+
+    // ── Event Logging (student) ──
 
     /**
-     * Log a client-side proctoring event (fullscreen exit, tab switch, window blur).
-     * These are Layer 1 & 2 anti-cheat violations detected by useFullscreenMonitor.
+     * Log a proctoring event from the client.
+     * Sources: useFullscreenMonitor (tab/fullscreen) + useFaceProctor (NO_FACE, MULTIPLE_FACES,
+     * FACE_MISMATCH, LOOKING_AWAY).
      */
     @Post('events')
     @UseGuards(JwtAuthGuard)
@@ -68,30 +78,22 @@ export class ProctorController {
         return this.proctorService.createEvent(body.attemptId, body.type as any, body.details);
     }
 
-    /**
-     * Internal callback — receives Meazure events forwarded by the proctor-service bridge.
-     * NOT exposed to students; protected by the shared PROCTOR_API_KEY secret.
-     *
-     * The proctor-service (Python) validates the Meazure HMAC signature then
-     * calls this endpoint with the mapped ProctorEventType.
-     */
-    @Post('meazure-event')
-    @HttpCode(200)
-    async handleMeazureEvent(
-        @Body() body: { attemptId: string; type: string; details?: Record<string, any> },
-        @Headers('x-api-key') apiKey: string,
-    ) {
-        const expected = process.env.PROCTOR_API_KEY || 'dev-proctor-key';
-        if (apiKey !== expected) {
-            throw new UnauthorizedException('Invalid API key');
-        }
-        return this.proctorService.createEvent(body.attemptId, body.type as any, body.details);
-    }
-
     // ── Admin Endpoints ──
 
     /**
-     * Full proctoring event timeline for an attempt (Admin only).
+     * Live monitoring feed — all currently IN_PROGRESS attempts with recent events.
+     * Admin dashboard polls this every 15 seconds.
+     * Query param: ?since=5 (minutes, default 5)
+     */
+    @Get('live')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async getLiveMonitoring(@Query('since') since?: string) {
+        return this.proctorService.getLiveMonitoring(since ? parseInt(since, 10) : 5);
+    }
+
+    /**
+     * Full proctoring event timeline for a single attempt (admin view).
      */
     @Get('report/:attemptId')
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -101,14 +103,14 @@ export class ProctorController {
     }
 
     /**
-     * Health check — confirms the proctoring subsystem is up.
+     * Health check — confirms proctoring subsystem is up.
      */
     @Get('health')
     async health() {
         return {
             status: 'ok',
-            provider: 'meazure-learning',
-            bridge: process.env.PROCTOR_SERVICE_URL || 'http://localhost:5000',
+            provider: 'face-api.js',
+            mode: 'client-side',
         };
     }
 }

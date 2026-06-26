@@ -1,7 +1,7 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: June 2026 (media questions · question pool system · S3 service)  
-> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · Python FastAPI · Razorpay · AWS S3 · Vercel · Render  
+> Last updated: June 2026 (face-api.js proctoring · media questions · question pool system · S3 service)  
+> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · AWS S3 · Vercel · Render  
 > Architecture reference: `prd-reference/docs/all-prds-re-arch-pass-2/` — bio-core · bio-portal · bio-proctor
 
 ---
@@ -15,7 +15,7 @@
 5. [Database Schema](#5-database-schema)
 6. [Backend — NestJS API](#6-backend--nestjs-api)
 7. [WebSocket Gateway](#7-websocket-gateway)
-8. [Python Proctor Service](#8-python-proctor-service)
+8. [Client-Side AI Proctoring (face-api.js)](#8-client-side-ai-proctoring-face-apijs)
 9. [Student Frontend](#9-student-frontend)
 10. [Admin Frontend](#10-admin-frontend)
 11. [Frontend Hooks](#11-frontend-hooks)
@@ -32,7 +32,7 @@ Bharat Innovation Olympiad is a **national online competitive examination platfo
 
 - Secure fullscreen exam delivery with anti-cheat enforcement
 - Real-time server-authoritative countdown timer via WebSocket
-- Webcam-based AI proctoring (face detection via ONNX model)
+- Webcam-based AI proctoring (face-api.js — runs entirely in student's browser, free)
 - Admin portal for exam/question bank management and analytics
 - Student portal for registration, exam-taking, and results
 
@@ -102,10 +102,10 @@ bharat Innovation Olympiad/
 │   │   │   ├── payment.controller.ts # POST create-order, verify, webhook; coupon CRUD
 │   │   │   └── payment.service.ts  # createOrder, verifyWebhookSignature, handleWebhookEvent
 │   │   │
-│   │   ├── proctor/                # AI Proctoring module
+│   │   ├── proctor/                # AI Proctoring module (face-api.js client-side)
 │   │   │   ├── proctor.module.ts
-│   │   │   ├── proctor.controller.ts # POST analyze-frame, enroll, events; GET report
-│   │   │   └── proctor.service.ts  # analyzeFrame, enrollFace, createEvent, getReport
+│   │   │   ├── proctor.controller.ts # POST enroll/verify/events; GET enrollment/live/report
+│   │   │   └── proctor.service.ts  # enrollFace, verifyFace, createEvent, getLiveMonitoring, getReport
 │   │   │
 │   │   ├── timer/                  # Real-time timer module
 │   │   │   ├── timer.module.ts
@@ -183,13 +183,20 @@ bharat Innovation Olympiad/
 │       │   │   └── Navbar.tsx      # Top navigation bar
 │       │   └── ThemeProvider.tsx   # Dark/light mode context
 │       ├── hooks/                  # See Section 11
+│       │   ├── useFaceProctor.ts   # ★ face-api.js — camera + face detection + event reporting
+│       │   ├── useWebcam.ts        # Basic camera stream for device check page
+│       │   ├── useFullscreenMonitor.ts
+│       │   ├── useExamSession.ts
+│       │   ├── useTimer.ts
+│       │   └── useSocket.ts
 │       ├── lib/
 │       │   ├── api.ts              # Axios instance — baseURL + JWT interceptor + refresh logic
 │       │   └── constants.ts        # TIMER_WARNING_THRESHOLD, TIMER_DANGER_THRESHOLD
 │       ├── store/
 │       │   └── examStore.ts        # Zustand store — exam session state
 │       └── types/
-│           └── exam.ts             # TypeScript types for Exam, Attempt, Question, etc.
+│           ├── exam.ts             # TypeScript types for Exam, Attempt, Question, etc.
+│           └── proctor.ts          # ProctorEventType (incl. LOOKING_AWAY), LiveMonitoringEntry
 │
 ├── admin-frontend/                 # Admin-facing Next.js app (port 3001)
 │   └── src/
@@ -202,6 +209,7 @@ bharat Innovation Olympiad/
 │       │   ├── questions/page.tsx  # Global question bank management
 │       │   ├── slots/page.tsx      # ★ Slot management — create/edit/delete slots + view bookings per slot
 │       │   ├── payments/page.tsx   # ★ Payments dashboard — revenue summary, transactions, refunds, coupon CRUD
+│       │   ├── proctor/page.tsx    # ★ Live monitoring — all active students, risk scores, recent violations
 │       │   ├── analytics/
 │       │   │   ├── page.tsx        # Exam analytics — score distribution, completion rate
 │       │   │   └── attempt/[attemptId]/page.tsx  # Per-student attempt detail + proctor events
@@ -215,9 +223,6 @@ bharat Innovation Olympiad/
 │       ├── store/
 │       └── types/
 │
-├── proctor-service/                # Python FastAPI AI proctoring service
-│   ├── main.py                     # FastAPI app — /analyze, /enroll, /health
-│   └── requirements.txt            # fastapi, uvicorn, onnxruntime, numpy, Pillow, sqlalchemy
 │
 ├── docker-compose.yml              # Local dev: PostgreSQL (5432) + Redis (6379)
 ├── render.yaml                     # Render.com deployment config for backend
@@ -266,14 +271,9 @@ bharat Innovation Olympiad/
 │  Primary DB        │          │    ElastiCache)       │
 │                    │          │    Timer state cache  │
 └───────────────────┘          └──────────────────────┘
-            │
-            ▼
-┌───────────────────┐
-│  Python Proctor   │
-│  Service (:5000)  │
-│  FastAPI + ONNX   │
-└───────────────────┘
 ```
+> **Proctoring note:** All AI face analysis runs in the student's browser via face-api.js (WebGL).
+> No separate proctoring service. The NestJS backend only receives small JSON violation events.
 
 **Data flow during an exam:**
 ```
@@ -282,8 +282,7 @@ Student Browser
   → WS join-exam (attemptId)           → starts server timer
   ← WS timer-tick (every second)       → updates countdown UI
   → POST /attempts/:id/answer          → saves answer to AttemptItem
-  → POST /proctor/analyze-frame        → sends webcam snapshot
-  → POST /proctor/events               → logs fullscreen/tab violations
+  → POST /proctor/events               → logs violations (face detection + fullscreen/tab)
   → POST /attempts/:id/submit          → scores + marks SUBMITTED
   ← WS timer-expired                   → triggers auto-submit
 ```
@@ -306,8 +305,6 @@ Student Browser
 | `FRONTEND_URL` | Student frontend origin (CORS) | `https://exam.bharatolympiad.in` |
 | `ADMIN_FRONTEND_URL` | Admin frontend origin (CORS) | `https://admin.bharatolympiad.in` |
 | `ALLOWED_ORIGINS` | Comma-separated additional CORS origins | — |
-| `PROCTOR_SERVICE_URL` | Python proctor service URL | `http://localhost:5000` |
-| `PROCTOR_API_KEY` | Shared secret for proctor service auth | random string |
 | `PORT` | Backend listen port | `4000` |
 | `RAZORPAY_KEY_ID` | Razorpay API key ID (test: `rzp_test_...`) | from Razorpay dashboard |
 | `RAZORPAY_KEY_SECRET` | Razorpay API key secret | from Razorpay dashboard |
@@ -627,7 +624,7 @@ QuestionType:     MCQ | MULTI_SELECT | TRUE_FALSE | SHORT_ANSWER | NUMERIC
 Difficulty:       EASY | MEDIUM | HARD
 MediaType:        IMAGE | VIDEO | AUDIO | DIAGRAM
 AttemptStatus:    NOT_STARTED | IN_PROGRESS | SUBMITTED | AUTO_SUBMITTED | EXPIRED
-ProctorEventType: NO_FACE | MULTIPLE_FACES | FACE_MISMATCH | TAB_SWITCH |
+ProctorEventType: NO_FACE | MULTIPLE_FACES | FACE_MISMATCH | LOOKING_AWAY | TAB_SWITCH |
                   EXIT_FULLSCREEN | SCREEN_CAPTURE | NETWORK_DISCONNECT | SEB_VIOLATION | IP_CHANGE
 BookingStatus:    PENDING | CONFIRMED | CANCELLED
 PaymentStatus:    CREATED | PAID | FAILED | REFUNDED
@@ -891,41 +888,52 @@ PUT  /admin/exams/:id           { easyPct: 30, mediumPct: 50, hardPct: 20 }
 
 ### Proctor Routes (`/proctor`)
 
-**Provider:** Meazure Learning / ProctorU (via `proctor-service` Python bridge)
+**Provider:** face-api.js (client-side, browser-based — no server AI processing)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/proctor/sessions` | JWT | Create Meazure proctoring session → `{ sessionId, launchUrl, status }` |
-| GET | `/proctor/sessions/:sessionId` | JWT | Poll Meazure session status |
-| POST | `/proctor/events` | JWT | Log client-side event (tab switch, fullscreen exit) |
-| POST | `/proctor/meazure-event` | API key | Internal callback from proctor-service bridge (Meazure webhooks) |
+| POST | `/proctor/enroll` | JWT | Store student's 128-D face descriptor from enrollment photo |
+| GET | `/proctor/enrollment` | JWT | Check if student has a face descriptor stored |
+| POST | `/proctor/verify` | JWT | Compare live descriptor vs stored — returns `{ match, distance }` |
+| POST | `/proctor/events` | JWT | Log violation event (tab/fullscreen/face detection) |
+| GET | `/proctor/live` | JWT + ADMIN | All IN_PROGRESS attempts with recent events (poll every 15s) |
 | GET | `/proctor/report/:attemptId` | JWT + ADMIN | Full proctor event timeline |
 | GET | `/proctor/health` | Public | Service health check |
 
-**`POST /proctor/sessions` body:**
+**`POST /proctor/enroll` body:**
 ```json
-{
-  "attemptId": "attempt-uuid",
-  "examTitle": "National Science Olympiad 2026",
-  "durationMinutes": 90
-}
+{ "descriptor": [0.023, -0.114, ...] }
 ```
+128 floats from `faceapi.faceRecognitionNet`. Stored as `User.faceEmbedding Bytes`.
 
-**`POST /proctor/sessions` response:**
+**`POST /proctor/verify` response:**
 ```json
-{
-  "sessionId": "meazure-session-uuid",
-  "launchUrl": "https://guardian.meazurelearning.com/launch?session_id=...",
-  "status": "SCHEDULED"
-}
+{ "match": true, "distance": 0.31 }
+```
+Distance < 0.5 = same person. Called by `useFaceProctor` at exam start.
+
+**`GET /proctor/live?since=5` response (per-attempt entry):**
+```json
+[
+  {
+    "attemptId": "uuid",
+    "studentName": "Arjun Sharma",
+    "studentEmail": "arjun@...",
+    "examTitle": "National Science Olympiad",
+    "startedAt": "2026-06-26T09:00:00Z",
+    "riskScore": 0.25,
+    "recentEvents": [...],
+    "eventCounts": { "NO_FACE": 2, "LOOKING_AWAY": 3 }
+  }
+]
 ```
 
 **`POST /proctor/events` body:**
 ```json
 {
   "attemptId": "attempt-uuid",
-  "type": "EXIT_FULLSCREEN",
-  "details": { "violationCount": 1, "source": "exit_fullscreen" }
+  "type": "NO_FACE",
+  "details": { "source": "face-api.js" }
 }
 ```
 
@@ -1087,85 +1095,96 @@ const socket = io(NEXT_PUBLIC_WS_URL, {
 
 ---
 
-## 8. Python Proctor Service — Meazure Learning Bridge
+## 8. Client-Side AI Proctoring (face-api.js)
 
-**Location:** `proctor-service/`  
-**URL:** `http://localhost:5000` (dev) / configured via `PROCTOR_SERVICE_URL`  
-**Framework:** FastAPI + Uvicorn  
-**Provider:** [Meazure Learning](https://www.meazurelearning.com) / ProctorU (3rd-party AI proctoring)
+**Library:** [face-api.js](https://github.com/justadudewhohacks/face-api.js) — TensorFlow.js in-browser face analysis  
+**Cost:** Free — zero API calls, zero 3rd-party services  
+**Processing:** 100% in the student's browser via WebGL GPU  
+**Hook:** `frontend/src/hooks/useFaceProctor.ts`
 
-This service acts as a bridge between the NestJS backend and the Meazure Learning proctoring platform. All webcam analysis, face detection, and screen monitoring is performed by Meazure's Guardian browser on the student's device — not by this service.
+All AI inference runs locally on the student's device. The server receives only lightweight violation events (small JSON POSTs), never raw video frames.
 
-### Routes
+### Models
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/health` | — | Health check; reports whether `MEAZURE_API_KEY` is configured |
-| POST | `/sessions/create` | `x-api-key` | Create a Meazure exam session → returns `{ session_id, launch_url, status }` |
-| GET | `/sessions/{session_id}` | `x-api-key` | Poll session status from Meazure |
-| POST | `/webhook` | HMAC-SHA256 | Receive Meazure violation events, validate signature, forward to NestJS |
+Three tiny models are served as static files from `frontend/public/models/`. The browser downloads them once and caches indefinitely.
 
-### Proctoring Flow (Meazure Integration)
+| Model | File size | Purpose |
+|---|---|---|
+| `tinyFaceDetector` | 190 KB | Fast face bounding-box detection |
+| `faceLandmark68TinyNet` | 80 KB | 68-point facial landmarks (for gaze estimation) |
+| `faceRecognitionNet` | 6.2 MB | 128-D face descriptor (for identity matching) |
+
+**Total first-load download: ~6.5 MB** (cached after first exam session).
+
+### Model Setup (one-time)
+
+```bash
+# Install in frontend
+cd frontend && npm install face-api.js
+
+# Download model weights to public/models/
+# Get from: https://github.com/justadudewhohacks/face-api.js/tree/master/weights
+# Files needed:
+#   tiny_face_detector_model-weights_manifest.json + shard1
+#   face_landmark_68_tiny_model-weights_manifest.json + shard1
+#   face_recognition_model-weights_manifest.json + shard1
+cp -r weights/ frontend/public/models/
+```
+
+### Detection Cadence
 
 ```
-1. Student clicks "Start Exam" in the frontend
-2. NestJS: POST /exams/:instanceId/start → creates Attempt row
-3. NestJS: POST /proctor/sessions { attemptId, examTitle, durationMinutes }
-   → calls proctor-service POST /sessions/create
-   → proctor-service calls Meazure API POST /exam-sessions
-   → returns { sessionId, launchUrl }
-4. Frontend displays "Launch Meazure Guardian" banner with launchUrl
-5. Student clicks launch → opens Meazure Guardian browser
-6. Meazure monitors: webcam (face detection), screen (recording/sharing), audio
-7. Meazure sends violation events to proctor-service POST /webhook:
-   - Validates X-Meazure-Signature HMAC header
-   - Maps incident type → ProctorEventType
-   - Forwards to NestJS POST /proctor/meazure-event
-8. NestJS stores as ProctorEvent → recalculates Attempt.riskScore
+setInterval(5000ms) → requestIdleCallback → runDetection()
 ```
 
-### Meazure Incident → ProctorEventType Mapping
+One inference tick every **5 seconds**, scheduled during browser idle time so the exam UI is never blocked. Each tick takes 30–50ms on GPU via WebGL.
 
-| Meazure Incident Type | Our ProctorEventType |
+### Events Fired (per tick)
+
+| Condition | Event posted |
 |---|---|
-| `no_face_detected` / `face_not_visible` | `NO_FACE` |
-| `multiple_people` / `multiple_faces` | `MULTIPLE_FACES` |
-| `face_mismatch` / `identity_verification_failed` | `FACE_MISMATCH` |
-| `screen_share` / `screen_recording` / `virtual_machine` | `SCREEN_CAPTURE` |
-| `network_disconnected` | `NETWORK_DISCONNECT` |
-| `unusual_eye_movement` / `looking_away` | `FACE_MISMATCH` |
-| `session.terminated` | `NETWORK_DISCONNECT` |
+| `detections.length === 0` | `NO_FACE` |
+| `detections.length > 1` | `MULTIPLE_FACES` |
+| Nose X deviation > 0.25 × face width, 2 consecutive ticks | `LOOKING_AWAY` |
+| Euclidean distance (live vs enrolled descriptor) > 0.5 | `FACE_MISMATCH` |
 
-### Environment Variables (`proctor-service/.env`)
+### Gaze Estimation Algorithm
 
-| Variable | Description |
-|---|---|
-| `PROCTOR_API_KEY` | Shared key NestJS presents when calling this service |
-| `MEAZURE_API_KEY` | API key from Meazure dashboard → Settings → API |
-| `MEAZURE_BASE_URL` | Meazure REST API base URL (default: `https://api.meazurelearning.com/api/v2`) |
-| `MEAZURE_WEBHOOK_SECRET` | Webhook signing secret from Meazure dashboard → Settings → Webhooks |
-| `NESTJS_CALLBACK_URL` | NestJS backend URL for forwarding webhook events |
-| `NESTJS_CALLBACK_KEY` | Key this service presents when calling NestJS callback |
-
-### Webhook Configuration (Meazure Dashboard)
-
-1. Log in at `https://dashboard.meazurelearning.com`
-2. Go to **Settings → Webhooks → Add Endpoint**
-3. Set URL to: `https://proctor.bharatolympiad.in/webhook` (or your proctor-service URL)
-4. Copy the signing secret → set as `MEAZURE_WEBHOOK_SECRET` in `.env`
-5. Subscribe to events: `incident.detected`, `session.terminated`, `session.started`, `session.completed`
-
-### Dev Mode (No Meazure Credentials)
-
-When `MEAZURE_API_KEY` is empty, the service returns a mock session:
-```json
-{
-  "session_id": "dev-session-{attemptId}",
-  "launch_url": "https://guardian.meazurelearning.com/launch?dev=true",
-  "status": "SCHEDULED"
-}
 ```
-This lets you develop and test the full exam flow without real Meazure credentials.
+faceCenterX  = (landmarks[36].x + landmarks[45].x) / 2   // eye outer corners
+faceWidth    = landmarks[45].x - landmarks[36].x
+deviation    = (landmarks[30].x - faceCenterX) / faceWidth  // nose tip
+if |deviation| > 0.25 → looking away
+```
+
+Two consecutive away-look ticks are required before posting `LOOKING_AWAY` (prevents single-frame false positives from natural head movement).
+
+### Identity Verification
+
+```
+enrolled descriptor  → Float32Array(128) stored as Buffer in User.faceEmbedding
+live descriptor      → captured by faceRecognitionNet on exam tick
+distance             = euclidean(enrolled, live)
+match                = distance < 0.5
+```
+
+Enrollment happens once via `POST /proctor/enroll` (from profile setup). Verification runs server-side via `POST /proctor/verify`, called at exam start. Mismatch during exam → `FACE_MISMATCH` event.
+
+### Proctoring Flow (face-api.js)
+
+```
+1. Student completes face enrollment on profile/device-check page
+   → captureDescriptor() → POST /proctor/enroll { descriptor: number[128] }
+2. Student clicks "Start Exam"
+   → useFaceProctor.startProctoring() called
+   → loadModels() (one-time, cached after first load)
+   → camera stream opened (320×240, front-facing)
+   → POST /proctor/verify to confirm identity at exam start
+3. setInterval fires every 5s → requestIdleCallback → runDetection()
+   → All violations posted to POST /api/proctor/events
+4. Admin sees events in real-time via GET /proctor/live (polls every 15s)
+5. On exam submit → stopProctoring() → camera stream closed
+```
 
 ---
 
@@ -1208,7 +1227,7 @@ The most complex page. Orchestrates:
 - **`useExamSession`** — loads exam + attempt, manages answers state
 - **`useFullscreenMonitor`** — enforces fullscreen, counts violations
 - **`useTimer`** — subscribes to WebSocket timer ticks
-- **`useWebcam`** — captures webcam frames, sends to proctoring
+- **`useFaceProctor`** — runs face-api.js in browser; detects faces, gaze, identity every 5s
 - **Zustand `examStore`** — persists exam session state across renders
 
 **Fullscreen gate overlay:** Shown on load and after each violation. Student must click "Enter Fullscreen" before interacting with exam. After 3 violations, exam auto-submits.
@@ -1340,14 +1359,36 @@ useTimer(attemptId: string) → { remaining: number }
 ---
 
 ### `useWebcam.ts`
-Manages webcam stream and proctoring snapshots.
+Manages webcam stream for the pre-exam device check page only.
 
 ```typescript
-useWebcam(attemptId: string) → { videoRef, canvasRef, startWebcam, startProctoring }
+useWebcam() → { videoRef, canvasRef, startWebcam }
 ```
 
-- `startWebcam()`: requests `navigator.mediaDevices.getUserMedia({ video: true })`
-- `startProctoring()`: starts interval — every 30s captures canvas frame → `POST /proctor/analyze-frame`
+- `startWebcam()`: requests `navigator.mediaDevices.getUserMedia({ video: true })`, attaches stream to video element
+- Used only on `/exams/[id]/instructions` for the camera preview check — not on the exam page
+- During the actual exam, `useFaceProctor` handles camera + AI detection
+
+---
+
+### `useFaceProctor.ts`
+Client-side AI proctoring hook — replaces all server-side face analysis.
+
+```typescript
+useFaceProctor({ attemptId, apiBase?, disabled? }) → {
+  videoRef, isLoaded, loadingProgress,
+  currentFaceCount, isIdentityVerified,
+  startProctoring, stopProctoring,
+  enrollFace, captureDescriptor
+}
+```
+
+- `startProctoring()`: loads face-api.js models from `/public/models/`, opens camera at 320×240, starts detection loop
+- Detection runs every **5 seconds** via `setInterval` + `requestIdleCallback` — never blocks exam UI
+- Per tick: detects all faces → checks count, gaze (68-point landmarks), identity (128-D descriptor vs enrolled)
+- Posts violation events to `POST /api/proctor/events` with Bearer token
+- `enrollFace(descriptor)`: sends `POST /api/proctor/enroll` — called from profile page enrollment UI
+- `captureDescriptor()`: runs single-face detection + returns 128 floats — used during enrollment capture
 
 ---
 
@@ -1470,9 +1511,10 @@ useSocket() → { socket, isConnected }
 11. useTimer connects WS → join-exam → server starts countdown
     - Every 1s: timer-tick → updates UI countdown
 
-12. useWebcam starts → requests camera permission
-    - Every 30s: snapshot → POST /proctor/analyze-frame
-    - Results in ProctorEvent if anomaly detected
+12. useFaceProctor starts → loads face-api.js models (one-time, ~3s, browser-cached)
+    - Camera opens at 320×240
+    - Every 5s via requestIdleCallback: detect faces + gaze + identity
+    - Violations → POST /proctor/events → ProctorEvent row + riskScore update
 
 13. Student answers questions:
     - Click option → handleSelectOption() → saveAnswer() → POST /attempts/:id/answer
@@ -1517,30 +1559,31 @@ useSocket() → { socket, isConnected }
 - `window.blur` event: window losing focus → violation (suppressed for 2s after fullscreen transitions)
 - All violations stored as `ProctorEvent` rows via `POST /proctor/events`
 
-**Layer 3 — Meazure Learning AI Proctoring (3rd Party)**
-- After exam starts, NestJS creates a Meazure session and returns a `launchUrl`
-- Student opens the `launchUrl` in the Meazure Guardian browser
-- Meazure monitors: webcam (face detection/liveness), screen recording/sharing detection, audio
-- Meazure posts violation webhooks to the proctor-service bridge
-- Bridge validates HMAC signature → maps to `ProctorEventType` → forwards to NestJS
-- Events logged: `NO_FACE`, `MULTIPLE_FACES`, `FACE_MISMATCH`, `SCREEN_CAPTURE`, `NETWORK_DISCONNECT`
-- Admin reviews full proctor timeline (Layers 1 + 2 + 3 combined) per attempt
+**Layer 3 — face-api.js Client-Side AI Proctoring**
+- `useFaceProctor` hook starts automatically when exam begins (no manual launch needed)
+- Camera opens at 320×240; models load once from `/public/models/` (~6.5 MB, browser-cached)
+- Inference runs every **5 seconds** in browser idle time — no UI lag, no server processing
+- Events logged: `NO_FACE`, `MULTIPLE_FACES`, `LOOKING_AWAY`, `FACE_MISMATCH`
+- Student enrolled via `POST /proctor/enroll` on profile setup; identity verified at exam start
+- Admin monitors all active students via live dashboard at `/proctor` (polls every 15s)
 
-### New Proctor API Endpoints
+### Proctor API Endpoints
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/proctor/sessions` | JWT | Create Meazure session → returns `{ sessionId, launchUrl, status }` |
-| GET | `/proctor/sessions/:sessionId` | JWT | Poll session status |
-| POST | `/proctor/events` | JWT | Log client-side violation (fullscreen/tab) |
-| POST | `/proctor/meazure-event` | API key | Internal: receive Meazure events from bridge service |
+| POST | `/proctor/enroll` | JWT | Store student's 128-D face descriptor |
+| GET | `/proctor/enrollment` | JWT | Check if student has a face enrolled |
+| POST | `/proctor/verify` | JWT | Compare live descriptor vs enrolled → `{ match, distance }` |
+| POST | `/proctor/events` | JWT | Log violation event (all layers) |
+| GET | `/proctor/live` | JWT + ADMIN | All IN_PROGRESS attempts with recent events |
 | GET | `/proctor/report/:attemptId` | JWT + ADMIN | Full event timeline for attempt |
+| GET | `/proctor/health` | Public | `{ status: 'ok', provider: 'face-api.js', mode: 'client-side' }` |
 
 ### Violation Persistence
 - Fullscreen/tab violations stored in `sessionStorage['violations_/exams/:id/play']`
 - Survives page refresh (intentional — prevents cheat via refresh)
 - Cleared only on exam submit or auto-submit
-- Meazure violations are stored permanently in `ProctorEvent` table (no sessionStorage)
+- Face detection violations stored permanently in `ProctorEvent` table (no sessionStorage)
 
 ---
 
@@ -1574,11 +1617,33 @@ cd backend && npx prisma migrate deploy
 # PENDING — Phase 2 Razorpay/slot schema migration (run before deploying payment feature)
 cd backend && npx prisma migrate dev --name phase2_razorpay_slots
 
+# Add LOOKING_AWAY to ProctorEventType enum (run once)
+cd backend && npx prisma migrate dev --name add_looking_away_event
+
 # After schema migration, regenerate frontend Prisma client
 cd frontend && npx prisma generate
 ```
 
 > **Before deploying the payment feature:** Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` in both `backend/.env` and `frontend/.env` (or Vercel/Render environment settings). Use `rzp_test_...` keys for development and `rzp_live_...` for production.
+
+### face-api.js Model Setup (one-time, per environment)
+
+```bash
+# Install library
+cd frontend && npm install face-api.js
+
+# Download model weights from face-api.js GitHub releases
+# https://github.com/justadudewhohacks/face-api.js/tree/master/weights
+# Copy the following files into frontend/public/models/:
+#   tiny_face_detector_model-weights_manifest.json
+#   tiny_face_detector_model-shard1
+#   face_landmark_68_tiny_model-weights_manifest.json
+#   face_landmark_68_tiny_model-shard1
+#   face_recognition_model-weights_manifest.json
+#   face_recognition_model-shard1
+```
+
+Models are served as static assets and browser-cached after first load — no CDN or extra server needed.
 
 ### Local Development
 
@@ -1594,10 +1659,5 @@ cd frontend && npm run dev       # http://localhost:3000
 
 # Admin frontend
 cd admin-frontend && npm run dev  # http://localhost:3001
-
-# Python proctor service
-cd proctor-service
-python -m venv venv && venv\Scripts\activate
-pip install -r requirements.txt
-python main.py                    # http://localhost:5000
+# No proctor-service needed — proctoring runs in the browser
 ```

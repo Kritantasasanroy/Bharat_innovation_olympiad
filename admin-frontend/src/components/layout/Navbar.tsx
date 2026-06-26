@@ -71,6 +71,12 @@ export default function Navbar() {
               >
                 Analytics
               </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/proctor') ? 'active' : ''}`}
+                onClick={() => router.push('/proctor')}
+              >
+                Live Proctor
+              </a>
             </>
           )}
         </div>

@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import { useAuthStore } from '@/store/authStore';
+import { useFaceProctor } from '@/hooks/useFaceProctor';
 import { FormEvent, useEffect, useState } from 'react';
 
 export default function ProfilePage() {
@@ -10,9 +11,25 @@ export default function ProfilePage() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [classBand, setClassBand] = useState<number>(6);
-    
+
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+
+    // Face enrollment state
+    const [enrollmentStatus, setEnrollmentStatus] = useState<'unknown' | 'enrolled' | 'not_enrolled'>('unknown');
+    const [enrollMsg, setEnrollMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [cameraActive, setCameraActive] = useState(false);
+    const [enrolling, setEnrolling] = useState(false);
+
+    const {
+        videoRef,
+        isLoaded: modelsLoaded,
+        loadingProgress,
+        startProctoring,
+        stopProctoring,
+        captureDescriptor,
+        enrollFace,
+    } = useFaceProctor({ attemptId: 'enrollment', disabled: false });
 
     useEffect(() => {
         if (user) {
@@ -21,6 +38,46 @@ export default function ProfilePage() {
             setClassBand(user.classBand || 6);
         }
     }, [user]);
+
+    // Check enrollment status on mount
+    useEffect(() => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        fetch('/api/proctor/enrollment', {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((d) => setEnrollmentStatus(d.enrolled ? 'enrolled' : 'not_enrolled'))
+            .catch(() => setEnrollmentStatus('not_enrolled'));
+    }, []);
+
+    const handleOpenCamera = async () => {
+        setEnrollMsg({ text: 'Loading face detection models…', type: 'info' });
+        await startProctoring();
+        setCameraActive(true);
+        setEnrollMsg({ text: 'Position your face in the frame and click Capture.', type: 'info' });
+    };
+
+    const handleCapture = async () => {
+        setEnrolling(true);
+        setEnrollMsg({ text: 'Capturing…', type: 'info' });
+        const descriptor = await captureDescriptor();
+        if (!descriptor) {
+            setEnrolling(false);
+            setEnrollMsg({ text: 'No face detected. Ensure your face is clearly visible and try again.', type: 'error' });
+            return;
+        }
+        const ok = await enrollFace(descriptor);
+        stopProctoring();
+        setCameraActive(false);
+        setEnrolling(false);
+        if (ok) {
+            setEnrollmentStatus('enrolled');
+            setEnrollMsg({ text: 'Face enrolled successfully! You are ready for AI-proctored exams.', type: 'success' });
+        } else {
+            setEnrollMsg({ text: 'Enrollment failed. Please try again.', type: 'error' });
+        }
+    };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -147,6 +204,94 @@ export default function ProfilePage() {
                             {isLoading ? 'Saving...' : 'Save Changes'}
                         </button>
                     </form>
+                </div>
+                {/* Face Enrollment Section */}
+                <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
+                    <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Face ID for Proctoring</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                        Required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor — no photo is saved.
+                    </p>
+
+                    {/* Status badge */}
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        {enrollmentStatus === 'enrolled' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'var(--success-500)', color: '#fff', padding: '0.4rem 1rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                ✓ Face Enrolled
+                            </span>
+                        )}
+                        {enrollmentStatus === 'not_enrolled' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'var(--danger-500)', color: '#fff', padding: '0.4rem 1rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                ✗ Not Enrolled
+                            </span>
+                        )}
+                        {enrollmentStatus === 'unknown' && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Checking…</span>
+                        )}
+                    </div>
+
+                    {/* Enrollment message */}
+                    {enrollMsg && (
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            marginBottom: '1rem',
+                            borderRadius: '8px',
+                            fontSize: '0.9rem',
+                            background: enrollMsg.type === 'success' ? 'var(--success-500)' : enrollMsg.type === 'error' ? 'var(--danger-500)' : 'var(--bg-elevated)',
+                            color: enrollMsg.type === 'info' ? 'var(--text-secondary)' : '#fff',
+                            border: enrollMsg.type === 'info' ? '1px solid var(--border-color)' : 'none',
+                        }}>
+                            {enrollMsg.text}
+                        </div>
+                    )}
+
+                    {/* Camera preview */}
+                    {cameraActive && (
+                        <div style={{ position: 'relative', marginBottom: '1rem', borderRadius: '12px', overflow: 'hidden', background: '#000', maxWidth: '320px' }}>
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                muted
+                                playsInline
+                                style={{ width: '100%', display: 'block', transform: 'scaleX(-1)' }}
+                            />
+                            <div style={{
+                                position: 'absolute', inset: 0,
+                                border: '2px solid var(--primary-400)',
+                                borderRadius: '12px',
+                                pointerEvents: 'none',
+                            }} />
+                        </div>
+                    )}
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        {!cameraActive ? (
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleOpenCamera}
+                                disabled={enrollmentStatus === 'unknown'}
+                            >
+                                {enrollmentStatus === 'enrolled' ? 'Re-enroll Face' : 'Enroll Face'}
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleCapture}
+                                    disabled={enrolling || !modelsLoaded}
+                                >
+                                    {enrolling ? 'Saving…' : modelsLoaded ? 'Capture & Save' : loadingProgress || 'Loading models…'}
+                                </button>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => { stopProctoring(); setCameraActive(false); setEnrollMsg(null); }}
+                                    disabled={enrolling}
+                                >
+                                    Cancel
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </main>
         </AuthGuard>
