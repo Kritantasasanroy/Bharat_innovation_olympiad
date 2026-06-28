@@ -84,3 +84,8 @@ FULLSCREEN_IMPLEMENTATION.md
 
 # ── Vercel local project config (contains project IDs) ───────
 **/.vercel/
+
+# ── Large archives (exceed GitHub 100 MB limit) ──────────────
+*.zip
+*.tar.gz
+*.rar

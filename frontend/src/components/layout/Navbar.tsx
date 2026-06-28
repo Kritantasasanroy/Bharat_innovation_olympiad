@@ -2,15 +2,13 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { APP_NAME } from '@/lib/constants';
-import { useThemeStore } from '@/store/themeStore';
 import { usePathname, useRouter } from 'next/navigation';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const { theme, toggleTheme } = useThemeStore();
-
   const handleLogout = () => {
     logout();
     router.push('/login');
@@ -81,9 +79,7 @@ export default function Navbar() {
         </div>
 
         <div className="navbar-user">
-          <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <ThemeToggle />
           {user && (
             <>
               <div className="user-avatar">

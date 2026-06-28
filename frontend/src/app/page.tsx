@@ -1,46 +1,495 @@
-'use client';
-
-import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
-import { useThemeStore } from '@/store/themeStore';
 import Link from 'next/link';
+import Image from 'next/image';
+import ThemeToggle from '@/components/ThemeToggle';
+import {
+  Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
+  Target, ScrollText, Star, ArrowRight, CheckCircle2, XCircle,
+  Award, TrendingUp, Zap, Sparkles, GraduationCap, FlaskConical,
+  Handshake, BadgeCheck,
+} from 'lucide-react';
 
-export default function HomePage() {
-  const { theme, toggleTheme } = useThemeStore();
-
+export default function LandingPage() {
   return (
-    <div className="page-wrapper">
-      {/* Theme toggle - top right */}
-      <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
-        <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
-      </div>
-      {/* Hero Section */}
-      <section className="hero">
-        <div className="hero-bg" />
-        <div className="container hero-content">
-          <img src="/bio-logo.png" alt={APP_NAME} className="hero-logo" />
-          <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
-          <h1 className="hero-title">
-            <span className="gradient-text">{APP_NAME}</span>
-          </h1>
-          <div className="hero-badge">
-            <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '20px', width: 'auto' }} /> Powered by {COMPANY_NAME}
+    <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', minHeight: '100vh' }}>
+
+      {/* ── NAV ── */}
+      <nav className="lp-nav" style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(var(--glass-blur))',
+        WebkitBackdropFilter: 'blur(var(--glass-blur))',
+        borderBottom: '1px solid var(--border-subtle)',
+      }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '12px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={38} width={160} style={{ height: 38, width: 'auto', display: 'block' }} />
+            <span className="lp-brand-name">Bharat Innovation Olympiad</span>
           </div>
-          <p className="hero-subtitle">
-            India&apos;s premier Innovation &amp; Entrepreneurship Olympiad for students,
-            by <strong>{COMPANY_NAME}</strong>. A definitive platform designed to discover young innovators, nurture startup ideas, and give teenagers a global stage to shine in entrepreneurship and experiential learning.
-          </p>
-          <div className="hero-actions">
-            <Link href="/register" className="btn btn-primary btn-lg">
-              Register Now
-            </Link>
-            <Link href="/login" className="btn btn-secondary btn-lg">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Link href="/login" className="lp-btn-secondary" style={{
+              border: '1px solid var(--border-default)', background: 'var(--bg-elevated)',
+              color: 'var(--text-primary)', fontWeight: 600, fontSize: 14,
+              padding: '9px 20px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 7,
+            }}>
               Student Login
+            </Link>
+            <Link href="/register" className="lp-btn-primary" style={{
+              background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
+              color: '#fff', fontWeight: 700, fontSize: 14,
+              padding: '10px 22px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 7,
+              boxShadow: '0 8px 24px rgba(125,200,50,0.3)',
+            }}>
+              <Rocket size={14} /> Register Now
+            </Link>
+            <ThemeToggle />
+          </div>
+        </div>
+      </nav>
+
+      {/* ── HERO ── */}
+      <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+        {/* BG glow */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
+          background: 'radial-gradient(ellipse 60% 55% at 10% 50%, rgba(125,200,50,0.07), transparent), radial-gradient(ellipse 50% 45% at 90% 20%, rgba(255,203,5,0.07), transparent)',
+        }} />
+        {/* decorative SVG grid dots */}
+        <svg viewBox="0 0 1200 480" aria-hidden="true" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0, opacity: 0.35, pointerEvents: 'none' }}>
+          <g stroke="rgba(125,200,50,0.4)" strokeWidth="1.2" fill="none">
+            <line x1="1000" y1="64" x2="1086" y2="38" /><line x1="1086" y1="38" x2="1150" y2="104" />
+            <line x1="1000" y1="64" x2="1052" y2="132" /><line x1="1052" y1="132" x2="1150" y2="104" />
+            <line x1="1052" y1="132" x2="1118" y2="196" /><line x1="1118" y1="196" x2="1150" y2="104" />
+          </g>
+          <g fill="rgba(125,200,50,0.5)">
+            <circle cx="1000" cy="64" r="4" /><circle cx="1086" cy="38" r="4" />
+            <circle cx="1150" cy="104" r="4" /><circle cx="1052" cy="132" r="4" /><circle cx="1118" cy="196" r="4" />
+          </g>
+          <g stroke="rgba(255,203,5,0.4)" strokeWidth="1.1" fill="none">
+            <line x1="70" y1="300" x2="150" y2="332" /><line x1="150" y1="332" x2="210" y2="286" /><line x1="210" y1="286" x2="282" y2="320" />
+          </g>
+          <g fill="rgba(255,203,5,0.5)">
+            <circle cx="70" cy="300" r="3.5" /><circle cx="150" cy="332" r="3.5" /><circle cx="210" cy="286" r="3.5" /><circle cx="282" cy="320" r="3.5" />
+          </g>
+          <polygon fill="rgba(255,203,5,0.4)" points="172,118 178,136 196,142 178,148 172,166 166,148 148,142 166,136" />
+          <polygon fill="rgba(125,200,50,0.4)" points="912,300 917,314 931,319 917,324 912,338 907,324 893,319 907,314" />
+        </svg>
+
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '64px 32px 48px', display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: 56, alignItems: 'center', position: 'relative', zIndex: 1 }}>
+          {/* Left */}
+          <div>
+            <div className="lp-fade-up lp-badge-glow" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.25)',
+              color: '#7dc832', fontWeight: 600, fontSize: 12.5, letterSpacing: '0.04em',
+              padding: '7px 14px', borderRadius: 999, marginBottom: 22,
+            }}>
+              <Sparkles size={12} />
+              India&apos;s National Innovation &amp; Future Skills Movement · Class 6–12
+            </div>
+
+            <h1 className="lp-fade-up-1" style={{
+              fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 46, lineHeight: 1.08,
+              letterSpacing: -1.5, margin: '0 0 18px',
+            }}>
+              India&apos;s Most Complete{' '}
+              <span style={{ background: 'linear-gradient(135deg,#7dc832,#ffcb05)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                Innovation
+              </span>
+              {' '}&amp; Future Skills Ecosystem
+            </h1>
+
+            <p className="lp-fade-up-2" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 600, fontSize: 18, color: '#7dc832', margin: '0 0 12px' }}>
+              One Registration. Four Powerful Benefits.
+            </p>
+            <p className="lp-fade-up-2" style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--text-secondary)', margin: '0 0 30px', maxWidth: 480 }}>
+              National Recognition · Innovation Challenges · Entrepreneurship Opportunities · Future Skills Development
+            </p>
+
+            <div className="lp-fade-up-3" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Link href="/register" className="lp-btn-primary" style={{
+                background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+                fontWeight: 700, fontSize: 15.5, padding: '14px 28px', borderRadius: 13,
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                boxShadow: '0 12px 30px rgba(125,200,50,0.35)',
+              }}>
+                <Rocket size={17} /> Register Now <ArrowRight size={15} />
+              </Link>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: 'flex', gap: 36, marginTop: 44, paddingTop: 28, borderTop: '1px solid var(--border-subtle)' }}>
+              <div className="lp-stat-1">
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 28, background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>2,400+</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>Partner Schools</div>
+              </div>
+              <div className="lp-stat-2">
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 28, background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>1.8L+</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>Young Innovators</div>
+              </div>
+              <div className="lp-stat-3">
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 28, background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>28</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>States &amp; UTs</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right — journey card */}
+          <div className="lp-fade-up-2 lp-float" style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+            borderRadius: 24, padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.3px', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 20 }}>The Student Journey</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {([
+                { Icon: Trophy,    title: 'Innovation Olympiad', sub: 'Take the national assessment',  bg: 'rgba(125,200,50,0.12)',  col: '#7dc832' },
+                { Icon: BarChart3, title: 'Innovation Profile',  sub: 'Build your skill identity',     bg: 'rgba(255,203,5,0.12)',   col: '#ffcb05' },
+                { Icon: Lightbulb, title: 'Innopreneurs',        sub: 'Enter startup challenges',      bg: 'rgba(125,200,50,0.12)',  col: '#7dc832' },
+                { Icon: Handshake, title: 'Mentorship',          sub: 'Learn from innovators',         bg: 'rgba(255,203,5,0.12)',   col: '#ffcb05' },
+              ] as const).map(({ Icon, title, sub, bg, col }, i) => (
+                <div key={i}>
+                  <div className="lp-step" style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                    borderRadius: 13,
+                  }}>
+                    <span className="lp-icon-wrap" style={{ width: 40, height: 40, borderRadius: 11, background: bg, flexShrink: 0 }}>
+                      <Icon size={18} color={col} />
+                    </span>
+                    <div>
+                      <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{sub}</div>
+                    </div>
+                  </div>
+                  {i < 3 && <div style={{ height: 16, width: 2, background: 'var(--border-default)', marginLeft: 33 }} />}
+                </div>
+              ))}
+              <div style={{ height: 16, width: 2, background: 'var(--border-default)', marginLeft: 33 }} />
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px',
+                background: 'linear-gradient(135deg,#7dc832,#4f9a12)', borderRadius: 13,
+                boxShadow: '0 10px 28px rgba(125,200,50,0.3)',
+              }}>
+                <span style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Rocket size={18} color="#fff" />
+                </span>
+                <div>
+                  <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14, color: '#fff' }}>Future Innovator</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>Your journey continues</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SUCCESS STORIES ── */}
+      <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg-primary)', padding: '76px 32px 84px' }}>
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 55% 40% at 80% 20%, rgba(255,203,5,0.04), transparent)' }} />
+
+        <div style={{ maxWidth: 1080, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 48px' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              background: 'rgba(255,203,5,0.08)', border: '1px solid rgba(255,203,5,0.2)',
+              color: '#ffcb05', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
+              padding: '7px 15px', borderRadius: 999, marginBottom: 18,
+            }}>
+              <Star size={10} fill="#ffcb05" color="#ffcb05" /> Innovation Alumni · Where Are They Now
+            </div>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 38, margin: '0 0 14px', letterSpacing: -0.8, lineHeight: 1.1 }}>
+              Real Students. Real Ideas. Real Impact.
+            </h2>
+            <p style={{ fontSize: 16, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 600, lineHeight: 1.65 }}>
+              Every one of them began with a single spark of curiosity — right where you are now.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+            {/* Guransh */}
+            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
+              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+                <Image src="/assets/alumni-guransh.jpg" alt="Guransh Singh" fill sizes="280px" style={{ objectFit: 'cover' }} />
+                <span style={{ position: 'absolute', top: 14, left: 14, background: '#7dc832', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(125,200,50,0.4)' }}>National Champion &apos;26</span>
+              </div>
+              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Guransh Singh</h3>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#7dc832', marginBottom: 16 }}>From Young Innovator to National Champion</div>
+                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Golden Years</b></div>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>School</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>DAV Public School, Amritsar</b></div>
+                </div>
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>He didn&apos;t stop after the contest. In 2026 he secured the 1st position nationally in Innopreneurs Junior Season 12 — competing against thousands of young innovators.</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+                  {['Innovation Mindset', 'Problem Solving'].map(t => (
+                    <span key={t} className="lp-pill" style={{ background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)', color: '#7dc832', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+                  <TrendingUp size={13} color="var(--text-tertiary)" />
+                  <b style={{ color: '#7dc832', fontWeight: 600, fontSize: 12.5 }}>Winner → Continued Innovator → National Champion Again</b>
+                </div>
+              </div>
+            </div>
+
+            {/* Falak */}
+            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
+              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+                <Image src="/assets/alumni-falak.jpg" alt="Falak Arora" fill sizes="280px" style={{ objectFit: 'cover' }} />
+                <span style={{ position: 'absolute', top: 14, left: 14, background: '#d4a017', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(212,160,23,0.4)' }}>Founder</span>
+              </div>
+              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Falak Arora</h3>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#ffcb05', marginBottom: 16 }}>Turning Sustainability into Entrepreneurship</div>
+                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Zedberrie</b></div>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Field</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Sustainable fashion</b></div>
+                </div>
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>She built fashion accessories from textile waste — turning an environmental challenge into a real business, now pursuing global opportunities.</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+                  {['Sustainability', 'Circular Economy'].map(t => (
+                    <span key={t} className="lp-pill" style={{ background: 'rgba(255,203,5,0.08)', border: '1px solid rgba(255,203,5,0.2)', color: '#ffcb05', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+                  <TrendingUp size={13} color="var(--text-tertiary)" />
+                  <b style={{ color: '#ffcb05', fontWeight: 600, fontSize: 12.5 }}>Student Innovator → Founder → Global Opportunities</b>
+                </div>
+              </div>
+            </div>
+
+            {/* Anay & Abeer */}
+            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
+              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+                <Image src="/assets/alumni-anay-abeer.jpg" alt="Anay and Abeer Ramakrishnan" fill sizes="280px" style={{ objectFit: 'cover' }} />
+                <span style={{ position: 'absolute', top: 14, left: 14, background: '#3b6fe0', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1 }}>AI Pioneers</span>
+              </div>
+              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Anay &amp; Abeer Ramakrishnan</h3>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#7baff5', marginBottom: 16 }}>From Child Innovators to AI Pioneers</div>
+                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Immvers</b></div>
+                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Field</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Immersive &amp; AI tech</b></div>
+                </div>
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>As kids the twins were already building technology. Immvers grew into a broader ecosystem at the intersection of AI, education and emerging technologies.</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+                  {['Artificial Intelligence', 'Deep Tech'].map(t => (
+                    <span key={t} className="lp-pill" style={{ background: 'rgba(59,111,224,0.12)', border: '1px solid rgba(59,111,224,0.25)', color: '#7baff5', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+                  <TrendingUp size={13} color="var(--text-tertiary)" />
+                  <b style={{ color: '#7baff5', fontWeight: 600, fontSize: 12.5 }}>Young Innovators → Technology Builders → AI Innovators</b>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginTop: 48 }}>
+            <p style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are students. Tomorrow, they&apos;ll build the future of Bharat.</p>
+            <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '0 0 26px' }}>Your innovation journey could be next · Powered by Lemon Ideas · Connected to Innopreneurs Junior</p>
+            <Link href="/register" className="lp-btn-primary" style={{
+              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+              fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+            }}>
+              Start your story <ArrowRight size={15} />
             </Link>
           </div>
         </div>
       </section>
+
+      {/* ── WHY DIFFERENT ── */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>Why This Olympiad Is Different</h2>
+          <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 520 }}>We don&apos;t test what students memorise. We measure how they think, create and solve.</p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 0, alignItems: 'stretch', maxWidth: 860, margin: '0 auto', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.4)' }}>
+            <div style={{ padding: '34px 30px', textAlign: 'left' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 22 }}>Traditional Olympiad</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {[['Memory', 'Rewards'], ['Marks', 'Measures'], ['Knowledge', 'Tests']].map(([thing, verb]) => (
+                  <div key={thing} className="lp-compare-row" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 8px', color: 'var(--text-secondary)', fontSize: 15 }}>
+                    <XCircle size={16} color="var(--danger-400)" style={{ flexShrink: 0 }} />
+                    <span>{verb} <b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{thing}</b></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ width: 1, background: 'var(--border-default)' }} />
+            <div style={{ padding: '34px 30px', textAlign: 'left', background: 'rgba(125,200,50,0.04)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#7dc832', marginBottom: 22 }}>Innovation Olympiad</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {[['Creativity', 'Rewards'], ['Innovation', 'Measures'], ['Problem Solving', 'Builds']].map(([thing, verb]) => (
+                  <div key={thing} className="lp-compare-row" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 8px', color: 'var(--text-primary)', fontSize: 15 }}>
+                    <CheckCircle2 size={16} color="#7dc832" style={{ flexShrink: 0 }} />
+                    <span>{verb} <b style={{ fontWeight: 700 }}>{thing}</b></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOUR BENEFITS ── */}
+      <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>One Registration. Four Powerful Benefits.</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Everything a young innovator needs to be recognised and grow.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 22 }}>
+            {([
+              { Icon: Medal,        col: '#7dc832',  bg: 'rgba(125,200,50,0.1)',  title: 'National Rankings',          desc: 'Stand out with verified All-India, State, City & School ranks.' },
+              { Icon: Lightbulb,    col: '#ffcb05',  bg: 'rgba(255,203,5,0.1)',   title: 'Innopreneurs Advantage',      desc: 'A direct pathway into startup contests and innovation labs.' },
+              { Icon: Globe,        col: '#7baff5',  bg: 'rgba(59,111,224,0.1)',  title: 'World Skill Challenge',      desc: 'Qualify for global future-skills challenges and exposure.' },
+              { Icon: GraduationCap,col: '#f97316',  bg: 'rgba(249,115,22,0.1)', title: 'Entrepreneurship Bootcamp',  desc: 'Hands-on bootcamps to turn ideas into real ventures.' },
+            ] as const).map(({ Icon, col, bg, title, desc }, i) => (
+              <div key={i} className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 18, padding: 26 }}>
+                <div className="lp-icon-wrap" style={{ width: 52, height: 52, borderRadius: 14, background: bg, marginBottom: 18 }}>
+                  <Icon size={24} color={col} />
+                </div>
+                <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+                <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── JOURNEY ROADMAP ── */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '78px 32px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 52 }}>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 32, margin: '0 0 10px', letterSpacing: -0.5 }}>The Innovation Journey Roadmap</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>From your first Olympiad to becoming a recognised innovator.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16 }}>
+            {([
+              { n: '01', Icon: Trophy,        label: 'Register & Assess',  sub: 'Sign up and take the Olympiad',    col: '#7dc832', bg: 'rgba(125,200,50,0.15)' },
+              { n: '02', Icon: BarChart3,      label: 'Get Ranked',         sub: 'National & school recognition',    col: '#ffcb05', bg: 'rgba(255,203,5,0.15)' },
+              { n: '03', Icon: FlaskConical,   label: 'Innopreneurs',        sub: 'Compete in startup contests',      col: '#7dc832', bg: 'rgba(125,200,50,0.15)' },
+              { n: '04', Icon: Users,          label: 'Mentorship',          sub: 'Guidance from innovators',         col: '#ffcb05', bg: 'rgba(255,203,5,0.15)' },
+              { n: '05', Icon: Rocket,         label: 'Future Innovator',   sub: 'Build real ventures',              col: '#fff',    bg: 'linear-gradient(135deg,#7dc832,#ffcb05)' },
+            ] as const).map(({ n, Icon, label, sub, col, bg }, i) => (
+              <div key={i} style={{ textAlign: 'center' }}>
+                <div className="lp-road-dot" style={{ width: 58, height: 58, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', flexDirection: 'column', gap: 1 }}>
+                  <Icon size={20} color={col} />
+                  <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 11, color: col, letterSpacing: '0.04em', lineHeight: 1 }}>{n}</span>
+                </div>
+                <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14.5, marginBottom: 6 }}>{label}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── WHAT EVERY STUDENT RECEIVES ── */}
+      <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Student Receives</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score — a complete innovation identity.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20 }}>
+            {([
+              { Icon: Trophy,        col: '#7dc832', bg: 'rgba(125,200,50,0.1)',  title: 'Rankings',                 desc: 'National, State, City & School ranks.' },
+              { Icon: BarChart3,     col: '#ffcb05', bg: 'rgba(255,203,5,0.1)',   title: 'Innovation Profile',       desc: 'A skill radar across 5 dimensions.' },
+              { Icon: BadgeCheck,    col: '#7baff5', bg: 'rgba(59,111,224,0.1)',  title: 'Certificate',              desc: 'Verifiable digital certificate.' },
+              { Icon: Zap,           col: '#f97316', bg: 'rgba(249,115,22,0.1)', title: 'Opportunities',            desc: 'Contests, challenges & events.' },
+              { Icon: Users,         col: '#a78bfa', bg: 'rgba(167,139,250,0.1)', title: 'Mentorship',              desc: 'Access to expert innovators.' },
+              { Icon: Rocket,        col: '#7dc832', bg: 'rgba(125,200,50,0.1)',  title: 'Entrepreneurship Exposure', desc: 'Bootcamps to launch ventures.' },
+            ] as const).map(({ Icon, col, bg, title, desc }, i) => (
+              <div key={i} className="lp-receives-item" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 16, padding: 24, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <span className="lp-icon-wrap" style={{ width: 46, height: 46, borderRadius: 12, background: bg, flexShrink: 0 }}>
+                  <Icon size={22} color={col} />
+                </span>
+                <div>
+                  <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 15.5, marginBottom: 5 }}>{title}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── NATIONAL STAGE GALLERY ── */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '80px 32px' }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 48 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)',
+              color: '#7dc832', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
+              padding: '7px 15px', borderRadius: 999, marginBottom: 18,
+            }}>
+              <Award size={12} /> Proven Legacy · Powered by Innopreneurs Junior
+            </div>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Students. Real Ideas. Real Impact.</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 640, lineHeight: 1.65 }}>For over four years, Innopreneurs Junior has helped school students across India identify problems, build solutions and present their ideas on a national stage.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 14 }}>
+            <div className="lp-gallery-cell" style={{ gridColumn: 'span 7', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 308 }}>
+              <Image src="/assets/hof-grand-finale-group.jpg" alt="Innopreneurs Junior Grand Finale cohort" fill sizes="(max-width: 900px) 100vw, 600px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px 14px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 1 }}>Grand Finale · The national cohort of young innovators</div>
+            </div>
+            <div className="lp-gallery-cell" style={{ gridColumn: 'span 5', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 308 }}>
+              <Image src="/assets/hof-winners.jpg" alt="National winners with certificate" fill sizes="(max-width: 900px) 100vw, 450px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px 14px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 1 }}>Winners felicitated on the main stage</div>
+            </div>
+            <div className="lp-gallery-cell" style={{ gridColumn: 'span 4', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 232 }}>
+              <Image src="/assets/hof-pitch-duo.jpg" alt="Students pitching their innovation" fill sizes="(max-width: 900px) 100vw, 380px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 12px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 12.5, fontWeight: 600, zIndex: 1 }}>Pitching to a national jury</div>
+            </div>
+            <div className="lp-gallery-cell" style={{ gridColumn: 'span 4', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 232 }}>
+              <Image src="/assets/hof-national-stage.jpg" alt="National stage recognition" fill sizes="(max-width: 900px) 100vw, 380px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 12px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 12.5, fontWeight: 600, zIndex: 1 }}>Recognised by national leaders</div>
+            </div>
+            <div className="lp-gallery-cell" style={{ gridColumn: 'span 4', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 232 }}>
+              <Image src="/assets/hof-certificates.jpg" alt="Regional round participants with certificates" fill sizes="(max-width: 900px) 100vw, 380px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 12px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 12.5, fontWeight: 600, zIndex: 1 }}>City rounds across India</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA BAND ── */}
+      <section style={{ background: 'linear-gradient(135deg,#1a3a0a,#0e2206)', padding: '70px 32px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(125,200,50,0.12), transparent)' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 32, color: '#fff', margin: '0 0 12px', letterSpacing: -0.5 }}>Every idea starts small. Every innovator starts somewhere.</h2>
+          <p className="lp-fade-up-1" style={{ fontSize: 17, color: 'rgba(255,255,255,0.7)', margin: '0 0 30px' }}>Join India&apos;s most complete innovation ecosystem today.</p>
+          <Link href="/register" className="lp-btn-primary" style={{
+            background: 'linear-gradient(135deg,#7dc832,#ffcb05)', color: '#0a0a0a',
+            fontWeight: 800, fontSize: 17, padding: '16px 36px', borderRadius: 14,
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 16px 40px rgba(125,200,50,0.35)',
+          }}>
+            <Rocket size={18} /> Register Now <ArrowRight size={16} />
+          </Link>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', padding: '36px 32px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={34} width={144} style={{ height: 34, width: 'auto', display: 'block' }} />
+            <span className="lp-brand-name" style={{ fontSize: '0.95rem' }}>Bharat Innovation Olympiad</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span>Powered by</span>
+            <Image src="/lemon-ideas-logo.png" alt="Lemon Ideas" height={15} width={75} style={{ height: 15, width: 'auto', filter: 'brightness(0.7)' }} />
+          </div>
+          <div style={{ marginTop: 4, color: 'var(--text-tertiary)' }}>© 2026 Bharat Innovation Olympiad · An Innovation &amp; Future Skills Ecosystem</div>
+        </div>
+      </footer>
+
     </div>
   );
 }

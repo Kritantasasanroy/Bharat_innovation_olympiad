@@ -2,7 +2,7 @@
 
 import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
-import { useThemeStore } from '@/store/themeStore';
+import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { emailOtp } from '@/lib/auth-client';
@@ -20,8 +20,6 @@ export default function LoginPage() {
 
     const loginWithEmail = useAuthStore((s) => s.loginWithEmail);
     const router = useRouter();
-    const { theme, toggleTheme } = useThemeStore();
-
     // Step 1: Send OTP
     const handleSendOtp = async (e: FormEvent) => {
         e.preventDefault();
@@ -98,9 +96,7 @@ export default function LoginPage() {
     return (
         <div className="auth-page">
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
-                <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-                    {theme === 'dark' ? '☀️' : '🌙'}
-                </button>
+                <ThemeToggle />
             </div>
 
             <div className="auth-container animate-fade-in">

@@ -2,7 +2,7 @@
 
 import { APP_NAME, CLASS_BANDS, COMPANY_NAME } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
-import { useThemeStore } from '@/store/themeStore';
+import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { emailOtp } from '@/lib/auth-client';
@@ -37,8 +37,6 @@ export default function RegisterPage() {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const register = useAuthStore((s) => s.register);
     const router = useRouter();
-    const { theme, toggleTheme } = useThemeStore();
-
     const filteredSchools = SCHOOLS.filter(s =>
         s.name.toLowerCase().includes(schoolSearch.toLowerCase())
     );
@@ -142,9 +140,7 @@ export default function RegisterPage() {
     return (
         <div className="auth-page">
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
-                <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-                    {theme === 'dark' ? '☀️' : '🌙'}
-                </button>
+                <ThemeToggle />
             </div>
 
             <div className="auth-container animate-fade-in">

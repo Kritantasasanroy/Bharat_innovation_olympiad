@@ -4,7 +4,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Poppins:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap');
 
 /* ── CSS Custom Properties ── */
 :root {
@@ -1567,4 +1567,203 @@ h4 {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ══════════════════════════════════════════════
+   Landing Page — Animations & Hover Effects
+   ══════════════════════════════════════════════ */
+
+@keyframes lpFadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lpFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes lpFloatY {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+@keyframes lpCountRoll {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lpBadgeGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(125,200,50,0); }
+  50%       { box-shadow: 0 0 14px 2px rgba(125,200,50,0.28); }
+}
+@keyframes lpIconBounce {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  30%       { transform: scale(1.18) rotate(-8deg); }
+  60%       { transform: scale(1.12) rotate(6deg); }
+}
+
+/* — Entrance animation helpers */
+.lp-fade-up   { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) both; }
+.lp-fade-up-1 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.08s both; }
+.lp-fade-up-2 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.16s both; }
+.lp-fade-up-3 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.24s both; }
+.lp-fade-up-4 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.32s both; }
+.lp-fade-up-5 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.40s both; }
+.lp-fade-up-6 { animation: lpFadeUp 0.65s cubic-bezier(0.16,1,0.3,1) 0.48s both; }
+
+.lp-stat-1 { animation: lpCountRoll 0.7s cubic-bezier(0.16,1,0.3,1) 0.5s both; }
+.lp-stat-2 { animation: lpCountRoll 0.7s cubic-bezier(0.16,1,0.3,1) 0.62s both; }
+.lp-stat-3 { animation: lpCountRoll 0.7s cubic-bezier(0.16,1,0.3,1) 0.74s both; }
+
+.lp-float { animation: lpFloatY 3.8s ease-in-out infinite; }
+
+/* — Card hover: lift + border glow */
+.lp-card {
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.28s ease,
+              border-color 0.22s ease;
+}
+.lp-card:hover {
+  transform: translateY(-6px) scale(1.012);
+  box-shadow: 0 24px 56px rgba(0,0,0,0.45), 0 0 0 1px rgba(125,200,50,0.22);
+  border-color: rgba(125,200,50,0.28) !important;
+}
+.lp-card:hover .lp-icon-wrap {
+  animation: lpIconBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.lp-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* — Alumni card hover */
+.lp-alumni-card {
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.28s ease,
+              border-color 0.22s ease;
+}
+.lp-alumni-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 28px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(125,200,50,0.2);
+  border-color: rgba(125,200,50,0.25) !important;
+}
+
+/* — Button: pop + glow */
+.lp-btn-primary {
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.22s ease,
+              filter 0.2s ease;
+  text-decoration: none !important;
+}
+.lp-btn-primary:hover {
+  transform: translateY(-3px) scale(1.045);
+  filter: brightness(1.12);
+  box-shadow: 0 16px 40px rgba(125,200,50,0.45) !important;
+  color: inherit !important;
+}
+.lp-btn-primary:active { transform: scale(0.96); }
+
+.lp-btn-secondary {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  text-decoration: none !important;
+}
+.lp-btn-secondary:hover {
+  transform: translateY(-2px);
+  border-color: rgba(125,200,50,0.45) !important;
+  background: rgba(125,200,50,0.08) !important;
+  color: inherit !important;
+}
+
+/* — Gallery cell: hover zoom */
+.lp-gallery-cell {
+  transition: transform 0.32s ease, box-shadow 0.32s ease, z-index 0s;
+  position: relative;
+}
+.lp-gallery-cell:hover {
+  transform: scale(1.025);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  z-index: 2;
+}
+.lp-gallery-cell .lp-gallery-img {
+  transition: transform 0.55s ease;
+}
+.lp-gallery-cell:hover .lp-gallery-img {
+  transform: scale(1.07);
+}
+
+/* — Journey step: slide right on hover */
+.lp-step {
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+              border-color 0.22s ease,
+              background 0.22s ease;
+}
+.lp-step:hover {
+  transform: translateX(5px);
+  border-color: rgba(125,200,50,0.38) !important;
+  background: rgba(125,200,50,0.06) !important;
+}
+
+/* — Roadmap dot: rolling pop */
+.lp-road-dot {
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.3s ease;
+  cursor: default;
+}
+.lp-road-dot:hover {
+  transform: scale(1.22) rotate(-10deg);
+  box-shadow: 0 8px 28px rgba(125,200,50,0.45);
+}
+
+/* — Pill hover: pop scale */
+.lp-pill {
+  transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), background 0.18s ease;
+  cursor: default;
+}
+.lp-pill:hover {
+  transform: scale(1.08);
+}
+
+/* — Badge float glow */
+.lp-badge-glow {
+  animation: lpBadgeGlow 2.8s ease-in-out infinite;
+}
+
+/* — Logo brand name gradient text */
+.lp-brand-name {
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+.lp-brand-name-lg {
+  font-size: 0.95rem;
+}
+
+/* — Comparison row hover */
+.lp-compare-row {
+  transition: background 0.18s ease;
+  border-radius: 8px;
+}
+.lp-compare-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* — Receives item hover */
+.lp-receives-item {
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
+              border-color 0.22s ease,
+              background 0.22s ease;
+}
+.lp-receives-item:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(125,200,50,0.28) !important;
+  background: rgba(125,200,50,0.04) !important;
+}
+.lp-receives-item:hover .lp-icon-wrap {
+  animation: lpIconBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
       
