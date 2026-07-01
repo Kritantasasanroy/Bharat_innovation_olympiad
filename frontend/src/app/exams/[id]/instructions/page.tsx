@@ -140,10 +140,10 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <h2>📋 Rules & Guidelines</h2>
                         <ul className="rules-list">
                             <li>The exam must be taken in <strong>fullscreen mode</strong>.</li>
-                            <li>Your webcam must remain on throughout the exam for AI proctoring.</li>
+                            <li>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</li>
                             <li>Exiting fullscreen or switching tabs will pause the exam.</li>
                             <li>If paused for more than 20 seconds, the exam will auto-submit.</li>
-                            <li>Maximum 3 violations allowed — exam auto-submits after that.</li>
+                            <li>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</li>
                             <li>Your answers are auto-saved continuously.</li>
                             <li>Negative marking applies for incorrect MCQ answers.</li>
                             <li>Use the Submit button when done — do not close the browser.</li>

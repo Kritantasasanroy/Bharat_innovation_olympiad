@@ -31,25 +31,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const attemptId = attempt?.id || '';
     const { remaining } = useTimer(attemptId);
 
-    const {
-        videoRef,
-        isLoaded: faceModelsLoaded,
-        loadingProgress,
-        currentFaceCount,
-        isIdentityVerified,
-        startProctoring,
-        stopProctoring,
-    } = useFaceProctor({ attemptId });
-
     // Latest-ref for submit so the auto-submit callback (registered once with
     // empty deps in the fullscreen hook) always calls the freshest version.
     const submitExamRef = useRef(submitExam);
     useEffect(() => { submitExamRef.current = submitExam; });
 
+    // handleAutoSubmit needs stopProctoring (from useFaceProctor, declared
+    // below) and useFullscreenMonitor needs handleAutoSubmit — a genuine
+    // circular dependency between the two hooks. Break it with a ref: define
+    // the callback body now, referencing stopProctoring via a ref that gets
+    // populated once useFaceProctor is called further down.
+    const stopProctoringRef = useRef<(() => void) | null>(null);
     const handleAutoSubmit = async (reason: string) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
-        stopProctoring();
+        stopProctoringRef.current?.();
         try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
         try {
             const result = await submitExamRef.current();
@@ -66,9 +62,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const {
         isFullscreen, violationCount, isGated, lastError, maxViolations, requestFullscreen,
+        reportExternalViolation,
     } = useFullscreenMonitor({
         onViolation: async (type, count) => {
             if (!attemptId) return;
+            // NO_FACE/LOOKING_AWAY are already logged by useFaceProctor's own
+            // postEvent calls — only fullscreen-related violations need a
+            // separate ProctorEvent posted here.
+            if (type === 'no_face' || type === 'looking_away') return;
             try {
                 const backendType =
                     type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN'
@@ -85,6 +86,34 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         maxViolations: 3,
         pauseTimeoutSec: 20,
     });
+
+    const {
+        videoRef,
+        isLoaded: faceModelsLoaded,
+        loadingProgress,
+        currentFaceCount,
+        isIdentityVerified,
+        noFaceSince,
+        awaySince,
+        startProctoring,
+        stopProctoring,
+    } = useFaceProctor({
+        attemptId,
+        onSustainedViolation: (type) => reportExternalViolation(type === 'NO_FACE' ? 'no_face' : 'looking_away'),
+    });
+
+    useEffect(() => { stopProctoringRef.current = stopProctoring; });
+
+    // Live "now" tick so the face/gaze popup countdowns re-render every 0.5s.
+    const [nowTick, setNowTick] = useState(() => Date.now());
+    useEffect(() => {
+        const t = setInterval(() => setNowTick(Date.now()), 500);
+        return () => clearInterval(t);
+    }, []);
+    const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((5000 - (nowTick - noFaceSince)) / 1000)) : null;
+    const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((3000 - (nowTick - awaySince)) / 1000)) : null;
+
+    const [showViolationInfo, setShowViolationInfo] = useState(false);
 
     // Start the exam once on mount.
     useEffect(() => {
@@ -201,6 +230,30 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
+                {/* ── Subtle face-check popups — non-blocking, student keeps answering ── */}
+                <div style={{ position: 'fixed', top: '4.5rem', right: '1.5rem', zIndex: 9997, display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '320px' }}>
+                    {noFaceSecondsLeft !== null && (
+                        <div style={{
+                            background: 'rgba(239,68,68,0.95)', color: '#fff', borderRadius: '10px',
+                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
+                        }}>
+                            <span style={{ fontSize: '1.1rem' }}>👤</span>
+                            <span>Face not detected — please be visible{noFaceSecondsLeft > 0 ? ` within ${noFaceSecondsLeft}s` : ''}.</span>
+                        </div>
+                    )}
+                    {awaySecondsLeft !== null && (
+                        <div style={{
+                            background: 'rgba(234,179,8,0.95)', color: '#1c1917', borderRadius: '10px',
+                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
+                        }}>
+                            <span style={{ fontSize: '1.1rem' }}>👀</span>
+                            <span>Please look at the screen{awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.</span>
+                        </div>
+                    )}
+                </div>
+
                 {/* ── Fullscreen Gate Overlay ──
                     Shown on initial load (page refresh) and after every fullscreen violation.
                     The user MUST click the button to enter fullscreen — this is the only
@@ -269,16 +322,43 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                     <div className="flex items-center gap-4">
                         {/* Always-visible violation counter so the student knows the score */}
-                        <div
-                            className="violation-badge"
-                            style={{
-                                color: violationCount === 0 ? 'var(--text-secondary)' : 'var(--danger-400)',
-                                background: violationCount === 0 ? 'rgba(148,163,184,0.08)' : 'rgba(239,68,68,0.1)',
-                                borderColor: violationCount === 0 ? 'var(--border-subtle)' : 'rgba(239,68,68,0.3)',
-                            }}
-                            title="Violations: leaving fullscreen, switching tabs, or losing focus all count toward this limit"
-                        >
-                            ⚠️ {violationCount} / {maxViolations}
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <div
+                                className="violation-badge"
+                                style={{
+                                    color: violationCount === 0 ? 'var(--text-secondary)' : 'var(--danger-400)',
+                                    background: violationCount === 0 ? 'rgba(148,163,184,0.08)' : 'rgba(239,68,68,0.1)',
+                                    borderColor: violationCount === 0 ? 'var(--border-subtle)' : 'rgba(239,68,68,0.3)',
+                                }}
+                            >
+                                ⚠️ {violationCount} / {maxViolations}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowViolationInfo((v) => !v)}
+                                onMouseEnter={() => setShowViolationInfo(true)}
+                                onMouseLeave={() => setShowViolationInfo(false)}
+                                aria-label="What counts as a violation?"
+                                style={{
+                                    width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+                                    border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
+                                    color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                                }}
+                            >
+                                i
+                            </button>
+                            {showViolationInfo && (
+                                <div style={{
+                                    position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', zIndex: 100,
+                                    width: '260px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                                    borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                                    fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5,
+                                }}>
+                                    Violations are recorded when exam integrity rules are broken — for example leaving fullscreen, switching tabs, or camera/face issues.
+                                    After {maxViolations} violations, your exam will be automatically submitted. Please follow all on-screen instructions carefully throughout the exam.
+                                </div>
+                            )}
                         </div>
                         <div className={`timer-display ${timerClass}`}>
                             ⏱ {formatTime(remaining)}

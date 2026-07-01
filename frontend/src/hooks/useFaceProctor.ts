@@ -10,12 +10,24 @@ type FaceApi = typeof import('face-api.js');
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
 const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
 const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
-// Two consecutive looking-away ticks before firing the event (avoids single-frame false positives)
-const LOOKING_AWAY_CONSECUTIVE = 2;
+
+// ── Sustained-issue tracking ──
+// Real inference only runs every 5s, but "sustained for N seconds" needs finer
+// resolution than that. A lightweight 1s timer (no model inference, just
+// Date.now() comparisons against timestamps set by the real detection tick)
+// checks whether the LAST KNOWN state has persisted long enough to count.
+const SUSTAIN_CHECK_INTERVAL_MS = 1000;
+const NO_FACE_SUSTAIN_MS = 5000;       // face must be missing continuously for >5s
+const LOOKING_AWAY_SUSTAIN_MS = 3000;  // gaze must be away continuously for >=3s
+const SUB_EVENTS_PER_VIOLATION = 2;    // 2 sustained occurrences = 1 counted violation
 
 interface UseFaceProctorOptions {
     attemptId: string;
     disabled?: boolean;
+    // Fired once per SUB_EVENTS_PER_VIOLATION sustained occurrences — only
+    // meaningful during an exam. Wire this into the same violation counter
+    // that fullscreen/tab-switch violations use.
+    onSustainedViolation?: (type: 'NO_FACE' | 'LOOKING_AWAY') => void;
 }
 
 interface FaceProctorState {
@@ -23,6 +35,8 @@ interface FaceProctorState {
     loadingProgress: string;
     currentFaceCount: number;
     isIdentityVerified: boolean | null; // null = not checked yet
+    noFaceSince: number | null;  // epoch ms since face went missing, null if present
+    awaySince: number | null;    // epoch ms since gaze registered "away", null if forward/no-face
 }
 
 /**
@@ -38,18 +52,30 @@ interface FaceProctorState {
  *
  * Detection cadence: every 5s via setInterval + requestIdleCallback.
  * Events fired: NO_FACE, MULTIPLE_FACES, LOOKING_AWAY, FACE_MISMATCH
- * All events posted to POST /api/proctor/events (same endpoint as fullscreen violations).
+ * All events posted to POST /proctor/events (via the shared api client).
  */
 export function useFaceProctor({
     attemptId,
     disabled = false,
+    onSustainedViolation,
 }: UseFaceProctorOptions) {
     const videoElementRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const sustainIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const faceApiRef = useRef<FaceApi | null>(null);
-    const lookingAwayCountRef = useRef(0);
     const enrolledDescriptorRef = useRef<Float32Array | null>(null);
+
+    const onSustainedViolationRef = useRef(onSustainedViolation);
+    useEffect(() => { onSustainedViolationRef.current = onSustainedViolation; });
+
+    // Timestamps set by the real 5s detection tick; read by the 1s sustain checker.
+    const noFaceSinceRef = useRef<number | null>(null);
+    const awaySinceRef = useRef<number | null>(null);
+    const noFaceSubFiredRef = useRef(false);
+    const awaySubFiredRef = useRef(false);
+    const noFaceSubCountRef = useRef(0);
+    const awaySubCountRef = useRef(0);
 
     const { setWebcamStream, setDeviceCheck } = useProctorStore();
 
@@ -58,6 +84,8 @@ export function useFaceProctor({
         loadingProgress: '',
         currentFaceCount: 0,
         isIdentityVerified: null,
+        noFaceSince: null,
+        awaySince: null,
     });
 
     // Callback ref — fires every time React mounts/unmounts the <video> element.
@@ -164,13 +192,19 @@ export function useFaceProctor({
             setState((s) => ({ ...s, currentFaceCount: faceCount }));
 
             if (faceCount === 0) {
-                lookingAwayCountRef.current = 0;
+                if (!noFaceSinceRef.current) noFaceSinceRef.current = Date.now();
+                // Can't assess gaze without a face — clear that tracker.
+                awaySinceRef.current = null;
+                awaySubFiredRef.current = false;
                 await postEvent('NO_FACE', { source: 'face-api.js' });
                 return;
             }
 
+            // Face is present again — reset the no-face tracker.
+            noFaceSinceRef.current = null;
+            noFaceSubFiredRef.current = false;
+
             if (faceCount > 1) {
-                lookingAwayCountRef.current = 0;
                 await postEvent('MULTIPLE_FACES', { faceCount, source: 'face-api.js' });
             }
 
@@ -180,13 +214,11 @@ export function useFaceProctor({
             // Gaze estimation
             const gaze = estimateGaze(primary.landmarks);
             if (gaze === 'away') {
-                lookingAwayCountRef.current += 1;
-                if (lookingAwayCountRef.current >= LOOKING_AWAY_CONSECUTIVE) {
-                    lookingAwayCountRef.current = 0;
-                    await postEvent('LOOKING_AWAY', { source: 'face-api.js' });
-                }
+                if (!awaySinceRef.current) awaySinceRef.current = Date.now();
+                await postEvent('LOOKING_AWAY', { source: 'face-api.js' });
             } else {
-                lookingAwayCountRef.current = 0;
+                awaySinceRef.current = null;
+                awaySubFiredRef.current = false;
             }
 
             // Identity verification — compare against enrolled descriptor
@@ -209,6 +241,40 @@ export function useFaceProctor({
         }
     }, [disabled, postEvent]);
 
+    // Runs every 1s — no model inference, just checks how long the LAST KNOWN
+    // state (set by runDetection above) has persisted, and fires a paired
+    // violation once SUB_EVENTS_PER_VIOLATION sustained occurrences happen.
+    const checkSustained = useCallback(() => {
+        const now = Date.now();
+
+        if (noFaceSinceRef.current && !noFaceSubFiredRef.current) {
+            if (now - noFaceSinceRef.current >= NO_FACE_SUSTAIN_MS) {
+                noFaceSubFiredRef.current = true;
+                noFaceSubCountRef.current += 1;
+                if (noFaceSubCountRef.current >= SUB_EVENTS_PER_VIOLATION) {
+                    noFaceSubCountRef.current = 0;
+                    onSustainedViolationRef.current?.('NO_FACE');
+                }
+            }
+        }
+
+        if (awaySinceRef.current && !awaySubFiredRef.current) {
+            if (now - awaySinceRef.current >= LOOKING_AWAY_SUSTAIN_MS) {
+                awaySubFiredRef.current = true;
+                awaySubCountRef.current += 1;
+                if (awaySubCountRef.current >= SUB_EVENTS_PER_VIOLATION) {
+                    awaySubCountRef.current = 0;
+                    onSustainedViolationRef.current?.('LOOKING_AWAY');
+                }
+            }
+        }
+
+        setState((s) => {
+            if (s.noFaceSince === noFaceSinceRef.current && s.awaySince === awaySinceRef.current) return s;
+            return { ...s, noFaceSince: noFaceSinceRef.current, awaySince: awaySinceRef.current };
+        });
+    }, []);
+
     const startProctoring = useCallback(async () => {
         if (disabled) return;
 
@@ -224,7 +290,10 @@ export function useFaceProctor({
                 runDetection();
             }
         }, DETECTION_INTERVAL_MS);
-    }, [disabled, loadModels, startCamera, fetchEnrolledDescriptor, runDetection]);
+
+        if (sustainIntervalRef.current) clearInterval(sustainIntervalRef.current);
+        sustainIntervalRef.current = setInterval(checkSustained, SUSTAIN_CHECK_INTERVAL_MS);
+    }, [disabled, loadModels, startCamera, fetchEnrolledDescriptor, runDetection, checkSustained]);
 
     // One-off camera + model load for the enrollment UI — no periodic detection
     // loop and no attemptId dependency, unlike startProctoring() (used during exams).
@@ -238,6 +307,16 @@ export function useFaceProctor({
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
+        if (sustainIntervalRef.current) {
+            clearInterval(sustainIntervalRef.current);
+            sustainIntervalRef.current = null;
+        }
+        noFaceSinceRef.current = null;
+        awaySinceRef.current = null;
+        noFaceSubFiredRef.current = false;
+        awaySubFiredRef.current = false;
+        noFaceSubCountRef.current = 0;
+        awaySubCountRef.current = 0;
         const stream = useProctorStore.getState().webcamStream;
         if (stream) {
             stream.getTracks().forEach((t) => t.stop());

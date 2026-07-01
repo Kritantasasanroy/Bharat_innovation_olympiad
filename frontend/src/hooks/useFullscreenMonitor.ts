@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur';
+type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur' | 'no_face' | 'looking_away';
 
 interface FullscreenMonitorOptions {
   onViolation?: (type: ViolationType, count: number) => void;
@@ -156,6 +156,26 @@ export function useFullscreenMonitor({
     startTimer();
   };
 
+  /**
+   * Report a violation from OUTSIDE the fullscreen/tab-switch/blur detectors
+   * above — used for face-related issues (sustained no-face, sustained
+   * looking-away). Adds to the SAME shared counter and triggers the SAME
+   * auto-submit-at-maxViolations behavior, but does NOT set `isGated` — face
+   * issues get a subtle popup (rendered by the caller), not the full
+   * fullscreen-recovery overlay, so the student can keep answering.
+   */
+  const reportExternalViolation = useCallback((type: ViolationType) => {
+    violationCountRef.current += 1;
+    const count = violationCountRef.current;
+    setViolationCount(count);
+    writeStoredViolations(count);
+    onViolationRef.current?.(type, count);
+
+    if (count >= maxViolations) {
+      onAutoSubmitRef.current?.(`Maximum violations reached (${maxViolations})`);
+    }
+  }, [maxViolations]);
+
   const requestFullscreen = useCallback(async () => {
     setLastError(null);
     if (typeof document === 'undefined') return;
@@ -269,5 +289,6 @@ export function useFullscreenMonitor({
     lastError,
     maxViolations,
     requestFullscreen,
+    reportExternalViolation,
   };
 }
