@@ -1598,37 +1598,30 @@ useSocket() → { socket, isConnected }
 
 ### Current Deployment
 
-| Service | Platform | URL |
-|---|---|---|
-| Backend (NestJS) | Render.com | `https://api.bharatolympiad.in` |
-| Student Frontend | Vercel | `https://olympiad-student-frontend-*.vercel.app` |
-| Admin Frontend | Vercel | `https://olympiad-admin-frontend-*.vercel.app` |
-| Database | Neon.tech (PostgreSQL) | Managed connection string |
-| Redis | Docker (local dev) | — |
+| Service | Platform | URL | Auto-deploy on push? |
+|---|---|---|---|
+| Backend (NestJS) | Render.com (Blueprint, `render.yaml`) | `https://olympiad-backend-wsvn.onrender.com` | Yes — service is Blueprint-managed |
+| Student Frontend | Vercel | `https://olympiad-student-frontend.vercel.app` | **No** — project has no Git integration ("Connect Git" is still unclicked in the dashboard); deploys are manual only |
+| Admin Frontend | Vercel | `https://olympiad-admin-frontend.vercel.app` | **No** — same as above |
+| Database | Neon.tech (PostgreSQL) | Managed connection string | — |
+
+> Both Vercel projects deploy from whatever's on disk when you run `vercel --prod`, not from GitHub. Pushing to `main` does **not** update either Vercel deployment — you have to deploy manually every time (see below). If you want auto-deploy, click "Connect Git" on each project in the Vercel dashboard and link it to this repo.
 
 ### Deploy Commands
 
 ```bash
-# Backend — push to main triggers Render auto-deploy
+# Backend — push to main triggers Render auto-deploy (Blueprint sync)
 git push origin main
 
-# Student frontend — force production deploy
-cd frontend && vercel --prod --yes
+# Student frontend — force production deploy (no git auto-deploy — see note above)
+cd frontend && npx vercel --prod --yes
 
-# Admin frontend — force production deploy
-cd admin-frontend && vercel --prod --yes
+# Admin frontend — force production deploy (same)
+cd admin-frontend && npx vercel --prod --yes
 
-# Run DB migration after schema change
-cd backend && npx prisma migrate deploy
-
-# PENDING — Phase 2 Razorpay/slot schema migration (run before deploying payment feature)
-cd backend && npx prisma migrate dev --name phase2_razorpay_slots
-
-# Add LOOKING_AWAY to ProctorEventType enum (run once)
-cd backend && npx prisma migrate dev --name add_looking_away_event
-
-# After schema migration, regenerate frontend Prisma client
-cd frontend && npx prisma generate
+# Sync DB schema after a schema.prisma change — this project has no prisma/migrations/
+# history, so use db push everywhere (locally, and as Render's startCommand step)
+cd backend && npx prisma db push
 ```
 
 > **Before deploying the payment feature:** Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` in both `backend/.env` and `frontend/.env` (or Vercel/Render environment settings). Use `rzp_test_...` keys for development and `rzp_live_...` for production.
