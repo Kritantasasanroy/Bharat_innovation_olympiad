@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur' | 'no_face' | 'looking_away';
+type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur' | 'no_face' | 'looking_away' | 'face_mismatch' | 'multiple_faces';
 
 interface FullscreenMonitorOptions {
   onViolation?: (type: ViolationType, count: number) => void;

@@ -9,7 +9,6 @@ type FaceApi = typeof import('face-api.js');
 
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
 const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
-const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
 
 // ── Sustained-issue tracking ──
 // Real inference only runs every 5s, but "sustained for N seconds" needs finer
@@ -17,17 +16,30 @@ const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces ma
 // Date.now() comparisons against timestamps set by the real detection tick)
 // checks whether the LAST KNOWN state has persisted long enough to count.
 const SUSTAIN_CHECK_INTERVAL_MS = 1000;
-const NO_FACE_SUSTAIN_MS = 5000;       // face must be missing continuously for >5s
-const LOOKING_AWAY_SUSTAIN_MS = 3000;  // gaze must be away continuously for >=3s
+// Exported so UI popups (countdowns) stay in sync with the actual thresholds.
+export const NO_FACE_SUSTAIN_MS = 7000;       // face must be missing continuously for >7s
+export const LOOKING_AWAY_SUSTAIN_MS = 5000;  // gaze must be away continuously for >=5s
+export const FACE_MISMATCH_SUSTAIN_MS = 5000; // identity mismatch must persist for >=5s
 const SUB_EVENTS_PER_VIOLATION = 2;    // 2 sustained occurrences = 1 counted violation
+// Safety net: a SINGLE continuous episode that drags on past this counts as
+// its own violation even without a second occurrence to pair with — closes
+// the loophole where staying away/mismatched forever only ever counts once.
+// Counted silently (no extra popup — the original popup is still showing).
+const LONG_VIOLATION_MS = 12000;
+
+type SustainedType = 'NO_FACE' | 'LOOKING_AWAY' | 'FACE_MISMATCH';
 
 interface UseFaceProctorOptions {
     attemptId: string;
     disabled?: boolean;
-    // Fired once per SUB_EVENTS_PER_VIOLATION sustained occurrences — only
-    // meaningful during an exam. Wire this into the same violation counter
-    // that fullscreen/tab-switch violations use.
-    onSustainedViolation?: (type: 'NO_FACE' | 'LOOKING_AWAY') => void;
+    // Fired once per SUB_EVENTS_PER_VIOLATION sustained occurrences (or once a
+    // single occurrence exceeds LONG_VIOLATION_MS) — only meaningful during an
+    // exam. Wire this into the same violation counter that fullscreen/tab-switch
+    // violations use.
+    onSustainedViolation?: (type: SustainedType) => void;
+    // Fired immediately the first tick multiple faces are seen — no sustain
+    // buffer, no pairing, counts every distinct episode as its own violation.
+    onInstantViolation?: (type: 'MULTIPLE_FACES') => void;
 }
 
 interface FaceProctorState {
@@ -35,8 +47,21 @@ interface FaceProctorState {
     loadingProgress: string;
     currentFaceCount: number;
     isIdentityVerified: boolean | null; // null = not checked yet
-    noFaceSince: number | null;  // epoch ms since face went missing, null if present
-    awaySince: number | null;    // epoch ms since gaze registered "away", null if forward/no-face
+    noFaceSince: number | null;   // epoch ms since face went missing, null if present
+    awaySince: number | null;     // epoch ms since gaze registered "away", null if forward/no-face
+    mismatchSince: number | null; // epoch ms since identity stopped matching, null if matching/unchecked
+}
+
+// Per-issue-type bookkeeping for the sustained-duration + pairing logic.
+interface SustainTracker {
+    since: number | null;
+    subFired: boolean;
+    longFired: boolean;
+    subCount: number;
+}
+
+function freshTracker(): SustainTracker {
+    return { since: null, subFired: false, longFired: false, subCount: 0 };
 }
 
 /**
@@ -53,29 +78,32 @@ interface FaceProctorState {
  * Detection cadence: every 5s via setInterval + requestIdleCallback.
  * Events fired: NO_FACE, MULTIPLE_FACES, LOOKING_AWAY, FACE_MISMATCH
  * All events posted to POST /proctor/events (via the shared api client).
+ * Identity match is verified server-side via POST /proctor/verify (the
+ * enrolled descriptor never leaves the backend).
  */
 export function useFaceProctor({
     attemptId,
     disabled = false,
     onSustainedViolation,
+    onInstantViolation,
 }: UseFaceProctorOptions) {
     const videoElementRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const sustainIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const faceApiRef = useRef<FaceApi | null>(null);
-    const enrolledDescriptorRef = useRef<Float32Array | null>(null);
+    const isEnrolledRef = useRef(false);
+    const multiFaceActiveRef = useRef(false);
 
     const onSustainedViolationRef = useRef(onSustainedViolation);
+    const onInstantViolationRef = useRef(onInstantViolation);
     useEffect(() => { onSustainedViolationRef.current = onSustainedViolation; });
+    useEffect(() => { onInstantViolationRef.current = onInstantViolation; });
 
-    // Timestamps set by the real 5s detection tick; read by the 1s sustain checker.
-    const noFaceSinceRef = useRef<number | null>(null);
-    const awaySinceRef = useRef<number | null>(null);
-    const noFaceSubFiredRef = useRef(false);
-    const awaySubFiredRef = useRef(false);
-    const noFaceSubCountRef = useRef(0);
-    const awaySubCountRef = useRef(0);
+    // Timestamps/flags set by the real 5s detection tick; read by the 1s sustain checker.
+    const noFaceTrackerRef = useRef<SustainTracker>(freshTracker());
+    const awayTrackerRef = useRef<SustainTracker>(freshTracker());
+    const mismatchTrackerRef = useRef<SustainTracker>(freshTracker());
 
     const { setWebcamStream, setDeviceCheck } = useProctorStore();
 
@@ -86,6 +114,7 @@ export function useFaceProctor({
         isIdentityVerified: null,
         noFaceSince: null,
         awaySince: null,
+        mismatchSince: null,
     });
 
     // Callback ref — fires every time React mounts/unmounts the <video> element.
@@ -156,13 +185,15 @@ export function useFaceProctor({
         }
     }, [setWebcamStream, setDeviceCheck]);
 
-    const fetchEnrolledDescriptor = useCallback(async () => {
+    // Checked once at proctoring start — whether this student has a stored
+    // face descriptor at all. If not, identity verification is skipped
+    // entirely (nothing to compare against).
+    const fetchEnrollmentStatus = useCallback(async () => {
         try {
             const res = await api.get('/proctor/enrollment');
-            if (!res.data.enrolled) return;
-            // Identity is verified each tick by POST /proctor/verify with the live descriptor
+            isEnrolledRef.current = !!res.data.enrolled;
         } catch {
-            // Non-fatal — skip identity verification if enrollment check fails
+            isEnrolledRef.current = false;
         }
     }, []);
 
@@ -192,20 +223,30 @@ export function useFaceProctor({
             setState((s) => ({ ...s, currentFaceCount: faceCount }));
 
             if (faceCount === 0) {
-                if (!noFaceSinceRef.current) noFaceSinceRef.current = Date.now();
-                // Can't assess gaze without a face — clear that tracker.
-                awaySinceRef.current = null;
-                awaySubFiredRef.current = false;
+                if (!noFaceTrackerRef.current.since) noFaceTrackerRef.current.since = Date.now();
+                // Can't assess gaze/identity without a face — clear those trackers.
+                awayTrackerRef.current = freshTracker();
+                mismatchTrackerRef.current = freshTracker();
+                multiFaceActiveRef.current = false;
+                setState((s) => ({ ...s, isIdentityVerified: null }));
                 await postEvent('NO_FACE', { source: 'face-api.js' });
                 return;
             }
 
             // Face is present again — reset the no-face tracker.
-            noFaceSinceRef.current = null;
-            noFaceSubFiredRef.current = false;
+            noFaceTrackerRef.current = freshTracker();
 
             if (faceCount > 1) {
+                if (!multiFaceActiveRef.current) {
+                    multiFaceActiveRef.current = true;
+                    onInstantViolationRef.current?.('MULTIPLE_FACES');
+                }
                 await postEvent('MULTIPLE_FACES', { faceCount, source: 'face-api.js' });
+                // Identity can't be reliably attributed with more than one face.
+                mismatchTrackerRef.current = freshTracker();
+                setState((s) => ({ ...s, isIdentityVerified: null }));
+            } else {
+                multiFaceActiveRef.current = false;
             }
 
             // Use the first (primary) face for gaze + identity checks
@@ -214,26 +255,33 @@ export function useFaceProctor({
             // Gaze estimation
             const gaze = estimateGaze(primary.landmarks);
             if (gaze === 'away') {
-                if (!awaySinceRef.current) awaySinceRef.current = Date.now();
+                if (!awayTrackerRef.current.since) awayTrackerRef.current.since = Date.now();
                 await postEvent('LOOKING_AWAY', { source: 'face-api.js' });
             } else {
-                awaySinceRef.current = null;
-                awaySubFiredRef.current = false;
+                awayTrackerRef.current = freshTracker();
             }
 
-            // Identity verification — compare against enrolled descriptor
-            if (enrolledDescriptorRef.current && primary.descriptor) {
-                const distance = faceapi.euclideanDistance(
-                    Array.from(primary.descriptor),
-                    Array.from(enrolledDescriptorRef.current),
-                );
-                const match = distance < IDENTITY_THRESHOLD;
-                setState((s) => ({ ...s, isIdentityVerified: match }));
-                if (!match) {
-                    await postEvent('FACE_MISMATCH', {
-                        distance: parseFloat(distance.toFixed(3)),
-                        source: 'face-api.js',
+            // Identity verification — only meaningful with exactly one face,
+            // and only if this student has an enrolled descriptor to compare
+            // against. Comparison runs server-side (POST /proctor/verify) so
+            // the enrolled descriptor never has to leave the backend.
+            if (faceCount === 1 && isEnrolledRef.current && primary.descriptor) {
+                try {
+                    const { data } = await api.post<{ match: boolean; distance: number }>('/proctor/verify', {
+                        descriptor: Array.from(primary.descriptor),
                     });
+                    setState((s) => ({ ...s, isIdentityVerified: data.match }));
+                    if (!data.match) {
+                        if (!mismatchTrackerRef.current.since) mismatchTrackerRef.current.since = Date.now();
+                        await postEvent('FACE_MISMATCH', {
+                            distance: parseFloat(data.distance.toFixed(3)),
+                            source: 'face-api.js',
+                        });
+                    } else {
+                        mismatchTrackerRef.current = freshTracker();
+                    }
+                } catch {
+                    // Network errors during verify are non-fatal — skip this tick
                 }
             }
         } catch {
@@ -243,35 +291,38 @@ export function useFaceProctor({
 
     // Runs every 1s — no model inference, just checks how long the LAST KNOWN
     // state (set by runDetection above) has persisted, and fires a paired
-    // violation once SUB_EVENTS_PER_VIOLATION sustained occurrences happen.
+    // violation once SUB_EVENTS_PER_VIOLATION sustained occurrences happen (or
+    // once a single occurrence exceeds LONG_VIOLATION_MS, silently).
     const checkSustained = useCallback(() => {
         const now = Date.now();
 
-        if (noFaceSinceRef.current && !noFaceSubFiredRef.current) {
-            if (now - noFaceSinceRef.current >= NO_FACE_SUSTAIN_MS) {
-                noFaceSubFiredRef.current = true;
-                noFaceSubCountRef.current += 1;
-                if (noFaceSubCountRef.current >= SUB_EVENTS_PER_VIOLATION) {
-                    noFaceSubCountRef.current = 0;
-                    onSustainedViolationRef.current?.('NO_FACE');
+        const evaluate = (tracker: SustainTracker, sustainMs: number, type: SustainedType) => {
+            if (!tracker.since) return;
+            const elapsed = now - tracker.since;
+            if (!tracker.subFired && elapsed >= sustainMs) {
+                tracker.subFired = true;
+                tracker.subCount += 1;
+                if (tracker.subCount >= SUB_EVENTS_PER_VIOLATION) {
+                    tracker.subCount = 0;
+                    onSustainedViolationRef.current?.(type);
                 }
             }
-        }
+            if (!tracker.longFired && elapsed >= LONG_VIOLATION_MS) {
+                tracker.longFired = true;
+                onSustainedViolationRef.current?.(type);
+            }
+        };
 
-        if (awaySinceRef.current && !awaySubFiredRef.current) {
-            if (now - awaySinceRef.current >= LOOKING_AWAY_SUSTAIN_MS) {
-                awaySubFiredRef.current = true;
-                awaySubCountRef.current += 1;
-                if (awaySubCountRef.current >= SUB_EVENTS_PER_VIOLATION) {
-                    awaySubCountRef.current = 0;
-                    onSustainedViolationRef.current?.('LOOKING_AWAY');
-                }
-            }
-        }
+        evaluate(noFaceTrackerRef.current, NO_FACE_SUSTAIN_MS, 'NO_FACE');
+        evaluate(awayTrackerRef.current, LOOKING_AWAY_SUSTAIN_MS, 'LOOKING_AWAY');
+        evaluate(mismatchTrackerRef.current, FACE_MISMATCH_SUSTAIN_MS, 'FACE_MISMATCH');
 
         setState((s) => {
-            if (s.noFaceSince === noFaceSinceRef.current && s.awaySince === awaySinceRef.current) return s;
-            return { ...s, noFaceSince: noFaceSinceRef.current, awaySince: awaySinceRef.current };
+            const noFaceSince = noFaceTrackerRef.current.since;
+            const awaySince = awayTrackerRef.current.since;
+            const mismatchSince = mismatchTrackerRef.current.since;
+            if (s.noFaceSince === noFaceSince && s.awaySince === awaySince && s.mismatchSince === mismatchSince) return s;
+            return { ...s, noFaceSince, awaySince, mismatchSince };
         });
     }, []);
 
@@ -280,7 +331,7 @@ export function useFaceProctor({
 
         await loadModels();
         await startCamera();
-        await fetchEnrolledDescriptor();
+        await fetchEnrollmentStatus();
 
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(() => {
@@ -293,7 +344,7 @@ export function useFaceProctor({
 
         if (sustainIntervalRef.current) clearInterval(sustainIntervalRef.current);
         sustainIntervalRef.current = setInterval(checkSustained, SUSTAIN_CHECK_INTERVAL_MS);
-    }, [disabled, loadModels, startCamera, fetchEnrolledDescriptor, runDetection, checkSustained]);
+    }, [disabled, loadModels, startCamera, fetchEnrollmentStatus, runDetection, checkSustained]);
 
     // One-off camera + model load for the enrollment UI — no periodic detection
     // loop and no attemptId dependency, unlike startProctoring() (used during exams).
@@ -311,12 +362,10 @@ export function useFaceProctor({
             clearInterval(sustainIntervalRef.current);
             sustainIntervalRef.current = null;
         }
-        noFaceSinceRef.current = null;
-        awaySinceRef.current = null;
-        noFaceSubFiredRef.current = false;
-        awaySubFiredRef.current = false;
-        noFaceSubCountRef.current = 0;
-        awaySubCountRef.current = 0;
+        noFaceTrackerRef.current = freshTracker();
+        awayTrackerRef.current = freshTracker();
+        mismatchTrackerRef.current = freshTracker();
+        multiFaceActiveRef.current = false;
         const stream = useProctorStore.getState().webcamStream;
         if (stream) {
             stream.getTracks().forEach((t) => t.stop());

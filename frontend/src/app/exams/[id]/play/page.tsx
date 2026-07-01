@@ -2,7 +2,7 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import { useExamSession } from '@/hooks/useExamSession';
-import { useFaceProctor } from '@/hooks/useFaceProctor';
+import { useFaceProctor, NO_FACE_SUSTAIN_MS, LOOKING_AWAY_SUSTAIN_MS, FACE_MISMATCH_SUSTAIN_MS } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
@@ -66,10 +66,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     } = useFullscreenMonitor({
         onViolation: async (type, count) => {
             if (!attemptId) return;
-            // NO_FACE/LOOKING_AWAY are already logged by useFaceProctor's own
-            // postEvent calls — only fullscreen-related violations need a
+            // Face-related violations are already logged by useFaceProctor's
+            // own postEvent calls — only fullscreen-related violations need a
             // separate ProctorEvent posted here.
-            if (type === 'no_face' || type === 'looking_away') return;
+            if (type === 'no_face' || type === 'looking_away' || type === 'face_mismatch' || type === 'multiple_faces') return;
             try {
                 const backendType =
                     type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN'
@@ -95,11 +95,15 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         isIdentityVerified,
         noFaceSince,
         awaySince,
+        mismatchSince,
         startProctoring,
         stopProctoring,
     } = useFaceProctor({
         attemptId,
-        onSustainedViolation: (type) => reportExternalViolation(type === 'NO_FACE' ? 'no_face' : 'looking_away'),
+        onSustainedViolation: (type) => reportExternalViolation(
+            type === 'NO_FACE' ? 'no_face' : type === 'LOOKING_AWAY' ? 'looking_away' : 'face_mismatch',
+        ),
+        onInstantViolation: () => reportExternalViolation('multiple_faces'),
     });
 
     useEffect(() => { stopProctoringRef.current = stopProctoring; });
@@ -110,8 +114,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         const t = setInterval(() => setNowTick(Date.now()), 500);
         return () => clearInterval(t);
     }, []);
-    const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((5000 - (nowTick - noFaceSince)) / 1000)) : null;
-    const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((3000 - (nowTick - awaySince)) / 1000)) : null;
+    const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((NO_FACE_SUSTAIN_MS - (nowTick - noFaceSince)) / 1000)) : null;
+    const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((LOOKING_AWAY_SUSTAIN_MS - (nowTick - awaySince)) / 1000)) : null;
+    const mismatchSecondsLeft = mismatchSince ? Math.max(0, Math.ceil((FACE_MISMATCH_SUSTAIN_MS - (nowTick - mismatchSince)) / 1000)) : null;
+    const showMultiFacePopup = currentFaceCount > 1;
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
@@ -250,6 +256,26 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         }}>
                             <span style={{ fontSize: '1.1rem' }}>👀</span>
                             <span>Please look at the screen{awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.</span>
+                        </div>
+                    )}
+                    {mismatchSecondsLeft !== null && (
+                        <div style={{
+                            background: 'rgba(220,38,38,0.95)', color: '#fff', borderRadius: '10px',
+                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
+                        }}>
+                            <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                            <span>Face does not match your enrolled profile. Please ensure you are the registered student.</span>
+                        </div>
+                    )}
+                    {showMultiFacePopup && (
+                        <div style={{
+                            background: 'rgba(249,115,22,0.95)', color: '#fff', borderRadius: '10px',
+                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
+                        }}>
+                            <span style={{ fontSize: '1.1rem' }}>👥</span>
+                            <span>Multiple faces detected. Only the registered student should be visible.</span>
                         </div>
                     )}
                 </div>
