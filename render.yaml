@@ -12,17 +12,17 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && node dist/src/main.js
+    # No prisma/migrations/ history exists for this project — schema changes
+    # are kept in sync via `db push`, not `migrate deploy` (which requires a
+    # migrations folder and fails outright without one).
+    startCommand: npx prisma db push --accept-data-loss && node dist/src/main.js
     envVars:
       - key: NODE_ENV
         value: production
 
       # ── Database ───────────────────────────────────────────────────────────
-      # DATABASE_URL  → Neon pooler URL  (pgbouncer=true, used by the app)
-      # DIRECT_URL    → Neon direct URL  (no pooler, used ONLY by prisma migrate deploy)
+      # Neon pooler URL (pgbouncer=true) — confirmed working with `prisma db push`.
       - key: DATABASE_URL
-        sync: false
-      - key: DIRECT_URL
         sync: false
 
       # ── JWT ─────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ services:
       - key: JWT_REFRESH_SECRET
         generateValue: true
 
-      # ── Admin seed credentials ────────────────────────────────────────────
+      # ── Admin login credentials (POST /api/auth/admin-login) ────────────
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
@@ -51,13 +51,15 @@ services:
       - key: ALLOWED_ORIGINS
         sync: false
 
-      # ── Proctor service ───────────────────────────────────────────────────
-      # Set PROCTOR_SERVICE_URL to the olympiad-proctor Render service URL
-      # after the proctor service is deployed, e.g.:
-      #   https://olympiad-proctor.onrender.com
-      - key: PROCTOR_SERVICE_URL
+      # ── Razorpay ──────────────────────────────────────────────────────────
+      # PaymentService constructs a Razorpay client at boot unconditionally —
+      # the backend crashes with "key_id or oauthToken is mandatory" without
+      # these set, even in environments where payments aren't in active use.
+      - key: RAZORPAY_KEY_ID
         sync: false
-      - key: PROCTOR_API_KEY
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
 
       # ── Redis (optional) ─────────────────────────────────────────────────
@@ -66,22 +68,10 @@ services:
       - key: REDIS_URL
         sync: false
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # FastAPI Proctoring Service — Face detection / frame analysis
-  # Uses Render's native Python environment (Ubuntu).
-  # libgomp1 (required by onnxruntime) is pre-installed on Render's build image.
-  # The startCommand overrides the hardcoded port=5000 in main.py and binds to
-  # Render's dynamic $PORT instead.
-  # ──────────────────────────────────────────────────────────────────────────
-  - type: web
-    name: olympiad-proctor
-    env: python
-    region: singapore
-    plan: free
-    rootDir: proctor-service
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      # Must match PROCTOR_API_KEY set on the backend service above.
-      - key: PROCTOR_API_KEY
-        sync: false
+  # Note: there is no separate proctor service. All AI proctoring (face
+  # detection, gaze estimation, identity matching) runs client-side in the
+  # student's browser via face-api.js — see frontend/src/hooks/useFaceProctor.ts.
+  # The Python FastAPI proctor-service this file used to deploy as
+  # "olympiad-proctor" was removed when the project migrated off Meazure
+  # Learning; do not re-add it without also restoring the proctor-service/
+  # directory.

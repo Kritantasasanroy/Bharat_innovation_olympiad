@@ -230,6 +230,18 @@ export class AttemptService {
     }
 
     async startAttempt(userId: string, instanceId: string, ipAddress?: string) {
+        // Face enrollment is required before starting any proctored exam —
+        // this is enforced here (not just at registration) so a student can
+        // never reach the exam player unenrolled, regardless of how their
+        // account was created or whether the frontend gate was bypassed.
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { faceEmbedding: true },
+        });
+        if (!user?.faceEmbedding) {
+            throw new ForbiddenException('FACE_ENROLLMENT_REQUIRED');
+        }
+
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: instanceId },
             include: { exam: true },

@@ -86,13 +86,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         pauseTimeoutSec: 20,
     });
 
-    // Start exam then immediately start face-api.js proctoring.
+    // Start the exam once on mount.
     useEffect(() => {
-        startExam()
-            .then(() => { startProctoring(); })
-            .catch(err => console.warn('Exam init warning:', err));
-        return () => { stopProctoring(); };
+        startExam().catch(err => console.warn('Exam init warning:', err));
     }, []);
+
+    // Start face-api.js proctoring only once the real attemptId is available.
+    // (attemptId is '' during the initial render, before startExam() resolves —
+    // calling startProctoring() from the mount effect above captured that stale
+    // '' via closure, so every detection event was posted with attemptId: '' and
+    // silently failed a foreign-key constraint server-side.)
+    useEffect(() => {
+        if (!attemptId) return;
+        startProctoring();
+        return () => { stopProctoring(); };
+    }, [attemptId]);
 
     useEffect(() => {
         if (currentQuestion) {
@@ -137,6 +145,23 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const answeredCount = Object.keys(answers).length;
     const progressPercent = questions.length > 0
         ? Math.round((answeredCount / questions.length) * 100) : 0;
+
+    if (error === 'FACE_ENROLLMENT_REQUIRED') {
+        return (
+            <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '500px' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🪪</div>
+                    <h2 style={{ marginBottom: '1rem' }}>Face Enrollment Required</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        This is a proctored exam — you need to enroll your face before you can start it. It only takes a few seconds.
+                    </p>
+                    <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/profile'}>
+                        Enroll Face Now
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (error) {
         return (
