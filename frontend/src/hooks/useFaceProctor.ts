@@ -226,6 +226,13 @@ export function useFaceProctor({
         }, DETECTION_INTERVAL_MS);
     }, [disabled, loadModels, startCamera, fetchEnrolledDescriptor, runDetection]);
 
+    // One-off camera + model load for the enrollment UI — no periodic detection
+    // loop and no attemptId dependency, unlike startProctoring() (used during exams).
+    const startEnrollmentCamera = useCallback(async () => {
+        await loadModels();
+        await startCamera();
+    }, [loadModels, startCamera]);
+
     const stopProctoring = useCallback(() => {
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -279,6 +286,7 @@ export function useFaceProctor({
         videoRef,
         ...state,
         startProctoring,
+        startEnrollmentCamera,
         stopProctoring,
         enrollFace,
         captureDescriptor,

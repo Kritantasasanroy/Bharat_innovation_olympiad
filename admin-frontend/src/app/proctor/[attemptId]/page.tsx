@@ -2,12 +2,10 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
-import Cookies from 'js-cookie';
+import api from '@/lib/api';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 interface ProctorEvent {
     id: string;
@@ -99,16 +97,9 @@ export default function StudentProctorDetailPage() {
 
     useEffect(() => {
         if (!attemptId) return;
-        const token = Cookies.get('admin_token');
-        fetch(`${API}/proctor/report/${attemptId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.json();
-            })
-            .then((d) => { setReport(d); setLoading(false); })
-            .catch((e) => { setError(e.message); setLoading(false); });
+        api.get(`/proctor/report/${attemptId}`)
+            .then((r) => { setReport(r.data); setLoading(false); })
+            .catch((e) => { setError(e.response?.data?.message ?? e.message); setLoading(false); });
     }, [attemptId]);
 
     if (loading) {

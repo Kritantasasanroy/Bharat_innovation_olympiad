@@ -1,36 +1,31 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Cookies from 'js-cookie';
-import Link from 'next/link';
+import AuthGuard from '@/components/layout/AuthGuard';
+import Navbar from '@/components/layout/Navbar';
+import api from '@/lib/api';
 import { LiveMonitoringEntry } from '@/types/proctor';
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const POLL_INTERVAL_MS = 15_000;
 
-const EVENT_LABELS: Record<string, { label: string; color: string }> = {
-    NO_FACE:           { label: 'No Face',        color: 'bg-red-500' },
-    MULTIPLE_FACES:    { label: 'Multi-Face',     color: 'bg-orange-500' },
-    FACE_MISMATCH:     { label: 'ID Mismatch',    color: 'bg-red-600' },
-    LOOKING_AWAY:      { label: 'Looking Away',   color: 'bg-yellow-500' },
-    TAB_SWITCH:        { label: 'Tab Switch',     color: 'bg-orange-400' },
-    EXIT_FULLSCREEN:   { label: 'Fullscreen Exit',color: 'bg-orange-400' },
-    SCREEN_CAPTURE:    { label: 'Screen Capture', color: 'bg-red-700' },
-    NETWORK_DISCONNECT:{ label: 'Disconnect',     color: 'bg-gray-500' },
-    SEB_VIOLATION:     { label: 'SEB Violation',  color: 'bg-purple-600' },
-    IP_CHANGE:         { label: 'IP Change',      color: 'bg-blue-500' },
+const EVENT_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+    NO_FACE:            { label: 'No Face',        color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+    MULTIPLE_FACES:     { label: 'Multi-Face',     color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
+    FACE_MISMATCH:      { label: 'ID Mismatch',    color: '#dc2626', bg: 'rgba(220,38,38,0.15)' },
+    LOOKING_AWAY:       { label: 'Looking Away',   color: '#eab308', bg: 'rgba(234,179,8,0.15)' },
+    TAB_SWITCH:         { label: 'Tab Switch',     color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
+    EXIT_FULLSCREEN:    { label: 'Fullscreen Exit',color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
+    SCREEN_CAPTURE:     { label: 'Screen Capture', color: '#dc2626', bg: 'rgba(220,38,38,0.15)' },
+    NETWORK_DISCONNECT: { label: 'Disconnected',   color: '#6b7280', bg: 'rgba(107,114,128,0.15)' },
+    SEB_VIOLATION:      { label: 'SEB Violation',  color: '#7c3aed', bg: 'rgba(124,58,237,0.15)' },
+    IP_CHANGE:          { label: 'IP Change',      color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
 };
 
 function riskColor(score: number): string {
-    if (score >= 0.5) return 'text-red-500';
-    if (score >= 0.2) return 'text-yellow-500';
-    return 'text-green-500';
-}
-
-function riskBarColor(score: number): string {
-    if (score >= 0.5) return 'bg-red-500';
-    if (score >= 0.2) return 'bg-yellow-400';
-    return 'bg-green-500';
+    if (score >= 0.5) return 'var(--danger-400)';
+    if (score >= 0.2) return 'var(--warning-400)';
+    return 'var(--success-400)';
 }
 
 function elapsed(startedAt: string): string {
@@ -50,18 +45,13 @@ export default function LiveProctorPage() {
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchLive = async () => {
-        const token = Cookies.get('admin_token');
         try {
-            const res = await fetch(`${API}/proctor/live?since=10`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data: LiveMonitoringEntry[] = await res.json();
+            const { data } = await api.get<LiveMonitoringEntry[]>('/proctor/live', { params: { since: 10 } });
             setEntries(data);
             setLastRefreshed(new Date());
             setError(null);
         } catch (e: any) {
-            setError(e.message ?? 'Failed to fetch live data');
+            setError(e.response?.data?.message ?? e.message ?? 'Failed to fetch live data');
         } finally {
             setLoading(false);
         }
@@ -73,153 +63,157 @@ export default function LiveProctorPage() {
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, []);
 
-    const highRisk  = entries.filter((e) => e.riskScore >= 0.5).length;
-    const medRisk   = entries.filter((e) => e.riskScore >= 0.2 && e.riskScore < 0.5).length;
-    const lowRisk   = entries.filter((e) => e.riskScore < 0.2).length;
+    const highRisk = entries.filter((e) => e.riskScore >= 0.5).length;
+    const medRisk = entries.filter((e) => e.riskScore >= 0.2 && e.riskScore < 0.5).length;
+    const lowRisk = entries.filter((e) => e.riskScore < 0.2).length;
 
     return (
-        <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-white">Live Exam Monitoring</h1>
-                    <p className="text-sm text-gray-400 mt-1">
-                        face-api.js client-side proctoring · auto-refreshes every 15s
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1.5 text-xs bg-green-900/40 text-green-400 border border-green-700 px-3 py-1.5 rounded-full">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                        Live
-                    </span>
-                    {lastRefreshed && (
-                        <span className="text-xs text-gray-500">
-                            Updated {lastRefreshed.toLocaleTimeString()}
-                        </span>
-                    )}
-                    <button
-                        onClick={fetchLive}
-                        className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                        Refresh now
-                    </button>
-                </div>
-            </div>
-
-            {/* Summary bar */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
-                {[
-                    { label: 'Active Students', value: entries.length, color: 'text-blue-400' },
-                    { label: 'High Risk (≥0.5)', value: highRisk,      color: 'text-red-400' },
-                    { label: 'Medium Risk',       value: medRisk,       color: 'text-yellow-400' },
-                    { label: 'Low Risk',           value: lowRisk,       color: 'text-green-400' },
-                ].map((stat) => (
-                    <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                        <p className="text-xs text-gray-500 mb-1">{stat.label}</p>
-                        <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+        <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
+            <Navbar />
+            <main className="container animate-fade-in" style={{ paddingTop: 'var(--space-8)', paddingBottom: 'var(--space-16)' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)', marginBottom: 'var(--space-8)' }}>
+                    <div>
+                        <h1 style={{ fontSize: '1.875rem', fontWeight: 700 }}>Live Exam Monitoring</h1>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-1)' }}>
+                            face-api.js client-side proctoring · auto-refreshes every 15s
+                        </p>
                     </div>
-                ))}
-            </div>
-
-            {/* Loading / error / empty */}
-            {loading && (
-                <div className="text-center text-gray-500 py-20">Loading active sessions…</div>
-            )}
-            {error && (
-                <div className="text-center text-red-400 py-20">{error}</div>
-            )}
-            {!loading && !error && entries.length === 0 && (
-                <div className="text-center py-20">
-                    <p className="text-gray-500 text-lg">No active exam sessions right now.</p>
-                    <p className="text-gray-600 text-sm mt-2">Students taking exams will appear here automatically.</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                        <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem',
+                            background: 'rgba(34,197,94,0.12)', color: 'var(--success-400)',
+                            border: '1px solid rgba(34,197,94,0.3)', padding: '0.35rem 0.75rem', borderRadius: 'var(--radius-full)',
+                        }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success-400)' }} className="animate-pulse" />
+                            Live
+                        </span>
+                        {lastRefreshed && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                                Updated {lastRefreshed.toLocaleTimeString()}
+                            </span>
+                        )}
+                        <button className="btn btn-sm btn-secondary" onClick={fetchLive}>Refresh now</button>
+                    </div>
                 </div>
-            )}
 
-            {/* Student grid */}
-            {entries.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {entries.map((entry) => (
-                        <div
-                            key={entry.attemptId}
-                            className={`bg-gray-900 border rounded-xl p-5 flex flex-col gap-3 ${
-                                entry.riskScore >= 0.5
-                                    ? 'border-red-700'
-                                    : entry.riskScore >= 0.2
-                                    ? 'border-yellow-700'
-                                    : 'border-gray-800'
-                            }`}
-                        >
-                            {/* Student info */}
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="font-semibold text-white">{entry.studentName}</p>
-                                    <p className="text-xs text-gray-400">{entry.studentEmail}</p>
-                                </div>
-                                <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-lg">
-                                    {elapsed(entry.startedAt)}
-                                </span>
-                            </div>
-
-                            {/* Exam title */}
-                            <p className="text-sm text-blue-300 truncate">{entry.examTitle}</p>
-
-                            {/* Risk score */}
-                            <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                    <span className="text-gray-400">Risk Score</span>
-                                    <span className={`font-bold ${riskColor(entry.riskScore)}`}>
-                                        {(entry.riskScore * 100).toFixed(0)}%
-                                    </span>
-                                </div>
-                                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${riskBarColor(entry.riskScore)}`}
-                                        style={{ width: `${Math.min(entry.riskScore * 100, 100)}%` }}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Event counts */}
-                            {Object.keys(entry.eventCounts).length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {Object.entries(entry.eventCounts).map(([type, count]) => {
-                                        const meta = EVENT_LABELS[type] ?? { label: type, color: 'bg-gray-600' };
-                                        return (
-                                            <span
-                                                key={type}
-                                                className={`inline-flex items-center gap-1 text-xs ${meta.color} text-white px-2 py-0.5 rounded-full`}
-                                            >
-                                                {meta.label}
-                                                <span className="font-bold">×{count}</span>
-                                            </span>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {Object.keys(entry.eventCounts).length === 0 && (
-                                <p className="text-xs text-gray-600 italic">No violations in last 10 minutes</p>
-                            )}
-
-                            {/* Actions */}
-                            <div className="flex gap-2 mt-1">
-                                <Link
-                                    href={`/proctor/${entry.attemptId}`}
-                                    className="text-xs text-center bg-blue-900/40 hover:bg-blue-800/60 border border-blue-700 text-blue-300 hover:text-white px-3 py-2 rounded-lg transition-colors flex-1"
-                                >
-                                    Proctor Detail →
-                                </Link>
-                                <Link
-                                    href={`/analytics/attempt/${entry.attemptId}`}
-                                    className="text-xs text-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-lg transition-colors flex-1"
-                                >
-                                    Score Report →
-                                </Link>
-                            </div>
+                {/* Summary bar */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-4)', marginBottom: 'var(--space-8)' }}>
+                    {[
+                        { label: 'Active Students', value: entries.length, color: 'var(--primary-400)' },
+                        { label: 'High Risk (≥50%)', value: highRisk, color: 'var(--danger-400)' },
+                        { label: 'Medium Risk', value: medRisk, color: 'var(--warning-400)' },
+                        { label: 'Low Risk', value: lowRisk, color: 'var(--success-400)' },
+                    ].map((stat) => (
+                        <div key={stat.label} className="glass-card" style={{ padding: 'var(--space-5)' }}>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--space-2)' }}>{stat.label}</p>
+                            <p style={{ fontSize: '1.75rem', fontWeight: 700, color: stat.color }}>{stat.value}</p>
                         </div>
                     ))}
                 </div>
-            )}
-        </div>
+
+                {/* Loading / error / empty */}
+                {loading && (
+                    <div className="glass-card" style={{ padding: 'var(--space-12)', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading active sessions…</div>
+                )}
+                {error && !loading && (
+                    <div className="glass-card" style={{ padding: 'var(--space-12)', textAlign: 'center', color: 'var(--danger-400)' }}>{error}</div>
+                )}
+                {!loading && !error && entries.length === 0 && (
+                    <div className="glass-card" style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: 'var(--space-3)' }}>🟢</div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem' }}>No active exam sessions right now.</p>
+                        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: 'var(--space-2)' }}>Students taking exams will appear here automatically.</p>
+                    </div>
+                )}
+
+                {/* Student grid */}
+                {entries.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--space-4)' }}>
+                        {entries.map((entry) => (
+                            <div
+                                key={entry.attemptId}
+                                className="glass-card"
+                                style={{
+                                    padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+                                    border: entry.riskScore >= 0.5 ? '1px solid rgba(239,68,68,0.4)'
+                                        : entry.riskScore >= 0.2 ? '1px solid rgba(234,179,8,0.4)' : undefined,
+                                }}
+                            >
+                                {/* Student info */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div>
+                                        <p style={{ fontWeight: 600 }}>{entry.studentName}</p>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{entry.studentEmail}</p>
+                                    </div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', padding: '0.2rem 0.6rem', borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap' }}>
+                                        {elapsed(entry.startedAt)}
+                                    </span>
+                                </div>
+
+                                {/* Exam title */}
+                                <p style={{ fontSize: '0.875rem', color: 'var(--primary-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.examTitle}</p>
+
+                                {/* Risk score */}
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>Risk Score</span>
+                                        <span style={{ fontWeight: 700, color: riskColor(entry.riskScore) }}>
+                                            {(entry.riskScore * 100).toFixed(0)}%
+                                        </span>
+                                    </div>
+                                    <div style={{ height: 6, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                                        <div style={{
+                                            height: '100%', width: `${Math.min(entry.riskScore * 100, 100)}%`,
+                                            background: riskColor(entry.riskScore), borderRadius: 'var(--radius-full)', transition: 'width 0.5s',
+                                        }} />
+                                    </div>
+                                </div>
+
+                                {/* Event counts */}
+                                {Object.keys(entry.eventCounts).length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                        {Object.entries(entry.eventCounts).map(([type, count]) => {
+                                            const meta = EVENT_LABELS[type] ?? { label: type, color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' };
+                                            return (
+                                                <span
+                                                    key={type}
+                                                    style={{
+                                                        display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem',
+                                                        background: meta.bg, color: meta.color, padding: '0.15rem 0.55rem', borderRadius: 'var(--radius-full)', fontWeight: 600,
+                                                    }}
+                                                >
+                                                    {meta.label} ×{count}
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No violations in last 10 minutes</p>
+                                )}
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+                                    <Link
+                                        href={`/proctor/${entry.attemptId}`}
+                                        className="btn btn-sm btn-primary"
+                                        style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                                    >
+                                        Proctor Detail →
+                                    </Link>
+                                    <Link
+                                        href={`/analytics/attempt/${entry.attemptId}`}
+                                        className="btn btn-sm btn-secondary"
+                                        style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                                    >
+                                        Score Report →
+                                    </Link>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
+        </AuthGuard>
     );
 }

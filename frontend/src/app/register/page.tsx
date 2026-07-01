@@ -2,6 +2,7 @@
 
 import { APP_NAME, CLASS_BANDS, COMPANY_NAME } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
+import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,7 +17,7 @@ const SCHOOLS = (schoolsData as any[]).map((s: any) => ({
     pincode: s['Pincode'] ? String(s['Pincode']).trim() : ''
 }));
 
-type Step = 'details' | 'verify';
+type Step = 'details' | 'verify' | 'face';
 
 export default function RegisterPage() {
     const [step, setStep] = useState<Step>('details');
@@ -40,6 +41,51 @@ export default function RegisterPage() {
     const filteredSchools = SCHOOLS.filter(s =>
         s.name.toLowerCase().includes(schoolSearch.toLowerCase())
     );
+
+    // Mandatory face enrollment (step 3, after account creation)
+    const [faceCameraOn, setFaceCameraOn] = useState(false);
+    const [faceCapturing, setFaceCapturing] = useState(false);
+    const [faceMsg, setFaceMsg] = useState('');
+    const {
+        videoRef,
+        isLoaded: modelsLoaded,
+        loadingProgress,
+        startEnrollmentCamera,
+        stopProctoring,
+        captureDescriptor,
+        enrollFace,
+    } = useFaceProctor({ attemptId: 'enrollment', disabled: false });
+
+    const handleStartFaceCapture = async () => {
+        setFaceMsg('Loading face detection models…');
+        setFaceCameraOn(true);
+        try {
+            await startEnrollmentCamera();
+            setFaceMsg('Position your face in the frame and click Capture.');
+        } catch {
+            setFaceCameraOn(false);
+            setFaceMsg('Could not access camera. Please allow camera permissions and try again.');
+        }
+    };
+
+    const handleCaptureFace = async () => {
+        setFaceCapturing(true);
+        setFaceMsg('Capturing…');
+        const descriptor = await captureDescriptor();
+        if (!descriptor) {
+            setFaceCapturing(false);
+            setFaceMsg('No face detected. Ensure your face is clearly visible and try again.');
+            return;
+        }
+        const ok = await enrollFace(descriptor);
+        stopProctoring();
+        setFaceCapturing(false);
+        if (ok) {
+            router.push('/dashboard');
+        } else {
+            setFaceMsg('Enrollment failed. Please try again.');
+        }
+    };
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -110,7 +156,9 @@ export default function RegisterPage() {
             const { schoolCode, ...profileData } = formData;
             await register({ ...profileData, ...(schoolCode ? { schoolCode } : {}) });
 
-            router.push('/dashboard');
+            // Account created — face enrollment is mandatory for new students
+            // before they can reach the dashboard.
+            setStep('face');
         } catch (err: any) {
             console.error('Verify OTP error:', err);
             setError(err?.response?.data?.message || err?.message || 'Account creation failed. Please try again.');
@@ -153,14 +201,58 @@ export default function RegisterPage() {
                         <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '18px', width: 'auto' }} />
                     </p>
                     <p className="auth-subtitle">
-                        {step === 'details' ? 'Create your student account' : 'Verify your email'}
+                        {step === 'details' ? 'Create your student account' : step === 'verify' ? 'Verify your email' : 'One last step — enroll your face'}
                     </p>
                 </div>
 
                 {error && <div className="auth-error">{error}</div>}
                 {success && <div className="auth-success" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.9rem' }}>{success}</div>}
 
-                {step === 'details' ? (
+                {step === 'face' ? (
+                    <div className="auth-form">
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
+                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor — no photo is saved.
+                            This step cannot be skipped.
+                        </p>
+
+                        {faceMsg && (
+                            <div style={{
+                                padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center',
+                                background: faceMsg.startsWith('No face') || faceMsg.startsWith('Enrollment failed') || faceMsg.startsWith('Could not access')
+                                    ? 'rgba(239,68,68,0.12)' : 'var(--bg-elevated)',
+                                color: faceMsg.startsWith('No face') || faceMsg.startsWith('Enrollment failed') || faceMsg.startsWith('Could not access')
+                                    ? '#dc2626' : 'var(--text-secondary)',
+                                border: '1px solid var(--border-color)',
+                            }}>
+                                {faceMsg}
+                            </div>
+                        )}
+
+                        {faceCameraOn && (
+                            <div style={{ position: 'relative', margin: '0 auto 1.25rem', borderRadius: '12px', overflow: 'hidden', background: '#000', maxWidth: '320px' }}>
+                                <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', display: 'block', transform: 'scaleX(-1)' }} />
+                                <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--primary-400)', borderRadius: '12px', pointerEvents: 'none' }} />
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+                            {!faceCameraOn ? (
+                                <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={handleStartFaceCapture}>
+                                    Enable Camera & Enroll Face
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-lg auth-submit"
+                                    onClick={handleCaptureFace}
+                                    disabled={faceCapturing || !modelsLoaded}
+                                >
+                                    {faceCapturing ? 'Saving…' : modelsLoaded ? 'Capture & Finish' : loadingProgress || 'Loading models…'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ) : step === 'details' ? (
                     <form onSubmit={handleSendOtp} className="auth-form">
                         <div className="form-row">
                             <div className="input-group">

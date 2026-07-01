@@ -26,7 +26,7 @@ export default function ProfilePage() {
         videoRef,
         isLoaded: modelsLoaded,
         loadingProgress,
-        startProctoring,
+        startEnrollmentCamera,
         stopProctoring,
         captureDescriptor,
         enrollFace,
@@ -49,9 +49,14 @@ export default function ProfilePage() {
 
     const handleOpenCamera = async () => {
         setEnrollMsg({ text: 'Loading face detection models…', type: 'info' });
-        await startProctoring();
         setCameraActive(true);
-        setEnrollMsg({ text: 'Position your face in the frame and click Capture.', type: 'info' });
+        try {
+            await startEnrollmentCamera();
+            setEnrollMsg({ text: 'Position your face in the frame and click Capture.', type: 'info' });
+        } catch {
+            setCameraActive(false);
+            setEnrollMsg({ text: 'Could not access camera. Please allow camera permissions and try again.', type: 'error' });
+        }
     };
 
     const handleCapture = async () => {

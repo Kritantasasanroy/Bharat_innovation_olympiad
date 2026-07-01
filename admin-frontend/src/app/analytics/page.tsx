@@ -105,7 +105,9 @@ export default function AdminAnalyticsPage() {
                                     <tr key={student.id}>
                                         <td>
                                             <div className="student-name">
-                                                <strong>{student.firstName} {student.lastName}</strong>
+                                                <Link href={`/students/${student.id}`} style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>
+                                                    <strong style={{ color: 'var(--primary-400)' }}>{student.firstName} {student.lastName} →</strong>
+                                                </Link>
                                                 <span className="join-date">
                                                     Joined {new Date(student.createdAt).toLocaleDateString()}
                                                 </span>

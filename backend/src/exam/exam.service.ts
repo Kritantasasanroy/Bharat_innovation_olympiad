@@ -263,7 +263,7 @@ export class ExamService {
                 const q = await tx.question.create({ data: payload, select: { id: true } });
                 created.push(q);
             }
-        });
+        }, { timeout: 30_000 });
         return { count: created.length };
     }
 
@@ -293,7 +293,7 @@ export class ExamService {
                 });
                 created.push(q);
             }
-        });
+        }, { timeout: 30_000 });
         return { count: created.length };
     }
 

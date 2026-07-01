@@ -213,8 +213,10 @@ bharat Innovation Olympiad/
 │       │   │   ├── page.tsx        # ★ Live monitoring — all active students, risk scores, recent violations (polls every 15s)
 │       │   │   └── [attemptId]/page.tsx  # ★ Per-student proctor detail — full event timeline, risk score, identity info
 │       │   ├── analytics/
-│       │   │   ├── page.tsx        # Exam analytics — score distribution, completion rate
+│       │   │   ├── page.tsx        # Exam analytics + student directory — score distribution, completion rate, links to /students/[id]
 │       │   │   └── attempt/[attemptId]/page.tsx  # Per-student attempt detail + proctor events
+│       │   ├── students/
+│       │   │   └── [id]/page.tsx   # ★ Full student profile — attempts, payment history, slot bookings, violation summary, face enrollment status
 │       │   └── unauthorized/page.tsx
 │       ├── components/
 │       │   ├── layout/AuthGuard.tsx
@@ -651,7 +653,8 @@ PaymentStatus:    CREATED | PAID | FAILED | REFUNDED
 | POST | `/auth/login-sync` | Public | Called after Neon OTP login → looks up User → returns JWT |
 | GET | `/auth/me` | JWT | Returns current user profile |
 | PUT | `/auth/me` | JWT | Updates firstName, lastName, classBand |
-| GET | `/auth/admin/users` | JWT + ADMIN | Returns all students with their exam scores |
+| GET | `/auth/admin/users` | JWT + ADMIN | Returns all students with their exam scores + face enrollment flag |
+| GET | `/auth/admin/users/:id` | JWT + ADMIN | ★ Full student profile — attempts (with per-attempt violation counts), payments, bookings, and a summary block (total attempts, total violations, highest risk score, total spend). Backs the admin `/students/[id]` page. |
 
 **Request body — `POST /auth/sync`:**
 ```json
@@ -1241,6 +1244,7 @@ The most complex page. Orchestrates:
 2. Student verifies OTP → Neon Auth confirms ownership
 3. Frontend calls `POST /auth/sync` with email + profile data
 4. Backend creates User → returns JWT → stored in localStorage
+5. **Mandatory face enrollment** — the form advances to a third `'face'` step (not a redirect) that opens the camera via `useFaceProctor().startEnrollmentCamera()`. There is no skip button; the student cannot reach `/dashboard` until `captureDescriptor()` + `enrollFace()` succeed. This only applies going forward — **existing accounts created before this step existed are never retroactively blocked** from taking exams if unenrolled; the login flow and exam start have no enrollment gate.
 
 #### `/login` — Login
 1. Student enters email → Neon Auth OTP
@@ -1377,19 +1381,20 @@ useWebcam() → { videoRef, canvasRef, startWebcam }
 Client-side AI proctoring hook — replaces all server-side face analysis.
 
 ```typescript
-useFaceProctor({ attemptId, apiBase?, disabled? }) → {
+useFaceProctor({ attemptId, disabled? }) → {
   videoRef, isLoaded, loadingProgress,
   currentFaceCount, isIdentityVerified,
-  startProctoring, stopProctoring,
+  startProctoring, startEnrollmentCamera, stopProctoring,
   enrollFace, captureDescriptor
 }
 ```
 
-- `startProctoring()`: loads face-api.js models from `/public/models/`, opens camera at 320×240, starts detection loop
+- `startProctoring()`: loads face-api.js models from `/public/models/`, opens camera at 320×240, **and starts the 5s detection interval** — use this only on the exam page, since every tick posts an event tied to `attemptId`.
+- `startEnrollmentCamera()`: loads models + opens camera **without** starting the detection interval — used by the profile page and the registration face-enrollment step, where there's no real `Attempt` row to attach events to. (Calling `startProctoring()` in those contexts silently spams `POST /proctor/events` with a bogus `attemptId` every 5s, which fails a foreign-key constraint server-side on every tick — a bug fixed by splitting this into two entry points.)
 - Detection runs every **5 seconds** via `setInterval` + `requestIdleCallback` — never blocks exam UI
 - Per tick: detects all faces → checks count, gaze (68-point landmarks), identity (128-D descriptor vs enrolled)
-- Posts violation events to `POST /api/proctor/events` with Bearer token
-- `enrollFace(descriptor)`: sends `POST /api/proctor/enroll` — called from profile page enrollment UI
+- Posts violation events to `POST /proctor/events` (via the shared `api` axios client, not a bare relative `fetch` — the backend lives on a different origin/port than the Next.js app) with Bearer token
+- `enrollFace(descriptor)`: sends `POST /proctor/enroll` — called from the profile page and the registration face-enrollment step
 - `captureDescriptor()`: runs single-face detection + returns 128 floats — used during enrollment capture
 
 ---
@@ -1643,23 +1648,45 @@ cd frontend && npm install face-api.js
 #   face_landmark_68_tiny_model-shard1
 #   face_recognition_model-weights_manifest.json
 #   face_recognition_model-shard1
+#   face_recognition_model-shard2   ← easy to miss: the recognition net is split
+#                                      across TWO shard files (~4 MB + ~2.2 MB).
+#                                      Downloading only shard1 loads fine but
+#                                      throws a tensor-shape mismatch at the first
+#                                      inference call ("... should have 589824
+#                                      values but has 166263"). Check the
+#                                      manifest's "paths" array if unsure how many
+#                                      shard files a model expects.
 ```
 
 Models are served as static assets and browser-cached after first load — no CDN or extra server needed.
 
 ### Local Development
 
+The project connects directly to a shared Neon Postgres database — there is no local Postgres container. `docker-compose.yml` only runs Redis + the three app services.
+
 ```bash
-# Start PostgreSQL + Redis
-docker-compose up -d
+# backend/.env
+DATABASE_URL=postgresql://<user>:<pass>@<neon-host>/<db>?sslmode=require
+JWT_SECRET=...
+ADMIN_EMAIL=admin@bharatolympiad.in
+ADMIN_PASSWORD=...
+RAZORPAY_KEY_ID=... RAZORPAY_KEY_SECRET=... RAZORPAY_WEBHOOK_SECRET=...   # required for PaymentService to boot even in dev — use dummy test values if payments aren't under test
+
+# frontend/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:4000
+NEXT_PUBLIC_WS_URL=ws://localhost:4000
+NEXT_PUBLIC_NEON_AUTH_URL=https://<project>.neonauth.<region>.aws.neon.tech/<db>/auth   # Neon Auth (Better Auth) endpoint — powers student OTP login/registration
 
 # Backend
+cd backend && npx prisma db push   # no migrations/ folder exists — schema is kept in sync via db push, not migrate dev
 cd backend && npm run start:dev
 
 # Student frontend
 cd frontend && npm run dev       # http://localhost:3000
 
 # Admin frontend
-cd admin-frontend && npm run dev  # http://localhost:3001
+cd admin-frontend && npm run dev  # http://localhost:3001 — NEXT_PUBLIC_API_URL defaults to localhost:4000, no .env needed
 # No proctor-service needed — proctoring runs in the browser
 ```
+
+Note: `prisma migrate dev` requires an interactive terminal and will refuse to run non-interactively (Prisma 5.22+). Since this project has no `prisma/migrations/` history, use `prisma db push` for schema changes in all environments.

@@ -2,10 +2,13 @@ export type ProctorEventType =
     | 'NO_FACE'
     | 'MULTIPLE_FACES'
     | 'FACE_MISMATCH'
+    | 'LOOKING_AWAY'
     | 'TAB_SWITCH'
     | 'EXIT_FULLSCREEN'
     | 'SCREEN_CAPTURE'
-    | 'NETWORK_DISCONNECT';
+    | 'NETWORK_DISCONNECT'
+    | 'SEB_VIOLATION'
+    | 'IP_CHANGE';
 
 export interface ProctorEvent {
     id: string;
@@ -29,4 +32,16 @@ export interface DeviceCheckStatus {
     webcam: boolean;
     fullscreen: boolean;
     audio: boolean;
+}
+
+export interface LiveMonitoringEntry {
+    attemptId: string;
+    userId: string;
+    studentName: string;
+    studentEmail: string;
+    examTitle: string;
+    startedAt: string;
+    riskScore: number;
+    recentEvents: ProctorEvent[];
+    eventCounts: Record<string, number>;
 }

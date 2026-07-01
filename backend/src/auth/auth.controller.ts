@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -83,5 +83,20 @@ export class AuthController {
             throw new UnauthorizedException('Admin access required');
         }
         return this.authService.getAllStudentsWithMarks();
+    }
+
+    /**
+     * Full student profile for the admin students directory: attempts, scores,
+     * payments, bookings, and proctor violation summary in one call.
+     */
+    @Get('admin/users/:id')
+    @UseGuards(JwtAuthGuard)
+    async getStudentDetail(@Param('id') id: string, @CurrentUser('role') role: string) {
+        if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+            throw new UnauthorizedException('Admin access required');
+        }
+        const student = await this.authService.getStudentDetail(id);
+        if (!student) throw new UnauthorizedException('Student not found');
+        return student;
     }
 }

@@ -5,6 +5,7 @@
  */
 export const DEMO_EXAM_IDS = new Set<string>([
     '0b95a4e0-66a6-4104-aa44-0c1c314f2fab', // Bio test 1, 22nd may
+    '36a2935b-da30-4bc6-b567-648f950a1854', // Practice Exam (No Expiry) — 20-question dummy exam for testing
 ]);
 
 export function isDemoExam(examId: string): boolean {
