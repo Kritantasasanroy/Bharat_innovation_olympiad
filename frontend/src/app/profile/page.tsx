@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import { useAuthStore } from '@/store/authStore';
+import api from '@/lib/api';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import { FormEvent, useEffect, useState } from 'react';
 
@@ -41,13 +42,8 @@ export default function ProfilePage() {
 
     // Check enrollment status on mount
     useEffect(() => {
-        const token = localStorage.getItem('auth_token');
-        if (!token) return;
-        fetch('/api/proctor/enrollment', {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => r.json())
-            .then((d) => setEnrollmentStatus(d.enrolled ? 'enrolled' : 'not_enrolled'))
+        api.get('/proctor/enrollment')
+            .then((r) => setEnrollmentStatus(r.data.enrolled ? 'enrolled' : 'not_enrolled'))
             .catch(() => setEnrollmentStatus('not_enrolled'));
     }, []);
 

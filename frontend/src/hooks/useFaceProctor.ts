@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import api from '@/lib/api';
 import { useProctorStore } from '@/store/proctorStore';
 
 // face-api.js is loaded dynamically to avoid SSR issues
@@ -14,7 +15,6 @@ const LOOKING_AWAY_CONSECUTIVE = 2;
 
 interface UseFaceProctorOptions {
     attemptId: string;
-    apiBase?: string;
     disabled?: boolean;
 }
 
@@ -42,7 +42,6 @@ interface FaceProctorState {
  */
 export function useFaceProctor({
     attemptId,
-    apiBase = '',
     disabled = false,
 }: UseFaceProctorOptions) {
     const videoElementRef = useRef<HTMLVideoElement | null>(null);
@@ -74,19 +73,12 @@ export function useFaceProctor({
     const postEvent = useCallback(
         async (type: string, details: Record<string, any> = {}) => {
             try {
-                await fetch(`${apiBase}/api/proctor/events`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}`,
-                    },
-                    body: JSON.stringify({ attemptId, type, details }),
-                });
+                await api.post('/proctor/events', { attemptId, type, details });
             } catch {
                 // Network errors during exam are non-fatal
             }
         },
-        [attemptId, apiBase],
+        [attemptId],
     );
 
     const loadModels = useCallback(async () => {
@@ -138,20 +130,13 @@ export function useFaceProctor({
 
     const fetchEnrolledDescriptor = useCallback(async () => {
         try {
-            const res = await fetch(`${apiBase}/api/proctor/enrollment`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` },
-            });
-            if (!res.ok) return;
-            const { enrolled } = await res.json();
-            if (!enrolled) return;
-
-            // Fetch the stored descriptor via the verify endpoint by sending a zero-vector
-            // The actual descriptor is retrieved from the enrollment check; identity is
-            // verified on each tick by calling POST /api/proctor/verify with the live descriptor.
+            const res = await api.get('/proctor/enrollment');
+            if (!res.data.enrolled) return;
+            // Identity is verified each tick by POST /proctor/verify with the live descriptor
         } catch {
             // Non-fatal — skip identity verification if enrollment check fails
         }
-    }, [apiBase]);
+    }, []);
 
     // ── Gaze estimation from 68 facial landmarks ──
     const estimateGaze = (landmarks: import('face-api.js').FaceLandmarks68): 'forward' | 'away' => {
@@ -260,20 +245,13 @@ export function useFaceProctor({
     const enrollFace = useCallback(
         async (descriptor: number[]): Promise<boolean> => {
             try {
-                const res = await fetch(`${apiBase}/api/proctor/enroll`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}`,
-                    },
-                    body: JSON.stringify({ descriptor }),
-                });
-                return res.ok;
+                await api.post('/proctor/enroll', { descriptor });
+                return true;
             } catch {
                 return false;
             }
         },
-        [apiBase],
+        [],
     );
 
     // Capture descriptor from the live video (used during enrollment)
