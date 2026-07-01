@@ -9,6 +9,7 @@ type FaceApi = typeof import('face-api.js');
 
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
 const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
+const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
 
 // ── Sustained-issue tracking ──
 // Real inference only runs every 5s, but "sustained for N seconds" needs finer
@@ -92,7 +93,7 @@ export function useFaceProctor({
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const sustainIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const faceApiRef = useRef<FaceApi | null>(null);
-    const isEnrolledRef = useRef(false);
+    const enrolledDescriptorRef = useRef<Float32Array | null>(null);
     const multiFaceActiveRef = useRef(false);
 
     const onSustainedViolationRef = useRef(onSustainedViolation);
@@ -185,15 +186,13 @@ export function useFaceProctor({
         }
     }, [setWebcamStream, setDeviceCheck]);
 
-    // Checked once at proctoring start — whether this student has a stored
-    // face descriptor at all. If not, identity verification is skipped
-    // entirely (nothing to compare against).
-    const fetchEnrollmentStatus = useCallback(async () => {
+    const fetchEnrolledDescriptor = useCallback(async () => {
         try {
             const res = await api.get('/proctor/enrollment');
-            isEnrolledRef.current = !!res.data.enrolled;
+            if (!res.data.enrolled) return;
+            // Identity is verified each tick by POST /proctor/verify with the live descriptor
         } catch {
-            isEnrolledRef.current = false;
+            // Non-fatal — skip identity verification if enrollment check fails
         }
     }, []);
 
@@ -261,27 +260,22 @@ export function useFaceProctor({
                 awayTrackerRef.current = freshTracker();
             }
 
-            // Identity verification — only meaningful with exactly one face,
-            // and only if this student has an enrolled descriptor to compare
-            // against. Comparison runs server-side (POST /proctor/verify) so
-            // the enrolled descriptor never has to leave the backend.
-            if (faceCount === 1 && isEnrolledRef.current && primary.descriptor) {
-                try {
-                    const { data } = await api.post<{ match: boolean; distance: number }>('/proctor/verify', {
-                        descriptor: Array.from(primary.descriptor),
+            // Identity verification — compare against enrolled descriptor
+            if (enrolledDescriptorRef.current && primary.descriptor) {
+                const distance = faceapi.euclideanDistance(
+                    Array.from(primary.descriptor),
+                    Array.from(enrolledDescriptorRef.current),
+                );
+                const match = distance < IDENTITY_THRESHOLD;
+                setState((s) => ({ ...s, isIdentityVerified: match }));
+                if (!match) {
+                    if (!mismatchTrackerRef.current.since) mismatchTrackerRef.current.since = Date.now();
+                    await postEvent('FACE_MISMATCH', {
+                        distance: parseFloat(distance.toFixed(3)),
+                        source: 'face-api.js',
                     });
-                    setState((s) => ({ ...s, isIdentityVerified: data.match }));
-                    if (!data.match) {
-                        if (!mismatchTrackerRef.current.since) mismatchTrackerRef.current.since = Date.now();
-                        await postEvent('FACE_MISMATCH', {
-                            distance: parseFloat(data.distance.toFixed(3)),
-                            source: 'face-api.js',
-                        });
-                    } else {
-                        mismatchTrackerRef.current = freshTracker();
-                    }
-                } catch {
-                    // Network errors during verify are non-fatal — skip this tick
+                } else {
+                    mismatchTrackerRef.current = freshTracker();
                 }
             }
         } catch {
@@ -331,7 +325,7 @@ export function useFaceProctor({
 
         await loadModels();
         await startCamera();
-        await fetchEnrollmentStatus();
+        await fetchEnrolledDescriptor();
 
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(() => {
@@ -344,7 +338,7 @@ export function useFaceProctor({
 
         if (sustainIntervalRef.current) clearInterval(sustainIntervalRef.current);
         sustainIntervalRef.current = setInterval(checkSustained, SUSTAIN_CHECK_INTERVAL_MS);
-    }, [disabled, loadModels, startCamera, fetchEnrollmentStatus, runDetection, checkSustained]);
+    }, [disabled, loadModels, startCamera, fetchEnrolledDescriptor, runDetection, checkSustained]);
 
     // One-off camera + model load for the enrollment UI — no periodic detection
     // loop and no attemptId dependency, unlike startProctoring() (used during exams).
