@@ -915,7 +915,7 @@ PUT  /admin/exams/:id           { easyPct: 30, mediumPct: 50, hardPct: 20 }
 ```json
 { "match": true, "distance": 0.31 }
 ```
-Distance < 0.5 = same person. Called by `useFaceProctor` at exam start.
+Distance < 0.5 = same person. The endpoint works correctly, but `useFaceProctor` doesn't currently call it — see the "Known issue" note under `useFaceProctor.ts` (§11) for why identity verification is presently a no-op on the client.
 
 **`GET /proctor/live?since=5` response (per-attempt entry):**
 ```json
@@ -1230,12 +1230,12 @@ Post-payment success screen with booking details. Uses `useSearchParams()` wrapp
 #### `/exams/[id]/play` — Exam Player
 The most complex page. Orchestrates:
 - **`useExamSession`** — loads exam + attempt, manages answers state
-- **`useFullscreenMonitor`** — enforces fullscreen, counts violations
+- **`useFullscreenMonitor`** — enforces fullscreen; owns the single shared violation counter (fullscreen exits, tab switches, AND face-related violations reported via `reportExternalViolation()`)
 - **`useTimer`** — subscribes to WebSocket timer ticks
-- **`useFaceProctor`** — runs face-api.js in browser; detects faces, gaze, identity every 5s
+- **`useFaceProctor`** — runs face-api.js in browser; detects faces + gaze every 5s (identity check currently non-functional, see §11); reports sustained/instant violations into `useFullscreenMonitor`'s counter
 - **Zustand `examStore`** — persists exam session state across renders
 
-**Fullscreen gate overlay:** Shown on load and after each violation. Student must click "Enter Fullscreen" before interacting with exam. After 3 violations, exam auto-submits.
+**Fullscreen gate overlay:** Shown on load and after each fullscreen-specific violation only. Student must click "Enter Fullscreen" before interacting with exam. Face-related violations (no-face, looking-away, multi-face, mismatch) show a separate subtle popup instead — they add to the same counter but don't gate/pause the exam. After 3 total violations (of any kind), exam auto-submits.
 
 **Slot gate:** `startAttempt()` in the backend checks for a CONFIRMED booking within the current slot's time window before allowing exam entry. If no slots exist for the instance, the gate is bypassed (backward-compatible with existing exams).
 
@@ -1349,8 +1349,9 @@ const LOCK_MS = 5000;            // 5s cooldown absorbs all duplicate browser ev
 - `releaseViolationLock()`: called on fullscreen re-entry → allows next violation to count fresh
 - Violations persisted to `sessionStorage` keyed by URL path → survive page refresh
 - 3 violations → `onAutoSubmit` called → exam submitted
+- `reportExternalViolation(type)`: entry point for violations that originate OUTSIDE this hook's own DOM listeners — specifically face-related violations from `useFaceProctor`. Adds to the **same** counter/auto-submit-at-3 logic as fullscreen/tab-switch violations, but skips the gating/20s-pause-timer behavior (no `acquireViolationLock()`, no `isGated`) — face issues get a subtle popup instead of the full-screen fullscreen-recovery overlay, so the student keeps answering.
 
-**Events monitored:** `fullscreenchange`, `webkitfullscreenchange`, `mozfullscreenchange`, `MSFullscreenChange`, `visibilitychange`, `window.blur`
+**Events monitored:** `fullscreenchange`, `webkitfullscreenchange`, `mozfullscreenchange`, `MSFullscreenChange`, `visibilitychange`, `window.blur`, plus externally-reported `no_face` / `looking_away` / `face_mismatch` / `multiple_faces` from `useFaceProctor`
 
 ---
 
@@ -1381,9 +1382,10 @@ useWebcam() → { videoRef, canvasRef, startWebcam }
 Client-side AI proctoring hook — replaces all server-side face analysis.
 
 ```typescript
-useFaceProctor({ attemptId, disabled? }) → {
+useFaceProctor({ attemptId, disabled?, onSustainedViolation?, onInstantViolation? }) → {
   videoRef, isLoaded, loadingProgress,
   currentFaceCount, isIdentityVerified,
+  noFaceSince, awaySince, mismatchSince,
   startProctoring, startEnrollmentCamera, stopProctoring,
   enrollFace, captureDescriptor
 }
@@ -1391,9 +1393,25 @@ useFaceProctor({ attemptId, disabled? }) → {
 
 - `startProctoring()`: loads face-api.js models from `/public/models/`, opens camera at 320×240, **and starts the 5s detection interval** — use this only on the exam page, since every tick posts an event tied to `attemptId`.
 - `startEnrollmentCamera()`: loads models + opens camera **without** starting the detection interval — used by the profile page and the registration face-enrollment step, where there's no real `Attempt` row to attach events to. (Calling `startProctoring()` in those contexts silently spams `POST /proctor/events` with a bogus `attemptId` every 5s, which fails a foreign-key constraint server-side on every tick — a bug fixed by splitting this into two entry points.)
-- Detection runs every **5 seconds** via `setInterval` + `requestIdleCallback` — never blocks exam UI
-- Per tick: detects all faces → checks count, gaze (68-point landmarks), identity (128-D descriptor vs enrolled)
-- Posts violation events to `POST /proctor/events` (via the shared `api` axios client, not a bare relative `fetch` — the backend lives on a different origin/port than the Next.js app) with Bearer token
+- Detection (face count + gaze) runs every **5 seconds** via `setInterval` + `requestIdleCallback` — never blocks exam UI. A second, lightweight **1-second** timer (`checkSustained`, no model inference — just `Date.now()` comparisons against timestamps the 5s tick sets) tracks how long the last-known state has persisted, since "sustained for N seconds" needs finer resolution than the 5s inference cadence provides.
+- Per 5s tick: detects all faces → checks count, gaze (68-point landmarks). Identity match (128-D descriptor vs. `enrolledDescriptorRef`) — **currently non-functional**, see below.
+- Posts raw violation events to `POST /proctor/events` (via the shared `api` axios client, not a bare relative `fetch` — the backend lives on a different origin/port than the Next.js app) with Bearer token, on every tick the condition is observed (audit-trail granularity).
+
+**Violation-counting model** (separate from the raw event log above — this drives the exam page's shared violation counter / auto-submit-at-3, via `onSustainedViolation`/`onInstantViolation`):
+
+| Type | Sustain threshold | Counting rule |
+|---|---|---|
+| `NO_FACE` | 7s continuous | 2 sustained occurrences = 1 violation |
+| `LOOKING_AWAY` | 5s continuous | 2 sustained occurrences = 1 violation |
+| `FACE_MISMATCH` | 5s continuous | 2 sustained occurrences = 1 violation *(currently unreachable — see Known Issue below)* |
+| `MULTIPLE_FACES` | none — instant | 1 violation on the very first tick, no buffer, no pairing; only re-fires once it clears and reoccurs (a single continuous multi-face episode doesn't spam violations every 5s) |
+
+All three sustained types (`NO_FACE`/`LOOKING_AWAY`/`FACE_MISMATCH`) also have a **12-second single-episode safety net**: if one continuous episode drags on past 12s, it counts as its own violation even without a second occurrence to pair with — silently, no extra popup (the original popup covering that episode is already on screen). This closes the loophole where staying away/mismatched for the whole exam would otherwise only ever count as a single incomplete "half" of a pair.
+
+The exam play page shows a subtle, non-blocking popup with a live countdown (using `noFaceSince`/`awaySince`/`mismatchSince`, exposed as epoch-ms timestamps) as soon as an issue is first observed — not after the sustain threshold — plus an (i) info button next to the violation counter that explains the policy generically (no exact thresholds/mechanics disclosed) and confirms 3 violations auto-submits.
+
+> **Known issue — identity verification (`FACE_MISMATCH`) is a no-op.** `enrolledDescriptorRef` (the client-side descriptor to compare live frames against) is declared but never populated anywhere in the codebase — there is no code path that fetches the enrolled descriptor into it. A fix was tried (calling `POST /proctor/verify` — a server-side comparison — on every tick) but was reverted at the user's request: distance readings near the 0.5 match threshold flicker under normal lighting/angle changes, producing frequent false mismatches that felt worse than no detection at all. `FACE_MISMATCH` popups/violations are wired up and functional once matching itself works, but currently never fire. Fixing this properly needs either a smoothed/debounced distance signal (e.g. require N consecutive over-threshold ticks before flipping `isIdentityVerified`) or a materially different verification strategy — not yet decided.
+
 - `enrollFace(descriptor)`: sends `POST /proctor/enroll` — called from the profile page and the registration face-enrollment step
 - `captureDescriptor()`: runs single-face detection + returns 128 floats — used during enrollment capture
 
@@ -1504,10 +1522,13 @@ useSocket() → { socket, isConnected }
    - Pays → Razorpay calls POST /api/payments/webhook (backup) + client calls POST /api/payments/verify
    - Booking status → CONFIRMED → redirect to /payment/success → then /exams/:id/instructions
 
-9. STUDENT opens /exams/:id/instructions → clicks "Start Exam":
-   - Page navigates to /exams/:id/play
+9. STUDENT opens /exams/:id/instructions (device check):
+   - Viewport / fullscreen-support / webcam / mic checks, same as before
+   - Face ID enrollment check (`GET /proctor/enrollment`) — if not enrolled, an inline "Face ID Enrollment" card opens the camera and requires `captureDescriptor()` + `enrollFace()` to succeed before "Start Exam" is enabled (reuses the same camera permission as the webcam check — no second prompt)
+   - Clicks "Start Exam" → page navigates to /exams/:id/play
    - useExamSession.startExam() → POST /exams/:instanceId/start
    - Backend slot gate: checks CONFIRMED booking within slot time window (skips if no slots)
+   - Backend **face-enrollment gate**: throws `FACE_ENROLLMENT_REQUIRED` if `User.faceEmbedding` is still null (defense in depth — catches direct-URL navigation bypassing the instructions page)
    - Backend creates Attempt + AttemptItems (one per question)
    - Returns exam + questions (shuffled by userId seed) + attempt
 
@@ -1520,8 +1541,9 @@ useSocket() → { socket, isConnected }
 
 12. useFaceProctor starts → loads face-api.js models (one-time, ~3s, browser-cached)
     - Camera opens at 320×240
-    - Every 5s via requestIdleCallback: detect faces + gaze + identity
-    - Violations → POST /proctor/events → ProctorEvent row + riskScore update
+    - Every 5s via requestIdleCallback: detect faces + gaze (identity check currently non-functional, §11)
+    - Every event tick → POST /proctor/events → ProctorEvent row + riskScore update (raw audit log)
+    - Separately: sustained-duration tracking (checked every 1s, no extra inference) turns 2 occurrences of NO_FACE (>7s each) or LOOKING_AWAY (>5s each) into 1 counted violation; MULTIPLE_FACES counts instantly (no buffer); any single episode past 12s also counts on its own, silently — see §11 for the full table
 
 13. Student answers questions:
     - Click option → handleSelectOption() → saveAnswer() → POST /attempts/:id/answer
@@ -1539,8 +1561,8 @@ useSocket() → { socket, isConnected }
 
 16. Auto-submit scenarios:
     a. Timer expired: WS timer-expired event → handleAutoSubmit()
-    b. 3 violations: useFullscreenMonitor onAutoSubmit → handleAutoSubmit()
-    c. 20s pause: violation timer → onAutoSubmit()
+    b. 3 violations (fullscreen/tab-switch OR sustained/instant face violations, same shared counter): useFullscreenMonitor onAutoSubmit → handleAutoSubmit()
+    c. 20s pause after a fullscreen violation specifically: violation timer → onAutoSubmit()
     Each auto-submit: clears sessionStorage, calls submitExam(), redirects
 
 17. ADMIN releases results (isResultReleased = true)
@@ -1606,6 +1628,10 @@ useSocket() → { socket, isConnected }
 | Database | Neon.tech (PostgreSQL) | Managed connection string | — |
 
 > Both Vercel projects deploy from whatever's on disk when you run `vercel --prod`, not from GitHub. Pushing to `main` does **not** update either Vercel deployment — you have to deploy manually every time (see below). If you want auto-deploy, click "Connect Git" on each project in the Vercel dashboard and link it to this repo.
+
+> **Render Blueprint sync doesn't retroactively update an existing service's build/start commands.** Editing `render.yaml` and pushing triggers a new deploy (confirmed via `GET /v1/services/:id/deploys`), but the service's stored `buildCommand`/`startCommand` can silently stay on the OLD values from before the edit — every deploy since the original face-api.js migration commit failed for exactly this reason (`startCommand` kept running `prisma migrate deploy` even after `render.yaml` said `prisma db push`). If a render.yaml change doesn't seem to take effect, `PATCH /v1/services/:id` directly with `serviceDetails.envSpecificDetails.{buildCommand,startCommand}` (Render API, needs an API key from Account Settings) rather than assuming the Blueprint sync applied it.
+
+> **Render free tier spins the backend down after ~15 min idle** — the first request after that takes 50+ seconds to wake it up, which shows up client-side as the admin/student app appearing to hang on load. A GitHub Actions workflow (`.github/workflows/keep-alive.yml`) pings `/api/proctor/health` every 10 minutes to prevent this at zero cost. Note: newly-added scheduled GitHub Actions workflows don't fire immediately — there can be a delay before the first scheduled run actually executes (verify via `GET /repos/:owner/:repo/actions/workflows/:id/runs`); the cold-start symptom can still occur until then. The permanent fix is upgrading the Render service off the free plan.
 
 ### Deploy Commands
 
