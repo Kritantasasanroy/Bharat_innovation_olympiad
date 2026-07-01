@@ -202,12 +202,20 @@ export default function LiveProctorPage() {
                             )}
 
                             {/* Actions */}
-                            <Link
-                                href={`/analytics/attempt/${entry.attemptId}`}
-                                className="text-xs text-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-lg transition-colors mt-1"
-                            >
-                                Full Report →
-                            </Link>
+                            <div className="flex gap-2 mt-1">
+                                <Link
+                                    href={`/proctor/${entry.attemptId}`}
+                                    className="text-xs text-center bg-blue-900/40 hover:bg-blue-800/60 border border-blue-700 text-blue-300 hover:text-white px-3 py-2 rounded-lg transition-colors flex-1"
+                                >
+                                    Proctor Detail →
+                                </Link>
+                                <Link
+                                    href={`/analytics/attempt/${entry.attemptId}`}
+                                    className="text-xs text-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-lg transition-colors flex-1"
+                                >
+                                    Score Report →
+                                </Link>
+                            </div>
                         </div>
                     ))}
                 </div>

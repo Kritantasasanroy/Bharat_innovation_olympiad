@@ -2,9 +2,9 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import { useExamSession } from '@/hooks/useExamSession';
+import { useFaceProctor } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
-import { useWebcam } from '@/hooks/useWebcam';
 import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
 import { use, useEffect, useRef, useState } from 'react';
@@ -28,12 +28,18 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [meazureLaunchUrl, setMeazureLaunchUrl] = useState<string | null>(null);
-    const [meazureLaunched, setMeazureLaunched] = useState(false);
-
     const attemptId = attempt?.id || '';
     const { remaining } = useTimer(attemptId);
-    const { videoRef, startWebcam } = useWebcam();
+
+    const {
+        videoRef,
+        isLoaded: faceModelsLoaded,
+        loadingProgress,
+        currentFaceCount,
+        isIdentityVerified,
+        startProctoring,
+        stopProctoring,
+    } = useFaceProctor({ attemptId });
 
     // Latest-ref for submit so the auto-submit callback (registered once with
     // empty deps in the fullscreen hook) always calls the freshest version.
@@ -43,6 +49,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const handleAutoSubmit = async (reason: string) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
+        stopProctoring();
         try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
         try {
             const result = await submitExamRef.current();
@@ -79,28 +86,12 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         pauseTimeoutSec: 20,
     });
 
-    // Start the exam, webcam, and create the Meazure proctoring session.
+    // Start exam then immediately start face-api.js proctoring.
     useEffect(() => {
         startExam()
-            .then(async (result: any) => {
-                startWebcam();
-                // Create Meazure session so proctoring begins on launch
-                if (result?.attempt?.id && result?.exam) {
-                    try {
-                        const { data } = await api.post('/proctor/sessions', {
-                            attemptId: result.attempt.id,
-                            examTitle: result.exam.title,
-                            durationMinutes: result.exam.durationMinutes,
-                        });
-                        if (data?.launchUrl) {
-                            setMeazureLaunchUrl(data.launchUrl);
-                        }
-                    } catch (err) {
-                        console.warn('[Proctor] Could not create Meazure session:', err);
-                    }
-                }
-            })
+            .then(() => { startProctoring(); })
             .catch(err => console.warn('Exam init warning:', err));
+        return () => { stopProctoring(); };
     }, []);
 
     useEffect(() => {
@@ -123,6 +114,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
+        stopProctoring();
         clearViolationStorage();
         try {
             const result = await submitExam();
@@ -172,46 +164,15 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         <AuthGuard allowedRoles={['STUDENT']}>
             <div className="exam-player">
 
-                {/* ── Meazure Proctoring Launch Banner ──
-                    Shown until the student opens the Meazure Guardian browser.
-                    Meazure monitors their webcam, screen, and audio during the exam. */}
-                {meazureLaunchUrl && !meazureLaunched && (
+                {/* ── face-api.js model loading banner — shown only during first load (~3s) ── */}
+                {!faceModelsLoaded && loadingProgress && (
                     <div style={{
                         position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9998,
-                        background: 'rgba(14,165,233,0.12)', borderBottom: '1px solid rgba(14,165,233,0.3)',
-                        padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between', gap: '1rem',
+                        background: 'rgba(14,165,233,0.10)', borderBottom: '1px solid rgba(14,165,233,0.25)',
+                        padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem',
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1.25rem' }}>🔒</span>
-                            <div>
-                                <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: 0 }}>
-                                    Proctored Exam — Meazure Guardian Required
-                                </p>
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-                                    Launch the Meazure Guardian browser to enable AI proctoring before answering.
-                                </p>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
-                            <a
-                                href={meazureLaunchUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-primary"
-                                style={{ fontSize: '0.85rem', padding: '0.5rem 1rem', whiteSpace: 'nowrap' }}
-                                onClick={() => setMeazureLaunched(true)}
-                            >
-                                Launch Guardian →
-                            </a>
-                            <button
-                                className="btn btn-secondary"
-                                style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
-                                onClick={() => setMeazureLaunched(true)}
-                            >
-                                Already launched
-                            </button>
-                        </div>
+                        <div style={{ width: '16px', height: '16px', border: '2px solid rgba(14,165,233,0.4)', borderTopColor: 'var(--primary-400)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{loadingProgress}</span>
                     </div>
                 )}
 
@@ -297,9 +258,34 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className={`timer-display ${timerClass}`}>
                             ⏱ {formatTime(remaining)}
                         </div>
+                        {/* Face detection status indicators */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {/* Face count dot */}
+                            <div
+                                title={
+                                    !faceModelsLoaded ? 'Loading AI models…'
+                                    : currentFaceCount === 0 ? 'No face detected'
+                                    : currentFaceCount === 1 ? 'Face detected'
+                                    : `${currentFaceCount} faces detected!`
+                                }
+                                style={{
+                                    width: '10px', height: '10px', borderRadius: '50%',
+                                    background: !faceModelsLoaded ? 'var(--text-muted)'
+                                        : currentFaceCount === 1 ? '#22c55e'
+                                        : currentFaceCount === 0 ? '#ef4444'
+                                        : '#f97316',
+                                    flexShrink: 0,
+                                }}
+                            />
+                            {/* Identity badge */}
+                            {isIdentityVerified === false && (
+                                <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>ID?</span>
+                            )}
+                        </div>
+                        {/* Webcam preview (hidden, face-api.js uses it internally) */}
                         <div className="webcam-mini" title="Camera preview">
-                            <video ref={videoRef} autoPlay muted playsInline />
-                            <div className="webcam-indicator" />
+                            <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div className="webcam-indicator" style={{ background: faceModelsLoaded && currentFaceCount === 1 ? '#22c55e' : faceModelsLoaded && currentFaceCount === 0 ? '#ef4444' : undefined }} />
                         </div>
                     </div>
                 </header>

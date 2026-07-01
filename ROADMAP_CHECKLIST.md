@@ -78,7 +78,7 @@
 - [x] PROCTOR-01 — Face Enrollment ✅ `POST /proctor/enroll` — stores 128-D descriptor (Float32Array → Buffer) in `User.faceEmbedding`; `GET /proctor/enrollment` checks status; identity verified at exam start via `POST /proctor/verify` (Euclidean distance < 0.5)
 - [x] PROCTOR-02 — Client-Side Frame Analysis ✅ `useFaceProctor.ts` — face-api.js runs in browser (WebGL); detects NO_FACE, MULTIPLE_FACES, LOOKING_AWAY, FACE_MISMATCH every 5s via `requestIdleCallback`; zero server processing; models served from `frontend/public/models/` (~6.5 MB, browser-cached) *(replaces Python ONNX service — removed)*
 - [x] PROCTOR-03 — Risk Events ✅ `POST /proctor/events`, riskScore aggregation (severity-weighted)
-- [x] PROCTOR-04 — Review Console ✅ `GET /proctor/report/:attemptId` for admins; `GET /proctor/live` for live dashboard — all IN_PROGRESS attempts + recent events; admin-frontend `/proctor` page polls every 15s
+- [x] PROCTOR-04 — Review Console ✅ `GET /proctor/report/:attemptId` for admins; `GET /proctor/live` for live dashboard — all IN_PROGRESS attempts + recent events; admin-frontend `/proctor` page polls every 15s; `/proctor/[attemptId]` per-student detail page with full chronological event timeline, risk score bar, event type summary cards, student + exam metadata
 - [ ] PROCTOR-05 — Biometric Retention (DPDP-compliant auto-delete of face embeddings after exam)
 
 ### P7 Ops + Analytics

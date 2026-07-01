@@ -90,23 +90,56 @@ export class ProctorService {
     }
 
     async getReport(attemptId: string) {
-        const [events, attempt] = await Promise.all([
-            this.prisma.proctorEvent.findMany({
-                where: { attemptId },
-                orderBy: { timestamp: 'asc' },
-            }),
-            this.prisma.attempt.findUnique({
-                where: { id: attemptId },
-                select: { riskScore: true },
-            }),
-        ]);
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        classBand: true,
+                        school: { select: { name: true } },
+                    },
+                },
+                examInstance: {
+                    include: {
+                        exam: { select: { title: true, durationMinutes: true } },
+                    },
+                },
+                proctorEvents: { orderBy: { timestamp: 'asc' } },
+            },
+        });
+
+        if (!attempt) {
+            return { attemptId, events: [], totalEvents: 0, riskScore: 0, summary: {} };
+        }
 
         return {
             attemptId,
-            totalEvents: events.length,
-            riskScore: attempt?.riskScore ?? 0,
-            events,
-            summary: this.summarizeEvents(events),
+            student: {
+                id: attempt.user.id,
+                name: `${attempt.user.firstName} ${attempt.user.lastName}`.trim(),
+                email: attempt.user.email,
+                classBand: attempt.user.classBand,
+                school: attempt.user.school?.name ?? null,
+            },
+            exam: {
+                title: attempt.examInstance.exam.title,
+                durationMinutes: attempt.examInstance.exam.durationMinutes,
+            },
+            attempt: {
+                status: attempt.status,
+                startedAt: attempt.startedAt,
+                submittedAt: attempt.submittedAt,
+                totalScore: attempt.totalScore,
+                maxScore: attempt.maxScore,
+                riskScore: attempt.riskScore ?? 0,
+            },
+            events: attempt.proctorEvents,
+            totalEvents: attempt.proctorEvents.length,
+            summary: this.summarizeEvents(attempt.proctorEvents),
         };
     }
 

@@ -209,7 +209,9 @@ bharat Innovation Olympiad/
 │       │   ├── questions/page.tsx  # Global question bank management
 │       │   ├── slots/page.tsx      # ★ Slot management — create/edit/delete slots + view bookings per slot
 │       │   ├── payments/page.tsx   # ★ Payments dashboard — revenue summary, transactions, refunds, coupon CRUD
-│       │   ├── proctor/page.tsx    # ★ Live monitoring — all active students, risk scores, recent violations
+│       │   ├── proctor/
+│       │   │   ├── page.tsx        # ★ Live monitoring — all active students, risk scores, recent violations (polls every 15s)
+│       │   │   └── [attemptId]/page.tsx  # ★ Per-student proctor detail — full event timeline, risk score, identity info
 │       │   ├── analytics/
 │       │   │   ├── page.tsx        # Exam analytics — score distribution, completion rate
 │       │   │   └── attempt/[attemptId]/page.tsx  # Per-student attempt detail + proctor events
