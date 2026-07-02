@@ -10,6 +10,16 @@ type FaceApi = typeof import('face-api.js');
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
 const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
 const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
+// tinyFaceDetector defaults (inputSize 416, scoreThreshold 0.5) are tuned for
+// clean, well-lit, higher-res input — against a 320x240 webcam feed under
+// normal indoor lighting they miss real, clearly-visible faces (reported as
+// NO_FACE despite a face being present). A larger inputSize gives the
+// detector more pixel detail to work with, and a lower scoreThreshold stops
+// it discarding legitimate but lower-confidence detections. This affects
+// face-count, gaze estimation, and multi-face detection alike since they all
+// run against the same detectAllFaces() call.
+const DETECTOR_INPUT_SIZE = 512;
+const DETECTOR_SCORE_THRESHOLD = 0.3;
 
 // ── Sustained-issue tracking ──
 // Real inference only runs every 5s, but "sustained for N seconds" needs finer
@@ -170,7 +180,9 @@ export function useFaceProctor({
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240, facingMode: 'user' },
+                // Higher resolution than the old 320x240 gives the detector more
+                // pixel detail to work with — see DETECTOR_INPUT_SIZE comment above.
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
                 audio: false,
             });
             if (videoElementRef.current) {
@@ -214,7 +226,10 @@ export function useFaceProctor({
 
         try {
             const detections = await faceapi
-                .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
+                    inputSize: DETECTOR_INPUT_SIZE,
+                    scoreThreshold: DETECTOR_SCORE_THRESHOLD,
+                }))
                 .withFaceLandmarks(true)
                 .withFaceDescriptors();
 
@@ -390,7 +405,10 @@ export function useFaceProctor({
         if (!faceapi || !video) return null;
 
         const detection = await faceapi
-            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                inputSize: DETECTOR_INPUT_SIZE,
+                scoreThreshold: DETECTOR_SCORE_THRESHOLD,
+            }))
             .withFaceLandmarks(true)
             .withFaceDescriptor();
 
