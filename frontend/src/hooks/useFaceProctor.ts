@@ -10,16 +10,15 @@ type FaceApi = typeof import('face-api.js');
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
 const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
 const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
-// tinyFaceDetector defaults (inputSize 416, scoreThreshold 0.5) are tuned for
-// clean, well-lit, higher-res input — against a 320x240 webcam feed under
-// normal indoor lighting they miss real, clearly-visible faces (reported as
-// NO_FACE despite a face being present). A larger inputSize gives the
-// detector more pixel detail to work with, and a lower scoreThreshold stops
-// it discarding legitimate but lower-confidence detections. This affects
+// tinyFaceDetector's default inputSize (416) is tuned for lower-res input —
+// a larger inputSize gives the detector more pixel detail to work with,
+// which helped with missed detections on a 320x240 feed. scoreThreshold is
+// back at face-api.js's own default (0.5); the lowered 0.3 tried earlier let
+// through too many low-confidence, unreliable detections. This affects
 // face-count, gaze estimation, and multi-face detection alike since they all
 // run against the same detectAllFaces() call.
 const DETECTOR_INPUT_SIZE = 512;
-const DETECTOR_SCORE_THRESHOLD = 0.3;
+const DETECTOR_SCORE_THRESHOLD = 0.5;
 
 // ── Sustained-issue tracking ──
 // Real inference only runs every 5s, but "sustained for N seconds" needs finer

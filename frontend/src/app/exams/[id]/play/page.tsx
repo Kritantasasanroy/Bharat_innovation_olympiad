@@ -117,7 +117,41 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((NO_FACE_SUSTAIN_MS - (nowTick - noFaceSince)) / 1000)) : null;
     const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((LOOKING_AWAY_SUSTAIN_MS - (nowTick - awaySince)) / 1000)) : null;
     const mismatchSecondsLeft = mismatchSince ? Math.max(0, Math.ceil((FACE_MISMATCH_SUSTAIN_MS - (nowTick - mismatchSince)) / 1000)) : null;
-    const showMultiFacePopup = currentFaceCount > 1;
+    const isMultiFace = currentFaceCount > 1;
+
+    // Center-screen popups, dismissed via an OK button. Each type tracks WHICH
+    // episode was last dismissed (its "since" timestamp) so a fresh episode of
+    // the same issue shows the popup again instead of staying dismissed forever.
+    const [noFaceDismissedAt, setNoFaceDismissedAt] = useState<number | null>(null);
+    const [awayDismissedAt, setAwayDismissedAt] = useState<number | null>(null);
+    const [mismatchDismissedAt, setMismatchDismissedAt] = useState<number | null>(null);
+    const [multiFaceDismissed, setMultiFaceDismissed] = useState(false);
+    useEffect(() => { if (!isMultiFace) setMultiFaceDismissed(false); }, [isMultiFace]);
+
+    // Only one popup on screen at a time — priority order below.
+    type FaceIssue = { key: string; icon: string; title: string; message: string; onOk: () => void };
+    const faceIssue: FaceIssue | null =
+        isMultiFace && !multiFaceDismissed ? {
+            key: 'multiface', icon: '👥', title: 'Multiple Faces Detected',
+            message: 'Only the registered student should be visible in the camera. Please make sure no one else is in frame.',
+            onOk: () => setMultiFaceDismissed(true),
+        }
+        : noFaceSince !== null && noFaceSince !== noFaceDismissedAt ? {
+            key: 'no-face', icon: '👤', title: 'Face Not Detected',
+            message: `Please be clearly visible in the camera${noFaceSecondsLeft && noFaceSecondsLeft > 0 ? ` within ${noFaceSecondsLeft}s` : ''}.`,
+            onOk: () => setNoFaceDismissedAt(noFaceSince),
+        }
+        : mismatchSince !== null && mismatchSince !== mismatchDismissedAt ? {
+            key: 'mismatch', icon: '⚠️', title: 'Identity Mismatch',
+            message: 'Face does not match your enrolled profile. Please ensure you are the registered student.',
+            onOk: () => setMismatchDismissedAt(mismatchSince),
+        }
+        : awaySince !== null && awaySince !== awayDismissedAt ? {
+            key: 'looking-away', icon: '👀', title: 'Looking Away',
+            message: `Please look at the screen${awaySecondsLeft && awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.`,
+            onOk: () => setAwayDismissedAt(awaySince),
+        }
+        : null;
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
@@ -236,49 +270,28 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Subtle face-check popups — non-blocking, student keeps answering ── */}
-                <div style={{ position: 'fixed', top: '4.5rem', right: '1.5rem', zIndex: 9997, display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '320px' }}>
-                    {noFaceSecondsLeft !== null && (
-                        <div style={{
-                            background: 'rgba(239,68,68,0.95)', color: '#fff', borderRadius: '10px',
-                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
-                        }}>
-                            <span style={{ fontSize: '1.1rem' }}>👤</span>
-                            <span>Face not detected — please be visible{noFaceSecondsLeft > 0 ? ` within ${noFaceSecondsLeft}s` : ''}.</span>
+                {/* ── Face-check popup — center-screen, dismissed via OK button ── */}
+                {faceIssue && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)', zIndex: 9996,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '420px', width: '90%' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{faceIssue.icon}</div>
+                            <h2 style={{ marginBottom: '0.75rem' }}>{faceIssue.title}</h2>
+                            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{faceIssue.message}</p>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ width: '100%', padding: '0.85rem', fontSize: '1rem' }}
+                                onClick={faceIssue.onOk}
+                            >
+                                OK
+                            </button>
                         </div>
-                    )}
-                    {awaySecondsLeft !== null && (
-                        <div style={{
-                            background: 'rgba(234,179,8,0.95)', color: '#1c1917', borderRadius: '10px',
-                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
-                        }}>
-                            <span style={{ fontSize: '1.1rem' }}>👀</span>
-                            <span>Please look at the screen{awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.</span>
-                        </div>
-                    )}
-                    {mismatchSecondsLeft !== null && (
-                        <div style={{
-                            background: 'rgba(220,38,38,0.95)', color: '#fff', borderRadius: '10px',
-                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
-                        }}>
-                            <span style={{ fontSize: '1.1rem' }}>⚠️</span>
-                            <span>Face does not match your enrolled profile. Please ensure you are the registered student.</span>
-                        </div>
-                    )}
-                    {showMultiFacePopup && (
-                        <div style={{
-                            background: 'rgba(249,115,22,0.95)', color: '#fff', borderRadius: '10px',
-                            padding: '0.75rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                            display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem',
-                        }}>
-                            <span style={{ fontSize: '1.1rem' }}>👥</span>
-                            <span>Multiple faces detected. Only the registered student should be visible.</span>
-                        </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* ── Fullscreen Gate Overlay ──
                     Shown on initial load (page refresh) and after every fullscreen violation.

@@ -8,6 +8,19 @@ import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
+// Shared between the Rules & Guidelines card and the Start Exam confirmation modal.
+const RULES = [
+    <>The exam must be taken in <strong>fullscreen mode</strong>.</>,
+    <>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</>,
+    <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
+    <>Exiting fullscreen or switching tabs will pause the exam.</>,
+    <>If paused for more than 20 seconds, the exam will auto-submit.</>,
+    <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</>,
+    <>Your answers are auto-saved continuously.</>,
+    <>Negative marking applies for incorrect MCQ answers.</>,
+    <>Use the Submit button when done — do not close the browser.</>,
+];
+
 export default function ExamInstructionsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { deviceChecks, allChecksPassed } = useDeviceCheck();
@@ -15,6 +28,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const router = useRouter();
     const [webcamStarted, setWebcamStarted] = useState(false);
     const [webcamLoading, setWebcamLoading] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     // Face ID enrollment gate — must be enrolled before Start Exam is enabled.
     const [faceEnrollStatus, setFaceEnrollStatus] = useState<'checking' | 'enrolled' | 'not_enrolled'>('checking');
@@ -84,6 +98,10 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         router.push(`/exams/${id}/play`);
     };
 
+    const handleStartClick = () => {
+        setShowConfirmModal(true);
+    };
+
     const checks = [
         {
             label: 'Screen Resolution',
@@ -139,14 +157,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     <div className="glass-card instructions-card">
                         <h2>📋 Rules & Guidelines</h2>
                         <ul className="rules-list">
-                            <li>The exam must be taken in <strong>fullscreen mode</strong>.</li>
-                            <li>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</li>
-                            <li>Exiting fullscreen or switching tabs will pause the exam.</li>
-                            <li>If paused for more than 20 seconds, the exam will auto-submit.</li>
-                            <li>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</li>
-                            <li>Your answers are auto-saved continuously.</li>
-                            <li>Negative marking applies for incorrect MCQ answers.</li>
-                            <li>Use the Submit button when done — do not close the browser.</li>
+                            {RULES.map((rule, i) => <li key={i}>{rule}</li>)}
                         </ul>
                     </div>
 
@@ -241,7 +252,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <button
                             className="btn btn-primary btn-lg"
                             disabled={!deviceChecks.viewport || !deviceChecks.fullscreen || !webcamStarted || faceEnrollStatus !== 'enrolled'}
-                            onClick={handleProceed}
+                            onClick={handleStartClick}
                         >
                             ✅ Start Exam
                         </button>
@@ -251,6 +262,45 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     </div>
                 </div>
 
+                {/* ── Start Exam confirmation modal — must confirm understanding of all rules ── */}
+                {showConfirmModal && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 9999,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+                    }}>
+                        <div className="glass-card" style={{ textAlign: 'left', padding: '2.5rem', maxWidth: '520px', width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+                                <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📋</div>
+                                <h2>Confirm Exam Rules</h2>
+                                <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                                    Please read all rules and guidelines carefully before starting.
+                                </p>
+                            </div>
+                            <ul className="rules-list" style={{ marginBottom: '1.5rem' }}>
+                                {RULES.map((rule, i) => <li key={i}>{rule}</li>)}
+                            </ul>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1, padding: '0.85rem' }}
+                                    onClick={() => setShowConfirmModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    style={{ flex: 1, padding: '0.85rem' }}
+                                    onClick={handleProceed}
+                                >
+                                    I Understand, Start Exam
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </div>
         </AuthGuard>
