@@ -1,0 +1,33 @@
+{
+	"root": true,
+	"parser": "@typescript-eslint/parser",
+	"parserOptions": {
+		"ecmaVersion": "latest",
+		"sourceType": "module"
+	},
+	"rules": {
+		"no-restricted-imports": [
+			"error",
+			{
+				"patterns": [
+					{
+						"group": ["@adapters/*", "@adapters/**/*"],
+						"message": "Domain module must not import from adapters. Define a port interface instead."
+					},
+					{
+						"group": ["@infra/*", "@infra/**/*"],
+						"message": "Domain module must not import from infrastructure. Define a port interface instead."
+					},
+					{
+						"group": ["**/adapters/**"],
+						"message": "Domain module must not import from adapters via relative paths. Define a port interface instead."
+					},
+					{
+						"group": ["**/infra/**"],
+						"message": "Domain module must not import from infrastructure via relative paths. Define a port interface instead."
+					}
+				]
+			}
+		]
+	}
+}

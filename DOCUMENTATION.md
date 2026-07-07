@@ -1,13 +1,15 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: June 2026 (face-api.js proctoring · media questions · question pool system · S3 service)  
-> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · AWS S3 · Vercel · Render  
-> Architecture reference: `prd-reference/docs/all-prds-re-arch-pass-2/` — bio-core · bio-portal · bio-proctor
+> Last updated: 2026-07-02 (BIO pnpm-workspace re-architecture · exam-api hexagonal port · scaffolded services/apps/packages from the org)  
+> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · AWS S3 · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
+> **Target stack (migrating to):** pnpm workspace · Bun/Elysia · Drizzle · Biome · Lefthook · hexagonal — mirrors `github.com/bharat-innovation-olympiad` (`bio-exam`, `bio-admin`, `bio-portal`, `bio-contracts`; `bio-proctor` intentionally kept as the existing face-api.js client).  
+> Architecture reference: golden PRDs now live in-repo at `ai/output/prds/`; agent rules in `ai/steering/`. See `AGENTS.md`, `BIO-REPOS.md`, and §0 below.
 
 ---
 
 ## Table of Contents
 
+0. [Architecture Re-Alignment — BIO pnpm Workspace](#0-architecture-re-alignment--bio-pnpm-workspace) ← **new**
 1. [Project Overview](#1-project-overview)
 2. [Repository Structure](#2-repository-structure)
 3. [Architecture Diagram](#3-architecture-diagram)
@@ -23,6 +25,97 @@
 13. [Exam Flow End-to-End](#13-exam-flow-end-to-end)
 14. [Proctoring System](#14-proctoring-system)
 15. [Deployment](#15-deployment)
+
+---
+
+## 0. Architecture Re-Alignment — BIO pnpm Workspace
+
+> **Why this section exists.** The private org `github.com/bharat-innovation-olympiad` holds the
+> *intended* production architecture as **five separate repos**. This project (originally a single
+> NestJS monolith) is being re-shaped to match them. As of 2026-07-02 the repo contains **both**:
+> the live monolith (`backend/`, `frontend/`, `admin-frontend/`) **and** a new `pnpm` workspace
+> that mirrors the org. The monolith stays in production until each workspace service reaches parity.
+
+### 0.1 The org (source of truth)
+
+| Org repo | Stack | Responsibility |
+|---|---|---|
+| `bio-contracts` | TS packages | Shared `@bio/*`: domain contracts (events/clients), auth-kit, shared types, UI kit, fixtures |
+| `bio-exam` | Bun/Elysia · Drizzle · Vite/React | Exam-window runtime: entitlement gate, player, autosave, durable timer, submission, SEB |
+| `bio-admin` | Bun/Elysia · Drizzle · Vite/React | Trusted admin: curation, scheduling, publishing, **scoring + answer keys**, results, analytics, ops (+ workers) |
+| `bio-portal` | Next.js App Router · Bun/Elysia seam | Always-on student portal: marketing, auth, booking, **payments**, entitlement issuance, admit/results |
+| `bio-proctor` | Python · FastAPI · uv | Proctoring: face enrollment, frame analysis, risk, review, **biometric retention** |
+
+`bio-po` is the golden-PRD repo (its `ai/output/prds/` is the source of truth); `workbench-*` are the
+AI workbenches. **Cross-repo law:** DTOs/events come from `@bio/domain-contracts` (never
+hand-duplicated); `bio-admin` owns answer keys + scoring, `bio-exam` consumes key-stripped snapshots;
+`bio-portal` owns payments/entitlement; `bio-proctor` owns biometrics.
+
+### 0.2 How it maps into this repo (one consolidated pnpm workspace)
+
+The five repos are flattened into a single workspace. Each package keeps its distinct `@bio/*` name,
+so its folder is the name minus the `@bio/` prefix (e.g. `@bio/exam-shared-types` →
+`packages/exam-shared-types`).
+
+```text
+Bharat_innovation_olympiad/
+├── pnpm-workspace.yaml · package.json · biome.json · tsconfig.json · lefthook.yml · .bio-repos.json
+├── AGENTS.md · BIO-REPOS.md            # governance (read before cross-service work)
+├── ai/                                 # AI workbench: steering/ (golden principles, roles, artifact rules) + output/prds/ (golden PRDs)
+├── packages/                           # = bio-contracts (+ each repo's local @bio/* packages)
+│   ├── domain-contracts · shared-types · auth-kit · ui-kit · contract-fixtures
+│   ├── exam-shared-types · exam-contract-fixtures
+│   ├── admin-auth · admin-authoring · admin-scheduling · admin-scoring · admin-results · admin-observability-testkit · admin-shared-types · admin-contract-fixtures
+│   └── portal-domain · portal-contract-fixtures
+├── services/                           # Bun/Elysia hexagonal APIs (+ admin workers)
+│   ├── exam-api      ← bio-exam       (★ exam-runtime slice PORTED — see §0.4)
+│   ├── admin-api     ← bio-admin       (scaffold)
+│   ├── {admin,analytics,publish,results,scoring}-worker  ← bio-admin (scaffolds)
+│   └── portal-api    ← bio-portal      (scaffold)
+├── apps/                               # exam-web, admin-web (Vite/React) · marketing-web, student-portal-web (Next.js)
+│
+├── backend/          # ← LEGACY NestJS + Prisma (production) — excluded from the workspace
+├── frontend/         # ← LEGACY Next.js student (production) — hosts the face-api.js proctor (kept)
+└── admin-frontend/   # ← LEGACY Next.js admin (production) — excluded from the workspace
+```
+
+`pnpm-workspace.yaml` globs only `apps/*`, `services/*`, `packages/*` — the three legacy apps stay on
+their own `npm` toolchains and are untouched.
+
+### 0.3 Conventions adopted from the org
+
+- **Package manager:** `pnpm` (workspace) — `pnpm@10.32.1`; runtime **Bun** (`>=1.2`).
+- **API framework:** **Elysia** on Bun (not NestJS). **ORM:** **Drizzle** (not Prisma). **Lint/format:** **Biome** (tabs, width 100, double quotes, semicolons, trailing commas) — not ESLint/Prettier. **Hooks:** Lefthook.
+- **Architecture:** hexagonal — `core/` (domain, ports/in, ports/out, services, errors) imports no framework; `adapters/` (`in/http`, `out/persistence`, `out/cache`); `infra/` (config, logger, shutdown). Enforced by `pnpm boundaries`.
+- **Proctoring exception (per request):** `bio-proctor` (Python) is **not** recreated. Proctoring remains the existing client-side face-api.js implementation in `frontend/` (see §8, §14).
+
+### 0.4 What was ported in this pass — `services/exam-api`
+
+The **exam-window runtime vertical slice** was ported from `backend/src/attempt` + `backend/src/timer`
+(NestJS/Prisma) onto Elysia + Drizzle, keeping behaviour identical. Full detail in
+`services/exam-api/PORT-NOTES.md`. Routes:
+
+| PRD | Route | Notes |
+|---|---|---|
+| EXAM-02 | `POST /exams/:instanceId/start` | Face + confirmed-slot entitlement gate; FNV-1a seeded per-student question set; create/resume/demo-reopen |
+| EXAM-03 | `POST /attempts/:id/answer`, `GET /attempts/:id` | Idempotent autosave; ownership-checked read |
+| EXAM-04 | `GET /attempts/:id/timer` | Server-authoritative Redis deadline (recomputed from DB on miss); auto-submit on expiry |
+| EXAM-05 | `POST /attempts/:id/submit` | Per-type scoring (MCQ/MULTI_SELECT/TRUE_FALSE/SHORT_ANSWER/NUMERIC) → finalize |
+
+Boundary honoured: answer keys never leave the domain — the repository returns `ScoredQuestion`
+(keys) for building/scoring, the HTTP layer only emits `QuestionView` (keys stripped). Drizzle targets
+the **same Neon tables** as Prisma (default PascalCase table + camelCase column naming), so both
+engines can run against one database during migration. It **shares `JWT_SECRET`** with the NestJS
+backend (HS256).
+
+### 0.5 Migration status & how to run the new stack
+
+- **Done + verified:** workspace tooling + governance + `ai/` workbench; all org packages/services/apps scaffolded; `exam-api` runtime slice ported **and green** — `pnpm install`, `tsc --noEmit` typecheck, Biome, and the `core` boundaries lint all pass. exam-api also **emits `attempt.submitted` / `attempt.auto_submitted` as validated `@bio/domain-contracts` envelopes** (producer `bio-exam`), exercising the shared-contract law.
+- **Next:** port scoring/results (SCORE), authoring (ADMIN) into `admin-api`; auth/booking/payments into `portal-api`; wire `apps/*`; then retire the matching legacy app.
+- **Run:** `pnpm install` → `pnpm --filter @bio/exam-api typecheck` → `DATABASE_URL=… REDIS_URL=… JWT_SECRET=… pnpm --filter @bio/exam-api dev`. Verify all: `pnpm verify`.
+
+> The remainder of this document (§1–§15) describes the **live production monolith**, which is
+> unchanged and authoritative until the workspace services replace it.
 
 ---
 

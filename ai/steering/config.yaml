@@ -1,0 +1,224 @@
+# steering/config.yaml
+# Template-owned configuration for the steering system.
+# Controls how the loader is invoked across layers and agents.
+#
+# Updated via PR to the ai-workbench template repo.
+# Stamped workbenches pick up changes through `update.wb`.
+
+version: 1
+
+# Where the loader lives (relative to workbench root).
+loader: scripts/steering-load.py
+
+# Scope definitions — the loader accepts these as CLI arguments.
+# Keeping them declarative here lets agents discover valid scopes without
+# guessing.
+scopes:
+  - name: golden
+    layer: 0
+    path: steering/golden-principles
+    id_prefix: GP
+  - name: role:dev
+    layer: 1
+    path: steering/roles/dev
+    id_prefix: DEV
+  - name: role:qa
+    layer: 1
+    path: steering/roles/qa
+    id_prefix: QA
+  - name: role:po
+    layer: 1
+    path: steering/roles/po
+    id_prefix: PO
+  - name: role:uxd
+    layer: 1
+    path: steering/roles/uxd
+    id_prefix: UXD
+  - name: artifact:prd
+    layer: 2
+    path: steering/artifacts/prd
+    id_prefix: PRD
+  - name: artifact:eng-spec
+    layer: 2
+    path: steering/artifacts/eng-spec
+    id_prefix: ESPEC
+  - name: artifact:tdd
+    layer: 2
+    path: steering/artifacts/tdd
+    id_prefix: TDD
+  - name: artifact:erd
+    layer: 2
+    path: steering/artifacts/erd
+    id_prefix: ERD
+  - name: artifact:bdd
+    layer: 2
+    path: steering/artifacts/bdd
+    id_prefix: BDD
+  - name: artifact:test-plan
+    layer: 2
+    path: steering/artifacts/test-plan
+    id_prefix: TP
+  - name: artifact:test-cases
+    layer: 2
+    path: steering/artifacts/test-cases
+    id_prefix: TC
+  - name: artifact:test-spec
+    layer: 2
+    path: steering/artifacts/test-spec
+    id_prefix: TSPEC
+  - name: topic:api-design
+    layer: 2
+    path: steering/topics/api-design
+    id_prefix: API
+  - name: topic:test-data
+    layer: 2
+    path: steering/topics/test-data
+    id_prefix: TD
+
+# Overlay location. User-owned. Per-workbench team customisations.
+overlay_root: steering.local
+
+# When loaders should fire.
+# Agents are expected to honour these invocation points.
+# The freshness hook in .claude/settings.json mirrors this list.
+invocation_points:
+  - name: session_start
+    scopes: [golden]
+    note: "Read at the top of every session before any other work."
+  - name: role_switch
+    scopes: ["role:<detected>"]
+    note: "Read when CLAUDE.md role-inference table matches a row."
+  - name: skill_invocation
+    scopes: ["artifact:<skill-type>", "topic:<declared-by-skill>"]
+    note: "Step 0 of every skill that produces an artifact. Topics declared in skill frontmatter."
+  - name: post_tool_use
+    trigger: "Bash(update.wb|git pull|git merge) OR Edit/Write on steering/** or steering.local/**"
+    scopes: [golden, "role:<current>"]
+    note: "Freshness reload. Wired via .claude/settings.json PostToolUse hook."
+  - name: manual
+    alias: wb.steering-refresh
+    scopes: [all]
+    note: "User-triggered refresh across every scope."
+
+# ID regex enforced by scripts/steering-lint.py.
+id_regex: '^[A-Z]+(-LOCAL)?-\d{2,3}$'
+
+# Required frontmatter fields on every rule file.
+required_fields:
+  - id
+  - title
+  - scope
+  - owner
+  - created
+
+# Overlay-only frontmatter fields (linter rejects these in steering/).
+overlay_only_fields:
+  - supersedes
+  - removes
+
+# Removed-sidecar filename convention.
+remove_sidecar_suffix: .removed.md
+
+workflow:
+  version: 1
+  status_json_shape: openspec-compatible
+  artifacts:
+    epic-context:
+      label: Epic context
+      scope: epic
+      command: /epic-intake
+      requires: []
+      optional: false
+      lifecycle_type: epic-context
+    epic-fitness:
+      label: Epic fitness check
+      scope: epic
+      command: /epic-fitness
+      requires: [epic-context]
+      optional: true
+      lifecycle_type: epic-fitness
+    prd:
+      label: PRD
+      scope: epic
+      command: /prd-draft
+      requires: [epic-context]
+      optional: false
+      lifecycle_type: prd
+    design:
+      label: Design
+      scope: prd
+      command: /design-draft
+      requires: [prd]
+      optional: true
+      lifecycle_type: design
+    eng-spec:
+      label: Engineering spec
+      scope: prd
+      command: /eng-spec
+      requires: [prd]
+      optional: false
+      lifecycle_type: eng-spec
+    tdd:
+      label: TDD
+      scope: prd
+      command: /tdd
+      requires: [eng-spec]
+      optional: false
+      lifecycle_type: tdd
+    erd:
+      label: ERD
+      scope: prd
+      command: /erd
+      requires: [eng-spec]
+      optional: true
+      lifecycle_type: erd
+    adr:
+      label: ADR
+      scope: prd
+      command: /adr
+      requires: [eng-spec]
+      optional: true
+      lifecycle_type: adr
+    bdd:
+      label: BDD features
+      scope: prd
+      command: /bdd-gen
+      requires: [prd]
+      optional: false
+      lifecycle_type: bdd
+    test-plan:
+      label: Test plan
+      scope: prd
+      command: /test-plan-gen
+      requires: [bdd]
+      optional: false
+      lifecycle_type: test-plan
+    test-cases:
+      label: Test cases
+      scope: prd
+      command: /test-cases-gen
+      requires: [bdd, test-plan]
+      optional: false
+      lifecycle_type: test-cases
+    test-spec:
+      label: Test spec
+      scope: prd
+      command: /test-spec
+      requires: [prd, bdd, test-cases]
+      optional: false
+      lifecycle_type: test-spec
+    test-erd:
+      label: Test ERD
+      scope: prd
+      command: /test-spec
+      requires: [test-spec]
+      optional: true
+      lifecycle_type: test-erd
+    ralph-workspace-plan:
+      label: Ralph workspace plan
+      scope: prd
+      command: /ralph-workspace-plan
+      requires: [prd, eng-spec, tdd, test-spec]
+      optional: false
+      virtual: true
+      output_path: repos/.ralph/fix_plan.md

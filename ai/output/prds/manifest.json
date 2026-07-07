@@ -1,0 +1,755 @@
+{
+	"repo": "bio-po",
+	"organization": "bharat-innovation-olympiad",
+	"generatedDate": "2026-06-12",
+	"goldenSourcePath": "ai/output/prds",
+	"selectionRules": [
+		"This directory is the canonical golden PRD source for BIO.",
+		"Historical draft/source PRD packs were consolidated here and removed from the working tree.",
+		"Service repos receive copied subsets from this directory under their own ai/output/prds folders.",
+		"Use git history for old source-pack provenance; use this directory for implementation."
+	],
+	"counts": {
+		"context": 6,
+		"scaffold": 4,
+		"goldenPrd": 39,
+		"total": 49
+	},
+	"files": [
+		{
+			"path": "ai/output/prds/EXECUTION-SEQUENCE-STATUS.md",
+			"file": "EXECUTION-SEQUENCE-STATUS.md",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "6b25e92822f64def58588f066a216bdb1e6a94d70c0ff349ddb5abcfbdca5ccf"
+		},
+		{
+			"path": "ai/output/prds/FINAL-MERMAID-MAP.md",
+			"file": "FINAL-MERMAID-MAP.md",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "5ebbf00ceb13dabb3916d9820beea17fe6b7e7b792cfb0a2fd54329bbc095099"
+		},
+		{
+			"path": "ai/output/prds/PRD-DISTRIBUTION-MATRIX.md",
+			"file": "PRD-DISTRIBUTION-MATRIX.md",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "7190dca174d59028416e14ebc87da1748c7d341e90f84f8e0ac2f728028c1259"
+		},
+		{
+			"path": "ai/output/prds/README.md",
+			"file": "README.md",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "8f90710cdcdb1c1135bf38711187f4386fe66a05894308af9223d237c76a27c4"
+		},
+		{
+			"path": "ai/output/prds/SOURCE-COVERAGE-MATRIX.md",
+			"file": "SOURCE-COVERAGE-MATRIX.md",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "0639588b0fc264bda309334c0eca134cee3a12b7b5cf62286693d6b4e734fdf1"
+		},
+		{
+			"path": "ai/output/prds/_final-prd-map.json",
+			"file": "_final-prd-map.json",
+			"category": "context",
+			"sourceRole": "golden-source",
+			"sha256": "da3a2a017415a7fce9ad02a2a4f290c8a324db6046f6d198a89e6ebd8bfa4e0c"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-01-question-bank.md",
+			"file": "PRD-ADMIN-01-question-bank.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "4da736669711982ca8b5afe911de263c9cf28ffe7d8f71870ccd3db63f0c083a",
+			"id": "ADMIN-01",
+			"title": "Question Bank",
+			"phase": "P2 Admin/Curator",
+			"primary": "bio-admin",
+			"impacted": [],
+			"note": "Question authoring, answer keys, imports, and versioning are admin-only.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-02-paper-builder.md",
+			"file": "PRD-ADMIN-02-paper-builder.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "954fca80b3df5f416f81008f2ba6c7adef8ffc85efc9a8f5a1bb05607997a306",
+			"id": "ADMIN-02",
+			"title": "Paper Builder",
+			"phase": "P2 Admin/Curator",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-exam"
+			],
+			"note": "Paper assembly and marking policy are admin-owned; exam consumes key-stripped published snapshots.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-03-scheduling-slots-pricing.md",
+			"file": "PRD-ADMIN-03-scheduling-slots-pricing.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "5d75208951080af2549661ea1f34f13cc5ea90a367507e05976ed1e8b894c1f6",
+			"id": "ADMIN-03",
+			"title": "Scheduling, Slots & Pricing Source",
+			"phase": "P2 Admin/Curator",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-portal",
+				"bio-exam"
+			],
+			"note": "Admin owns schedule/slot/pricing source of truth; portal consumes catalog, exam consumes runtime windows.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-04-publishing-snapshots.md",
+			"file": "PRD-ADMIN-04-publishing-snapshots.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "f274d7b367b4775daab48160e43460d254d9d2fff6c64fc89ff770c53d6f390b",
+			"id": "ADMIN-04",
+			"title": "Publishing Snapshots",
+			"phase": "P2 Admin/Curator",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-exam",
+				"bio-portal"
+			],
+			"note": "Admin publishes immutable key-stripped exam snapshots to exam and public slot/catalog projections to portal.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-05-user-school-management.md",
+			"file": "PRD-ADMIN-05-user-school-management.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "9f1d8320d86bcdd6cb54a8570681ab17709003a5da5f7a664474cc6a2ef7ba86",
+			"id": "ADMIN-05",
+			"title": "User & School Management",
+			"phase": "P2 Admin/Curator",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-portal"
+			],
+			"note": "Admin manages schools/cohorts/admin users; portal consumes eligibility and school projections.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-ADMIN-06-dashboard-analytics.md",
+			"file": "PRD-ADMIN-06-dashboard-analytics.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "513eb922a4dc7d48d0edb9c8a6608aa5dbdc931dc55809a047d1b696c62585da",
+			"id": "ADMIN-06",
+			"title": "Dashboard Analytics",
+			"phase": "P2 Admin/Ops",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-portal",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Admin owns analytics/read models across registration, attempts, scoring, and proctor signals.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-AUTH-01-mobile-otp-login.md",
+			"file": "PRD-AUTH-01-mobile-otp-login.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "90e88eaebd640aea7aaf6d6690f5dc72fd2aae9a2ee6a2b7bd914aadfd7bad97",
+			"id": "AUTH-01",
+			"title": "Mobile OTP Login",
+			"phase": "P1 Identity/Auth",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-exam",
+				"bio-admin"
+			],
+			"note": "Student/guardian OTP login lives in always-on portal; exam/admin consume signed claims or introspection only.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-AUTH-02-registration-profile.md",
+			"file": "PRD-AUTH-02-registration-profile.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "87c29b1e3e733a4d83479cd64b3603d3b1da7c9549fe7bc2dee4be34692eed6c",
+			"id": "AUTH-02",
+			"title": "Registration Profile",
+			"phase": "P1 Identity/Auth",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Student profile and eligibility data originates in portal and is synchronized as claims/read models.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-AUTH-03-dpdp-consent-retention.md",
+			"file": "PRD-AUTH-03-dpdp-consent-retention.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "8045028275a8f703a4d9d08f8c3156c77f318a053b9482c9916602852d48940c",
+			"id": "AUTH-03",
+			"title": "DPDP Consent & Retention",
+			"phase": "P1 Identity/Auth",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Portal captures student/guardian consent; proctor and admin enforce biometric/data-retention obligations.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-AUTH-04-admin-auth-rbac.md",
+			"file": "PRD-AUTH-04-admin-auth-rbac.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "fc81641269e801f88acd0a21950d3780b6e7b53d2da095976f81dad0061e6a29",
+			"id": "AUTH-04",
+			"title": "Admin Auth & RBAC",
+			"phase": "P1 Identity/Auth",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-proctor"
+			],
+			"note": "Admin authentication and privileged RBAC live in bio-admin; proctor review roles consume admin claims.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-AUTH-05-session-token-management.md",
+			"file": "PRD-AUTH-05-session-token-management.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "db366ea122c4f951b0860749e5cfcb9b711fc84b1b5a0f404ea9bce0ca1f7a41",
+			"id": "AUTH-05",
+			"title": "Sessions & Tokens",
+			"phase": "P1 Identity/Auth",
+			"primary": "bio-portal + bio-admin",
+			"impacted": [
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "One shared token/session model: portal/admin issue sessions; exam/proctor validate claims fail-closed.",
+			"cadence": "shared identity/foundation cadence"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-00-runtime-dashboard-handoff.md",
+			"file": "PRD-EXAM-00-runtime-dashboard-handoff.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "4c38dfc9f801dc933cc17c32d6469c8b9dfd6ed99a75469c8290b2bcfa5c5a3b",
+			"id": "EXAM-00",
+			"title": "Runtime Dashboard Handoff",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-portal"
+			],
+			"note": "Exam owns readiness/check-in/runtime handoff; portal links students into it.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-01-device-identity-check.md",
+			"file": "PRD-EXAM-01-device-identity-check.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "d2038500efea4d33e4f8ce227acb5d7ea0b8f36df138a677b18a0a6efe107434",
+			"id": "EXAM-01",
+			"title": "Device & Identity Check",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-proctor",
+				"bio-portal"
+			],
+			"note": "Exam owns preflight/readiness; proctor provides biometric/device signals where enabled.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-02-attempt-entitlement-gate.md",
+			"file": "PRD-EXAM-02-attempt-entitlement-gate.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "26ad2af20d5fb96dff6159d8a870ae10a25898bf03452d94eb23e6348ac5ee48",
+			"id": "EXAM-02",
+			"title": "Attempt Entitlement Gate",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-portal",
+				"bio-admin"
+			],
+			"note": "Exam owns attempt start and validates portal entitlements plus admin slot/snapshot windows.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-03-player-autosave.md",
+			"file": "PRD-EXAM-03-player-autosave.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "aeb8d3196b8287e45e95a7a6629544007470a0a29725367f2400f30a5b13afe5",
+			"id": "EXAM-03",
+			"title": "Player & Autosave",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-admin"
+			],
+			"note": "Exam owns student player and raw-answer durability; admin/scoring later consumes submissions.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-04-durable-timer.md",
+			"file": "PRD-EXAM-04-durable-timer.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "9842a68c7dc9f8b4f834fb1e76fcd7699a4ad0ca790778b72f074b6a0b2964bc",
+			"id": "EXAM-04",
+			"title": "Durable Timer",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-admin"
+			],
+			"note": "Exam owns server-authoritative timer and auto-submit; admin/ops monitors it.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-05-submission-post-exam.md",
+			"file": "PRD-EXAM-05-submission-post-exam.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "6f06579b8fe2e5298549be1b66aed0c778477b6e05833ae5d9574ccee9dce8b3",
+			"id": "EXAM-05",
+			"title": "Submission & Post-Exam",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-admin",
+				"bio-portal"
+			],
+			"note": "Exam owns submit/finalize; admin scoring consumes submission; portal shows post-exam state.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-EXAM-06-seb-lockdown.md",
+			"file": "PRD-EXAM-06-seb-lockdown.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "4ca525ebb9dc5590fbdf1ff28d75daf8639d567b7c5260e0eaa756a7f1c74e13",
+			"id": "EXAM-06",
+			"title": "SEB Lockdown",
+			"phase": "P4 Exam Runtime",
+			"primary": "bio-exam",
+			"impacted": [
+				"bio-admin",
+				"bio-portal"
+			],
+			"note": "Exam owns lockdown enforcement; admin configures requirement; portal surfaces guidance.",
+			"cadence": "exam-window runtime; spin up before check-in, scale down after submission/export gates"
+		},
+		{
+			"path": "ai/output/prds/PRD-OPS-01-exam-day-ops-incident-response.md",
+			"file": "PRD-OPS-01-exam-day-ops-incident-response.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "7d4a5c227cc2192dbd987534d502a6e2055ccb6fbdf745c4f7bacbbbfbd28fad",
+			"id": "OPS-01",
+			"title": "Exam-Day Ops & Incident Response",
+			"phase": "P7 Ops",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-portal",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Admin owns command center/runbooks/controls; all runtime services emit signals and accept governed controls.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-PLAT-01-repo-scaffolding.md",
+			"file": "PRD-PLAT-01-repo-scaffolding.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "cf038203ae808e8fc2fdc2f5734e7851945411eca32cbe102ddaf58ce5e5676f",
+			"id": "PLAT-01",
+			"title": "Repo Scaffolding",
+			"phase": "P0 Foundation",
+			"primary": "all four repos / foundation track",
+			"impacted": [
+				"bio-portal",
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Scaffold four deployable service repos; no bio-core monolith remains.",
+			"cadence": "foundation; applies to all deployment cadences"
+		},
+		{
+			"path": "ai/output/prds/PRD-PLAT-02-shared-contracts-events.md",
+			"file": "PRD-PLAT-02-shared-contracts-events.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "17ab434e6020fd27224dd4e00e62b421c08c77d13c4be1fa2400d590e1687bda",
+			"id": "PLAT-02",
+			"title": "Contracts & Events",
+			"phase": "P0 Foundation",
+			"primary": "all four repos / foundation track",
+			"impacted": [
+				"bio-portal",
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Define shared contract packages and event families consumed by all four services.",
+			"cadence": "foundation; applies to all deployment cadences"
+		},
+		{
+			"path": "ai/output/prds/PRD-PLAT-03-infrastructure.md",
+			"file": "PRD-PLAT-03-infrastructure.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "57cf198f8147260ef09f53c177e4eab31104f4d83ef82871e19eec39e4d89bc7",
+			"id": "PLAT-03",
+			"title": "Infrastructure",
+			"phase": "P0 Foundation",
+			"primary": "all four repos / foundation track",
+			"impacted": [
+				"bio-portal",
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Define always-on vs exam-window infrastructure and spin-up/spin-down gates.",
+			"cadence": "foundation; applies to all deployment cadences"
+		},
+		{
+			"path": "ai/output/prds/PRD-PLAT-04-observability-audit.md",
+			"file": "PRD-PLAT-04-observability-audit.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "6c91be01ee37ac5b846cdc9a99867729e530140ee7ce51f2cb7b367b73ed2b1a",
+			"id": "PLAT-04",
+			"title": "Observability & Audit",
+			"phase": "P0 Foundation",
+			"primary": "all four repos / foundation track",
+			"impacted": [
+				"bio-portal",
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "One telemetry/audit standard across portal, admin, exam runtime, and proctor.",
+			"cadence": "foundation; applies to all deployment cadences"
+		},
+		{
+			"path": "ai/output/prds/PRD-PLAT-05-security-baseline-threat-model.md",
+			"file": "PRD-PLAT-05-security-baseline-threat-model.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "c4a613c7443a00ee1391b02da9d9f4d4c5f683d6c678366ea7fd9e9e4977a60c",
+			"id": "PLAT-05",
+			"title": "Security Baseline",
+			"phase": "P0 Foundation",
+			"primary": "all four repos / foundation track",
+			"impacted": [
+				"bio-portal",
+				"bio-admin",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Deny-by-default authz, secret handling, threat model, and DPDP/security gates for all services.",
+			"cadence": "foundation; applies to all deployment cadences"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-01-marketing-discovery.md",
+			"file": "PRD-PORTAL-01-marketing-discovery.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "31c83039da2568248296808cbb2b1f3d34b0adb23746a6bd3bc49d03d32beee4",
+			"id": "PORTAL-01",
+			"title": "Marketing Discovery",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [],
+			"note": "Always-on public marketing and discovery.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-02-slot-catalog.md",
+			"file": "PRD-PORTAL-02-slot-catalog.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "54ed05b93b68c6b7eb98f50bc6054c1569f030bf1ea114c2b7384d2af913192b",
+			"id": "PORTAL-02",
+			"title": "Slot Catalog",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Portal lists admin-published slots and exposes availability for booking and exam handoff.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-03-booking-seat-reservation.md",
+			"file": "PRD-PORTAL-03-booking-seat-reservation.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "1b99fe66e5010c477acf5c4bc52d992dfd381a16d3f2f6fb79c4bb2042dfcc14",
+			"id": "PORTAL-03",
+			"title": "Booking & Seat Holds",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Portal owns atomic holds/booking; confirmed bookings become exam entitlements.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-04-razorpay-payments.md",
+			"file": "PRD-PORTAL-04-razorpay-payments.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "0569c8d2346484034ceb41cee7fc8f0836b721d462de315c9f67b31e68fef2e9",
+			"id": "PORTAL-04",
+			"title": "Razorpay Payments",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Portal owns payment/order/webhook/reconciliation; admin reads revenue, exam receives paid entitlement only.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-05-confirmation-admit-card-notifications.md",
+			"file": "PRD-PORTAL-05-confirmation-admit-card-notifications.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "7391b1dbdafff634da818ec8d5df0efab6b4507406e013cecaa8cef5d85993f2",
+			"id": "PORTAL-05",
+			"title": "Confirmation, Admit Card & Notifications",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Portal owns confirmations/admit-card notifications; exam validates admit/check-in data.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-06-refunds-cancellations.md",
+			"file": "PRD-PORTAL-06-refunds-cancellations.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "9dfc50823fc8c65d2a6a15f0a8c198bcc34fd60ee2a38f931d084b1c93bfed59",
+			"id": "PORTAL-06",
+			"title": "Refunds & Cancellations",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin",
+				"bio-exam"
+			],
+			"note": "Portal owns refund/cancellation money flows and entitlement revocation events.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-07-registration-entitlement-sync.md",
+			"file": "PRD-PORTAL-07-registration-entitlement-sync.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "24819fe9b78d9f36260a6623b86864cc8291079fd0b720d3c45134cd8f9cd9d5",
+			"id": "PORTAL-07",
+			"title": "Registration Entitlement Sync",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-exam",
+				"bio-admin"
+			],
+			"note": "Portal emits paid entitlement; exam start gate consumes it; admin audits/reports it.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PORTAL-08-pricing-coupons.md",
+			"file": "PRD-PORTAL-08-pricing-coupons.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "0ee155a5b5d5e05f82f93b0b6bf37d217c2d6f35f349bfa732094a872c09712a",
+			"id": "PORTAL-08",
+			"title": "Pricing & Coupons",
+			"phase": "P3 Portal/Commerce",
+			"primary": "bio-portal",
+			"impacted": [
+				"bio-admin"
+			],
+			"note": "Portal owns coupon/early-bird math while admin owns base slot price/policy.",
+			"cadence": "always-on"
+		},
+		{
+			"path": "ai/output/prds/PRD-PROCTOR-01-face-enrollment.md",
+			"file": "PRD-PROCTOR-01-face-enrollment.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "614b9086bd7f8fe5a39294297bd86f13411e8c39bb37563930cfc46c2c27f214",
+			"id": "PROCTOR-01",
+			"title": "Face Enrollment",
+			"phase": "P6 Proctoring",
+			"primary": "bio-proctor",
+			"impacted": [
+				"bio-exam",
+				"bio-portal",
+				"bio-admin"
+			],
+			"note": "Proctor owns enrollment/embeddings; portal captures consent; exam invokes readiness; admin audits.",
+			"cadence": "exam-window + post-exam review/retention workers; scheduled deletion/DSR jobs may run outside windows"
+		},
+		{
+			"path": "ai/output/prds/PRD-PROCTOR-02-frame-analysis-match.md",
+			"file": "PRD-PROCTOR-02-frame-analysis-match.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "f1722215c02aa926f2f0b9e52b37330838db2d05323df6094a6be34a90988e7f",
+			"id": "PROCTOR-02",
+			"title": "Frame Analysis & Match",
+			"phase": "P6 Proctoring",
+			"primary": "bio-proctor",
+			"impacted": [
+				"bio-exam",
+				"bio-admin"
+			],
+			"note": "Proctor owns ML inference/risk signals; exam sends frames/events, admin reviews aggregate state.",
+			"cadence": "exam-window + post-exam review/retention workers; scheduled deletion/DSR jobs may run outside windows"
+		},
+		{
+			"path": "ai/output/prds/PRD-PROCTOR-03-events-risk-integrity.md",
+			"file": "PRD-PROCTOR-03-events-risk-integrity.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "64a59a4f42344aabbbe8f0709ce16913324f16620d25cd855af7c48d2d381a81",
+			"id": "PROCTOR-03",
+			"title": "Events, Risk & Integrity",
+			"phase": "P6 Proctoring",
+			"primary": "bio-proctor",
+			"impacted": [
+				"bio-exam",
+				"bio-admin"
+			],
+			"note": "Proctor owns proctor events/risk; exam attaches attempts, admin consumes integrity signals.",
+			"cadence": "exam-window + post-exam review/retention workers; scheduled deletion/DSR jobs may run outside windows"
+		},
+		{
+			"path": "ai/output/prds/PRD-PROCTOR-04-review-console.md",
+			"file": "PRD-PROCTOR-04-review-console.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "b68274cd62d2c42596fda2b70200ee816caf26a6b06849c6a365c365c85c4ed7",
+			"id": "PROCTOR-04",
+			"title": "Review Console",
+			"phase": "P6 Proctoring",
+			"primary": "bio-proctor",
+			"impacted": [
+				"bio-admin",
+				"bio-exam",
+				"bio-portal"
+			],
+			"note": "Proctor owns review workflow; admin shell may deep-link/embed; result holds flow to admin/portal.",
+			"cadence": "exam-window + post-exam review/retention workers; scheduled deletion/DSR jobs may run outside windows"
+		},
+		{
+			"path": "ai/output/prds/PRD-PROCTOR-05-biometric-retention.md",
+			"file": "PRD-PROCTOR-05-biometric-retention.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "f01c882d46e46129672eddf4717a53d2d019d167c7d784623f8ed5a9a63016f5",
+			"id": "PROCTOR-05",
+			"title": "Biometric Retention",
+			"phase": "P6 Proctoring",
+			"primary": "bio-proctor",
+			"impacted": [
+				"bio-portal",
+				"bio-admin"
+			],
+			"note": "Proctor owns biometric deletion/proof; portal consent and admin DPO workflows trigger/read it.",
+			"cadence": "exam-window + post-exam review/retention workers; scheduled deletion/DSR jobs may run outside windows"
+		},
+		{
+			"path": "ai/output/prds/PRD-SCORE-01-async-scoring.md",
+			"file": "PRD-SCORE-01-async-scoring.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "da77f11081b22db2f734451ddcdda28db815ecd5b24670f47bf126c812e13cad",
+			"id": "SCORE-01",
+			"title": "Async Scoring",
+			"phase": "P5 Scoring/Results",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-exam"
+			],
+			"note": "Scoring is trusted/admin-side so answer keys never enter the student-facing exam runtime.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/PRD-SCORE-02-results-ranking-certificates.md",
+			"file": "PRD-SCORE-02-results-ranking-certificates.md",
+			"category": "golden-prd",
+			"sourceRole": "golden-source",
+			"sha256": "4d676d7f2f1424ad12cb76acb607f12798ac411ac26c32812b25244a8516442c",
+			"id": "SCORE-02",
+			"title": "Results, Ranking & Certificates",
+			"phase": "P5 Scoring/Results",
+			"primary": "bio-admin",
+			"impacted": [
+				"bio-portal",
+				"bio-exam",
+				"bio-proctor"
+			],
+			"note": "Admin owns release/rank/certificates; portal displays released results; proctor holds can block release.",
+			"cadence": "admin/curation/results/ops; low baseline outside exams, scale for authoring/results/ops"
+		},
+		{
+			"path": "ai/output/prds/REPO-SCAFFOLD-bio-admin.md",
+			"file": "REPO-SCAFFOLD-bio-admin.md",
+			"category": "scaffold",
+			"sourceRole": "golden-source",
+			"sha256": "ba286391ee1404d8a4f47fbe2c20e08fd740b2c2e5e4f3bb00ce311548fe1606"
+		},
+		{
+			"path": "ai/output/prds/REPO-SCAFFOLD-bio-exam.md",
+			"file": "REPO-SCAFFOLD-bio-exam.md",
+			"category": "scaffold",
+			"sourceRole": "golden-source",
+			"sha256": "e9ce8aedbb4e59879ec842a055e23db528ce49e44c24208763bcff3242c4f546"
+		},
+		{
+			"path": "ai/output/prds/REPO-SCAFFOLD-bio-portal.md",
+			"file": "REPO-SCAFFOLD-bio-portal.md",
+			"category": "scaffold",
+			"sourceRole": "golden-source",
+			"sha256": "8b1b28cb131a6119e4b0b252da812da44f97569c94aa3470dd0c4b5f3abbc95c"
+		},
+		{
+			"path": "ai/output/prds/REPO-SCAFFOLD-bio-proctor.md",
+			"file": "REPO-SCAFFOLD-bio-proctor.md",
+			"category": "scaffold",
+			"sourceRole": "golden-source",
+			"sha256": "2720916d25f6231cdb2074968d4c6dc4a7359a7e9f2a4e097062e9e5d458af15"
+		}
+	]
+}

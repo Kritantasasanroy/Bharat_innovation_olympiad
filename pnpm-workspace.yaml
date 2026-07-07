@@ -1,0 +1,20 @@
+packages:
+  - "apps/*"
+  - "services/*"
+  - "packages/*"
+
+# Mirrors the bio-contracts pnpm catalog (TDD-001 §3): the shared contract
+# packages reference `zod: catalog:` so the whole workspace pins one version.
+catalog:
+  zod: 4.4.3
+# Consolidated BIO workspace.
+# The five org repos (bio-contracts, bio-exam, bio-admin, bio-portal, bio-proctor)
+# are flattened into one pnpm workspace here. Each org package keeps its distinct
+# @bio/* name, so folder names carry the name minus the @bio/ prefix
+# (e.g. @bio/exam-shared-types -> packages/exam-shared-types). This preserves the
+# option to split any area back into its own repo later.
+#
+# NOT part of this workspace (kept on their existing npm toolchains until each
+# service reaches parity and is retired): backend/ (NestJS), frontend/,
+# admin-frontend/. Proctoring stays in the current client-side face-api.js
+# implementation and is intentionally NOT recreated as the Python bio-proctor.

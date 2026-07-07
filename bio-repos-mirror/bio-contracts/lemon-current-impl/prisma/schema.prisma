@@ -1,0 +1,346 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  passwordHash    String?
+  firstName       String
+  lastName        String
+  role            Role           @default(STUDENT)
+  classBand       Int?
+  schoolId        String?
+  faceEmbedding   Bytes?
+  profileImageUrl String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  attempts        Attempt[]
+  refreshTokens   RefreshToken[]
+  school          School?        @relation(fields: [schoolId], references: [id])
+  bookings        Booking[]
+  payments        Payment[]
+
+  @@index([email])
+  @@index([schoolId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model School {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  city      String
+  state     String
+  createdAt DateTime @default(now())
+  users     User[]
+
+  @@index([code])
+}
+
+model Exam {
+  id               String         @id @default(uuid())
+  title            String
+  description      String?
+  classBands       Int[]
+  totalMarks       Int
+  durationMinutes  Int
+  isPublished      Boolean        @default(false)
+  isResultReleased Boolean        @default(false)
+  feeAmount        Int?
+  easyPct          Int            @default(30)
+  mediumPct        Int            @default(50)
+  hardPct          Int            @default(20)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  instances        ExamInstance[]
+  sections         ExamSection[]
+
+  @@index([isPublished])
+}
+
+model ExamSection {
+  id                String            @id @default(uuid())
+  examId            String
+  title             String
+  sortOrder         Int
+  questionsToAssign Int               @default(0) // 0 = assign all from pool; N = pick N per student
+  exam              Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  sectionQuestions  SectionQuestion[]
+
+  @@index([examId])
+}
+
+model Question {
+  id            String            @id @default(uuid())
+  type          QuestionType
+  difficulty    Difficulty
+  text          String
+  options       Json?
+  correctAnswer String?
+  marks         Int               @default(1)
+  negativeMarks Float             @default(0)
+  timeLimitSecs Int?
+  mediaUrl      String?           // S3 URL or external URL for attached media
+  mediaType     MediaType?        // IMAGE | VIDEO | AUDIO | DIAGRAM
+  tags          String[]
+  explanation   String?
+  createdAt     DateTime          @default(now())
+  attemptItems  AttemptItem[]
+  sectionLinks  SectionQuestion[]
+
+  @@index([type])
+  @@index([difficulty])
+}
+
+model SectionQuestion {
+  id         String      @id @default(uuid())
+  sectionId  String
+  questionId String
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+  section    ExamSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, questionId])
+  @@index([sectionId, sortOrder])
+  @@index([questionId])
+}
+
+model ExamInstance {
+  id             String     @id @default(uuid())
+  examId         String
+  startsAt       DateTime
+  endsAt         DateTime
+  requireSeb     Boolean    @default(false)
+  browserExamKey String?
+  configKey      String?
+  quitUrl        String?
+  maxAttempts    Int        @default(1)
+  createdAt      DateTime   @default(now())
+  attempts       Attempt[]
+  slots          ExamSlot[]
+  exam           Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+  @@index([startsAt, endsAt])
+}
+
+model Attempt {
+  id                String         @id @default(uuid())
+  userId            String
+  examInstanceId    String
+  status            AttemptStatus  @default(NOT_STARTED)
+  startedAt         DateTime?
+  submittedAt       DateTime?
+  totalScore        Float?
+  maxScore          Float?
+  ipAddress         String?
+  deviceFingerprint String?
+  riskScore         Float?         @default(0)
+  createdAt         DateTime       @default(now())
+  examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             AttemptItem[]
+  proctorEvents     ProctorEvent[]
+
+  @@unique([userId, examInstanceId])
+  @@index([userId])
+  @@index([examInstanceId])
+  @@index([status])
+}
+
+model AttemptItem {
+  id         String    @id @default(uuid())
+  attemptId  String
+  questionId String
+  sortOrder  Int       @default(0)
+  answer     Json?
+  isCorrect  Boolean?
+  score      Float?
+  answeredAt DateTime?
+  attempt    Attempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId, sortOrder])
+}
+
+model ProctorEvent {
+  id        String           @id @default(uuid())
+  attemptId String
+  type      ProctorEventType
+  severity  Int              @default(1)
+  details   Json?
+  timestamp DateTime         @default(now())
+  attempt   Attempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@index([type])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum Role {
+  STUDENT
+  PARENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum QuestionType {
+  MCQ
+  MULTI_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DIAGRAM
+}
+
+
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  EXPIRED
+}
+
+enum ProctorEventType {
+  NO_FACE
+  MULTIPLE_FACES
+  FACE_MISMATCH
+  LOOKING_AWAY
+  TAB_SWITCH
+  EXIT_FULLSCREEN
+  SCREEN_CAPTURE
+  NETWORK_DISCONNECT
+  SEB_VIOLATION
+  IP_CHANGE
+}
+
+// ── Slot booking & payment models ────────────────────────────────────────────
+
+model ExamSlot {
+  id             String       @id @default(uuid())
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  label          String?
+  startsAt       DateTime
+  endsAt         DateTime
+  capacity       Int
+  booked         Int          @default(0)
+  createdAt      DateTime     @default(now())
+  bookings       Booking[]
+
+  @@index([examInstanceId])
+  @@index([startsAt])
+}
+
+model Booking {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slotId    String
+  slot      ExamSlot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  paymentId String?       @unique
+  payment   Payment?      @relation(fields: [paymentId], references: [id])
+  status    BookingStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, slotId])
+  @@index([userId])
+  @@index([slotId])
+  @@index([status])
+}
+
+model Payment {
+  id                  String        @id @default(uuid())
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayOrderId     String        @unique
+  razorpayPaymentId   String?       @unique
+  razorpaySignature   String?
+  amount              Int
+  currency            String        @default("INR")
+  status              PaymentStatus @default(CREATED)
+  couponId            String?
+  coupon              Coupon?       @relation(fields: [couponId], references: [id])
+  booking             Booking?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([razorpayOrderId])
+}
+
+model Coupon {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  discountPct Int
+  maxUses     Int
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  payments    Payment[]
+  createdAt   DateTime  @default(now())
+
+  @@index([code])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
+}

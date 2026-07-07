@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@core/*": ["src/core/*"],
+			"@contracts": ["src/contracts/index.ts"],
+			"@contracts/*": ["src/contracts/*"]
+		},
+		"types": ["bun"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts"],
+	"exclude": ["node_modules", "dist"]
+}
