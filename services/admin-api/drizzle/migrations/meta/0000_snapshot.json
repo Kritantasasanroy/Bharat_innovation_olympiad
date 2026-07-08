@@ -1,0 +1,613 @@
+{
+	"id": "0a1fab3c-6992-410d-9b07-f8dbbbe79430",
+	"prevId": "00000000-0000-0000-0000-000000000000",
+	"version": "7",
+	"dialect": "postgresql",
+	"tables": {
+		"public.AttributionRecord": {
+			"name": "AttributionRecord",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"campaignId": {
+					"name": "campaignId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"studentId": {
+					"name": "studentId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"registrationId": {
+					"name": "registrationId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"status": {
+					"name": "status",
+					"type": "AttributionStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'OPEN'"
+				},
+				"ruleApplied": {
+					"name": "ruleApplied",
+					"type": "AttributionRule",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"amountPaise": {
+					"name": "amountPaise",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"convertedAt": {
+					"name": "convertedAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"createdAt": {
+					"name": "createdAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"attribution_partner_student_registration_key": {
+					"name": "attribution_partner_student_registration_key",
+					"columns": [
+						{
+							"expression": "partnerId",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "studentId",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "registrationId",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.Campaign": {
+			"name": "Campaign",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"name": {
+					"name": "name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"linkToken": {
+					"name": "linkToken",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"referralCode": {
+					"name": "referralCode",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"status": {
+					"name": "status",
+					"type": "CampaignStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'ACTIVE'"
+				},
+				"caps": {
+					"name": "caps",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"createdAt": {
+					"name": "createdAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"campaign_link_token_key": {
+					"name": "campaign_link_token_key",
+					"columns": [
+						{
+							"expression": "linkToken",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"campaign_referral_code_key": {
+					"name": "campaign_referral_code_key",
+					"columns": [
+						{
+							"expression": "referralCode",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.CommissionStatement": {
+			"name": "CommissionStatement",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"period": {
+					"name": "period",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"version": {
+					"name": "version",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"lineItemsJson": {
+					"name": "lineItemsJson",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"totalPaise": {
+					"name": "totalPaise",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"status": {
+					"name": "status",
+					"type": "CommissionStatementStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'ISSUED'"
+				},
+				"issuedAt": {
+					"name": "issuedAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"statement_partner_period_version_key": {
+					"name": "statement_partner_period_version_key",
+					"columns": [
+						{
+							"expression": "partnerId",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "period",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "version",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.PartnerApplication": {
+			"name": "PartnerApplication",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"orgName": {
+					"name": "orgName",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"contactPerson": {
+					"name": "contactPerson",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"email": {
+					"name": "email",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"phone": {
+					"name": "phone",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"status": {
+					"name": "status",
+					"type": "PartnerApplicationStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'SUBMITTED'"
+				},
+				"decisionReason": {
+					"name": "decisionReason",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"decidedBy": {
+					"name": "decidedBy",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"decidedAt": {
+					"name": "decidedAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"createdAt": {
+					"name": "createdAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.PartnerInstitutionAssignment": {
+			"name": "PartnerInstitutionAssignment",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"institutionId": {
+					"name": "institutionId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"effectiveFrom": {
+					"name": "effectiveFrom",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				},
+				"effectiveTo": {
+					"name": "effectiveTo",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"assignedBy": {
+					"name": "assignedBy",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.Partner": {
+			"name": "Partner",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"orgName": {
+					"name": "orgName",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"contactPerson": {
+					"name": "contactPerson",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"email": {
+					"name": "email",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"phone": {
+					"name": "phone",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"commissionRatePct": {
+					"name": "commissionRatePct",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"status": {
+					"name": "status",
+					"type": "PartnerStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'PENDING'"
+				},
+				"createdAt": {
+					"name": "createdAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.PayoutLedgerEntry": {
+			"name": "PayoutLedgerEntry",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"partnerId": {
+					"name": "partnerId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"statementId": {
+					"name": "statementId",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"amountPaise": {
+					"name": "amountPaise",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"status": {
+					"name": "status",
+					"type": "PayoutStatus",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'PENDING'"
+				},
+				"financeSignOffApprover": {
+					"name": "financeSignOffApprover",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"financeSignOffAt": {
+					"name": "financeSignOffAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"reason": {
+					"name": "reason",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"createdAt": {
+					"name": "createdAt",
+					"type": "timestamp (3)",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		}
+	},
+	"enums": {
+		"public.PartnerApplicationStatus": {
+			"name": "PartnerApplicationStatus",
+			"schema": "public",
+			"values": ["SUBMITTED", "APPROVED", "REJECTED"]
+		},
+		"public.AttributionRule": {
+			"name": "AttributionRule",
+			"schema": "public",
+			"values": ["LINK_FIRST_TOUCH", "COUPON_ONLY", "LINK_ONLY"]
+		},
+		"public.AttributionStatus": {
+			"name": "AttributionStatus",
+			"schema": "public",
+			"values": ["OPEN", "CREDITED"]
+		},
+		"public.CampaignStatus": {
+			"name": "CampaignStatus",
+			"schema": "public",
+			"values": ["ACTIVE", "DEACTIVATED"]
+		},
+		"public.PartnerStatus": {
+			"name": "PartnerStatus",
+			"schema": "public",
+			"values": ["PENDING", "APPROVED", "REJECTED"]
+		},
+		"public.PayoutStatus": {
+			"name": "PayoutStatus",
+			"schema": "public",
+			"values": ["PENDING", "SIGNED_OFF", "RELEASED"]
+		},
+		"public.CommissionStatementStatus": {
+			"name": "CommissionStatementStatus",
+			"schema": "public",
+			"values": ["ISSUED"]
+		}
+	},
+	"schemas": {},
+	"sequences": {},
+	"roles": {},
+	"policies": {},
+	"views": {},
+	"_meta": {
+		"columns": {},
+		"schemas": {},
+		"tables": {}
+	}
+}

@@ -7,8 +7,17 @@ import { DomainError } from "../../../core/errors";
  * Domain errors carry their own `code` + `httpStatus`, so they map to a stable
  * response envelope without instanceof chains. Elysia's built-in codes
  * (NOT_FOUND, VALIDATION) and unexpected errors fall through to sane defaults.
+ *
+ * Registered `{ as: "global" }`: this plugin defines no routes of its own — it
+ * is mounted in `app.ts` as a sibling to `attemptRoutes`/`timerRoutes`.
+ * Elysia's lifecycle hooks default to "local" scope (the declaring instance's
+ * own routes only), which would make this `onError` invisible to errors
+ * thrown by those sibling plugins' handlers (e.g. `NotFoundError`,
+ * `ForbiddenError`, `EntitlementError` from `AttemptService`) — they would
+ * fall through to a raw, unmapped 500 instead of their real HTTP status.
  */
 export const errorHandler = new Elysia({ name: "error-handler" }).onError(
+	{ as: "global" },
 	({ code, error, set }) => {
 		if (error instanceof DomainError) {
 			set.status = error.httpStatus;

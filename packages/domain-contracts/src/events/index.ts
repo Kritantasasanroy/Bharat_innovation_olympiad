@@ -10,12 +10,14 @@
 import type { z } from "zod";
 import { ADMIN_EVENT_PAYLOADS } from "./admin.ts";
 import { COMMERCE_EVENT_PAYLOADS } from "./commerce.ts";
+import { PARTNER_EVENT_PAYLOADS } from "./partner.ts";
 import { PROCTOR_EVENT_PAYLOADS } from "./proctor.ts";
 import { RUNTIME_EVENT_PAYLOADS } from "./runtime.ts";
 
 export * from "./_shared.ts";
 export * from "./admin.ts";
 export * from "./commerce.ts";
+export * from "./partner.ts";
 export * from "./proctor.ts";
 export * from "./runtime.ts";
 
@@ -28,6 +30,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
 	...ADMIN_EVENT_PAYLOADS,
 	...RUNTIME_EVENT_PAYLOADS,
 	...PROCTOR_EVENT_PAYLOADS,
+	...PARTNER_EVENT_PAYLOADS,
 } as const;
 
 /** Every canonical catalog event type (a union of string literals). */

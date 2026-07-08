@@ -8,6 +8,7 @@ function validEnv(): NodeJS.ProcessEnv {
 		DATABASE_URL: "postgresql://admin:secret@localhost:5433/admin",
 		REDIS_URL: "redis://:secret@localhost:6380",
 		CORS_ORIGIN: "http://localhost:5173",
+		JWT_SECRET: "test-jwt-secret-please-rotate",
 		PORT: "3000",
 		LOG_LEVEL: "info",
 		CONTRACT_VERSION: EXPECTED_CONTRACT_VERSION,
@@ -21,6 +22,7 @@ describe("loadAdminConfig (fail-closed)", () => {
 			databaseUrl: "postgresql://admin:secret@localhost:5433/admin",
 			redisUrl: "redis://:secret@localhost:6380",
 			corsOrigin: "http://localhost:5173",
+			jwtSecret: "test-jwt-secret-please-rotate",
 			port: 3000,
 			logLevel: "info",
 			contractVersion: EXPECTED_CONTRACT_VERSION,
@@ -36,7 +38,13 @@ describe("loadAdminConfig (fail-closed)", () => {
 		expect(config.logLevel).toBe("info");
 	});
 
-	for (const secret of ["DATABASE_URL", "REDIS_URL", "CORS_ORIGIN", "CONTRACT_VERSION"]) {
+	for (const secret of [
+		"DATABASE_URL",
+		"REDIS_URL",
+		"CORS_ORIGIN",
+		"JWT_SECRET",
+		"CONTRACT_VERSION",
+	]) {
 		it(`throws MissingConfigError when ${secret} is absent`, () => {
 			const env = validEnv();
 			delete env[secret];

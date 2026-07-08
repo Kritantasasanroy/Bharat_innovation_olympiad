@@ -11,7 +11,7 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
-		"lint:boundaries": "eslint --no-eslintrc -c .eslintrc.json 'src/core/**/*.ts'"
+		"lint:boundaries": "eslint --no-eslintrc -c .eslintrc.json \"src/core/**/*.ts\""
 	},
 	"dependencies": {
 		"@elysiajs/cors": "^1.4.1",

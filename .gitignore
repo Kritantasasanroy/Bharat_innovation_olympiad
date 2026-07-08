@@ -8,7 +8,11 @@ node_modules/
 dist/
 build/
 .next/
-out/
+# NOTE: scoped (not a bare `out/`) — a bare pattern matches at any depth and
+# was silently swallowing the hexagonal-architecture `ports/out/` and
+# `adapters/out/` source directories used across services/* and packages/*.
+/frontend/out/
+/admin-frontend/out/
 *.tsbuildinfo
 
 # ── Environment ───────────────────────────────────────────────
