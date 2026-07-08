@@ -256,6 +256,52 @@ collide when the five repos are flattened into one workspace.
 
 ---
 
+### 0.16 Partner Attribution, Commission & Payout Engine + Portal (2026-07-09)
+
+Second real vertical slice in the workspace (after `exam-api`), built to draft PRDs `PRD-046`
+(engine, workbench-bio-exam-admin) and `PRD-011` (UI, workbench-bio-portal) — "contractor" in the
+original request meant "partner"; there is no separate contractor concept anywhere in the org.
+School Portal (`PRD-010`) and the PRD-047 school self-service backend stay **deferred**.
+
+- **`services/admin-api`** owns the engine: `Partner`, `PartnerApplication`, `Campaign`,
+  `AttributionRecord`, `CommissionStatement`, `PayoutLedgerEntry`, `PartnerInstitutionAssignment`
+  (Drizzle, shared Neon DB, migration `0000_shocking_galactus.sql`). Application approval and payout
+  release are manual-decision hooks (one audited PATCH each, mandatory reason) — no review UI or
+  queue, per the PRD's explicit non-goal. Attribution ties (a referral link and a coupon both
+  present) resolve first-touch; one credit per student+registration, idempotent on duplicate
+  paid-conversion events. Commission statements are immutable once issued — regenerating creates a
+  new version rather than mutating the original. Payouts move `PENDING → SIGNED_OFF → RELEASED`,
+  blocked from `RELEASED` without a finance sign-off field. No KYC/Aadhaar fields anywhere (explicit
+  decision) — the application is just org name, contact person, email, phone.
+- **Auth**: `services/admin-api`'s `require-role.guard.ts` placeholder (`x-admin-role` header, no
+  verification) is now replaced by a real `auth.plugin.ts` — the same HS256 JWT verification
+  (`JWT_SECRET`, `{ sub, email, role }` payload) `exam-api` already uses against the legacy backend's
+  tokens. A `PARTNER` role rides the same token; partner-scoped routes are always scoped to the
+  token's `sub`, never a client-supplied id (contract-tested — no cross-partner leakage).
+- **`services/portal-api` + `apps/partner-portal-web`** (new): a thin BFF (`/partner/*` routes)
+  proxying to `admin-api`, and an 11-page Next.js App Router app — application + status, dashboard
+  (gated on approved status), institutions, campaign/link management, funnel, payouts/statements, a
+  support-request form (submission + status only), a `mailto:` dispute link. Not yet
+  integration-tested against a live `admin-api` — see ROADMAP for the specific open item.
+- **Test coverage**: 81 `bun test` cases in `admin-api` (one group per acceptance criterion), 35 in
+  `portal-api`; both packages' `typecheck`/`lint:boundaries`/Biome all green.
+- **Repo-wide bugs found and fixed in this pass** (not specific to Partner code):
+  1. `.gitignore`'s unanchored `out/` rule was silently excluding every service's
+     `core/ports/out/`/`adapters/out/` directory from git. This meant `exam-api`'s Drizzle
+     schema/repositories/event-publisher — built and verified in the 2026-07-02/03 sessions — had
+     **zero commit history** despite being described as "ported and pushed" in this document. Fixed
+     the glob (scoped to `apps/*/out/`, `/frontend/out/`, `/admin-frontend/out/`) and recovered the
+     previously-invisible `exam-api` files as their own commit.
+  2. Elysia's `onError` hook defaults to `"local"` scope — `error-handler.ts` in both `admin-api` and
+     `exam-api` was mounted as a sibling plugin without `{ as: "global" }`, so it never actually
+     caught errors from the route plugins next to it; every `DomainError` fell through to a raw,
+     unmapped 500. Fixed in both.
+  3. `lint:boundaries`'s single-quoted glob (`'src/core/**/*.ts'`) isn't stripped by the Windows
+     shell lefthook invokes, so eslint received the literal quote characters and matched nothing —
+     switched to double quotes in both services.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
@@ -714,7 +760,23 @@ A time window within an ExamInstance that students can book.
 | `capacity` | Int | Max students allowed in this slot |
 | `booked` | Int | Current booking count (default 0, incremented atomically) |
 
-**Relations:** `bookings[]` (Booking)
+**Relations:** `bookings[]` (Booking), `schoolAssignments[]` (SchoolSlotAssignment)
+
+---
+
+#### `SchoolSlotAssignment` (2026-07-09)
+Same school, same slot: which `ExamSlot` a school's students land in for a given `ExamInstance`, admin-editable. Read by `SchoolSlotService.autoAllocateStudent()` at registration time and by the admin reassignment endpoints.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | — |
+| `schoolId` | FK → School | — |
+| `examInstanceId` | FK → ExamInstance | — |
+| `slotId` | FK → ExamSlot | Must belong to `examInstanceId` (validated on write) |
+| `assignedBy` | String? | Admin user id who set it |
+| `createdAt` / `updatedAt` | DateTime | — |
+
+**Unique constraint:** `(schoolId, examInstanceId)` — one assignment per school per instance.
 
 ---
 
@@ -1205,6 +1267,11 @@ Student slot endpoints require `JWT`. Admin slot endpoints require `JWT + ADMIN`
 | DELETE | `/admin/slots/:id` | JWT + ADMIN | Delete slot |
 | GET | `/admin/slots` | JWT + ADMIN | List all slots (`?examInstanceId=`) |
 | GET | `/admin/slots/:id/bookings` | JWT + ADMIN | List all bookings for a slot |
+| GET | `/admin/schools` | JWT + ADMIN | Minimal school directory (`id, name, code`) — powers the assignment UI; not the full School module in ROADMAP Step 2.3 |
+| PUT | `/admin/exams/instances/:instanceId/schools/:schoolId/slot` | JWT + ADMIN | ★ Assign/edit which slot a school's students use for an instance; upserts `SchoolSlotAssignment` then sweeps currently-unbooked eligible students into it |
+| GET | `/admin/exams/instances/:instanceId/school-slot-assignments` | JWT + ADMIN | ★ List current school→slot assignments for an instance |
+| POST | `/admin/bookings/:id/reassign` | JWT + ADMIN | ★ Move one student's booking to a different slot (capacity-checked) |
+| POST | `/admin/schools/:schoolId/instances/:instanceId/reassign-all` | JWT + ADMIN | ★ Bulk-move every active booking of a school's students to a different slot; returns `{ total, succeeded, failed }` — a capacity shortfall never rolls back students who already moved |
 
 **`POST /slots/:id/book` response:**
 ```json
@@ -1226,6 +1293,17 @@ Free exams return `"status": "CONFIRMED"` and `"requiresPayment": false`.
   "label": "Morning Batch"
 }
 ```
+
+#### School → Slot auto-allocation (`backend/src/slot/school-slot.service.ts`, 2026-07-09)
+
+**Same school, same slot, admin-editable.** A `SchoolSlotAssignment` row (`schoolId` + `examInstanceId` -> `slotId`, `@@unique([schoolId, examInstanceId])`) is the mapping an admin sets via `PUT /admin/exams/instances/:instanceId/schools/:schoolId/slot`. Once set:
+
+- **Registration trigger**: `AuthService.syncUser()` calls `SchoolSlotService.autoAllocateForNewStudent(userId, schoolId)` right after a new student's `schoolId` resolves — it sweeps every exam instance that school already has an assignment for and books the student in, with no student action required. No-ops when the school has no assignment for any instance, so registration for every other exam is unaffected.
+- **Manual booking always wins**: if a student already holds a `PENDING`/`CONFIRMED` booking for the exam (self-service `POST /slots/:id/book`), auto-allocation skips them (`MANUALLY_BOOKED`) rather than double-booking or overriding.
+- **Free vs. paid**: mirrors `SlotService.bookSlot()` exactly — free exams (`feeAmount` null/0) get a `CONFIRMED` booking immediately; paid exams get a `PENDING` booking, and the *existing* Razorpay `create-order`/`verify`/webhook flow (unchanged) confirms it on payment, since those only need a `bookingId` to exist, not how it was created.
+- **Capacity safety**: uses an atomic `updateMany({ where: { id, booked: { lt: capacity } } })` compare-and-increment — a single SQL statement, not a separate read-then-write — so concurrent allocations can never oversell a slot. (The older `SlotService.bookSlot()` read-then-write pattern this was modeled on does not have this guarantee; it was left unchanged since it was out of scope for this pass.)
+- **Admin controls**: `setSchoolSlotAssignment()` (assign/edit + sweep unbooked students), `reassignBooking()` (move one student, capacity-checked on the destination), `reassignSchool()` (bulk-move every active booking of a school's students, reporting per-booking success/failure — a capacity shortfall never rolls back students who already moved).
+- **Tests**: `backend/src/slot/school-slot.service.spec.ts` (10 cases against a hand-rolled in-memory Prisma fake with real capacity/uniqueness semantics) — including a concurrency test that genuinely fails against a naive find-then-increment implementation (both callers get allocated, oversetting a capacity-1 slot) and passes against the atomic `updateMany` implementation actually shipped.
 
 ---
 
