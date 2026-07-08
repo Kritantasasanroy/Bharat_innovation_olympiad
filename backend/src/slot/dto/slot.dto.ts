@@ -24,3 +24,8 @@ export class BookSlotDto {
     @IsString()
     couponCode?: string;
 }
+
+export class AssignSlotDto {
+    @IsUUID()
+    slotId: string;
+}

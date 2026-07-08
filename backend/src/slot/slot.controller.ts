@@ -14,12 +14,16 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { BookSlotDto, CreateSlotDto } from './dto/slot.dto';
+import { AssignSlotDto, BookSlotDto, CreateSlotDto } from './dto/slot.dto';
+import { SchoolSlotService } from './school-slot.service';
 import { SlotService } from './slot.service';
 
 @Controller()
 export class SlotController {
-    constructor(private slotService: SlotService) {}
+    constructor(
+        private slotService: SlotService,
+        private schoolSlotService: SchoolSlotService,
+    ) {}
 
     // ── Student routes ────────────────────────────────────────────────────────
 
@@ -97,5 +101,56 @@ export class SlotController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async adminListSlotBookings(@Param('id') slotId: string) {
         return this.slotService.adminListSlotBookings(slotId);
+    }
+
+    // ── School slot assignment / reassignment (auto-allocation) ────────────────
+
+    @Get('admin/schools')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listSchools() {
+        return this.schoolSlotService.listSchools();
+    }
+
+    @Put('admin/exams/instances/:instanceId/schools/:schoolId/slot')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async setSchoolSlotAssignment(
+        @Param('instanceId') instanceId: string,
+        @Param('schoolId') schoolId: string,
+        @Body() dto: AssignSlotDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.schoolSlotService.setSchoolSlotAssignment(
+            schoolId,
+            instanceId,
+            dto.slotId,
+            adminId,
+        );
+    }
+
+    @Get('admin/exams/instances/:instanceId/school-slot-assignments')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listSchoolSlotAssignments(@Param('instanceId') instanceId: string) {
+        return this.schoolSlotService.listAssignmentsForInstance(instanceId);
+    }
+
+    @Post('admin/bookings/:id/reassign')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async reassignBooking(@Param('id') bookingId: string, @Body() dto: AssignSlotDto) {
+        return this.schoolSlotService.reassignBooking(bookingId, dto.slotId);
+    }
+
+    @Post('admin/schools/:schoolId/instances/:instanceId/reassign-all')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async reassignSchool(
+        @Param('schoolId') schoolId: string,
+        @Param('instanceId') instanceId: string,
+        @Body() dto: AssignSlotDto,
+    ) {
+        return this.schoolSlotService.reassignSchool(schoolId, instanceId, dto.slotId);
     }
 }

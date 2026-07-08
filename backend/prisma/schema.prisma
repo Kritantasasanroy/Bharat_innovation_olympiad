@@ -45,13 +45,14 @@ model RefreshToken {
 }
 
 model School {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique
-  city      String
-  state     String
-  createdAt DateTime @default(now())
-  users     User[]
+  id                    String                 @id @default(uuid())
+  name                  String
+  code                  String                 @unique
+  city                  String
+  state                 String
+  createdAt             DateTime               @default(now())
+  users                 User[]
+  slotAssignments       SchoolSlotAssignment[]
 
   @@index([code])
 }
@@ -126,19 +127,20 @@ model SectionQuestion {
 }
 
 model ExamInstance {
-  id             String     @id @default(uuid())
-  examId         String
-  startsAt       DateTime
-  endsAt         DateTime
-  requireSeb     Boolean    @default(false)
-  browserExamKey String?
-  configKey      String?
-  quitUrl        String?
-  maxAttempts    Int        @default(1)
-  createdAt      DateTime   @default(now())
-  attempts       Attempt[]
-  slots          ExamSlot[]
-  exam           Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  id               String                 @id @default(uuid())
+  examId           String
+  startsAt         DateTime
+  endsAt           DateTime
+  requireSeb       Boolean                @default(false)
+  browserExamKey   String?
+  configKey        String?
+  quitUrl          String?
+  maxAttempts      Int                    @default(1)
+  createdAt        DateTime               @default(now())
+  attempts         Attempt[]
+  slots            ExamSlot[]
+  exam             Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  slotAssignments  SchoolSlotAssignment[]
 
   @@index([examId])
   @@index([startsAt, endsAt])
@@ -265,19 +267,40 @@ enum ProctorEventType {
 // ── Slot booking & payment models ────────────────────────────────────────────
 
 model ExamSlot {
-  id             String       @id @default(uuid())
-  examInstanceId String
-  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
-  label          String?
-  startsAt       DateTime
-  endsAt         DateTime
-  capacity       Int
-  booked         Int          @default(0)
-  createdAt      DateTime     @default(now())
-  bookings       Booking[]
+  id               String                 @id @default(uuid())
+  examInstanceId   String
+  examInstance     ExamInstance           @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  label            String?
+  startsAt         DateTime
+  endsAt           DateTime
+  capacity         Int
+  booked           Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  bookings         Booking[]
+  schoolAssignments SchoolSlotAssignment[]
 
   @@index([examInstanceId])
   @@index([startsAt])
+}
+
+// A school's students all land in the same slot for a given exam instance —
+// admin-editable per school (see SchoolSlotService); students with no
+// assignment for their school keep using the existing manual slot-picker.
+model SchoolSlotAssignment {
+  id             String       @id @default(uuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  slotId         String
+  slot           ExamSlot     @relation(fields: [slotId], references: [id])
+  assignedBy     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([schoolId, examInstanceId])
+  @@index([examInstanceId])
+  @@index([slotId])
 }
 
 model Booking {
