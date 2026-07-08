@@ -63,3 +63,25 @@ export class ProviderError extends DomainError {
 		this.cause = cause;
 	}
 }
+
+/** Thrown when a request carries no (or an invalid/expired) bearer token. */
+export class UnauthorizedError extends DomainError {
+	constructor(message = "Authentication required") {
+		super(message, "UNAUTHORIZED", 401);
+	}
+}
+
+/** Thrown when the caller is authenticated but not permitted to perform the action. */
+export class ForbiddenError extends DomainError {
+	constructor(message = "Forbidden", code = "FORBIDDEN") {
+		super(message, code, 403);
+	}
+}
+
+/** Thrown on a state conflict: an invalid lifecycle transition, or a rule that
+ * blocks an otherwise well-formed request until a precondition is met. */
+export class ConflictError extends DomainError {
+	constructor(message: string, code = "CONFLICT") {
+		super(message, code, 409);
+	}
+}

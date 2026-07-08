@@ -8,6 +8,7 @@ import {
 	EVENT_PAYLOAD_SCHEMAS,
 	FieldClassification,
 	isCatalogEventType,
+	PARTNER_EVENT_TYPES,
 	PROCTOR_EVENT_TYPES,
 	payloadSchemaFor,
 	RegistrationConfirmedPayload,
@@ -60,6 +61,12 @@ const CANONICAL_CATALOG = [
 	"RiskScoreChanged",
 	"ProctorReportFinalized",
 	"BiometricDataDeleted",
+	// partner (bio-admin — PRD-046)
+	"PartnerApplicationSubmitted",
+	"PartnerStatusChanged",
+	"AttributionCredited",
+	"CommissionStatementIssued",
+	"PayoutStatusChanged",
 ] as const;
 
 describe("catalog coverage", () => {
@@ -67,12 +74,13 @@ describe("catalog coverage", () => {
 		expect([...CATALOG_EVENT_TYPES].sort()).toEqual([...CANONICAL_CATALOG].sort());
 	});
 
-	it("partitions the catalog across the four families without overlap", () => {
+	it("partitions the catalog across the five families without overlap", () => {
 		const families = [
 			COMMERCE_EVENT_TYPES,
 			ADMIN_EVENT_TYPES,
 			RUNTIME_EVENT_TYPES,
 			PROCTOR_EVENT_TYPES,
+			PARTNER_EVENT_TYPES,
 		];
 		const total = families.reduce((sum, fam) => sum + fam.length, 0);
 		expect(total).toBe(CATALOG_EVENT_TYPES.length);

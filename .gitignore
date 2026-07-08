@@ -16,6 +16,8 @@ build/
 # via `git log --all -- services/exam-api/src/adapters/out` (and admin-api's
 # equivalent) returning no history at all on this branch.
 apps/*/out/
+/frontend/out/
+/admin-frontend/out/
 *.tsbuildinfo
 
 # ── Environment ───────────────────────────────────────────────

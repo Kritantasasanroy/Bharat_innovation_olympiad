@@ -34,6 +34,9 @@ const adminConfigSchema = z.object({
 	CORS_ORIGIN: z
 		.string({ message: "CORS_ORIGIN is required" })
 		.min(1, "CORS_ORIGIN must not be empty"),
+	JWT_SECRET: z
+		.string({ message: "JWT_SECRET is required" })
+		.min(1, "JWT_SECRET must not be empty"),
 	PORT: z.coerce
 		.number({ message: "PORT must be a number" })
 		.int("PORT must be an integer")
@@ -58,6 +61,7 @@ export interface AdminConfig {
 	readonly databaseUrl: string;
 	readonly redisUrl: string;
 	readonly corsOrigin: string;
+	readonly jwtSecret: string;
 	readonly port: number;
 	readonly logLevel: (typeof LOG_LEVELS)[number];
 	readonly contractVersion: string;
@@ -101,6 +105,7 @@ export function loadAdminConfig(env: NodeJS.ProcessEnv = process.env): AdminConf
 		DATABASE_URL: env["DATABASE_URL"],
 		REDIS_URL: env["REDIS_URL"],
 		CORS_ORIGIN: env["CORS_ORIGIN"],
+		JWT_SECRET: env["JWT_SECRET"],
 		PORT: env["PORT"],
 		LOG_LEVEL: env["LOG_LEVEL"],
 		CONTRACT_VERSION: env["CONTRACT_VERSION"],
@@ -119,6 +124,7 @@ export function loadAdminConfig(env: NodeJS.ProcessEnv = process.env): AdminConf
 		databaseUrl: parsed.DATABASE_URL,
 		redisUrl: parsed.REDIS_URL,
 		corsOrigin: parsed.CORS_ORIGIN,
+		jwtSecret: parsed.JWT_SECRET,
 		port: parsed.PORT,
 		logLevel: parsed.LOG_LEVEL,
 		contractVersion: parsed.CONTRACT_VERSION,

@@ -2,6 +2,7 @@ import { CONTRACT_VERSION } from "../../shared-types/src/index.ts";
 
 export * from "./clients/index.ts";
 export * from "./events/index.ts";
+export * from "./ids.ts";
 export { CONTRACT_VERSION };
 
 export type BioEventProducer = "bio-portal" | "bio-admin" | "bio-exam" | "bio-proctor";
