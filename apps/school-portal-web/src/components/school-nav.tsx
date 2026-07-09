@@ -5,20 +5,22 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
 	{ href: "/dashboard", label: "Overview" },
-	{ href: "/dashboard/institutions", label: "Institutions" },
-	{ href: "/dashboard/campaigns", label: "Campaigns & links" },
-	{ href: "/dashboard/funnel", label: "Funnel" },
-	{ href: "/dashboard/payouts", label: "Payouts & statements" },
+	{ href: "/dashboard/profile", label: "Profile & roles" },
+	{ href: "/dashboard/students", label: "Students" },
+	{ href: "/dashboard/slots", label: "Slots & windows" },
+	{ href: "/dashboard/monitoring", label: "Live monitoring" },
+	{ href: "/dashboard/results", label: "Results & analytics" },
+	{ href: "/dashboard/billing", label: "Sponsorship" },
 	{ href: "/dashboard/support", label: "Support" },
 ] as const;
 
-export function DashboardNav() {
+export function SchoolNav() {
 	const pathname = usePathname();
 	return (
 		<nav className="dashboard-nav">
 			<Link href="/dashboard" className="dashboard-nav__brand">
 				<span className="dashboard-nav__brand-text">Bharat Innovation Olympiad</span>
-				<span className="dashboard-nav__brand-sub">Partner Portal</span>
+				<span className="dashboard-nav__brand-sub">School Portal</span>
 			</Link>
 			{LINKS.map((link) => {
 				const isActive =

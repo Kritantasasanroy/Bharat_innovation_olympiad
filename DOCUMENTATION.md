@@ -302,6 +302,70 @@ School Portal (`PRD-010`) and the PRD-047 school self-service backend stay **def
 
 ---
 
+### 0.17 Portal UI consistency + School Portal (2026-07-10)
+
+Built against `Portal_Features.pdf` (the plain-language features spec: **Student 30 / School 22 /
+Partner 15 / Admin 30** features + cross-cutting platform safeguards). Decision: the partner and
+school portals are delivered as **new pnpm-workspace apps that share the student/admin BIO design
+system**, and Aadhaar/OTP/KYC identity verification is **skipped** by request.
+
+**The shared design system.** `frontend/` and `admin-frontend/` share a CSS-variable design system
+(`admin-frontend/src/app/globals.css`): Inter + JetBrains Mono, a lemon-yellow→lime-green brand
+palette (`--primary-*` / `--accent-*`), glass-card surfaces (`--glass-bg` + `backdrop-filter`), an
+animated radial background mesh, and shadow/spacing/radius scales. Both new workspace apps embed this
+exact token set in their own `globals.css` (the workspace has no Tailwind; these are hand-authored
+CSS variables), so the four portals read as one product.
+
+**Partner portal (`apps/partner-portal-web`) — restyled in place.** Its original `globals.css` used a
+separate blue theme and bespoke class names (`.card`, `.button`, `.stat-tile`, `.dashboard-nav`,
+`.badge`, `.copy-field`…). Rather than rewrite ten pages, the stylesheet was replaced with one that
+(a) declares the full BIO token set and (b) **re-implements those same class names on top of the
+tokens** — so every existing page (all 15 partner features: onboarding, dashboard, institutions,
+campaigns/links, funnel, payouts/statements, support) matches student/admin with zero JSX changes. A
+branded gradient sidebar header was added to `dashboard-nav`. Runs on `:3400`, talks to
+`services/portal-api` (`:3300`).
+
+**School portal (`apps/school-portal-web`) — new, built from scratch.** A Next.js 16 / React 19
+workspace app on `:3500` mirroring the partner portal's structure: JWT-paste auth
+(`bio-school-portal.access-token`), a landing page, `/login`, `/activate` (invitation &
+self-activation), and a redirect-gated `/dashboard/*` shell with a branded sidebar (`school-nav`).
+**All 22 school features** live across 8 dashboard pages:
+
+| Page | Spec features covered |
+|---|---|
+| Overview | Dashboard access, participation summary, upcoming windows |
+| Profile & roles | Institution profile setup, RBAC (coordinator / read-only invite + remove) |
+| Students | View invited + participating (filter/search), **bulk CSV upload** (client-side validate + preview + template) |
+| Slots & windows | Exam-slot dates, slot-allocation status bars, custom-window request, updated-window visibility |
+| Live monitoring | Near-real-time exam-day snapshot (5s auto-refresh), flagged-session notice |
+| Results & analytics | Results-available, participation summary, class/grade performance, student-wise scores, percentile benchmarking, peer school comparison, CSV export |
+| Sponsorship | Sponsored / future-payment requests |
+| Support | Helpdesk escalation + `mailto:` |
+
+`pnpm --filter @bio/school-portal-web typecheck` is green (the workspace's strict
+`exactOptionalPropertyTypes` + `noUncheckedIndexedAccess` are honoured); all 11 routes compile under
+Turbopack and serve 200.
+
+**Data layer is representative demo data.** There is **no school-coordinator backend yet** — the
+monolith only exposes ADMIN-scoped school endpoints (`GET /admin/schools`, school-slot-assignments,
+reassignment; see the 2026-07-09 log). So `apps/school-portal-web/src/lib/school-data.ts` returns
+representative in-memory data, and is the **single seam** to swap for real `fetch()` calls (base URL
+`NEXT_PUBLIC_API_URL`) once the PRD-047 / SCHOOL-01 school API lands. Nothing on this portal is
+persisted server-side yet; forms mutate local component state only.
+
+**Local port map (dev):** backend `:4000`, student `:3000`, admin `:3001`, admin-api `:4100`,
+portal-api `:3300`, partner portal `:3400`, school portal `:3500`, Redis `:6379` (now published to the
+host in `docker-compose.yml`).
+
+**Remaining (this multi-part request):** Phase 3 — fill genuine student/admin spec gaps on the **live
+monolith** (student: admit card, certificate + public verification, grievance/reattempt, consent
+capture; admin: fair-score normalization / result-release gating, certificate generation,
+refund-request review, exam-day + KYC/payment ops queues, partner-management view). Phase 4 — deploy
+frontends to Vercel + backends to Render and collect links (blocked on `VERCEL_TOKEN` +
+`RENDER_API_KEY`).
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:

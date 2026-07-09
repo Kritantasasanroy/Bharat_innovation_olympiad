@@ -647,3 +647,227 @@ textarea:focus-visible {
 		font-size: 1.6rem;
 	}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   School Portal additions (grids, performance bars, upload, hero)
+   ══════════════════════════════════════════════════════════════ */
+
+.grid-2 {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--space-6);
+}
+
+.grid-3 {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--space-6);
+}
+
+.grid-4 {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--space-6);
+}
+
+@media (max-width: 1024px) {
+	.grid-4 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.grid-3 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (max-width: 640px) {
+	.grid-2,
+	.grid-3,
+	.grid-4 {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Section / row helpers */
+.section-title {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+	margin-bottom: var(--space-4);
+}
+
+.section-title h2,
+.section-title h3 {
+	margin: 0;
+}
+
+.row-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.inline {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+}
+
+/* Performance / progress bar */
+.perf-bar {
+	width: 100%;
+	height: 10px;
+	background: var(--bg-elevated);
+	border-radius: var(--radius-full);
+	overflow: hidden;
+}
+
+.perf-bar__fill {
+	height: 100%;
+	background: var(--gradient-brand);
+	border-radius: var(--radius-full);
+	transition: width var(--transition-slow);
+}
+
+.perf-row {
+	display: grid;
+	grid-template-columns: 120px 1fr 56px;
+	align-items: center;
+	gap: var(--space-4);
+	margin-bottom: var(--space-3);
+}
+
+.perf-row__label {
+	font-size: 0.9rem;
+	color: var(--text-secondary);
+}
+
+.perf-row__value {
+	text-align: right;
+	font-weight: 600;
+	font-size: 0.9rem;
+}
+
+/* File drop / upload zone */
+.drop-zone {
+	border: 2px dashed var(--border-strong);
+	border-radius: var(--radius-lg);
+	padding: var(--space-10) var(--space-6);
+	text-align: center;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition: all var(--transition-fast);
+	background: var(--bg-input);
+}
+
+.drop-zone:hover,
+.drop-zone--active {
+	border-color: var(--primary-400);
+	background: rgba(255, 203, 5, 0.04);
+	color: var(--text-primary);
+}
+
+.drop-zone__icon {
+	font-size: 2rem;
+	display: block;
+	margin-bottom: var(--space-3);
+}
+
+/* Pills */
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-full);
+	font-size: 0.78rem;
+	font-weight: 500;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border-default);
+	color: var(--text-secondary);
+}
+
+.pill--active {
+	background: rgba(255, 203, 5, 0.12);
+	border-color: var(--primary-500);
+	color: var(--primary-400);
+}
+
+/* Hero (landing) */
+.hero {
+	position: relative;
+	z-index: 1;
+	max-width: 780px;
+	margin: 0 auto;
+	padding: var(--space-16, 4rem) var(--space-6);
+	text-align: center;
+}
+
+.hero h1 {
+	font-size: 2.6rem;
+	margin-bottom: var(--space-4);
+}
+
+.hero .brand-gradient {
+	background: var(--gradient-brand);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+.hero p {
+	font-size: 1.1rem;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-8);
+}
+
+.hero__actions {
+	display: flex;
+	gap: var(--space-4);
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+/* Empty state */
+.empty-state {
+	padding: var(--space-12) var(--space-6);
+	text-align: center;
+	color: var(--text-secondary);
+}
+
+.empty-state__icon {
+	font-size: 2.4rem;
+	display: block;
+	margin-bottom: var(--space-3);
+}
+
+/* Small helpers */
+.text-right {
+	text-align: right;
+}
+
+.text-mono {
+	font-family: var(--font-mono);
+}
+
+.mt-4 {
+	margin-top: var(--space-4);
+}
+
+.mb-0 {
+	margin-bottom: 0;
+}
+
+.divider {
+	height: 1px;
+	background: var(--border-subtle);
+	margin: var(--space-5) 0;
+}
