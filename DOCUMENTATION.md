@@ -357,12 +357,34 @@ persisted server-side yet; forms mutate local component state only.
 portal-api `:3300`, partner portal `:3400`, school portal `:3500`, Redis `:6379` (now published to the
 host in `docker-compose.yml`).
 
-**Remaining (this multi-part request):** Phase 3 — fill genuine student/admin spec gaps on the **live
-monolith** (student: admit card, certificate + public verification, grievance/reattempt, consent
-capture; admin: fair-score normalization / result-release gating, certificate generation,
-refund-request review, exam-day + KYC/payment ops queues, partner-management view). Phase 4 — deploy
-frontends to Vercel + backends to Render and collect links (blocked on `VERCEL_TOKEN` +
-`RENDER_API_KEY`).
+**Live deployment (2026-07-10).** All portals are deployed. Frontends on Vercel
+(`kritantasasanroys-projects`), backends on Render (`My Workspace`, Singapore):
+
+| Service | URL | Notes |
+|---|---|---|
+| Student portal | https://olympiad-student-frontend.vercel.app | existing, redeployed |
+| Admin portal | https://olympiad-admin-frontend.vercel.app | existing, redeployed |
+| **Partner portal** | https://bio-partner-portal.vercel.app | new (`apps/partner-portal-web`) |
+| **School portal** | https://bio-school-portal.vercel.app | new (`apps/school-portal-web`) |
+| Backend (NestJS) | https://olympiad-backend-wsvn.onrender.com | existing, redeployed; `/api/proctor/health` 200 |
+| **admin-api** (Bun) | https://bio-admin-api.onrender.com | new; + Render Key Value `bio-admin-redis` |
+| **portal-api** (Bun) | https://bio-portal-api.onrender.com | new; `/partner/*` → 401 unauthenticated ✓ |
+
+Deploy specifics worth remembering: (1) Render has **no native Bun runtime** and its `/usr/bin` is
+**read-only**, so `corepack enable` fails (`EROFS`) — the Bun services build with
+`npm install -g pnpm@10.32.1 bun && pnpm install --frozen-lockfile --filter <pkg>... --ignore-scripts`
+(rootDir = repo root so the pnpm workspace resolves) and start with `bun services/<svc>/src/index.ts`;
+Render injects `PORT`. (2) The Vercel CLI uploads only the app directory, so each portal app needs a
+**self-contained `tsconfig.json`** (no `extends: ../../`) and an explicit `typescript` devDep — the
+apps have no `@bio/*` workspace deps, so they build standalone. (3) `admin-api` is fail-closed on
+`REDIS_URL`; a Render Key Value instance (`redis://red-...:6379`, internal) backs it. Tokens used for
+this deploy were provided in-session and should be rotated.
+
+**Remaining (Phase 3, deferred by choice — deploy-first was done first):** fill genuine student/admin
+spec gaps on the **live monolith** (student: admit card, certificate + public verification,
+grievance/reattempt, consent capture; admin: fair-score normalization / result-release gating,
+certificate generation, refund-request review, exam-day + KYC/payment ops queues, partner-management
+view).
 
 ---
 
