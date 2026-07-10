@@ -561,6 +561,96 @@ still demo data — `apps/school-portal-web/src/lib/school-data.ts` is the seam)
 
 ---
 
+### 0.20 School access loop, issued access tokens, unified admin queue (2026-07-10)
+
+Three defects made "request access" unusable end-to-end, and the credential the spec asks for did
+not exist. All four are addressed here.
+
+#### Why partner apply failed with "the partner engine is starting up"
+
+`PartnerService.apply()` called admin-api to mint the `partnerId` before writing anything locally.
+admin-api sleeps on Render's free tier; a **measured cold start is 32.7s** (warm: 0.44s), while the
+retry budget was `[1s, 3s, 6s, 10s]` — 20s of sleeping. The client gave up mid-boot and surfaced its
+cold-start message to a real applicant. A stranger's very first interaction with the platform
+depended on a sleeping background service waking up in time.
+
+Applying is now a **local write only**. The engine `Partner` is provisioned lazily on the first
+approval — the only moment `partnerId` is actually needed, and a path where a staff member can
+afford to wait. This is strictly better than a longer timeout: the engine can be down entirely and
+schools and partners can still apply.
+
+The budget did also grow, to `[1, 2, 4, 8, 12, 15, 20]s` (~62s), but only under a **`patient`**
+policy used by staff-initiated calls. Referral attribution moved to a **`fast`** policy (no retries)
+and is **no longer awaited** (`void this.partnerAdminApi.tryCaptureSignup(...)`) — otherwise the wider
+budget would have stalled a student's signup or a payment callback for a minute behind a cold engine.
+Losing an attribution during a cold start is the accepted trade; blocking a student is not.
+
+#### Why school requests never reached the admin queue
+
+They were never sent. `apps/school-portal-web/src/app/activate/page.tsx` had
+`handleSubmit = () => setDone(true)`, and the app made **zero network calls** — "Your school is
+activated" was a cosmetic screen. There is now a real `backend/src/school/` module (PRD-047, the
+access half):
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/school/apply` | public | queue a request; no credential involved |
+| `POST /api/school/login` | public | exchange an access token for a `role: SCHOOL` session JWT |
+| `GET /api/admin/school-requests` | staff | the review queue |
+| `PATCH /api/admin/school-requests/:id` | staff | grant / reject / revoke / re-grant |
+| `GET /api/admin/school-requests/:id/card` | staff | the handover card, token in the clear |
+| `POST /api/admin/school-requests/:id/rotate-token` | staff | replace the token |
+
+Approving provisions the `School` row and a coordinator `User` (`Role.SCHOOL`, new). Revoking sets
+that user `isActive: false`, so `JwtStrategy` rejects a **still-valid JWT on its next request** —
+the same immediacy the partner gate has.
+
+Applying **refuses a coordinator email that already has a BIO account** rather than silently
+converting someone's student account into a school coordinator at approval time.
+
+#### Access tokens
+
+Approval issues exactly one token per organisation, e.g. `BIO-SCH-4K2M9-...` (100 bits over a
+Crockford-style alphabet with no `I`/`L`/`O`/`U`, so it survives being read aloud or retyped from a
+printed card — lookup normalises case and folds the omitted glyphs).
+
+Storage is split, because the two jobs conflict:
+
+- **`accessTokenHash`** — SHA-256, under a **unique index**. This is what authenticates. A presented
+  token resolves to at most one row, so *a token issued to one school can never sign another one in*.
+- **`accessTokenSealed`** — the same token under AES-256-GCM, opened only for an authenticated admin
+  re-rendering the handover card. A leaked database dump alone therefore yields no usable tokens.
+
+The sealing key comes from **`ACCESS_TOKEN_KEY`** (falling back to `JWT_SECRET`). It is deliberately
+a separate variable: rotating `JWT_SECRET` must not make every existing handover card unreadable.
+If the key does change, tokens still *authenticate* (the digest is independent) — only the card
+needs a rotation to be re-issued.
+
+A token survives a revoke → re-grant cycle, so a card already sitting in a coordinator's inbox stays
+valid. `rotate-token` invalidates the old one immediately.
+
+Partners get the same credential: `POST /api/partner/login` now accepts **either** `{email, password}`
+or `{accessToken}`. The password path compares against a real bcrypt hash even when no partner
+matches, so "unknown email" and "wrong password" take the same time.
+
+#### One queue
+
+`admin-frontend/src/app/access/page.tsx` replaces `/partners` (which now redirects) with a single
+queue over both request types, filterable by type and status, with the handover card as a modal
+(reveal / copy token / copy full card / rotate). Approving opens the card immediately — that is
+exactly when staff need the token.
+
+**Tests:** 39 new (20 token primitive, 19 school service), 116 backend total, all green. The school
+suite proves the invariants that matter rather than that a mock was called: two approved schools get
+distinct tokens that each resolve only to their own school; a partner token and a JWT are both
+rejected; revoke deactivates the coordinator *and* refuses login; rotation locks out the old token.
+
+**Still deferred:** the school **dashboard** remains demo data (`school-data.ts`) — this change wires
+the access loop, not the read/write half of PRD-047. Notifications are still absent, so the handover
+card is copied out of the admin UI by hand rather than emailed.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:

@@ -7,6 +7,15 @@ const nextConfig = {
     env: {
         NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000',
     },
+    async redirects() {
+        return [
+            // Partner review merged into the shared Access Requests queue, which
+            // now covers schools too. Done here rather than with a page calling
+            // `redirect()`: a prerendered page ships an error shell and only
+            // redirects once JS runs, where this is a real Location response.
+            { source: '/partners', destination: '/access', permanent: false },
+        ];
+    },
     async headers() {
         return [
             {
