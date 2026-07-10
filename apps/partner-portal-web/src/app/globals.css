@@ -7,7 +7,7 @@
    existing pages match student/admin without JSX changes.
    ══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 /* ── Design tokens (shared with student/admin) ── */
 :root {
@@ -90,8 +90,8 @@
 	--radius-full: 9999px;
 
 	/* Typography */
-	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+	--font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--font-mono: "JetBrains Mono", "Fira Code", monospace;
 
 	/* Transitions */
 	--transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -137,7 +137,7 @@ body {
 
 /* Animated background mesh — Lemon Ideas palette */
 body::before {
-	content: '';
+	content: "";
 	position: fixed;
 	inset: 0;
 	background:

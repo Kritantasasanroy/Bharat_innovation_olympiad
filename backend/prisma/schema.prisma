@@ -23,6 +23,13 @@ model User {
   /// Captured at registration; replayed at payment time to credit the paid
   /// conversion to the referring partner's campaign (PRD-046 attribution).
   referralCode    String?
+  /// Set when a school coordinator adds this student to their roster. The
+  /// student has no account yet — they claim it by registering with this email.
+  invitedAt       DateTime?
+  /// Set the first time the student completes registration (`/auth/sync`).
+  /// `invitedAt` without `activatedAt` is exactly the "invited, not yet signed
+  /// up" state the school dashboard reports.
+  activatedAt     DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   attempts        Attempt[]
@@ -52,20 +59,36 @@ model RefreshToken {
   @@index([token])
 }
 
+/// The school directory. Every row is a school students can pick during
+/// registration. A row arrives one of two ways:
+///
+///  - **Onboarded** — an approved `SchoolRequest`, so it has a coordinator and
+///    portal access. `onboardedAt` is set.
+///  - **Student-added** — a student could not find their school and added it by
+///    name + pincode. No coordinator, no portal access, `onboardedAt` is null.
+///
+/// `nameKey` is the normalised name (see `schoolNameKey`); together with
+/// `pincode` it is the duplicate key, so the same school cannot be added twice
+/// under punctuation or casing variants.
 model School {
   id                    String                 @id @default(uuid())
   name                  String
+  nameKey               String
   code                  String                 @unique
   city                  String
   state                 String
+  pincode               String
   board                 String?
   udiseCode             String?
+  onboardedAt           DateTime?
   createdAt             DateTime               @default(now())
   users                 User[]
   slotAssignments       SchoolSlotAssignment[]
   accessRequest         SchoolRequest?
 
+  @@unique([nameKey, pincode])
   @@index([code])
+  @@index([pincode])
 }
 
 model Exam {
@@ -307,12 +330,18 @@ model SchoolRequest {
   schoolName       String
   board            String
   udiseCode        String?
+  pincode          String
   city             String
   state            String
   coordinatorName  String
   coordinatorEmail String              @unique
   coordinatorPhone String
   status           SchoolRequestStatus @default(PENDING)
+
+  /// The admin-api `Partner.id` that onboarded this school, when a partner
+  /// submitted the request on the school's behalf rather than the school
+  /// self-applying. Staff see the attribution on the review queue.
+  submittedByPartnerId String?
 
   accessTokenHash   String?   @unique
   accessTokenSealed String?

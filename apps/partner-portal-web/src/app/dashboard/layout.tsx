@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { DashboardNav } from "../../components/dashboard-nav";
-import { type ApprovedPartner, ApiError, portalApi } from "../../lib/api-client";
+import { ApiError, type ApprovedPartner, portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 
 /**

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeSchoolCode } from '../school/school-directory.helpers';
 import { SchoolSlotService } from '../slot/school-slot.service';
 import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 
@@ -10,42 +11,69 @@ export class AuthService {
         private schoolSlotService: SchoolSlotService,
     ) { }
 
+    /**
+     * Resolve the school code a student typed or picked. Codes come off printed
+     * cards and forwarded messages, so matching tolerates case, spacing and a
+     * missing hyphen.
+     */
+    private async resolveSchoolId(schoolCode?: string): Promise<string | undefined> {
+        if (!schoolCode?.trim()) return undefined;
+        const school = await this.prisma.school.findUnique({
+            where: { code: normalizeSchoolCode(schoolCode) },
+            select: { id: true },
+        });
+        if (!school) {
+            throw new BadRequestException(
+                'We could not find a school with that code. Check it, or search for your school by name.',
+            );
+        }
+        return school.id;
+    }
+
     async syncUser(email: string, dto: SyncUserDto) {
-        let user = await this.prisma.user.findUnique({ where: { email } });
+        const existing = await this.prisma.user.findUnique({ where: { email } });
 
-        if (!user) {
-            let schoolId: string | undefined;
-            if (dto.schoolCode) {
-                const school = await this.prisma.school.findUnique({ where: { code: dto.schoolCode } });
-                if (school) {
-                    schoolId = school.id;
-                } else {
-                    throw new BadRequestException('Invalid school code');
-                }
-            }
-
-            user = await this.prisma.user.create({
+        // A coordinator may have put this student on their roster already. That
+        // row has `invitedAt` and no account behind it; registering claims it,
+        // keeping the school that invited them.
+        if (existing) {
+            if (existing.activatedAt) return existing;
+            return this.prisma.user.update({
+                where: { id: existing.id },
                 data: {
-                    email,
-                    firstName: dto.firstName,
-                    lastName: dto.lastName,
-                    role: dto.role || 'STUDENT',
-                    classBand: dto.classBand,
-                    schoolId,
-                    // Remembered so the later paid conversion can be credited to
-                    // the referring partner's campaign (PRD-046 attribution).
-                    referralCode: dto.referralCode ?? null,
-                }
+                    firstName: dto.firstName || existing.firstName,
+                    lastName: dto.lastName || existing.lastName,
+                    classBand: dto.classBand ?? existing.classBand,
+                    activatedAt: new Date(),
+                    ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
+                },
             });
+        }
 
-            // Same school -> same slot: if this student's school already has a
-            // slot assignment for any exam instance, book them into it
-            // immediately. No-ops when the school has no assignment yet, so
-            // registration is unaffected for every exam that still uses manual
-            // slot picking.
-            if (schoolId) {
-                await this.schoolSlotService.autoAllocateForNewStudent(user.id, schoolId);
+        const schoolId = await this.resolveSchoolId(dto.schoolCode);
+
+        const user = await this.prisma.user.create({
+            data: {
+                email,
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                role: dto.role || 'STUDENT',
+                classBand: dto.classBand,
+                schoolId,
+                activatedAt: new Date(),
+                // Remembered so the later paid conversion can be credited to
+                // the referring partner's campaign (PRD-046 attribution).
+                referralCode: dto.referralCode ?? null,
             }
+        });
+
+        // Same school -> same slot: if this student's school already has a
+        // slot assignment for any exam instance, book them into it
+        // immediately. No-ops when the school has no assignment yet, so
+        // registration is unaffected for every exam that still uses manual
+        // slot picking.
+        if (schoolId) {
+            await this.schoolSlotService.autoAllocateForNewStudent(user.id, schoolId);
         }
 
         return user;

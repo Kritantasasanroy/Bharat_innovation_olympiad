@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { generateAccessToken } from '../common/access-token';
+import { schoolNameKey } from './school-directory.helpers';
 import { SchoolService } from './school.service';
 
 /**
@@ -20,7 +21,17 @@ function createFakeDb() {
     const users: any[] = [];
     const auditLogs: any[] = [];
 
-    const match = (row: any, where: any) => Object.keys(where).every((k) => row[k] === where[k]);
+    /**
+     * Matches every key in `where`. A composite-unique lookup arrives as a
+     * single nested key (`{ nameKey_pincode: { nameKey, pincode } }`), which is
+     * how Prisma names `@@unique([nameKey, pincode])` — flatten it.
+     */
+    const match = (row: any, where: any) =>
+        Object.entries(where).every(([key, value]) =>
+            value && typeof value === 'object' && !(value instanceof Date)
+                ? Object.entries(value).every(([k, v]) => row[k] === v)
+                : row[key] === value,
+        );
 
     const hydrate = (row: any, include?: any) =>
         row && include?.school
@@ -48,6 +59,11 @@ function createFakeDb() {
             create: async ({ data }: any) => {
                 const row = { id: nextId('school'), ...data };
                 schools.push(row);
+                return row;
+            },
+            update: async ({ where, data }: any) => {
+                const row = schools.find((s) => match(s, where));
+                Object.assign(row, data);
                 return row;
             },
         },
@@ -79,6 +95,7 @@ const APPLICATION = {
     schoolName: 'Delhi Public School, Sector 12',
     board: 'CBSE',
     udiseCode: '07010100112',
+    pincode: '110001',
     city: 'New Delhi',
     state: 'Delhi',
     coordinatorName: 'Anita Rao',
@@ -187,6 +204,46 @@ describe('decide — approval', () => {
         expect(schools).toHaveLength(1);
         expect(users).toHaveLength(1);
         expect((await service.card(requestId)).accessToken).toBe(token);
+    });
+
+    it('adopts a school a student already added, rather than duplicating it', async () => {
+        const { service, prisma, schools } = setup();
+        // A student could not find their school and added it to the directory:
+        // same school, no coordinator, not onboarded.
+        await prisma.school.create({
+            data: {
+                name: 'Delhi Public School Sector 12',
+                nameKey: schoolNameKey(APPLICATION.schoolName),
+                code: 'SCH-AAAAAA',
+                city: 'New Delhi',
+                state: 'Delhi',
+                pincode: '110001',
+                onboardedAt: null,
+            },
+        });
+
+        const { card } = await approved(service);
+
+        // One row, now onboarded, keeping the code students may already hold.
+        expect(schools).toHaveLength(1);
+        expect(schools[0].code).toBe('SCH-AAAAAA');
+        expect(schools[0].onboardedAt).toBeInstanceOf(Date);
+        expect(schools[0].board).toBe('CBSE');
+        expect(card.schoolCode).toBe('SCH-AAAAAA');
+    });
+
+    it('records the partner that onboarded the school', async () => {
+        const { service, schoolRequests } = setup();
+        await service.apply(APPLICATION as any, 'partner-42');
+
+        expect(schoolRequests[0].submittedByPartnerId).toBe('partner-42');
+    });
+
+    it('leaves submittedByPartnerId null on a self-application', async () => {
+        const { service, schoolRequests } = setup();
+        await service.apply(APPLICATION as any);
+
+        expect(schoolRequests[0].submittedByPartnerId).toBeNull();
     });
 
     it('rejecting an unprovisioned request creates no school or user', async () => {

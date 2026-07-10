@@ -48,10 +48,13 @@ export default function ApplyPage() {
 					<h2>Your request is under review</h2>
 					<p className="muted">
 						Thanks — we&apos;ve received your partner access request for{" "}
-						<strong>{form.orgName}</strong>. Our team reviews applications manually. Once
-						approved, sign in with <strong>{form.email}</strong> and the password you just set.
+						<strong>{form.orgName}</strong>. Our team reviews applications manually. Once approved,
+						sign in with <strong>{form.email}</strong> and the password you just set.
 					</p>
-					<div className="divider" style={{ height: 1, background: "var(--border-subtle)", margin: "1.25rem 0" }} />
+					<div
+						className="divider"
+						style={{ height: 1, background: "var(--border-subtle)", margin: "1.25rem 0" }}
+					/>
 					<Link href="/login" className="button">
 						Go to sign in
 					</Link>
@@ -65,8 +68,8 @@ export default function ApplyPage() {
 			<div className="page-header">
 				<h1>Request partner access</h1>
 				<p>
-					Tell us about your organisation and choose a password. Once our team approves your
-					request you can sign in and start referring institutions and students.
+					Tell us about your organisation and choose a password. Once our team approves your request
+					you can sign in and start referring institutions and students.
 				</p>
 			</div>
 

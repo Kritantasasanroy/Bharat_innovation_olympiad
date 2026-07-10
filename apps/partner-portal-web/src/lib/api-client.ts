@@ -155,13 +155,20 @@ interface NestErrorBody {
 	readonly error?: string;
 }
 
-async function backendRequest<T>(path: string, body: unknown): Promise<T> {
+async function backendRequest<T>(
+	path: string,
+	body: unknown,
+	init: { method?: string; token?: string } = {},
+): Promise<T> {
 	let response: Response;
 	try {
 		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(body),
+			method: init.method ?? (body === undefined ? "GET" : "POST"),
+			headers: {
+				"content-type": "application/json",
+				...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+			},
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
 	} catch {
 		throw new ApiError({
@@ -199,4 +206,58 @@ export const backendApi = {
 	/** The access token staff issue on approval, exchanged for a session JWT. */
 	loginWithToken: (accessToken: string) =>
 		backendRequest<PartnerLoginResult>("/partner/login", { accessToken }),
+};
+
+export interface PincodeLocation {
+	readonly pincode: string;
+	readonly city: string;
+	readonly state: string;
+}
+
+export interface PartnerSchoolInput {
+	readonly schoolName: string;
+	readonly board: string;
+	readonly udiseCode?: string;
+	readonly pincode: string;
+	readonly city: string;
+	readonly state: string;
+	readonly coordinatorName: string;
+	readonly coordinatorEmail: string;
+	readonly coordinatorPhone: string;
+}
+
+export interface PartnerSchool {
+	readonly id: string;
+	readonly schoolName: string;
+	readonly board: string;
+	readonly city: string;
+	readonly state: string;
+	readonly pincode: string;
+	readonly coordinatorName: string;
+	readonly coordinatorEmail: string;
+	readonly status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+	readonly decisionReason: string | null;
+	readonly createdAt: string;
+	readonly decidedAt: string | null;
+	readonly schoolCode: string | null;
+}
+
+/**
+ * Partners onboard schools, not just students. A partner submits a school's
+ * access request; staff review it in the same queue as a self-applying school.
+ * The partner never gains access to the school — the coordinator gets the token.
+ */
+export const partnerSchoolApi = {
+	lookupPincode: (pincode: string) =>
+		backendRequest<PincodeLocation>(`/geo/pincode/${encodeURIComponent(pincode)}`, undefined),
+
+	onboard: (token: string, input: PartnerSchoolInput) =>
+		backendRequest<{ status: string; schoolName: string; coordinatorEmail: string }>(
+			"/partner/schools",
+			input,
+			{ token },
+		),
+
+	list: (token: string) =>
+		backendRequest<PartnerSchool[]>("/partner/schools", undefined, { token }),
 };

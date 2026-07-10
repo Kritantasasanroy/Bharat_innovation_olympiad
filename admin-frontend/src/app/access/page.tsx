@@ -29,12 +29,14 @@ interface SchoolRow {
     schoolName: string;
     board: string;
     udiseCode: string | null;
+    pincode: string;
     city: string;
     state: string;
     coordinatorName: string;
     coordinatorEmail: string;
     coordinatorPhone: string;
     status: Status;
+    submittedByPartnerId: string | null;
     decisionReason: string | null;
     createdAt: string;
     tokenIssuedAt: string | null;
@@ -54,6 +56,8 @@ interface Row {
     decisionReason: string | null;
     createdAt: string;
     tokenIssuedAt: string | null;
+    /** Set on a school a partner brought in; drives the "via partner" tag. */
+    viaPartner: boolean;
 }
 
 interface Card {
@@ -74,11 +78,13 @@ interface Card {
     schoolCode?: string | null;
     board?: string;
     udiseCode?: string | null;
+    pincode?: string;
     city?: string;
     state?: string;
     coordinatorName?: string;
     coordinatorEmail?: string;
     coordinatorPhone?: string;
+    submittedByPartnerId?: string | null;
     email?: string;
     phone?: string;
 }
@@ -125,12 +131,13 @@ const toRow = {
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
         tokenIssuedAt: r.tokenIssuedAt,
+        viaPartner: false,
     }),
     SCHOOL: (r: SchoolRow): Row => ({
         kind: 'SCHOOL',
         id: r.id,
         title: r.schoolName,
-        detail: `${r.board} · ${r.city}, ${r.state}`,
+        detail: `${r.board} · ${r.city}, ${r.state} · ${r.pincode}`,
         contactName: r.coordinatorName,
         email: r.coordinatorEmail,
         phone: r.coordinatorPhone,
@@ -138,6 +145,7 @@ const toRow = {
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
         tokenIssuedAt: r.tokenIssuedAt,
+        viaPartner: r.submittedByPartnerId !== null,
     }),
 };
 
@@ -151,6 +159,7 @@ function cardAsText(card: Card): string {
                   ['Board', card.board],
                   ['UDISE', card.udiseCode || '—'],
                   ['City', `${card.city}, ${card.state}`],
+                  ['Pincode', card.pincode],
                   ['Coordinator', card.coordinatorName],
                   ['Email', card.coordinatorEmail],
                   ['Phone', card.coordinatorPhone],
@@ -371,6 +380,11 @@ export default function AccessPage() {
                                             <span className={`kind-tag kind-tag--${row.kind.toLowerCase()}`}>
                                                 {row.kind === 'PARTNER' ? 'Partner' : 'School'}
                                             </span>
+                                            {row.viaPartner && (
+                                                <span className="kind-tag kind-tag--partner" style={{ marginTop: '0.3rem', display: 'inline-block' }}>
+                                                    via partner
+                                                </span>
+                                            )}
                                         </td>
                                         <td>
                                             <div className="student-name">
@@ -502,6 +516,7 @@ export default function AccessPage() {
                                     <Field label="Board" value={card.board} />
                                     <Field label="UDISE" value={card.udiseCode || '—'} />
                                     <Field label="City" value={`${card.city}, ${card.state}`} />
+                                    <Field label="Pincode" value={card.pincode} />
                                     <Field label="Coordinator" value={card.coordinatorName} />
                                     <Field label="Email" value={card.coordinatorEmail} />
                                     <Field label="Phone" value={card.coordinatorPhone} />

@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { SchoolNav } from "../../components/school-nav";
+import { portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
-import { school } from "../../lib/school-data";
+import { useResource } from "../../lib/use-resource";
 
 export default function DashboardLayout({ children }: { readonly children: ReactNode }) {
 	const { token, signOut } = useAuth();
 	const router = useRouter();
+	const { data: profile } = useResource(portalApi.profile);
 
 	useEffect(() => {
 		if (token === undefined) return;
@@ -31,12 +33,23 @@ export default function DashboardLayout({ children }: { readonly children: React
 			<div className="dashboard-content">
 				<div className="top-bar">
 					<div>
-						<strong>{school.name}</strong>
-						<span className="muted"> · {school.code} · {school.board}</span>
+						<strong>{profile?.name ?? "Your school"}</strong>
+						{profile && (
+							<span className="muted">
+								{" "}
+								· {profile.code} · {profile.board ?? "—"}
+							</span>
+						)}
 					</div>
 					<div className="inline">
-						<span className="badge badge--positive">Active</span>
-						<button type="button" className="button button--secondary button--small" onClick={signOut}>
+						<span className="badge badge--positive">
+							{profile?.status === "PENDING" ? "Pending" : "Active"}
+						</span>
+						<button
+							type="button"
+							className="button button--secondary button--small"
+							onClick={signOut}
+						>
 							Sign out
 						</button>
 					</div>

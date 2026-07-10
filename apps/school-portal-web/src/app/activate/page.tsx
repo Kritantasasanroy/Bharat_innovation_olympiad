@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, backendApi } from "../../lib/api-client";
 
 const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
+const PINCODE_LENGTH = 6;
 
 /**
  * School self-activation (features §2.1–2.2).
@@ -13,14 +14,43 @@ const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
  * review on the admin Access Requests page. Approval provisions the school and
  * issues a single access token, which staff hand over; the school then signs in
  * with it at `/login`. Nothing is granted here.
+ *
+ * City and state are filled from the pincode, so they always agree with what a
+ * student sees when picking this school later.
  */
 export default function ActivatePage() {
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [done, setDone] = useState<{ schoolName: string; coordinatorEmail: string } | null>(null);
 
+	const [pincode, setPincode] = useState("");
+	const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
+	const [locating, setLocating] = useState(false);
+
+	// Resolve city and state as soon as a complete pincode is entered.
+	useEffect(() => {
+		if (pincode.length !== PINCODE_LENGTH) {
+			setLocation(null);
+			return;
+		}
+		let cancelled = false;
+		setLocating(true);
+		backendApi
+			.lookupPincode(pincode)
+			.then((found) => !cancelled && setLocation({ city: found.city, state: found.state }))
+			.catch(() => !cancelled && setLocation(null))
+			.finally(() => !cancelled && setLocating(false));
+		return () => {
+			cancelled = true;
+		};
+	}, [pincode]);
+
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (!location) {
+			setError("Enter a valid pincode so we can confirm your city and state.");
+			return;
+		}
 		setSubmitting(true);
 		setError(null);
 
@@ -32,8 +62,9 @@ export default function ActivatePage() {
 				schoolName: value("schoolName"),
 				board: value("board"),
 				...(value("udiseCode") ? { udiseCode: value("udiseCode") } : {}),
-				city: value("city"),
-				state: value("state"),
+				pincode,
+				city: location.city,
+				state: location.state,
 				coordinatorName: value("coordinatorName"),
 				coordinatorEmail: value("coordinatorEmail"),
 				coordinatorPhone: value("coordinatorPhone"),
@@ -105,12 +136,30 @@ export default function ActivatePage() {
 					</div>
 					<div className="grid-2" style={{ gap: "1rem" }}>
 						<div>
-							<label htmlFor="city">City</label>
-							<input id="city" name="city" required />
+							<label htmlFor="pincode">Pincode</label>
+							<input
+								id="pincode"
+								name="pincode"
+								inputMode="numeric"
+								maxLength={PINCODE_LENGTH}
+								placeholder="e.g. 110001"
+								value={pincode}
+								onChange={(event) =>
+									setPincode(event.target.value.replace(/\D/g, "").slice(0, PINCODE_LENGTH))
+								}
+								required
+							/>
 						</div>
 						<div>
-							<label htmlFor="state">State</label>
-							<input id="state" name="state" required />
+							<label htmlFor="location">City &amp; state</label>
+							<input
+								id="location"
+								readOnly
+								value={
+									locating ? "Looking up…" : location ? `${location.city}, ${location.state}` : ""
+								}
+								placeholder="Filled from your pincode"
+							/>
 						</div>
 					</div>
 					<div>
@@ -128,7 +177,7 @@ export default function ActivatePage() {
 						</div>
 					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}
-					<button type="submit" className="button" disabled={submitting}>
+					<button type="submit" className="button" disabled={submitting || !location}>
 						{submitting ? "Submitting…" : "Submit for activation"}
 					</button>
 				</form>

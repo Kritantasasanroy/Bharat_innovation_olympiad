@@ -17,6 +17,7 @@ import {
 } from '../common/access-token';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
+import { schoolNameKey } from './school-directory.helpers';
 
 /**
  * School access lifecycle (PRD-047), mirroring the partner loop: a school
@@ -35,8 +36,12 @@ export class SchoolService {
         private jwt: JwtService,
     ) {}
 
-    /** PUBLIC self-service application — no token, no side effects beyond the row. */
-    async apply(dto: ApplySchoolDto) {
+    /**
+     * Self-service application — no token, no side effects beyond the row.
+     * `submittedByPartnerId` is set when a partner onboards the school on its
+     * behalf, so staff can see the attribution on the review queue.
+     */
+    async apply(dto: ApplySchoolDto, submittedByPartnerId?: string) {
         const coordinatorEmail = dto.coordinatorEmail.trim().toLowerCase();
 
         const existing = await this.prisma.schoolRequest.findUnique({
@@ -61,12 +66,14 @@ export class SchoolService {
                 schoolName: dto.schoolName,
                 board: dto.board,
                 udiseCode: dto.udiseCode || null,
+                pincode: dto.pincode.trim(),
                 city: dto.city,
                 state: dto.state,
                 coordinatorName: dto.coordinatorName,
                 coordinatorEmail,
                 coordinatorPhone: dto.coordinatorPhone,
                 status: 'PENDING',
+                submittedByPartnerId: submittedByPartnerId ?? null,
             },
         });
 
@@ -136,6 +143,7 @@ export class SchoolService {
                 schoolName: true,
                 board: true,
                 udiseCode: true,
+                pincode: true,
                 city: true,
                 state: true,
                 coordinatorName: true,
@@ -143,6 +151,7 @@ export class SchoolService {
                 coordinatorPhone: true,
                 status: true,
                 schoolId: true,
+                submittedByPartnerId: true,
                 decisionReason: true,
                 decidedBy: true,
                 decidedAt: true,
@@ -178,22 +187,51 @@ export class SchoolService {
         // handover card already in the coordinator's inbox stays valid.
         const issuing = dto.decision === 'APPROVED' && !request.accessTokenHash;
         const plaintext = issuing ? generateAccessToken('SCHOOL') : null;
+        const now = new Date();
 
         const result = await this.prisma.$transaction(async (tx) => {
             let schoolId = request.schoolId;
             let coordinatorUserId = request.coordinatorUserId;
 
             if (dto.decision === 'APPROVED' && (!schoolId || !coordinatorUserId)) {
-                const school = await tx.school.create({
-                    data: {
-                        name: request.schoolName,
-                        code: await this.allocateSchoolCode(tx),
-                        city: request.city,
-                        state: request.state,
-                        board: request.board,
-                        udiseCode: request.udiseCode,
-                    },
+                const nameKey = schoolNameKey(request.schoolName);
+                const pincode = request.pincode;
+
+                // A student may already have added this school to the directory.
+                // Adopt that row and onboard it rather than creating a second one
+                // — (nameKey, pincode) is unique, so a blind create would fail,
+                // and students already pointing at it must keep their school.
+                const existing = await tx.school.findUnique({
+                    where: { nameKey_pincode: { nameKey, pincode } },
                 });
+
+                const school = existing
+                    ? await tx.school.update({
+                          where: { id: existing.id },
+                          data: {
+                              // The coordinator's own details win over whatever a
+                              // student typed, but never blank out what we have.
+                              name: request.schoolName,
+                              city: request.city || existing.city,
+                              state: request.state || existing.state,
+                              board: request.board,
+                              udiseCode: request.udiseCode,
+                              onboardedAt: now,
+                          },
+                      })
+                    : await tx.school.create({
+                          data: {
+                              name: request.schoolName,
+                              nameKey,
+                              code: await this.allocateSchoolCode(tx),
+                              city: request.city,
+                              state: request.state,
+                              pincode,
+                              board: request.board,
+                              udiseCode: request.udiseCode,
+                              onboardedAt: now,
+                          },
+                      });
 
                 const [firstName, ...rest] = request.coordinatorName.trim().split(/\s+/);
                 const coordinator = await tx.user.create({
@@ -275,8 +313,10 @@ export class SchoolService {
             schoolCode: request.school?.code ?? null,
             board: request.board,
             udiseCode: request.udiseCode,
+            pincode: request.pincode,
             city: request.city,
             state: request.state,
+            submittedByPartnerId: request.submittedByPartnerId,
             coordinatorName: request.coordinatorName,
             coordinatorEmail: request.coordinatorEmail,
             coordinatorPhone: request.coordinatorPhone,

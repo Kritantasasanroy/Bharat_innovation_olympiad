@@ -1,16 +1,22 @@
 "use client";
 
 import { type ChangeEvent, type DragEvent, useMemo, useRef, useState } from "react";
-import { students as initialStudents } from "../../../lib/school-data";
-import type { SchoolStudent, StudentStatus } from "../../../lib/types";
+import {
+	ApiError,
+	type NewStudent,
+	type PortalStudent,
+	portalApi,
+	type RegisterStudentsResult,
+} from "../../../lib/api-client";
+import { useAuth } from "../../../lib/auth-context";
+import { useResource } from "../../../lib/use-resource";
 
 type Filter = "ALL" | "INVITED" | "PARTICIPATING";
 
-const STATUS_BADGE: Record<StudentStatus, string> = {
+const STATUS_BADGE: Record<PortalStudent["status"], string> = {
 	INVITED: "badge",
 	REGISTERED: "badge badge--pending",
 	PAID: "badge badge--pending",
-	SLOTTED: "badge badge--positive",
 	COMPLETED: "badge badge--positive",
 };
 
@@ -22,17 +28,28 @@ interface ParsedRow {
 	error?: string | undefined;
 }
 
-/** View Invited (§2.6) + Participating (§2.7) students + Bulk Upload (§2.8). */
+/**
+ * View invited (§2.6) and participating (§2.7) students, plus bulk upload (§2.8).
+ *
+ * Registering students is the ONE thing a school may write. It creates each
+ * student as an invited roster entry; the student claims the account by
+ * registering with that email. Everything else on this portal is read-only.
+ */
 export default function StudentsPage() {
-	const [students, setStudents] = useState<SchoolStudent[]>(initialStudents);
+	const { token } = useAuth();
+	const { data: students, loading, error, reload } = useResource(portalApi.students);
+
 	const [filter, setFilter] = useState<Filter>("ALL");
 	const [query, setQuery] = useState("");
 	const [parsed, setParsed] = useState<ParsedRow[] | null>(null);
 	const [dragActive, setDragActive] = useState(false);
+	const [submitting, setSubmitting] = useState(false);
+	const [result, setResult] = useState<RegisterStudentsResult | null>(null);
+	const [submitError, setSubmitError] = useState<string | null>(null);
 	const fileInput = useRef<HTMLInputElement>(null);
 
 	const visible = useMemo(() => {
-		return students.filter((s) => {
+		return (students ?? []).filter((s) => {
 			const matchesFilter =
 				filter === "ALL" ||
 				(filter === "INVITED" && s.status === "INVITED") ||
@@ -58,7 +75,7 @@ export default function StudentsPage() {
 			const classNum = Number(classBand);
 			const valid =
 				name.length > 1 &&
-				classNum >= 6 &&
+				classNum >= 1 &&
 				classNum <= 12 &&
 				/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 			rows.push({
@@ -66,10 +83,12 @@ export default function StudentsPage() {
 				classBand,
 				email,
 				valid,
-				error: valid ? undefined : "Check name, class (6–12) and email",
+				error: valid ? undefined : "Check name, class (1–12) and email",
 			});
 		}
 		setParsed(rows);
+		setResult(null);
+		setSubmitError(null);
 	}
 
 	function onFile(event: ChangeEvent<HTMLInputElement>) {
@@ -85,21 +104,27 @@ export default function StudentsPage() {
 		if (file) file.text().then(parseCsv);
 	}
 
-	function importValid() {
-		if (!parsed) return;
-		const additions: SchoolStudent[] = parsed
+	async function importValid() {
+		if (!parsed || !token) return;
+		const payload: NewStudent[] = parsed
 			.filter((r) => r.valid)
-			.map((r, i) => ({
-				id: `stu_new_${Date.now()}_${i}`,
-				name: r.name,
-				classBand: Number(r.classBand),
-				email: r.email,
-				status: "INVITED",
-				slotLabel: null,
-				score: null,
-			}));
-		setStudents((prev) => [...additions, ...prev]);
-		setParsed(null);
+			.map((r) => ({ name: r.name, email: r.email, classBand: Number(r.classBand) }));
+		if (!payload.length) return;
+
+		setSubmitting(true);
+		setSubmitError(null);
+		try {
+			const outcome = await portalApi.registerStudents(token, payload);
+			setResult(outcome);
+			setParsed(null);
+			reload();
+		} catch (cause) {
+			setSubmitError(
+				cause instanceof ApiError ? cause.message : "Could not register these students.",
+			);
+		} finally {
+			setSubmitting(false);
+		}
 	}
 
 	const validCount = parsed?.filter((r) => r.valid).length ?? 0;
@@ -109,12 +134,33 @@ export default function StudentsPage() {
 		<main>
 			<div className="page-header">
 				<h1>Students</h1>
-				<p className="muted">Invited and participating students, plus bulk roster upload.</p>
+				<p className="muted">
+					Invite students to your school, and track how far each has got. Invited students claim
+					their account by registering with the same email.
+				</p>
 			</div>
+
+			{result && (
+				<div className="notice notice--success" style={{ marginBottom: "1rem" }}>
+					Added {result.added} student{result.added === 1 ? "" : "s"}.
+					{result.skipped.length > 0 && (
+						<>
+							{" "}
+							{result.skipped.length} skipped —{" "}
+							{result.skipped.map((s) => `${s.email} (${s.reason})`).join("; ")}.
+						</>
+					)}
+				</div>
+			)}
+			{submitError && (
+				<div className="notice notice--error" style={{ marginBottom: "1rem" }}>
+					{submitError}
+				</div>
+			)}
 
 			<div className="card">
 				<div className="section-title">
-					<h2>Bulk student upload</h2>
+					<h2>Invite students</h2>
 					<a
 						className="button button--secondary button--small"
 						href={
@@ -126,7 +172,7 @@ export default function StudentsPage() {
 						Download template
 					</a>
 				</div>
-				{/* biome-ignore lint/a11y: demo upload affordance; keyboard users use the button below */}
+				{/* biome-ignore lint/a11y: upload affordance; keyboard users use the button below */}
 				<div
 					className={dragActive ? "drop-zone drop-zone--active" : "drop-zone"}
 					onClick={() => fileInput.current?.click()}
@@ -152,7 +198,9 @@ export default function StudentsPage() {
 					<div className="mt-4">
 						<div className="inline" style={{ marginBottom: "0.75rem" }}>
 							<span className="badge badge--positive">{validCount} valid</span>
-							{invalidCount > 0 ? <span className="badge badge--negative">{invalidCount} need fixing</span> : null}
+							{invalidCount > 0 ? (
+								<span className="badge badge--negative">{invalidCount} need fixing</span>
+							) : null}
 						</div>
 						<div className="table-wrap">
 							<table>
@@ -166,10 +214,15 @@ export default function StudentsPage() {
 								</thead>
 								<tbody>
 									{parsed.map((r, i) => (
+										// A CSV can list the same email twice; the index disambiguates
+										// the preview rows, which are transient and never reordered.
+										// biome-ignore lint/suspicious/noArrayIndexKey: transient preview rows
 										<tr key={`${r.email}-${i}`}>
 											<td>{r.name}</td>
 											<td>{r.classBand}</td>
-											<td className="text-mono" style={{ fontSize: "0.8rem" }}>{r.email}</td>
+											<td className="text-mono" style={{ fontSize: "0.8rem" }}>
+												{r.email}
+											</td>
 											<td>
 												{r.valid ? (
 													<span className="badge badge--positive">OK</span>
@@ -185,10 +238,21 @@ export default function StudentsPage() {
 							</table>
 						</div>
 						<div className="inline mt-4">
-							<button type="button" className="button" onClick={importValid} disabled={validCount === 0}>
-								Import {validCount} student{validCount === 1 ? "" : "s"}
+							<button
+								type="button"
+								className="button"
+								onClick={importValid}
+								disabled={validCount === 0 || submitting}
+							>
+								{submitting
+									? "Inviting…"
+									: `Invite ${validCount} student${validCount === 1 ? "" : "s"}`}
 							</button>
-							<button type="button" className="button button--secondary" onClick={() => setParsed(null)}>
+							<button
+								type="button"
+								className="button button--secondary"
+								onClick={() => setParsed(null)}
+							>
 								Cancel
 							</button>
 						</div>
@@ -218,6 +282,9 @@ export default function StudentsPage() {
 						</button>
 					))}
 				</div>
+
+				{error && <div className="notice notice--error">{error}</div>}
+
 				<div className="table-wrap">
 					<table>
 						<thead>
@@ -226,7 +293,7 @@ export default function StudentsPage() {
 								<th>Class</th>
 								<th>Email</th>
 								<th>Status</th>
-								<th>Slot</th>
+								<th>Score</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -234,20 +301,24 @@ export default function StudentsPage() {
 								<tr key={s.id}>
 									<td>{s.name}</td>
 									<td>Class {s.classBand}</td>
-									<td className="text-mono" style={{ fontSize: "0.8rem" }}>{s.email}</td>
+									<td className="text-mono" style={{ fontSize: "0.8rem" }}>
+										{s.email}
+									</td>
 									<td>
 										<span className={STATUS_BADGE[s.status]}>{s.status}</span>
 									</td>
-									<td className="muted">{s.slotLabel ?? "—"}</td>
+									<td className="muted">{s.score ?? "—"}</td>
 								</tr>
 							))}
 						</tbody>
 					</table>
 				</div>
-				{visible.length === 0 ? (
+				{!loading && visible.length === 0 ? (
 					<div className="empty-state">
-						<span className="empty-state__icon">🔍</span>
-						No students match this filter.
+						<span className="empty-state__icon">🧑‍🎓</span>
+						{students && students.length === 0
+							? "No students yet. Invite your first batch above."
+							: "No students match this filter."}
 					</div>
 				) : null}
 			</div>

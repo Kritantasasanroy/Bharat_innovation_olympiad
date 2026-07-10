@@ -1767,3 +1767,150 @@ h4 {
   animation: lpIconBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
 }
       
+/* ── SchoolPicker (student registration) ───────────────────────────────────── */
+
+.school-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.school-tab {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.school-tab.active {
+  background: rgba(255, 203, 5, 0.12);
+  border-color: var(--primary-400);
+  color: var(--primary-400);
+}
+
+.school-code-row,
+.school-add__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.school-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.school-add__hint {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin: 0;
+  min-height: 1.1em;
+}
+
+.school-add__actions {
+  justify-content: flex-end;
+}
+
+.school-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  z-index: 20;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.school-dropdown__empty {
+  padding: 0.75rem 1rem;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.school-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.school-option:hover {
+  background: var(--bg-elevated);
+}
+
+.school-option__name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.school-option__badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
+.school-option__meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.school-option--add {
+  color: var(--primary-400);
+  font-weight: 500;
+  border-bottom: none;
+}
+
+.school-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--primary-400);
+  border-radius: var(--radius-md);
+  background: rgba(255, 203, 5, 0.06);
+}
+
+.school-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.school-chip__text span {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.school-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #f87171;
+}

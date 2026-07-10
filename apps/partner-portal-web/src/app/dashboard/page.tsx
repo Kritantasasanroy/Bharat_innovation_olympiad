@@ -81,7 +81,9 @@ export default function DashboardOverviewPage() {
 											<td>
 												<span
 													className={
-														institution.effectiveTo ? "badge badge--negative" : "badge badge--positive"
+														institution.effectiveTo
+															? "badge badge--negative"
+															: "badge badge--positive"
 													}
 												>
 													{institution.effectiveTo ? "Ended" : "Active"}
