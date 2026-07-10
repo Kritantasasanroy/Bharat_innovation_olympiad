@@ -14,6 +14,12 @@ import type {
 	StatementRequestInput,
 } from "../../../core/ports/out/index.ts";
 
+/** Render answers 502/503/504 while a sleeping free-tier service cold-starts. */
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_BACKOFF_MS = [1_000, 3_000, 6_000, 10_000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** The raw funnel admin-api returns: totals + counts keyed by campaign id only. */
 interface AdminApiFunnel {
 	readonly partnerId: string;
@@ -210,10 +216,15 @@ export class HttpAdminApiClient implements AdminApiClient {
 		);
 	}
 
-	async #request<T>(method: string, path: string, token: string, body?: unknown): Promise<T> {
-		let response: Response;
+	/** One attempt; `null` when the socket itself failed. */
+	async #attempt(
+		method: string,
+		path: string,
+		token: string,
+		body?: unknown,
+	): Promise<Response | null> {
 		try {
-			response = await this.#fetchImpl(`${this.#baseUrl}${path}`, {
+			return await this.#fetchImpl(`${this.#baseUrl}${path}`, {
 				method,
 				headers: {
 					"content-type": "application/json",
@@ -221,8 +232,30 @@ export class HttpAdminApiClient implements AdminApiClient {
 				},
 				...(body === undefined ? {} : { body: JSON.stringify(body) }),
 			});
-		} catch (cause) {
-			throw new ProviderError("admin-api", cause instanceof Error ? cause : undefined);
+		} catch {
+			return null;
+		}
+	}
+
+	async #request<T>(method: string, path: string, token: string, body?: unknown): Promise<T> {
+		let response: Response | null = null;
+
+		// admin-api sleeps on Render's free tier; while it cold-starts, Render's
+		// edge answers 502/503/504. Those are transient, so retry with backoff
+		// rather than surfacing a dead dashboard to the partner.
+		for (let i = 0; i <= RETRY_BACKOFF_MS.length; i += 1) {
+			response = await this.#attempt(method, path, token, body);
+
+			const coldStart = response === null || RETRY_STATUSES.has(response.status);
+			if (!coldStart) break;
+
+			const delay = RETRY_BACKOFF_MS[i];
+			if (delay === undefined) break; // retries exhausted
+			await sleep(delay);
+		}
+
+		if (!response) {
+			throw new ProviderError("admin-api", new Error("unreachable"));
 		}
 
 		if (response.status === 404) {

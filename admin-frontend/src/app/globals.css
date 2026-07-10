@@ -1040,13 +1040,14 @@ h4 {
           align-items: center;
           justify-content: space-between;
           padding: var(--space-3) var(--space-6);
-          gap: var(--space-6);
+          gap: var(--space-4);
         }
         .navbar-brand {
           display: flex;
           align-items: center;
           gap: var(--space-3);
           cursor: pointer;
+          flex-shrink: 0;
         }
         .brand-logo {
           height: 42px;
@@ -1086,13 +1087,28 @@ h4 {
         }
         .navbar-links {
           display: flex;
+          align-items: center;
           gap: var(--space-1);
+          min-width: 0;
+          flex: 1 1 auto;
+          justify-content: center;
         }
         .nav-link {
-          padding: var(--space-2) var(--space-4);
+          /* Nav items are <button>s for keyboard/screen-reader correctness, so
+             the browser's button chrome has to be reset back to a plain link. */
+          appearance: none;
+          background: transparent;
+          border: none;
+          font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: var(--space-2) var(--space-3);
           border-radius: var(--radius-md);
-          font-size: 0.9rem;
+          font-size: 0.875rem;
           font-weight: 500;
+          line-height: 1.2;
+          white-space: nowrap;
           color: var(--text-secondary);
           cursor: pointer;
           transition: all var(--transition-fast);
@@ -1105,10 +1121,91 @@ h4 {
           color: var(--primary-400);
           background: rgba(255, 203, 5, 0.1);
         }
+        .nav-link:focus-visible {
+          outline: 2px solid var(--primary-400);
+          outline-offset: 2px;
+        }
+
+        /* ── Grouped nav dropdowns ── */
+        .nav-group {
+          position: relative;
+        }
+        .nav-caret {
+          transition: transform var(--transition-fast);
+          opacity: 0.7;
+        }
+        .nav-caret--open {
+          transform: rotate(180deg);
+        }
+        .nav-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          min-width: 210px;
+          padding: var(--space-2);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-xl);
+          z-index: 60;
+          animation: fadeIn 0.14s ease-out;
+        }
+        .nav-menu__item {
+          appearance: none;
+          background: transparent;
+          border: none;
+          font-family: inherit;
+          text-align: left;
+          width: 100%;
+          padding: var(--space-3) var(--space-3);
+          border-radius: var(--radius-sm);
+          font-size: 0.875rem;
+          font-weight: 500;
+          white-space: nowrap;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .nav-menu__item:hover {
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+        }
+        .nav-menu__item.active {
+          color: var(--primary-400);
+          background: rgba(255, 203, 5, 0.1);
+        }
+        .nav-menu__item:focus-visible {
+          outline: 2px solid var(--primary-400);
+          outline-offset: -2px;
+        }
+
         .navbar-user {
           display: flex;
           align-items: center;
           gap: var(--space-3);
+          flex-shrink: 0;
+        }
+
+        /* Below ~1100px the brand text and the user's name are the first things
+           to go, so the nav row itself never has to wrap or scroll. */
+        @media (max-width: 1100px) {
+          .brand-text-group {
+            display: none;
+          }
+        }
+        @media (max-width: 900px) {
+          .navbar-user .user-info {
+            display: none;
+          }
+          .navbar-links {
+            gap: 0;
+          }
+          .nav-link {
+            padding: var(--space-2);
+          }
         }
         .user-avatar {
           width: 36px;

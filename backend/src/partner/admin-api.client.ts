@@ -32,6 +32,19 @@ export interface AdminApiCampaign {
 
 export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
 
+/**
+ * admin-api sleeps on Render's free tier and takes ~20-60s to cold start. While
+ * it boots, Render's edge answers callers with 502/503/504 rather than queuing
+ * them, which would otherwise fail a partner's very first application. These
+ * are transient by definition, so retry them with backoff. A monitor pinging
+ * `/health/live` keeps the service warm, but a cold start can still happen right
+ * after a deploy, so the client must not depend on that.
+ */
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_BACKOFF_MS = [1_000, 3_000, 6_000, 10_000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 @Injectable()
 export class PartnerAdminApiClient {
     private readonly logger = new Logger(PartnerAdminApiClient.name);
@@ -43,22 +56,51 @@ export class PartnerAdminApiClient {
         return this.jwt.sign({ sub: 'system', role: 'SUPER_ADMIN' }, { expiresIn: '5m' });
     }
 
-    private async call<T>(path: string, init: RequestInit): Promise<T> {
-        let res: Response;
+    /** One attempt. Resolves the raw Response, or null when the socket failed. */
+    private async attempt(path: string, init: RequestInit): Promise<Response | null> {
         try {
-            res = await fetch(`${ADMIN_API_URL}${path}`, {
+            return await fetch(`${ADMIN_API_URL}${path}`, {
                 ...init,
                 headers: {
                     'content-type': 'application/json',
+                    // Minted per attempt: a slow cold start must not outlive the token.
                     authorization: `Bearer ${this.staffToken()}`,
                     ...(init.headers ?? {}),
                 },
             });
         } catch {
+            return null;
+        }
+    }
+
+    private async call<T>(path: string, init: RequestInit): Promise<T> {
+        let res: Response | null = null;
+
+        for (let i = 0; i <= RETRY_BACKOFF_MS.length; i += 1) {
+            res = await this.attempt(path, init);
+
+            const isColdStart = res === null || RETRY_STATUSES.has(res.status);
+            if (!isColdStart) break;
+
+            const delay = RETRY_BACKOFF_MS[i];
+            if (delay === undefined) break; // retries exhausted; fall through to the error below
+            this.logger.warn(
+                `admin-api ${path} looks asleep (${res?.status ?? 'no response'}); retrying in ${delay}ms`,
+            );
+            await sleep(delay);
+        }
+
+        if (!res) {
             throw new InternalServerErrorException(
                 `Partner engine (admin-api) unreachable at ${ADMIN_API_URL}.`,
             );
         }
+        if (RETRY_STATUSES.has(res.status)) {
+            throw new InternalServerErrorException(
+                'The partner engine is starting up. Please try again in a moment.',
+            );
+        }
+
         const body = (await res.json().catch(() => null)) as
             | { success: true; data: T }
             | { success: false; error?: { message?: string } }
