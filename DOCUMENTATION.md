@@ -473,6 +473,94 @@ paid conversion → `paid=1`, still `1` on replay. `admin-api` 81 tests, `portal
 
 ---
 
+### 0.19 Phase 3 — results integrity, decision loops, consent (2026-07-10)
+
+Everything here lives in the **legacy backend** (`backend/`) plus the student and admin frontends.
+New modules: `results/`, `certificate/`, `grievance/`, `refund/`, `consent/`.
+
+#### The results integrity chain
+
+Three steps, and each one is **impossible until its predecessor has run** — enforced server-side, and
+mirrored in the admin UI (`/results`) by disabling the next button:
+
+```
+   normalize  ──►  release  ──►  issue certificates
+   (automatic)     (human,        (only for a released
+                    audited,       instance)
+                    reason req.)
+```
+
+- **Normalization** (`results/normalization.ts`) is a pure, unit-tested function. Students sit
+  *different question sets*, so raw marks are not comparable. It rescales in **percentage space**
+  (so attempts with different `maxScore` compare correctly) via a z-score:
+  `pct' = clamp(0.5 + 0.15·z, 0, 1)`, then `score' = pct' · maxScore`.
+  - **A zero-variance cohort is left untouched.** If everyone scored the same, forcing them onto the
+    target mean would silently rewrite a perfect 100% into a 50%.
+  - Percentile is the textbook percentile *rank* `(L + 0.5E)/N · 100` (a lone candidate sits at 50);
+    rank is competition ranking (ties share a rank and consume the following slots).
+  - Ranking is done on the normalized **percentage**, not `normalizedScore`, because two attempts with
+    different `maxScore` can order differently in raw-score space.
+- **Release** requires a completed normalization run and a written reason; both go to `AuditLog`. It
+  also flips the legacy `Exam.isResultReleased` so the existing student-facing gate stays in step.
+- **Certificates** can only be issued for a released instance.
+
+#### Certificates and public verification
+
+`certificateNumber` is the public identifier, so it is **unguessable**: `BIO-<year>-<10 chars>` over a
+Crockford-style alphabet (no `I`, `L`, `O`, `U`), ~50 bits of entropy, plus a unique constraint with
+retry. A sequential counter would let anyone enumerate every certificate ever issued.
+
+`GET /api/certificates/verify/:number` is **PUBLIC** (no guard). It:
+- reports a revoked certificate as `{valid:false, reason:'REVOKED'}` rather than 404 — a revoked
+  certificate must not silently vanish; and
+- returns the *same* `NOT_FOUND` for an unknown number and a malformed one, so it cannot be used as an
+  oracle. Revocation is soft.
+
+Certificates and admit cards are **print-friendly pages**, not server-generated PDFs: Puppeteer's
+bundled Chromium does not fit the current hosting tier, and print-to-PDF yields the same artefact.
+
+#### Decision loops
+
+- **Grievance / re-attempt** (`/support` → `/grievances`). Approving a `REATTEMPT` genuinely grants
+  one: the attempt is reset to `NOT_STARTED` and its answers deleted (an `Attempt` is unique per
+  student+instance, so there is no second row to create). That is destructive, so the original
+  submission — score, timestamps, answer count — is **snapshotted into the audit log before it is
+  cleared**. Decisions are one-shot.
+- **Refunds** (`refund/refund-eligibility.ts`, pure). The rule is the spec's: *before the cutoff
+  (48 h), and not once a slot booking is `CONFIRMED`*. It is evaluated at request time **and again on
+  approval** — a request that was eligible last week must not be paid out after the cutoff has since
+  passed. Approval issues immediately through the existing `PaymentService.adminRefund`; if Razorpay
+  fails the request stays `APPROVED` (retryable) rather than being marked `ISSUED`.
+- **Consent** is versioned (`CURRENT_CONSENT_VERSION`) and permanent; all three permissions are
+  mandatory, so a partial consent is rejected rather than stored.
+
+#### Surfaces
+
+| Actor | Routes / pages |
+|---|---|
+| Public | `GET /api/certificates/verify/:number`; student app `/verify/[number]` |
+| Student | `/consent`, `/certificates` (+ printable `[id]`), `/support` (grievance + refund), `/admit-card/[bookingId]` |
+| Admin | `/results` (normalize → release → certificates), `/grievances`, `/refunds` |
+
+#### Testing
+
+**77 backend tests pass** (`cd backend && npm test`) — 65 new across 5 suites. The pure modules
+(normalization, certificate numbering, refund eligibility) are exhaustively unit-tested; the grievance
+and results services are tested against hand-rolled in-memory Prisma fakes whose rows really mutate,
+so the re-attempt reset and the release gate are genuinely exercised rather than stubbed.
+
+Runtime E2E against the live backend confirmed: release-before-normalize → `409`; normalize → release
+→ certificates; **public verify with no auth** → `valid:true`; revoke → verify reports `REVOKED`;
+partial consent → `400`; grievance decided twice → `409`. (A real cohort of two 0/20 attempts
+exercised the zero-variance path exactly as unit-tested.) All E2E artefacts were removed from the
+shared database afterwards.
+
+**Not built, deliberately:** notifications (SMS/Email/WhatsApp — needs SES/DLT/Meta infrastructure),
+Aadhaar/KYC/OTP (skipped by request), and school↔admin custom-window approval (the school portal is
+still demo data — `apps/school-portal-web/src/lib/school-data.ts` is the seam).
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:

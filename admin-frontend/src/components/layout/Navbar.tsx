@@ -72,6 +72,24 @@ export default function Navbar() {
                 Analytics
               </a>
               <a
+                className={`nav-link ${pathname?.startsWith('/results') ? 'active' : ''}`}
+                onClick={() => router.push('/results')}
+              >
+                Results
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/grievances') ? 'active' : ''}`}
+                onClick={() => router.push('/grievances')}
+              >
+                Grievances
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/refunds') ? 'active' : ''}`}
+                onClick={() => router.push('/refunds')}
+              >
+                Refunds
+              </a>
+              <a
                 className={`nav-link ${pathname?.startsWith('/partners') ? 'active' : ''}`}
                 onClick={() => router.push('/partners')}
               >

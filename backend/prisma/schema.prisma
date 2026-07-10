@@ -30,6 +30,10 @@ model User {
   school          School?        @relation(fields: [schoolId], references: [id])
   bookings        Booking[]
   payments        Payment[]
+  certificates    Certificate[]
+  grievances      Grievance[]
+  refundRequests  RefundRequest[]
+  consents        Consent[]
 
   @@index([email])
   @@index([schoolId])
@@ -140,11 +144,17 @@ model ExamInstance {
   configKey        String?
   quitUrl          String?
   maxAttempts      Int                    @default(1)
+  /// Result-release gating (ADMIN-20). Results cannot be released until a
+  /// normalization run has completed; releasing is an audited human decision.
+  resultsNormalizedAt DateTime?
+  resultsReleasedAt   DateTime?
+  resultsReleasedBy   String?
   createdAt        DateTime               @default(now())
   attempts         Attempt[]
   slots            ExamSlot[]
   exam             Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
   slotAssignments  SchoolSlotAssignment[]
+  certificates     Certificate[]
 
   @@index([examId])
   @@index([startsAt, endsAt])
@@ -159,6 +169,13 @@ model Attempt {
   submittedAt       DateTime?
   totalScore        Float?
   maxScore          Float?
+  /// Fair-score processing (ADMIN-19). Written by the normalization run, never
+  /// by scoring. Null until the exam instance has been normalized.
+  normalizedScore   Float?
+  /// Textbook percentile rank ((L + 0.5E)/N * 100) over normalized scores.
+  percentile        Float?
+  /// Competition ranking (1 + count of strictly-better attempts); ties share a rank.
+  rank              Int?
   ipAddress         String?
   deviceFingerprint String?
   riskScore         Float?         @default(0)
@@ -167,6 +184,8 @@ model Attempt {
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   items             AttemptItem[]
   proctorEvents     ProctorEvent[]
+  certificate       Certificate?
+  grievances        Grievance[]
 
   @@unique([userId, examInstanceId])
   @@index([userId])
@@ -254,6 +273,117 @@ model PartnerRequest {
   updatedAt      DateTime             @updatedAt
 
   @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — results integrity chain, human decision loops, and consent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum GrievanceType {
+  GRIEVANCE
+  REATTEMPT
+}
+
+enum GrievanceStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  ISSUED
+}
+
+/// A certificate issued to a student for a submitted attempt on a RELEASED
+/// exam instance. `certificateNumber` is the public, human-shareable id used by
+/// the unauthenticated verification endpoint. Revocation is soft (anti-fraud).
+model Certificate {
+  id                String       @id @default(uuid())
+  certificateNumber String       @unique
+  attemptId         String       @unique
+  attempt           Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examInstanceId    String
+  examInstance      ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  score             Float
+  maxScore          Float
+  percentile        Float?
+  rank              Int?
+  issuedAt          DateTime     @default(now())
+  revokedAt         DateTime?
+  revokeReason      String?
+
+  @@index([userId])
+  @@index([examInstanceId])
+}
+
+/// A student-raised complaint or re-attempt request; decided by staff with a
+/// mandatory reason. Approving a REATTEMPT grants the student another attempt.
+model Grievance {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptId   String?
+  attempt     Attempt?        @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  type        GrievanceType   @default(GRIEVANCE)
+  subject     String
+  description String
+  status      GrievanceStatus @default(OPEN)
+  resolution  String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// A student-requested refund on a PAID payment. Eligibility is evaluated
+/// automatically at request time (before the cutoff, and not once a slot
+/// booking is CONFIRMED) and re-checked on approval.
+model RefundRequest {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId      String       @unique
+  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reason         String
+  status         RefundStatus @default(REQUESTED)
+  /// Snapshot of the automatic eligibility check at request time.
+  eligible       Boolean
+  eligibilityNote String?
+  decisionReason String?
+  decidedBy      String?
+  decidedAt      DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// Explicit, permanently stored consent (Student §6, DPDP). Versioned so a
+/// policy change can require re-consent without losing the historical record.
+model Consent {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version         String
+  dataProcessing  Boolean
+  mediaCapture    Boolean
+  proctoring      Boolean
+  acceptedAt      DateTime @default(now())
+  ipAddress       String?
+
+  @@unique([userId, version])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -508,6 +638,7 @@ model Payment {
   couponId            String?
   coupon              Coupon?       @relation(fields: [couponId], references: [id])
   booking             Booking?
+  refundRequest       RefundRequest?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 

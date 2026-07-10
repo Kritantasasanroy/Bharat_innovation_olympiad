@@ -46,6 +46,18 @@ export default function Navbar() {
               >
                 Results
               </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/certificates') ? 'active' : ''}`}
+                onClick={() => router.push('/certificates')}
+              >
+                Certificates
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/support') ? 'active' : ''}`}
+                onClick={() => router.push('/support')}
+              >
+                Support
+              </a>
             </>
           )}
           {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
