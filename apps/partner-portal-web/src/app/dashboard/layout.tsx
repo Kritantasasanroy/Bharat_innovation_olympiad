@@ -3,27 +3,24 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { DashboardNav } from "../../components/dashboard-nav";
-import { ApiError, portalApi } from "../../lib/api-client";
+import { type ApprovedPartner, ApiError, portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
-import type { PartnerApplication } from "../../lib/types";
 
 /**
  * Gate for the whole `/dashboard/*` tree (PRD-011: "Routes must be gated on
- * approved status; a partner with a SUBMITTED or REJECTED application should
- * not reach the dashboard").
+ * approved status").
  *
  * This is a client-side convenience redirect, not the real enforcement — the
  * real guarantee is server-side: every `/partner/*` dashboard route in
- * portal-api calls `requireApprovedPartner` and returns 403 for anything but
- * an APPROVED application (see
- * `services/portal-api/src/adapters/in/http/require-approved-partner.ts` and
- * its tests). This layout just avoids flashing dashboard chrome at a partner
- * who cannot use it.
+ * portal-api calls `requireApprovedPartner`, which reads the admin-api
+ * `Partner.status` on every request. So when staff REVOKE a partner, the next
+ * `getMe` here returns 403 and we bounce them out, even though their token is
+ * still cryptographically valid.
  */
 export default function DashboardLayout({ children }: { readonly children: ReactNode }) {
-	const { token } = useAuth();
+	const { token, signOut } = useAuth();
 	const router = useRouter();
-	const [application, setApplication] = useState<PartnerApplication | null>(null);
+	const [partner, setPartner] = useState<ApprovedPartner | null>(null);
 	const [checking, setChecking] = useState(true);
 
 	useEffect(() => {
@@ -35,30 +32,26 @@ export default function DashboardLayout({ children }: { readonly children: React
 
 		let cancelled = false;
 		portalApi
-			.getMyApplication(token)
+			.getMe(token)
 			.then((data) => {
 				if (cancelled) return;
-				if (data.status !== "APPROVED") {
-					router.replace("/apply");
-					return;
-				}
-				setApplication(data);
+				setPartner(data);
 				setChecking(false);
 			})
 			.catch((error: unknown) => {
 				if (cancelled) return;
-				if (error instanceof ApiError && error.statusCode === 404) {
-					router.replace("/apply");
-					return;
+				// 403 => not approved / revoked; 401 => bad or expired token.
+				if (error instanceof ApiError && error.statusCode === 401) {
+					signOut();
 				}
-				router.replace("/apply");
+				router.replace("/login");
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [token, router]);
+	}, [token, router, signOut]);
 
-	if (checking || !application) {
+	if (checking || !partner) {
 		return (
 			<main className="page">
 				<p className="muted">Checking your partner status…</p>
@@ -72,9 +65,19 @@ export default function DashboardLayout({ children }: { readonly children: React
 			<div className="dashboard-content">
 				<div className="top-bar">
 					<div>
-						<strong>{application.orgName}</strong>
+						<strong>{partner.orgName}</strong>
 						<span className="muted"> · Approved partner</span>
 					</div>
+					<button
+						type="button"
+						className="button button--secondary button--small"
+						onClick={() => {
+							signOut();
+							router.replace("/login");
+						}}
+					>
+						Sign out
+					</button>
 				</div>
 				{children}
 			</div>

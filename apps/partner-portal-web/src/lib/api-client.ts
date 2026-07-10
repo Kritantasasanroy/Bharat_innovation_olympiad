@@ -3,8 +3,6 @@ import type {
 	CampaignInput,
 	CampaignUpdateInput,
 	InstitutionPerformance,
-	PartnerApplication,
-	PartnerApplicationInput,
 	PartnerFunnel,
 	Statement,
 	StatementRequestInput,
@@ -12,8 +10,16 @@ import type {
 	SupportRequestInput,
 } from "./types";
 
-/** Base URL of the `services/portal-api` BFF this app talks to. */
+/** Base URL of the `services/portal-api` BFF this app talks to (dashboard data). */
 const PORTAL_API_URL = process.env.NEXT_PUBLIC_PORTAL_API_URL ?? "http://localhost:3300";
+
+/**
+ * Base URL of the legacy backend, which owns partner *authentication*:
+ * `POST /api/partner/apply` (public) and `POST /api/partner/login`. It is the
+ * only JWT signer in the platform, so the `role: PARTNER` token every
+ * portal-api call needs can only come from here.
+ */
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 interface ApiErrorBody {
 	readonly code: string;
@@ -70,16 +76,21 @@ async function request<T>(path: string, token: string | null, init: RequestInit 
 	return envelope.data;
 }
 
+/** The approved partner behind the current token (403 once access is revoked). */
+export interface ApprovedPartner {
+	readonly partnerId: string;
+	readonly orgName: string;
+	readonly email: string;
+}
+
 /** Typed client for every partner-facing portal-api route (PRD-011). */
 export const portalApi = {
-	getMyApplication: (token: string) =>
-		request<PartnerApplication>("/partner/applications/me", token),
-
-	submitApplication: (token: string, input: PartnerApplicationInput) =>
-		request<PartnerApplication>("/partner/applications", token, {
-			method: "POST",
-			body: JSON.stringify(input),
-		}),
+	/**
+	 * Identity for the dashboard shell. Applying and signing in now happen against
+	 * the backend (`backendApi`), so this is the only "who am I" call the portal
+	 * needs — and it 403s the instant staff revoke access.
+	 */
+	getMe: (token: string) => request<ApprovedPartner>("/partner/me", token),
 
 	getInstitutions: (token: string) =>
 		request<{ institutions: readonly InstitutionPerformance[] }>("/partner/institutions", token),
@@ -120,4 +131,64 @@ export const portalApi = {
 
 	listSupportRequests: (token: string) =>
 		request<SupportRequest[]>("/partner/support-requests", token),
+};
+
+// ── Backend (auth) ───────────────────────────────────────────────────────────
+
+export interface PartnerApplyInput {
+	readonly orgName: string;
+	readonly contactPerson: string;
+	readonly email: string;
+	readonly phone: string;
+	readonly password: string;
+}
+
+export interface PartnerLoginResult {
+	readonly accessToken: string;
+	readonly partner: { readonly id: string; readonly orgName: string; readonly email: string };
+}
+
+/** NestJS error envelope: `{ statusCode, message: string | string[], error }`. */
+interface NestErrorBody {
+	readonly statusCode?: number;
+	readonly message?: string | string[];
+	readonly error?: string;
+}
+
+async function backendRequest<T>(path: string, body: unknown): Promise<T> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	} catch {
+		throw new ApiError({
+			code: "NETWORK_ERROR",
+			message: `Could not reach the BIO backend at ${BACKEND_API_URL}. Is it running?`,
+			statusCode: 0,
+		});
+	}
+
+	const raw: unknown = await response.json().catch(() => null);
+	if (!response.ok) {
+		const err = (raw ?? {}) as NestErrorBody;
+		const message = Array.isArray(err.message)
+			? (err.message[0] ?? "Request failed.")
+			: (err.message ?? `Request failed with status ${response.status}.`);
+		throw new ApiError({ code: err.error ?? "REQUEST_FAILED", message, statusCode: response.status });
+	}
+	return raw as T;
+}
+
+/** Partner authentication against the legacy backend (public — no token needed). */
+export const backendApi = {
+	/** Self-service access request. No token required — this is the way in. */
+	apply: (input: PartnerApplyInput) =>
+		backendRequest<{ status: string; email: string; orgName: string }>("/partner/apply", input),
+
+	/** Email + password sign-in; only APPROVED partners receive a token. */
+	login: (email: string, password: string) =>
+		backendRequest<PartnerLoginResult>("/partner/login", { email, password }),
 };

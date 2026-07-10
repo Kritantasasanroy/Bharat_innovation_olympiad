@@ -19,6 +19,15 @@ import { requireApprovedPartner } from "./require-approved-partner";
 export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret: string) {
 	return new Elysia({ name: "partner-dashboard-routes", prefix: "/partner" })
 		.use(createAuthPlugin(jwtSecret))
+		/**
+		 * The approved-partner identity for the dashboard shell. Returns 403 the
+		 * moment staff revoke access, which is what the client uses to bounce a
+		 * revoked partner out of `/dashboard/*`.
+		 */
+		.get("/me", async ({ auth, token }) => {
+			const partner = await requireApprovedPartner(auth, adminApiClient, token);
+			return { success: true, data: partner };
+		})
 		.get("/institutions", async ({ auth, token }) => {
 			const application = await requireApprovedPartner(auth, adminApiClient, token);
 			const funnel = await adminApiClient.getFunnel(application.partnerId, token ?? "");

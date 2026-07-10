@@ -63,6 +63,30 @@ export const partnerRoutes = (container: PartnerContainer) =>
 				}),
 			},
 		)
+		.patch(
+			"/partners/:id/access",
+			async ({ params, body, auth }) => {
+				const user = requireAuth(auth);
+				assertStaffRole(user);
+				const data = await container.partnerApplicationService.setAccess({
+					partnerId: params.id,
+					status: body.status,
+					reason: body.reason,
+					decidedBy: user.userId,
+				});
+				return { success: true, data };
+			},
+			{
+				body: t.Object({
+					status: t.Union([
+						t.Literal("APPROVED"),
+						t.Literal("REJECTED"),
+						t.Literal("REVOKED"),
+					]),
+					reason: t.String(),
+				}),
+			},
+		)
 		.get("/partners/:id/funnel", async ({ params, auth }) => {
 			const user = requireAuth(auth);
 			assertOwnsPartner(user, params.id);

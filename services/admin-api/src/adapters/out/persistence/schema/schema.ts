@@ -17,7 +17,12 @@ import { integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "d
 
 const ts = (name: string) => timestamp(name, { mode: "date", precision: 3 });
 
-export const partnerStatus = pgEnum("PartnerStatus", ["PENDING", "APPROVED", "REJECTED"]);
+export const partnerStatus = pgEnum("PartnerStatus", [
+	"PENDING",
+	"APPROVED",
+	"REJECTED",
+	"REVOKED",
+]);
 export const applicationStatus = pgEnum("PartnerApplicationStatus", [
 	"SUBMITTED",
 	"APPROVED",

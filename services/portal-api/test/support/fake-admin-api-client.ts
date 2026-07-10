@@ -3,6 +3,7 @@ import type {
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
+	Partner,
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerFunnel,
@@ -28,12 +29,23 @@ export interface RecordedCall {
 export class FakeAdminApiClient implements AdminApiClient {
 	readonly calls: RecordedCall[] = [];
 	readonly #applications = new Map<string, PartnerApplication>();
+	readonly #partners = new Map<string, Partner>();
 	readonly #funnels = new Map<string, PartnerFunnel>();
 	readonly #campaigns = new Map<string, Campaign[]>();
 	readonly #statements = new Map<string, Statement[]>();
 
 	seedApplication(partnerId: string, application: PartnerApplication): void {
 		this.#applications.set(partnerId, application);
+	}
+
+	/**
+	 * Seed the Partner aggregate explicitly — used to exercise access states the
+	 * application status cannot express (notably `REVOKED`). When not seeded,
+	 * {@link getPartner} derives a Partner from the seeded application so the
+	 * existing application-based tests keep working unchanged.
+	 */
+	seedPartner(partnerId: string, partner: Partner): void {
+		this.#partners.set(partnerId, partner);
 	}
 
 	seedFunnel(partnerId: string, funnel: PartnerFunnel): void {
@@ -63,6 +75,27 @@ export class FakeAdminApiClient implements AdminApiClient {
 	getPartnerApplication(partnerId: string, token: string): Promise<PartnerApplication | null> {
 		this.calls.push({ method: "getPartnerApplication", partnerId, token });
 		return Promise.resolve(this.#applications.get(partnerId) ?? null);
+	}
+
+	getPartner(partnerId: string, token: string): Promise<Partner | null> {
+		this.calls.push({ method: "getPartner", partnerId, token });
+		const explicit = this.#partners.get(partnerId);
+		if (explicit) return Promise.resolve(explicit);
+
+		// Derive from the seeded application (SUBMITTED -> PENDING) so tests that
+		// only seed an application still gate correctly.
+		const application = this.#applications.get(partnerId);
+		if (!application) return Promise.resolve(null);
+		return Promise.resolve({
+			id: partnerId,
+			orgName: application.orgName,
+			contactPerson: application.contactPerson,
+			email: application.email,
+			phone: application.phone,
+			status: application.status === "SUBMITTED" ? "PENDING" : application.status,
+			commissionRatePct: 10,
+			createdAt: application.submittedAt,
+		});
 	}
 
 	getFunnel(partnerId: string, token: string): Promise<PartnerFunnel> {

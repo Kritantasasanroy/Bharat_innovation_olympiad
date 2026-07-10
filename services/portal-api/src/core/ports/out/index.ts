@@ -6,6 +6,8 @@ export type {
 	CampaignStatus,
 	CampaignUpdateInput,
 	InstitutionPerformance,
+	Partner,
+	PartnerAccessStatus,
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerApplicationStatus,

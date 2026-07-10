@@ -72,6 +72,12 @@ export default function Navbar() {
                 Analytics
               </a>
               <a
+                className={`nav-link ${pathname?.startsWith('/partners') ? 'active' : ''}`}
+                onClick={() => router.push('/partners')}
+              >
+                Partners
+              </a>
+              <a
                 className={`nav-link ${pathname?.startsWith('/proctor') ? 'active' : ''}`}
                 onClick={() => router.push('/proctor')}
               >

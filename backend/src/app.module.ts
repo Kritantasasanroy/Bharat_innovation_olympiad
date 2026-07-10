@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { S3Module } from './common/services/s3.module';
 import { ExamModule } from './exam/exam.module';
 import { HealthController } from './health.controller';
+import { PartnerModule } from './partner/partner.module';
 import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProctorModule } from './proctor/proctor.module';
@@ -25,6 +26,7 @@ import { UserModule } from './user/user.module';
         TimerModule,
         SlotModule,
         PaymentModule,
+        PartnerModule,
     ],
     controllers: [HealthController],
 })

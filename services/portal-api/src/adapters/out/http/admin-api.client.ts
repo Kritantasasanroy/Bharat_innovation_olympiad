@@ -4,6 +4,7 @@ import type {
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
+	Partner,
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerFunnel,
@@ -47,6 +48,20 @@ export class HttpAdminApiClient implements AdminApiClient {
 			return await this.#request<PartnerApplication>(
 				"GET",
 				`/partner-applications/${encodeURIComponent(partnerId)}`,
+				token,
+			);
+		} catch (error) {
+			if (error instanceof NotFoundError) return null;
+			throw error;
+		}
+	}
+
+	/** `GET /partners/:id` — the Partner aggregate whose `status` gates the dashboard. */
+	async getPartner(partnerId: string, token: string): Promise<Partner | null> {
+		try {
+			return await this.#request<Partner>(
+				"GET",
+				`/partners/${encodeURIComponent(partnerId)}`,
 				token,
 			);
 		} catch (error) {

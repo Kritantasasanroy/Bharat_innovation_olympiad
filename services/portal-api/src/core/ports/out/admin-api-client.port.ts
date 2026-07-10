@@ -63,6 +63,25 @@
 
 export type PartnerApplicationStatus = "SUBMITTED" | "APPROVED" | "REJECTED";
 
+/**
+ * Access status of the admin-api `Partner` aggregate. This — not the
+ * application status — is the authoritative dashboard gate: staff drive it via
+ * admin-api `PATCH /partners/:id/access`, so a REVOKED partner loses access on
+ * their very next request even with a still-valid token.
+ */
+export type PartnerAccessStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+
+export interface Partner {
+	readonly id: string;
+	readonly orgName: string;
+	readonly contactPerson: string;
+	readonly email: string;
+	readonly phone: string;
+	readonly status: PartnerAccessStatus;
+	readonly commissionRatePct: number;
+	readonly createdAt: string;
+}
+
 export interface PartnerApplicationInput {
 	readonly orgName: string;
 	readonly contactPerson: string;
@@ -171,6 +190,9 @@ export interface AdminApiClient {
 	): Promise<PartnerApplication>;
 
 	getPartnerApplication(partnerId: string, token: string): Promise<PartnerApplication | null>;
+
+	/** The Partner aggregate — its `status` is the dashboard access gate. */
+	getPartner(partnerId: string, token: string): Promise<Partner | null>;
 
 	getFunnel(partnerId: string, token: string): Promise<PartnerFunnel>;
 

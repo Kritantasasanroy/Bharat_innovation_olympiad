@@ -2,43 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ApiError, portalApi } from "../lib/api-client";
+import { useEffect } from "react";
 import { useAuth } from "../lib/auth-context";
 
 export default function HomePage() {
 	const { token, claims } = useAuth();
 	const router = useRouter();
-	const [checking, setChecking] = useState(true);
 
 	useEffect(() => {
 		if (token === undefined) return; // still hydrating from localStorage
-		if (!token) {
-			setChecking(false);
-			return;
-		}
+		if (token && claims?.role === "PARTNER") router.replace("/dashboard");
+	}, [token, claims, router]);
 
-		let cancelled = false;
-		portalApi
-			.getMyApplication(token)
-			.then((application) => {
-				if (cancelled) return;
-				router.replace(application.status === "APPROVED" ? "/dashboard" : "/apply");
-			})
-			.catch((error: unknown) => {
-				if (cancelled) return;
-				if (error instanceof ApiError && error.statusCode === 404) {
-					router.replace("/apply");
-					return;
-				}
-				setChecking(false);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [token, router]);
-
-	if (token === undefined || (token && checking)) {
+	if (token === undefined) {
 		return (
 			<main className="page">
 				<p className="muted">Loading…</p>
@@ -66,12 +42,18 @@ export default function HomePage() {
 			<div className="card">
 				<h2>Get started</h2>
 				<p className="muted">
-					New partners submit an onboarding application; approved partners get a dashboard with
-					their assigned institutions, referral links, conversion funnel, and payouts.
+					New partners request access with their organisation details and a password. Once our team
+					approves the request, sign in to get your dashboard: assigned institutions, referral
+					links, conversion funnel, and payouts.
 				</p>
-				<Link href="/login" className="button">
-					Sign in
-				</Link>
+				<div className="inline" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+					<Link href="/apply" className="button">
+						Request access
+					</Link>
+					<Link href="/login" className="button button--secondary">
+						Sign in
+					</Link>
+				</div>
 			</div>
 		</main>
 	);

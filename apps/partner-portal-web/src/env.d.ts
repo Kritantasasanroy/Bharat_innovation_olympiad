@@ -11,6 +11,8 @@
 declare namespace NodeJS {
 	interface ProcessEnv {
 		readonly NEXT_PUBLIC_PORTAL_API_URL?: string;
+		/** Legacy backend base URL — owns partner apply + login (the only JWT signer). */
+		readonly NEXT_PUBLIC_API_URL?: string;
 		readonly NEXT_PUBLIC_PARTNER_SUPPORT_EMAIL?: string;
 	}
 }

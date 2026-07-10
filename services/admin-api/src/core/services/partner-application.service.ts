@@ -1,5 +1,5 @@
 import { ApplicationStatus, PartnerStatus } from "../domain/partner-enums";
-import type { PartnerApplication } from "../domain/partner-models";
+import type { Partner, PartnerApplication } from "../domain/partner-models";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import type {
 	DecidePartnerApplicationInput,
@@ -155,6 +155,48 @@ export class PartnerApplicationService {
 		});
 
 		return decided;
+	}
+
+	/**
+	 * Staff access hook — set a partner's access status directly
+	 * (`APPROVED` | `REJECTED` | `REVOKED`), audited with a mandatory reason.
+	 *
+	 * Unlike {@link decide} (the one-shot application decision), this operates on
+	 * the Partner aggregate and is idempotent/repeatable, so staff can revoke a
+	 * previously-approved partner and re-grant later. `Partner.status` is the
+	 * single gate the partner dashboard reads (portal-api `requireApprovedPartner`),
+	 * so a REVOKE here removes access on the partner's very next request.
+	 *
+	 * No contract event is published (the status set is an operational access
+	 * change, not a first onboarding decision) — the audit record is the trail.
+	 */
+	async setAccess(input: {
+		readonly partnerId: string;
+		readonly status: PartnerStatus;
+		readonly reason: string;
+		readonly decidedBy: string;
+	}): Promise<Partner> {
+		assertNonEmpty("partnerId", input.partnerId);
+		assertNonEmpty("reason", input.reason);
+		assertNonEmpty("decidedBy", input.decidedBy);
+
+		const partner = await this.deps.partners.findById(input.partnerId);
+		if (!partner) throw new NotFoundError("Partner", input.partnerId);
+
+		const now = this.deps.clock.now();
+		const updated = await this.deps.partners.updateStatus(input.partnerId, input.status);
+		if (!updated) throw new NotFoundError("Partner", input.partnerId);
+
+		await this.deps.audit.record({
+			action: `partner.access.${input.status.toLowerCase()}`,
+			actor: { id: input.decidedBy, type: "user" },
+			resource: { type: "partner", id: input.partnerId },
+			outcome: "success",
+			occurredAt: now.toISOString(),
+			metadata: { reason: input.reason, previousStatus: partner.status },
+		});
+
+		return updated;
 	}
 
 	private async publish(event: PartnerDomainEvent): Promise<void> {

@@ -4,11 +4,15 @@
  */
 
 /** Status of a `Partner` aggregate. A partner is created (PENDING) alongside
- * its onboarding application, and flips to APPROVED/REJECTED when staff decide. */
+ * its onboarding application, flips to APPROVED/REJECTED when staff decide, and
+ * can later be REVOKED (access removed) or re-granted (back to APPROVED) via the
+ * staff access hook (`PATCH /partners/:id/access`). REVOKED is the immediate,
+ * per-request gate the partner dashboard checks. */
 export const PartnerStatus = {
 	PENDING: "PENDING",
 	APPROVED: "APPROVED",
 	REJECTED: "REJECTED",
+	REVOKED: "REVOKED",
 } as const;
 export type PartnerStatus = (typeof PartnerStatus)[keyof typeof PartnerStatus];
 

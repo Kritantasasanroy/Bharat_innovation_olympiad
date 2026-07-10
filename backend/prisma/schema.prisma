@@ -218,6 +218,176 @@ enum Role {
   PARENT
   ADMIN
   SUPER_ADMIN
+  PARTNER
+}
+
+enum PartnerRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+/// Backend-owned partner credential + access-review record. The legacy backend
+/// is the only JWT signer, so it owns partner login (email + password). The
+/// admin-api partner ENGINE (funnel/campaigns/payouts, Drizzle tables) stays
+/// separate and is reached over HTTP; `partnerId` is the admin-api Partner.id
+/// and is used as the partner JWT `sub` so `sub === partnerId` everywhere.
+model PartnerRequest {
+  id             String               @id @default(uuid())
+  orgName        String
+  contactPerson  String
+  email          String               @unique
+  phone          String
+  passwordHash   String
+  status         PartnerRequestStatus @default(PENDING)
+  partnerId      String? // admin-api Partner.id (also the JWT sub once issued)
+  applicationId  String? // admin-api PartnerApplication.id
+  decisionReason String?
+  decidedBy      String?
+  decidedAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Partner Attribution, Commission & Payout Engine (PRD-046).
+//
+// These tables are READ AND WRITTEN BY `services/admin-api` via Drizzle, not by
+// this backend. They are declared here ONLY so Prisma knows they exist:
+// `prisma db push` reconciles the database to this schema and DROPS any table
+// it does not know about — and the production backend's start command runs
+// `prisma db push --accept-data-loss`. Without these models, every backend
+// deploy would silently wipe the partner engine.
+//
+// Keep in exact sync with
+// `services/admin-api/src/adapters/out/persistence/schema/schema.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+enum PartnerApplicationStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum CampaignStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum AttributionStatus {
+  OPEN
+  CREDITED
+}
+
+enum AttributionRule {
+  LINK_FIRST_TOUCH
+  COUPON_ONLY
+  LINK_ONLY
+}
+
+enum CommissionStatementStatus {
+  ISSUED
+}
+
+enum PayoutStatus {
+  PENDING
+  SIGNED_OFF
+  RELEASED
+}
+
+model Partner {
+  id                String        @id
+  orgName           String
+  contactPerson     String
+  email             String
+  phone             String
+  commissionRatePct Int
+  status            PartnerStatus @default(PENDING)
+  createdAt         DateTime      @default(now()) @db.Timestamp(3)
+}
+
+model PartnerApplication {
+  id             String                   @id
+  partnerId      String
+  orgName        String
+  contactPerson  String
+  email          String
+  phone          String
+  status         PartnerApplicationStatus @default(SUBMITTED)
+  decisionReason String?
+  decidedBy      String?
+  decidedAt      DateTime?                @db.Timestamp(3)
+  createdAt      DateTime                 @default(now()) @db.Timestamp(3)
+}
+
+model Campaign {
+  id           String         @id
+  partnerId    String
+  name         String
+  linkToken    String         @unique(map: "campaign_link_token_key")
+  referralCode String         @unique(map: "campaign_referral_code_key")
+  status       CampaignStatus @default(ACTIVE)
+  caps         Json?
+  createdAt    DateTime       @default(now()) @db.Timestamp(3)
+}
+
+model AttributionRecord {
+  id             String            @id
+  partnerId      String
+  campaignId     String
+  studentId      String
+  registrationId String?
+  status         AttributionStatus @default(OPEN)
+  ruleApplied    AttributionRule?
+  amountPaise    Int?
+  convertedAt    DateTime?         @db.Timestamp(3)
+  createdAt      DateTime          @default(now()) @db.Timestamp(3)
+
+  @@unique([partnerId, studentId, registrationId], map: "attribution_partner_student_registration_key")
+}
+
+model CommissionStatement {
+  id            String                    @id
+  partnerId     String
+  period        String
+  version       Int
+  lineItemsJson Json
+  totalPaise    Int
+  status        CommissionStatementStatus @default(ISSUED)
+  issuedAt      DateTime                  @default(now()) @db.Timestamp(3)
+
+  @@unique([partnerId, period, version], map: "statement_partner_period_version_key")
+}
+
+model PayoutLedgerEntry {
+  id                     String       @id
+  partnerId              String
+  statementId            String
+  amountPaise            Int
+  status                 PayoutStatus @default(PENDING)
+  financeSignOffApprover String?
+  financeSignOffAt       DateTime?    @db.Timestamp(3)
+  reason                 String?
+  createdAt              DateTime     @default(now()) @db.Timestamp(3)
+}
+
+model PartnerInstitutionAssignment {
+  id            String    @id
+  partnerId     String
+  institutionId String
+  effectiveFrom DateTime  @default(now()) @db.Timestamp(3)
+  effectiveTo   DateTime? @db.Timestamp(3)
+  assignedBy    String
 }
 
 enum QuestionType {

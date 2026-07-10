@@ -1,66 +1,83 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { ApiError, backendApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 
 /**
- * Token entry.
+ * Partner sign-in — email + password.
  *
- * PRD-011 explicitly delegates auth: "Partner accounts authenticate via the
- * SAME shared JWT... you do not need to build new auth infrastructure."
- * There is no partner-specific login flow anywhere in the org yet (see
- * `frontend/src/store/authStore.ts` for the one that exists for students:
- * Neon Auth OTP -> `POST /auth/login-sync` -> a signed `{sub,email,role}`
- * HS256 token). Until that (or an equivalent SSO front door) is wired up for
- * partners specifically, this page is the front door: paste the shared JWT
- * you already have, and every subsequent page attaches it as
- * `Authorization: Bearer <token>` on calls to portal-api, which verifies it
- * the same way `exam-api` does.
+ * The legacy backend is the platform's only JWT signer, so it owns partner
+ * login (`POST /api/partner/login`) and returns a `role: PARTNER` token whose
+ * `sub` is the admin-api partnerId. Only an APPROVED partner gets a token;
+ * PENDING/REJECTED/REVOKED are rejected with a clear message.
  */
 export default function LoginPage() {
 	const { setToken } = useAuth();
 	const router = useRouter();
-	const [value, setValue] = useState("");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
+	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	function handleSubmit(event: FormEvent<HTMLFormElement>) {
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const trimmed = value.trim();
-		if (trimmed.split(".").length !== 3) {
-			setError("That doesn't look like a JWT (expected header.payload.signature).");
-			return;
+		setSubmitting(true);
+		setError(null);
+		try {
+			const result = await backendApi.login(email.trim(), password);
+			setToken(result.accessToken);
+			router.push("/dashboard");
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not sign you in.");
+		} finally {
+			setSubmitting(false);
 		}
-		setToken(trimmed);
-		router.push("/");
 	}
 
 	return (
 		<main className="page">
 			<div className="page-header">
-				<h1>Sign in</h1>
-				<p>
-					Paste your BIO platform access token (the shared JWT issued to your partner account).
-					portal-api verifies it on every request — nothing is trusted from this form beyond the
-					token itself.
-				</p>
+				<h1>Partner sign in</h1>
+				<p>Use the email and password from your approved partner access request.</p>
 			</div>
-			<form className="form-grid" onSubmit={handleSubmit}>
-				<div>
-					<label htmlFor="token">Access token</label>
-					<textarea
-						id="token"
-						value={value}
-						onChange={(event) => setValue(event.target.value)}
-						placeholder="eyJhbGciOi..."
-						required
-					/>
-				</div>
-				{error ? <div className="notice notice--error">{error}</div> : null}
-				<button type="submit" className="button">
-					Continue
-				</button>
-			</form>
+
+			<div className="card" style={{ maxWidth: 480 }}>
+				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
+					<div>
+						<label htmlFor="email">Email</label>
+						<input
+							id="email"
+							type="email"
+							required
+							autoComplete="email"
+							value={email}
+							onChange={(event) => setEmail(event.target.value)}
+						/>
+					</div>
+					<div>
+						<label htmlFor="password">Password</label>
+						<input
+							id="password"
+							type="password"
+							required
+							autoComplete="current-password"
+							value={password}
+							onChange={(event) => setPassword(event.target.value)}
+						/>
+					</div>
+					{error ? <div className="notice notice--error">{error}</div> : null}
+					<button type="submit" className="button" disabled={submitting}>
+						{submitting ? "Signing in…" : "Sign in"}
+					</button>
+				</form>
+			</div>
+
+			<p className="muted" style={{ marginTop: "1rem" }}>
+				New partner? <Link href="/apply">Request access</Link>.
+			</p>
 		</main>
 	);
 }
