@@ -651,6 +651,91 @@ card is copied out of the admin UI by hand rather than emailed.
 
 ---
 
+### 0.21 Real school directory, functional school portal, partner onboarding (2026-07-10)
+
+The school side of the platform was cosmetic in two places and outright broken in a third. All three
+are now real.
+
+#### The student "Invalid school code" bug
+
+The register page (`frontend/src/app/register/page.tsx`) shipped a hard-coded `schools.json` of 25
+schools whose codes were `SCH001`, `SCH002`… The database issues codes like `SCH-1T8GMH`. So the
+moment a student picked a school and submitted, `auth/sync` looked the code up, found nothing, and
+threw `Invalid school code` — the exact error in the report. The static file could never match live
+data, and no onboarded school ever appeared in it.
+
+The fix is a **live directory** — the `School` table, exposed at `GET /api/schools`:
+
+- `GET /api/schools?q=` — search by name, city or pincode, case-insensitive. Empty query lists
+  onboarded schools first.
+- `GET /api/schools/by-code/:code` — resolve a school's issued code, tolerant of case, spacing and a
+  missing hyphen (`normalizeSchoolCode`).
+- `POST /api/schools/add` — "my school isn't listed": add it by **name + pincode only**. City and
+  state come from the pincode (never the student), so two people adding the same school agree on
+  where it is.
+
+The new `SchoolPicker` component gives the student all three: search, code entry, or add. An onboarded
+school shows up the instant staff approve it, because the directory *is* the table — there is no
+separate list to sync.
+
+#### No duplicate schools
+
+`School` gains `nameKey` (a normalised name — lowercased, apostrophes dropped, non-alphanumerics
+collapsed) and `pincode`, with **`@@unique([nameKey, pincode])`**. `addToDirectory` checks that key
+first and returns the existing row; if a concurrent insert still wins, the `P2002` is caught and the
+existing row returned. A `P2002` on any *other* column (e.g. `code`) is rethrown — swallowing it, or
+retrying forever, would hide a real bug.
+
+Pincode → city/state is `PincodeService`, backed by India Post's public directory, **proxied through
+the backend** (`GET /api/geo/pincode/:pin`) so one process-lifetime cache serves every visitor and the
+upstream stays off our CORS surface. A hit is cached (pincodes never change); a failure is not (an
+outage must not poison the cache).
+
+#### The school portal is no longer demo data
+
+`school-data.ts` is deleted. Every dashboard page reads live, **JWT-scoped** data from
+`/api/school/portal/*` — the `schoolId` comes off the token, so a coordinator can never address
+another school. `SchoolPortalService` is **read-only except one method**: `registerStudents`, the
+single write a school is trusted with. It adds students to *its own* roster as invited `User` rows
+(`invitedAt`, no account until the student registers with that email), and:
+
+- **never overwrites an existing account** — an email already on the platform is reported, not seized;
+- **never moves another school's student** — "already registered elsewhere" is distinct from "already
+  on your roster";
+- de-dupes within a single CSV upload.
+
+Everything else — profile, slots, monitoring, results — is a view. Results only ever include attempts
+whose exam has been *released*, so a school cannot see scores before its students do; and an
+auto-submitted attempt counts as completed (counting only `SUBMITTED` under-reports every school).
+
+#### Partners onboard schools
+
+`PartnerJwtGuard` authenticates a `role: PARTNER` token (which `JwtAuthGuard` cannot, since its `sub`
+is a `Partner.id`, not a user) and re-checks the partner is still APPROVED every request.
+`POST /api/partner/schools` submits a school on its behalf into the **same** admin queue a
+self-applying school lands in, tagged `submittedByPartnerId`. The partner sees status and the eventual
+school code — but **never the access token**, which goes to the school's own coordinator.
+
+#### Approval adopts, rather than duplicates
+
+Because a student may add a school before it is onboarded, approval matches on `(nameKey, pincode)`
+and **adopts that row** — updating it in place, keeping the code students already hold, setting
+`onboardedAt` — instead of creating a second one (which the unique index would reject anyway).
+
+#### Migration safety
+
+The schema change is additive, but there was live data (one real school the user created). Rather than
+`db push --force-reset` (which drops the database), a hand-written migration added the columns
+nullable, backfilled `nameKey`/`pincode`/`onboardedAt`/`activatedAt` from existing rows, then applied
+`NOT NULL`. Verified `prisma migrate diff` emitted no `DROP`, and confirmed all 7 mirrored engine
+tables plus the live school survived.
+
+**45 new tests, 161 total.** Still deferred: the handover card is still copied by hand (no email), and
+custom exam-window requests aren't built (schools view their allocated windows, they don't request new
+ones — consistent with read-only).
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
