@@ -9,6 +9,8 @@ export interface Config {
 	readonly partnerSupportEmail: string;
 	/** Student app base URL used to build a campaign's shareable `?ref=` link. */
 	readonly studentAppUrl: string;
+	/** School portal base URL used to build a campaign's school-onboarding `?ref=` link. */
+	readonly schoolAppUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -19,6 +21,7 @@ export function loadConfig(): Config {
 		corsOrigin: process.env["CORS_ORIGIN"] ?? true,
 		partnerSupportEmail: process.env["PARTNER_SUPPORT_EMAIL"] ?? "partners@bio.example.com",
 		studentAppUrl: process.env["STUDENT_APP_URL"] ?? "http://localhost:3000",
+		schoolAppUrl: process.env["SCHOOL_APP_URL"] ?? "http://localhost:3500",
 	};
 }
 

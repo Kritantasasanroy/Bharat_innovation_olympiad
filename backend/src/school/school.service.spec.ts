@@ -103,9 +103,18 @@ const APPLICATION = {
     coordinatorPhone: '+919812345678',
 };
 
-function setup() {
+/**
+ * Fake engine client. `resolvePartnerIdByReferralCode` is best-effort: the real
+ * one returns null for an unknown/inactive code and never throws. Tests can
+ * override the resolver per case.
+ */
+function createFakeAdminApi(resolve: (code: string) => Promise<string | null> = async () => null) {
+    return { resolvePartnerIdByReferralCode: jest.fn(resolve) } as any;
+}
+
+function setup(adminApi = createFakeAdminApi()) {
     const db = createFakeDb();
-    return { ...db, service: new SchoolService(db.prisma, jwt) };
+    return { ...db, adminApi, service: new SchoolService(db.prisma, jwt, adminApi) };
 }
 
 /**
@@ -244,6 +253,41 @@ describe('decide — approval', () => {
         await service.apply(APPLICATION as any);
 
         expect(schoolRequests[0].submittedByPartnerId).toBeNull();
+    });
+
+    it('attributes a campaign referral code to its partner', async () => {
+        const adminApi = createFakeAdminApi(async (code) =>
+            code === 'ref_good' ? 'partner-from-campaign' : null,
+        );
+        const { service, schoolRequests } = setup(adminApi);
+
+        await service.apply({ ...APPLICATION, referralCode: 'ref_good' } as any);
+
+        expect(adminApi.resolvePartnerIdByReferralCode).toHaveBeenCalledWith('ref_good');
+        expect(schoolRequests[0].submittedByPartnerId).toBe('partner-from-campaign');
+        expect(schoolRequests[0].submittedViaReferralCode).toBe('ref_good');
+    });
+
+    it('ignores an unresolvable code without failing the application', async () => {
+        // The resolver returns null for an unknown/inactive code; apply must succeed.
+        const { service, schoolRequests } = setup(createFakeAdminApi(async () => null));
+
+        const result = await service.apply({ ...APPLICATION, referralCode: 'ref_bad' } as any);
+
+        expect(result.status).toBe('PENDING');
+        expect(schoolRequests[0].submittedByPartnerId).toBeNull();
+        expect(schoolRequests[0].submittedViaReferralCode).toBeNull();
+    });
+
+    it('does not resolve a code when a partner already onboarded directly', async () => {
+        const adminApi = createFakeAdminApi(async () => 'should-not-be-used');
+        const { service, schoolRequests } = setup(adminApi);
+
+        // The authenticated /partner/schools path passes submittedByPartnerId.
+        await service.apply({ ...APPLICATION, referralCode: 'ref_good' } as any, 'direct-partner');
+
+        expect(adminApi.resolvePartnerIdByReferralCode).not.toHaveBeenCalled();
+        expect(schoolRequests[0].submittedByPartnerId).toBe('direct-partner');
     });
 
     it('rejecting an unprovisioned request creates no school or user', async () => {

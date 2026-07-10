@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { ApiError, backendApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 
@@ -45,6 +46,9 @@ export default function LoginPage() {
 
 	return (
 		<main className="page">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
 			<div className="page-header">
 				<h1>Partner sign in</h1>
 				<p>Use the password from your access request, or the access token BIO issued you.</p>

@@ -75,13 +75,23 @@ export class SchoolSlotService {
         });
     }
 
-    /** Runs auto-allocation for every currently-unbooked STUDENT of a school against one exam instance. Idempotent — safe to re-run (e.g. after the assignment changes or as a manual backfill). */
+    /**
+     * Runs auto-allocation for every currently-unbooked **eligible** STUDENT of a
+     * school against one exam instance. "Eligible" means the student's class is
+     * one the exam accepts (`Exam.classBands`) — a Class-6 student is not swept
+     * into a Class-9-only exam's slot. Idempotent; safe to re-run.
+     */
     async runAllocationForSchool(
         schoolId: string,
         examInstanceId: string,
     ): Promise<Record<string, AllocationOutcome>> {
+        const classBands = await this.eligibleClassBands(examInstanceId);
         const students = await this.prisma.user.findMany({
-            where: { schoolId, role: Role.STUDENT },
+            where: {
+                schoolId,
+                role: Role.STUDENT,
+                ...(classBands ? { classBand: { in: classBands } } : {}),
+            },
             select: { id: true },
         });
 
@@ -90,6 +100,15 @@ export class SchoolSlotService {
             results[student.id] = await this.autoAllocateStudent(student.id, examInstanceId);
         }
         return results;
+    }
+
+    /** The class bands an instance's exam accepts, or `null` if the instance is gone. */
+    private async eligibleClassBands(examInstanceId: string): Promise<number[] | null> {
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: examInstanceId },
+            select: { exam: { select: { classBands: true } } },
+        });
+        return instance?.exam.classBands ?? null;
     }
 
     /** Runs auto-allocation for one newly-registered student against every exam instance their school already has an assignment for. */
@@ -225,5 +244,168 @@ export class SchoolSlotService {
             }
         }
         return { total: bookings.length, succeeded, failed };
+    }
+
+    /**
+     * Books one student into a specific slot, atomically. Returns false when the
+     * slot is full (the same `UPDATE ... WHERE booked < capacity` guard the rest
+     * of this service uses, so two concurrent placements can't oversell it).
+     */
+    private async bookIntoSlot(
+        userId: string,
+        slotId: string,
+        capacity: number,
+        confirmed: boolean,
+    ): Promise<boolean> {
+        return this.prisma.$transaction(async (tx) => {
+            const claim = await tx.examSlot.updateMany({
+                where: { id: slotId, booked: { lt: capacity } },
+                data: { booked: { increment: 1 } },
+            });
+            if (claim.count === 0) return false;
+            await tx.booking.create({
+                data: {
+                    userId,
+                    slotId,
+                    status: confirmed ? BookingStatus.CONFIRMED : BookingStatus.PENDING,
+                },
+            });
+            return true;
+        });
+    }
+
+    /**
+     * Auto-assigns every eligible student across an exam instance's slots, in one
+     * pass, when the exam is created (or on demand afterwards).
+     *
+     * The rules the admin asked for:
+     *  - **Same school, same slot** — a school's students are kept together, and
+     *    the school is pinned to that slot via a `SchoolSlotAssignment` so later
+     *    registrations from the same school land there too.
+     *  - **Balance, not pile-up** — schools are placed into the emptiest slot that
+     *    fits them (largest schools first), so no single slot is crowded while
+     *    others sit empty.
+     *  - **Overflow** — a school too big for any one slot fills its primary slot,
+     *    then spills the remainder into the next-emptiest slots.
+     *
+     * Eligibility is the exam's `classBands`. A student already booked for this
+     * instance (e.g. a manual pick) is left alone. Capacity is never oversold —
+     * every booking goes through the atomic guard, and an in-memory capacity
+     * mirror only decides *preference*, not permission.
+     */
+    async autoDistributeInstance(
+        examInstanceId: string,
+        options: { classBandFilter?: boolean } = {},
+    ) {
+        const classBandFilter = options.classBandFilter ?? true;
+
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: examInstanceId },
+            include: { exam: { select: { classBands: true, feeAmount: true } } },
+        });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const now = new Date();
+        const confirmed = (instance.exam.feeAmount ?? 0) === 0;
+
+        // Slots that can still take bookings, most-open first is decided per-step.
+        const slots = (
+            await this.prisma.examSlot.findMany({
+                where: { examInstanceId },
+                orderBy: { startsAt: 'asc' },
+            })
+        )
+            .filter((s) => s.endsAt > now)
+            .map((s) => ({ id: s.id, capacity: s.capacity, remaining: s.capacity - s.booked }));
+
+        if (slots.length === 0) {
+            throw new BadRequestException('This exam instance has no upcoming slots to fill.');
+        }
+
+        const students = await this.prisma.user.findMany({
+            where: {
+                role: Role.STUDENT,
+                ...(classBandFilter ? { classBand: { in: instance.exam.classBands } } : {}),
+            },
+            select: { id: true, schoolId: true },
+        });
+
+        // Students already booked for this instance keep their slot.
+        const existing = await this.prisma.booking.findMany({
+            where: {
+                status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+                slot: { examInstanceId },
+            },
+            select: { userId: true },
+        });
+        const alreadyBooked = new Set(existing.map((b) => b.userId));
+
+        const bySchool = new Map<string | null, string[]>();
+        for (const s of students) {
+            if (alreadyBooked.has(s.id)) continue;
+            const key = s.schoolId;
+            const list = bySchool.get(key) ?? [];
+            list.push(s.id);
+            bySchool.set(key, list);
+        }
+
+        const summary = { allocated: 0, overflowed: 0, noCapacity: 0, skippedAlreadyBooked: alreadyBooked.size };
+
+        // The emptiest slot first, so a student overflows into the least-crowded one.
+        const byRemaining = () => [...slots].sort((a, b) => b.remaining - a.remaining);
+
+        // ── Schools: largest first, kept together where possible ──────────────
+        const schoolGroups = [...bySchool.entries()]
+            .filter(([schoolId]) => schoolId !== null)
+            .sort((a, b) => b[1].length - a[1].length) as [string, string[]][];
+
+        for (const [schoolId, studentIds] of schoolGroups) {
+            // Primary slot: the emptiest that fits the whole school, else the emptiest.
+            const sorted = byRemaining();
+            const fits = sorted.find((s) => s.remaining >= studentIds.length);
+            const primary = fits ?? sorted[0];
+
+            await this.prisma.schoolSlotAssignment.upsert({
+                where: { schoolId_examInstanceId: { schoolId, examInstanceId } },
+                update: { slotId: primary.id },
+                create: { schoolId, examInstanceId, slotId: primary.id },
+            });
+
+            for (const userId of studentIds) {
+                // Prefer the school's primary slot; overflow into the next-emptiest.
+                const order = [primary, ...byRemaining().filter((s) => s.id !== primary.id)];
+                let placed = false;
+                for (const slot of order) {
+                    if (slot.remaining <= 0) continue;
+                    const ok = await this.bookIntoSlot(userId, slot.id, slot.capacity, confirmed);
+                    if (ok) {
+                        slot.remaining -= 1;
+                        placed = true;
+                        if (slot.id === primary.id) summary.allocated += 1;
+                        else summary.overflowed += 1;
+                        break;
+                    }
+                }
+                if (!placed) summary.noCapacity += 1;
+            }
+        }
+
+        // ── Independent students (no school): singletons, spread evenly ───────
+        for (const userId of bySchool.get(null) ?? []) {
+            let placed = false;
+            for (const slot of byRemaining()) {
+                if (slot.remaining <= 0) continue;
+                const ok = await this.bookIntoSlot(userId, slot.id, slot.capacity, confirmed);
+                if (ok) {
+                    slot.remaining -= 1;
+                    placed = true;
+                    summary.allocated += 1;
+                    break;
+                }
+            }
+            if (!placed) summary.noCapacity += 1;
+        }
+
+        return summary;
     }
 }

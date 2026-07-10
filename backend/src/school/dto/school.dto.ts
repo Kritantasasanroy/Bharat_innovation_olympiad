@@ -54,6 +54,13 @@ export class ApplySchoolDto {
     @IsString()
     @IsNotEmpty()
     coordinatorPhone: string;
+
+    /// The campaign referral code the school arrived on (`/activate?ref=CODE`),
+    /// if it followed a partner's onboarding link. Resolved to the partner at
+    /// apply time; a bad code is ignored, never an error.
+    @IsOptional()
+    @IsString()
+    referralCode?: string;
 }
 
 export class SchoolLoginDto {

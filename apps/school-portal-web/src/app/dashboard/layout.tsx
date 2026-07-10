@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { SchoolNav } from "../../components/school-nav";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 import { useResource } from "../../lib/use-resource";
@@ -45,6 +46,7 @@ export default function DashboardLayout({ children }: { readonly children: React
 						<span className="badge badge--positive">
 							{profile?.status === "PENDING" ? "Pending" : "Active"}
 						</span>
+						<ThemeToggle />
 						<button
 							type="button"
 							className="button button--secondary button--small"

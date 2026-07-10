@@ -115,10 +115,15 @@ export default function CampaignsPage() {
 									</button>
 								</div>
 								<CopyField label="Code" value={campaign.code} />
-								<CopyField label="Share link" value={campaign.shareUrl} />
+								<CopyField label="Student link" value={campaign.shareUrl} />
 								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
-									Share this link. A student who lands on it and registers is credited to this
-									campaign — and so is their payment.
+									A student who lands on this link and registers is credited to this campaign — and
+									so is their payment.
+								</p>
+								<CopyField label="School onboarding link" value={campaign.schoolShareUrl} />
+								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
+									Send this to a school. A school that activates through it is attributed to you in
+									the admin review queue.
 								</p>
 								<div className="stat-row" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
 									<div className="stat-tile">

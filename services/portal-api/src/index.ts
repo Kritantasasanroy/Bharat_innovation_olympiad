@@ -5,7 +5,12 @@ import { logger } from "./infra";
 import { config } from "./infra/config";
 
 export const app = buildApp({
-	adminApiClient: new HttpAdminApiClient(config.adminApiUrl, config.studentAppUrl),
+	adminApiClient: new HttpAdminApiClient(
+		config.adminApiUrl,
+		config.studentAppUrl,
+		fetch,
+		config.schoolAppUrl,
+	),
 	supportRequestRepository: new InMemorySupportRequestRepository(),
 	jwtSecret: config.jwtSecret,
 });

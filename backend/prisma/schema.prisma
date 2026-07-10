@@ -343,6 +343,11 @@ model SchoolRequest {
   /// self-applying. Staff see the attribution on the review queue.
   submittedByPartnerId String?
 
+  /// The campaign referral code the school arrived on (`/activate?ref=CODE`),
+  /// when it self-applied via a partner's onboarding link. Resolves to
+  /// `submittedByPartnerId` at apply time; kept so staff see which campaign drove it.
+  submittedViaReferralCode String?
+
   accessTokenHash   String?   @unique
   accessTokenSealed String?
   tokenIssuedAt     DateTime?
@@ -757,4 +762,39 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin power — permanent deletion with a preserved audit trail.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ArchivedEntityType {
+  STUDENT
+  SCHOOL
+  PARTNER
+}
+
+/// A tombstone written the instant an admin permanently deletes a student,
+/// school, or partner. The operational rows are hard-deleted from their tables
+/// (a real Neon delete), but their identifying details — and a full JSON
+/// snapshot — are preserved here so a deletion is auditable and the contact is
+/// still recoverable on paper. Nothing references this table; it only grows.
+model ArchivedEntity {
+  id             String             @id @default(uuid())
+  entityType     ArchivedEntityType
+  originalId     String
+  name           String
+  email          String?
+  phone          String?
+  /// The full row(s) as they were at delete time (the deleted record plus any
+  /// provisioned rows removed alongside it, e.g. a school's coordinator user).
+  snapshot       Json
+  reason         String?
+  deletedBy      String
+  deletedByEmail String?
+  deletedAt      DateTime           @default(now())
+
+  @@index([entityType])
+  @@index([email])
+  @@index([originalId])
 }

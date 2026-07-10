@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { ApiError, backendApi } from "../../lib/api-client";
 
 /**
@@ -65,6 +66,9 @@ export default function ApplyPage() {
 
 	return (
 		<main className="page">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
 			<div className="page-header">
 				<h1>Request partner access</h1>
 				<p>

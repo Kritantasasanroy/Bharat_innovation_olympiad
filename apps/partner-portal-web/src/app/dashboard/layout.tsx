@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { DashboardNav } from "../../components/dashboard-nav";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { ApiError, type ApprovedPartner, portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 
@@ -68,16 +69,19 @@ export default function DashboardLayout({ children }: { readonly children: React
 						<strong>{partner.orgName}</strong>
 						<span className="muted"> · Approved partner</span>
 					</div>
-					<button
-						type="button"
-						className="button button--secondary button--small"
-						onClick={() => {
-							signOut();
-							router.replace("/login");
-						}}
-					>
-						Sign out
-					</button>
+					<div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+						<ThemeToggle />
+						<button
+							type="button"
+							className="button button--secondary button--small"
+							onClick={() => {
+								signOut();
+								router.replace("/login");
+							}}
+						>
+							Sign out
+						</button>
+					</div>
 				</div>
 				{children}
 			</div>

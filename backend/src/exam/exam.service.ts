@@ -193,6 +193,89 @@ export class ExamService {
         });
     }
 
+    /**
+     * Create an exam, one scheduled instance, and its slots in a single step —
+     * the shape the admin "new exam" wizard collects. Unlike {@link createExam}
+     * this does **not** force-publish: the wizard passes explicit flags, so an
+     * exam can be drafted with its schedule and slots before it goes live.
+     *
+     * Slot auto-distribution (same-school-together, balance + overflow) is a
+     * separate call the wizard makes afterwards, so the admin can review the
+     * slots first — see `SchoolSlotService.autoDistributeInstance`.
+     */
+    async createFull(input: {
+        title: string;
+        description?: string;
+        classBands: number[];
+        totalMarks: number;
+        durationMinutes: number;
+        feeAmount?: number;
+        easyPct?: number;
+        mediumPct?: number;
+        hardPct?: number;
+        isPublished?: boolean;
+        isResultReleased?: boolean;
+        instance: {
+            startsAt: string | Date;
+            endsAt: string | Date;
+            requireSeb?: boolean;
+            browserExamKey?: string;
+            configKey?: string;
+            quitUrl?: string;
+        };
+        slots: {
+            label?: string;
+            startsAt: string | Date;
+            endsAt: string | Date;
+            capacity: number;
+        }[];
+    }) {
+        if (!input.slots?.length) {
+            throw new BadRequestException('Add at least one slot.');
+        }
+
+        const { instance, slots, isPublished, isResultReleased, ...examData } = input;
+
+        return this.prisma.$transaction(async (tx) => {
+            const exam = await tx.exam.create({
+                data: {
+                    ...examData,
+                    isPublished: isPublished ?? true,
+                    isResultReleased: isResultReleased ?? false,
+                },
+            });
+
+            const examInstance = await tx.examInstance.create({
+                data: {
+                    examId: exam.id,
+                    startsAt: new Date(instance.startsAt),
+                    endsAt: new Date(instance.endsAt),
+                    requireSeb: instance.requireSeb ?? false,
+                    browserExamKey: instance.browserExamKey,
+                    configKey: instance.configKey,
+                    quitUrl: instance.quitUrl,
+                },
+            });
+
+            await tx.examSlot.createMany({
+                data: slots.map((s) => ({
+                    examInstanceId: examInstance.id,
+                    label: s.label,
+                    startsAt: new Date(s.startsAt),
+                    endsAt: new Date(s.endsAt),
+                    capacity: s.capacity,
+                })),
+            });
+
+            const createdSlots = await tx.examSlot.findMany({
+                where: { examInstanceId: examInstance.id },
+                orderBy: { startsAt: 'asc' },
+            });
+
+            return { exam, instance: examInstance, slots: createdSlots };
+        });
+    }
+
     async deleteExam(id: string) {
         await this.prisma.exam.delete({ where: { id } });
     }

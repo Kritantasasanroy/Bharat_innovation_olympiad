@@ -214,6 +214,12 @@ export default function AccessPage() {
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
 
+    // Permanent delete
+    const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState('');
+    const [deleteReason, setDeleteReason] = useState('');
+    const [deleting, setDeleting] = useState(false);
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -260,6 +266,28 @@ export default function AccessPage() {
             setCardBusy(false);
         }
     }, []);
+
+    /** Permanent-delete endpoint per kind: partner-request vs school-request. */
+    const deletePath = (row: Row) =>
+        row.kind === 'PARTNER' ? `/admin/manage/partners/${row.id}` : `/admin/manage/school-requests/${row.id}`;
+
+    async function confirmDelete(event: FormEvent) {
+        event.preventDefault();
+        if (!deleteTarget || deleteConfirm.trim() !== deleteTarget.title) return;
+        setDeleting(true);
+        setError(null);
+        try {
+            await api.delete(deletePath(deleteTarget), {
+                data: { reason: deleteReason.trim() || undefined },
+            });
+            setDeleteTarget(null);
+            await load();
+        } catch {
+            setError('Could not delete this record.');
+        } finally {
+            setDeleting(false);
+        }
+    }
 
     async function submitDecision(event: FormEvent) {
         event.preventDefault();
@@ -428,6 +456,17 @@ export default function AccessPage() {
                                                         {ACTION_LABEL[decision]}
                                                     </button>
                                                 ))}
+                                                <button
+                                                    className="btn btn-sm btn-danger"
+                                                    title="Permanently delete this record"
+                                                    onClick={() => {
+                                                        setDeleteTarget(row);
+                                                        setDeleteConfirm('');
+                                                        setDeleteReason('');
+                                                    }}
+                                                >
+                                                    Delete
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -484,6 +523,60 @@ export default function AccessPage() {
                                     disabled={submitting || !reason.trim()}
                                 >
                                     {submitting ? 'Saving…' : ACTION_LABEL[pending.decision]}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="modal-overlay" onClick={() => !deleting && setDeleteTarget(null)}>
+                    <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
+                        <h2>Permanently delete {deleteTarget.title}?</h2>
+                        <p className="text-muted">
+                            {deleteTarget.kind === 'SCHOOL'
+                                ? 'This removes the school and its coordinator from the database and detaches its students (they keep their accounts). '
+                                : 'This removes the partner and its access request from the database. '}
+                            The record&apos;s contact details are archived (recoverable under Archive), but
+                            this cannot be undone.
+                        </p>
+                        <form className="exam-form" onSubmit={confirmDelete}>
+                            <div className="form-group">
+                                <label>Reason (recorded in the archive + audit log)</label>
+                                <input
+                                    className="form-control"
+                                    value={deleteReason}
+                                    onChange={(e) => setDeleteReason(e.target.value)}
+                                    placeholder="e.g. Duplicate / test record"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>
+                                    Type <strong>{deleteTarget.title}</strong> to confirm
+                                </label>
+                                <input
+                                    className="form-control"
+                                    value={deleteConfirm}
+                                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setDeleteTarget(null)}
+                                    disabled={deleting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-danger"
+                                    disabled={deleting || deleteConfirm.trim() !== deleteTarget.title}
+                                >
+                                    {deleting ? 'Deleting…' : 'Delete permanently'}
                                 </button>
                             </div>
                         </form>

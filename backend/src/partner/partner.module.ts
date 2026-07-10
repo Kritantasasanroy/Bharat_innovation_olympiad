@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SchoolModule } from '../school/school.module';
@@ -11,8 +11,9 @@ import { PartnerService } from './partner.service';
 @Module({
     imports: [
         PrismaModule,
-        // Partners onboard schools through the same service a school self-applies to.
-        SchoolModule,
+        // Partners onboard schools through the same service a school self-applies
+        // to; SchoolService in turn needs this module's PartnerAdminApiClient.
+        forwardRef(() => SchoolModule),
         JwtModule.register({ secret: process.env.JWT_SECRET || 'dev-jwt-secret' }),
     ],
     controllers: [PartnerController, PartnerSchoolController],

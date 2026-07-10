@@ -59,6 +59,8 @@ export interface SchoolApplyInput {
 	readonly coordinatorName: string;
 	readonly coordinatorEmail: string;
 	readonly coordinatorPhone: string;
+	/** Campaign code from a partner's onboarding link (`/activate?ref=CODE`). */
+	readonly referralCode?: string;
 }
 
 export interface PincodeLocation {

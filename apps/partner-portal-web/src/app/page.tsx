@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ThemeToggle } from "../components/theme-toggle";
 import { useAuth } from "../lib/auth-context";
 
 export default function HomePage() {
@@ -24,6 +25,9 @@ export default function HomePage() {
 
 	return (
 		<main className="page">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
 			<div className="page-header">
 				<h1>BIO Partner Portal</h1>
 				<p>

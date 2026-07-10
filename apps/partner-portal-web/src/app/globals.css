@@ -7,7 +7,7 @@
    existing pages match student/admin without JSX changes.
    ══════════════════════════════════════════════════════════════ */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@500;600;700;800&family=Montserrat:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 /* ── Design tokens (shared with student/admin) ── */
 :root {
@@ -299,7 +299,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-	background-color: rgba(255, 255, 255, 0.02);
+	background-color: var(--bg-card-hover);
 }
 
 tr:last-child td {
@@ -646,4 +646,105 @@ textarea:focus-visible {
 	h1 {
 		font-size: 1.6rem;
 	}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Light theme — the default (dark is the toggle). Same token names
+   as :root, overridden values. Copied from the student/admin design
+   system so both portals match without touching any page markup.
+   ══════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+	color-scheme: light;
+
+	--bg-primary: #f8f8f8;
+	--bg-secondary: #ffffff;
+	--bg-card: #ffffff;
+	--bg-card-hover: #f3f3f3;
+	--bg-elevated: #ededed;
+	--bg-input: #ffffff;
+
+	--text-primary: #1a1a1a;
+	--text-secondary: #555555;
+	--text-tertiary: #888888;
+	--text-muted: #999999;
+	--text-on-primary: #0a0a0a;
+
+	--border-subtle: rgba(0, 0, 0, 0.06);
+	--border-default: rgba(0, 0, 0, 0.1);
+	--border-strong: rgba(0, 0, 0, 0.18);
+
+	--gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.04), rgba(99, 184, 27, 0.04));
+	--gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.08), rgba(99, 184, 27, 0.08));
+
+	--glass-bg: rgba(255, 255, 255, 0.85);
+	--glass-border: rgba(0, 0, 0, 0.08);
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+	--shadow-glow: 0 0 30px rgba(255, 203, 5, 0.08);
+
+	/* Darker brand shades for contrast on white */
+	--primary-400: #b88a00;
+	--primary-500: #9c7400;
+	--accent-400: #4f9a12;
+	--accent-500: #3f7d0e;
+	--success-400: #16a34a;
+	--danger-400: #dc2626;
+	--warning-400: #d97706;
+}
+
+/* The animated mesh reads as noise on white — hide it in light mode. */
+[data-theme="light"] body::before {
+	display: none;
+}
+
+body {
+	transition:
+		background-color var(--transition-base),
+		color var(--transition-base);
+}
+
+/* ── Theme toggle button (shared with student/admin) ── */
+.theme-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border-default);
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	transition: all var(--transition-fast);
+	color: var(--text-secondary);
+	flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+	background: var(--bg-card-hover);
+	border-color: var(--primary-400);
+	color: var(--primary-400);
+	transform: scale(1.05);
+}
+
+/* ── Premium display typography (student-portal-inspired) ─────────────────── */
+:root {
+	--font-display: "Poppins", var(--font-sans);
+	--font-stat: "Montserrat", var(--font-sans);
+}
+
+h1,
+h2,
+.page-header h1,
+.hero h1 {
+	font-family: var(--font-display);
+	letter-spacing: -0.02em;
+}
+
+.stat-tile__value {
+	font-family: var(--font-stat);
+	letter-spacing: -0.01em;
 }

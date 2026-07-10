@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ThemeToggle } from "../components/theme-toggle";
 import { useAuth } from "../lib/auth-context";
 
 export default function HomePage() {
@@ -15,6 +16,9 @@ export default function HomePage() {
 
 	return (
 		<main className="hero">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
 			<div className="pill pill--active" style={{ marginBottom: "1.25rem" }}>
 				Bharat Innovation Olympiad
 			</div>

@@ -50,15 +50,18 @@ interface AdminApiFunnel {
 export class HttpAdminApiClient implements AdminApiClient {
 	readonly #baseUrl: string;
 	readonly #studentAppUrl: string;
+	readonly #schoolAppUrl: string;
 	readonly #fetchImpl: typeof fetch;
 
 	constructor(
 		baseUrl: string,
 		studentAppUrl = "http://localhost:3000",
 		fetchImpl: typeof fetch = fetch,
+		schoolAppUrl = "http://localhost:3500",
 	) {
 		this.#baseUrl = baseUrl.replace(/\/+$/, "");
 		this.#studentAppUrl = studentAppUrl.replace(/\/+$/, "");
+		this.#schoolAppUrl = schoolAppUrl.replace(/\/+$/, "");
 		this.#fetchImpl = fetchImpl;
 	}
 
@@ -128,6 +131,7 @@ export class HttpAdminApiClient implements AdminApiClient {
 				name: row.name,
 				code: row.referralCode,
 				shareUrl: this.#shareUrl(row.referralCode),
+				schoolShareUrl: this.#schoolShareUrl(row.referralCode),
 				status: row.status,
 				signups: counts?.signups ?? 0,
 				registrations: counts?.registrations ?? 0,
@@ -166,6 +170,11 @@ export class HttpAdminApiClient implements AdminApiClient {
 	/** The link a partner shares; the student app captures `?ref=` on first touch. */
 	#shareUrl(referralCode: string): string {
 		return `${this.#studentAppUrl}/?ref=${encodeURIComponent(referralCode)}`;
+	}
+
+	/** The school-onboarding link; the school portal's activate page captures `?ref=`. */
+	#schoolShareUrl(referralCode: string): string {
+		return `${this.#schoolAppUrl}/activate?ref=${encodeURIComponent(referralCode)}`;
 	}
 
 	createCampaign(partnerId: string, input: CampaignInput, token: string): Promise<Campaign> {

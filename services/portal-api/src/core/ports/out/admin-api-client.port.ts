@@ -123,6 +123,8 @@ export interface CampaignFunnelBreakdown {
 	readonly name: string;
 	readonly code: string;
 	readonly shareUrl: string;
+	/** Same code, pointed at the school portal's activate page — onboards schools. */
+	readonly schoolShareUrl: string;
 	readonly status: CampaignStatus;
 	readonly signups: number;
 	readonly registrations: number;

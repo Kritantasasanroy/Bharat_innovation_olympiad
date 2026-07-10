@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { ApiError, backendApi } from "../../lib/api-client";
+import { clearReferralCode, getReferralCode } from "../../lib/referral";
 
 const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
 const PINCODE_LENGTH = 6;
@@ -58,6 +60,9 @@ export default function ActivatePage() {
 		const value = (name: string) => String(form.get(name) ?? "").trim();
 
 		try {
+			// A partner's onboarding link leaves `?ref=CODE` in localStorage;
+			// pass it so this school is attributed to that partner's campaign.
+			const referralCode = getReferralCode();
 			const result = await backendApi.apply({
 				schoolName: value("schoolName"),
 				board: value("board"),
@@ -68,7 +73,9 @@ export default function ActivatePage() {
 				coordinatorName: value("coordinatorName"),
 				coordinatorEmail: value("coordinatorEmail"),
 				coordinatorPhone: value("coordinatorPhone"),
+				...(referralCode ? { referralCode } : {}),
 			});
+			clearReferralCode();
 			setDone(result);
 		} catch (cause) {
 			setError(
@@ -101,6 +108,9 @@ export default function ActivatePage() {
 
 	return (
 		<main className="page">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
 			<div className="page-header">
 				<h1>Activate your school</h1>
 				<p>

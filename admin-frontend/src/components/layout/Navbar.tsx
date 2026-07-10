@@ -39,6 +39,13 @@ const NAV: (NavLeaf | NavGroup)[] = [
         ],
     },
     {
+        label: 'People',
+        items: [
+            { label: 'Manage people', href: '/students' },
+            { label: 'Deletion archive', href: '/archive' },
+        ],
+    },
+    {
         label: 'Operations',
         items: [
             { label: 'Live proctor', href: '/proctor' },

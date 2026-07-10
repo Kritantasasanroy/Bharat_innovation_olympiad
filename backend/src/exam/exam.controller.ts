@@ -59,6 +59,14 @@ export class ExamController {
         return this.examService.createExam(body);
     }
 
+    /** Wizard: create the exam, its schedule, and its slots in one call. */
+    @Post('admin/exams/full')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async createFullExam(@Body() body: Parameters<ExamService['createFull']>[0]) {
+        return this.examService.createFull(body);
+    }
+
     @Put('admin/exams/:id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)

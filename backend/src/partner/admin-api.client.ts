@@ -171,6 +171,25 @@ export class PartnerAdminApiClient {
         );
     }
 
+    /**
+     * Resolve a campaign referral code to the partner that owns it, so a school
+     * arriving via a partner's onboarding link can be attributed to that partner
+     * (`SchoolRequest.submittedByPartnerId`). Best-effort: returns `null` for an
+     * unknown/inactive code or if the engine is unreachable — a bad code must
+     * never fail the school's application.
+     */
+    async resolvePartnerIdByReferralCode(code: string): Promise<string | null> {
+        try {
+            const campaign = await this.getCampaignByCode(code);
+            return campaign.partnerId ?? null;
+        } catch (error) {
+            this.logger.warn(
+                `Could not resolve referral code ${code} to a partner: ${(error as Error).message}`,
+            );
+            return null;
+        }
+    }
+
     /** Record a signup touch for a referred student. Never throws. */
     async tryCaptureSignup(referralCode: string, studentId: string): Promise<void> {
         try {

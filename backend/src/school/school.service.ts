@@ -15,6 +15,7 @@ import {
     randomCode,
     sealAccessToken,
 } from '../common/access-token';
+import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
@@ -34,12 +35,18 @@ export class SchoolService {
     constructor(
         private prisma: PrismaService,
         private jwt: JwtService,
+        private adminApi: PartnerAdminApiClient,
     ) {}
 
     /**
      * Self-service application — no token, no side effects beyond the row.
-     * `submittedByPartnerId` is set when a partner onboards the school on its
-     * behalf, so staff can see the attribution on the review queue.
+     *
+     * `submittedByPartnerId` is set when a partner onboards the school directly
+     * (the authenticated `/partner/schools` path). A self-applying school can
+     * instead arrive on a partner's campaign link carrying `referralCode`; that
+     * code is resolved to the same partner here, so a campaign onboards schools
+     * just as it onboards students. A bad or inactive code is ignored, never an
+     * error — attribution must never block a school's application.
      */
     async apply(dto: ApplySchoolDto, submittedByPartnerId?: string) {
         const coordinatorEmail = dto.coordinatorEmail.trim().toLowerCase();
@@ -61,6 +68,15 @@ export class SchoolService {
             );
         }
 
+        // A campaign referral code (self-apply path) resolves to the partner that
+        // owns it. The authenticated partner path passes `submittedByPartnerId`
+        // directly and carries no code.
+        const referralCode = dto.referralCode?.trim() || null;
+        let partnerId = submittedByPartnerId ?? null;
+        if (!partnerId && referralCode) {
+            partnerId = await this.adminApi.resolvePartnerIdByReferralCode(referralCode);
+        }
+
         const request = await this.prisma.schoolRequest.create({
             data: {
                 schoolName: dto.schoolName,
@@ -73,7 +89,9 @@ export class SchoolService {
                 coordinatorEmail,
                 coordinatorPhone: dto.coordinatorPhone,
                 status: 'PENDING',
-                submittedByPartnerId: submittedByPartnerId ?? null,
+                submittedByPartnerId: partnerId,
+                // Recorded only when a code actually resolved to a partner.
+                submittedViaReferralCode: partnerId && referralCode ? referralCode : null,
             },
         });
 
@@ -152,6 +170,7 @@ export class SchoolService {
                 status: true,
                 schoolId: true,
                 submittedByPartnerId: true,
+                submittedViaReferralCode: true,
                 decisionReason: true,
                 decidedBy: true,
                 decidedAt: true,

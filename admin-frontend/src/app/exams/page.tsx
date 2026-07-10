@@ -172,9 +172,14 @@ export default function AdminExamsPage() {
                             Create and manage exams, set their duration, and target specific classes.
                         </p>
                     </div>
-                    <button className="btn btn-primary" onClick={openCreateModal}>
-                        + Create Exam
-                    </button>
+                    <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                        <button className="btn btn-secondary" onClick={openCreateModal}>
+                            + Quick exam
+                        </button>
+                        <a href="/exams/new" className="btn btn-primary">
+                            + New exam with slots
+                        </a>
+                    </div>
                 </div>
 
                 {actionError && (

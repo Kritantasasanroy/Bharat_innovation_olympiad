@@ -153,4 +153,17 @@ export class SlotController {
     ) {
         return this.schoolSlotService.reassignSchool(schoolId, instanceId, dto.slotId);
     }
+
+    /**
+     * Auto-assign every eligible student across this instance's slots:
+     * same-school-together, balanced, overflowing when a slot fills. Run by the
+     * exam-creation wizard, and re-runnable afterwards (already-booked students
+     * are left alone).
+     */
+    @Post('admin/exams/instances/:instanceId/auto-distribute')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async autoDistribute(@Param('instanceId') instanceId: string) {
+        return this.schoolSlotService.autoDistributeInstance(instanceId);
+    }
 }
