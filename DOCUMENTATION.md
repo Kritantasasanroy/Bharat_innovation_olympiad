@@ -370,6 +370,11 @@ host in `docker-compose.yml`).
 | **admin-api** (Bun) | https://bio-admin-api.onrender.com | new; + Render Key Value `bio-admin-redis` |
 | **portal-api** (Bun) | https://bio-portal-api.onrender.com | new; `/partner/*` → 401 unauthenticated ✓ |
 
+> Updated 2026-07-10: all three Render services now deploy from **`bio-workspace-rearch`** (the
+> backend previously built from `main`, which does not contain the partner module). New env vars:
+> backend `ADMIN_API_URL`, portal-api `STUDENT_APP_URL`, partner portal `NEXT_PUBLIC_API_URL`. All
+> services share one `JWT_SECRET` — see §0.18 for the production mismatch that broke this.
+
 Deploy specifics worth remembering: (1) Render has **no native Bun runtime** and its `/usr/bin` is
 **read-only**, so `corepack enable` fails (`EROFS`) — the Bun services build with
 `npm install -g pnpm@10.32.1 bun && pnpm install --frozen-lockfile --filter <pkg>... --ignore-scripts`
@@ -383,8 +388,88 @@ this deploy were provided in-session and should be rotated.
 **Remaining (Phase 3, deferred by choice — deploy-first was done first):** fill genuine student/admin
 spec gaps on the **live monolith** (student: admit card, certificate + public verification,
 grievance/reattempt, consent capture; admin: fair-score normalization / result-release gating,
-certificate generation, refund-request review, exam-day + KYC/payment ops queues, partner-management
-view).
+certificate generation, refund-request review, exam-day + KYC/payment ops queues). The
+partner-management view is now **done** — see §0.18.
+
+---
+
+### 0.18 Partner access loop + referral attribution (2026-07-10)
+
+**The problem.** A brand-new partner could not get into the partner portal at all. Three linked gaps:
+`/apply` and `/login` both required a *pasted JWT*; **no token could ever carry `role: PARTNER`**
+(the backend `Role` enum lacked it, and only the legacy backend signs JWTs — admin-api/portal-api
+merely verify); and admin had no way to see or decide requests (admin-api could approve/reject but had
+no list endpoint and no revoke, and `admin-frontend` only ever talks to the backend on `:4000`).
+
+**Who owns what.** The legacy backend is the platform's only JWT signer, so it owns **partner
+identity + review**; admin-api keeps the partner **engine** (funnel/campaigns/statements/payouts).
+They are kept in lock-step by the backend, which drives the engine over server-to-server calls.
+
+```
+partner-web ──apply/login──► backend :4000 ──s2s (short-lived SUPER_ADMIN JWT)──► admin-api :4100
+            └──dashboard───► portal-api :3300 ──proxy──────────────────────────►┘
+admin-web ──review queue──► backend :4000 (orchestrates the engine; no new admin client needed)
+student-web ──?ref=CODE──► backend /auth/sync ──► admin-api /campaigns/{by-code,:id/signup}
+```
+
+**The reconciliation key.** `admin-api Partner.id` (minted by the public application) is stored on the
+backend's `PartnerRequest.partnerId` **and used as the partner JWT `sub`** — so `sub === partnerId`
+everywhere, which is exactly what portal-api's scoping already assumed.
+
+**The access gate.** `portal-api`'s `requireApprovedPartner` reads **`Partner.status`** via
+`GET /partners/:id` (previously it passed a `partnerId` to `GET /partner-applications/:id`, which
+expects an *application* id). Staff drive that status through the new staff-only, audited
+`PATCH /partners/:id/access` (`APPROVED | REJECTED | REVOKED`). Because the guard runs on **every**
+dashboard request, **a revoke removes access immediately — even while the partner still holds a valid
+24h token.** Re-granting restores it on the same token.
+
+| Surface | Route |
+|---|---|
+| Partner requests access (**public, no token**) | `POST /api/partner/apply` |
+| Partner signs in (email + password, bcrypt) | `POST /api/partner/login` → `role:PARTNER` JWT |
+| Admin review queue | `GET /api/admin/partner-requests` |
+| Admin grant / reject / revoke / re-grant | `PATCH /api/admin/partner-requests/:id` (reason mandatory, audited) |
+| Engine access switch (staff, s2s) | `PATCH /partners/:id/access` |
+| Dashboard identity (403 once revoked) | `GET /partner/me` |
+
+**Referral attribution.** A partner shares `…/?ref=CODE`. The student app captures it on first touch
+(landing + register, `frontend/src/lib/referral.ts` — first touch wins, matching the engine's
+`LINK_FIRST_TOUCH` rule), replays it into `POST /auth/sync`, where the backend resolves
+`GET /campaigns/by-code/:code` and captures the signup; the code is persisted on `User.referralCode`
+and replayed at payment to credit the paid conversion. Attribution is **best-effort** (it never breaks
+a registration or a payment) and **idempotent** — admin-api enforces one credit per
+`student+registration`, so firing from both the Razorpay webhook and the client-verify path is safe.
+
+**Two production bugs found and fixed while verifying:**
+1. **`prisma db push` was wiping the partner engine on every backend deploy.** The admin-api partner
+   tables were Drizzle-only and absent from `schema.prisma`; the production start command is
+   `npx prisma db push --accept-data-loss && node dist/src/main.js`, and `db push` drops any table it
+   does not know about. The 7 tables + 7 enums are now mirrored into `schema.prisma` (they are still
+   *written* only by admin-api via Drizzle — Prisma just needs to know they exist). Keep the two in
+   sync. Verified they survive a push.
+2. **Mismatched `JWT_SECRET` in production.** `olympiad-backend` on Render had a different secret than
+   `bio-admin-api` / `bio-portal-api` (which were seeded from a local `.env`), so every
+   backend-issued token — partner *and* staff — was rejected in production. The two new services were
+   realigned to the backend's authoritative secret (changing the backend's would have invalidated
+   every live student/admin session).
+
+**Contract reconciliation (the partner dashboard had never actually been wired).** portal-api's port
+assumed a funnel shape admin-api does not return, so `/partner/funnel` leaked the raw engine payload
+and `/partner/institutions` returned `{}`. The BFF adapter now merges `GET /funnel` + `GET /campaigns`
+into one DTO (adding `code`, `shareUrl`, `status`), institutions come from the real assignment route,
+and campaign pause/resume maps to admin-api's `deactivate` boolean (**resume was previously a silent
+no-op**). The portal adopted the engine's vocabulary (`signups` / `registrations` / `paid`) instead of
+the invented `leads` / `paidConversions`, and the fabricated per-institution funnel was dropped — the
+engine does not key attribution by institution.
+
+**New env vars:** backend `ADMIN_API_URL`; portal-api `STUDENT_APP_URL` (builds the `?ref=` share
+link); partner portal `NEXT_PUBLIC_API_URL` (the backend, for apply/login). All three Render services
+now deploy from the `bio-workspace-rearch` branch.
+
+**Verified in production** (not just locally): apply with no token → `403` pre-approval login → admin
+queue → grant → partner login → dashboard `200` → **revoke → same token `403`** → re-grant → `200`;
+campaign create → funnel shows code + real `shareUrl` → referred student registers → `signups=1`;
+paid conversion → `paid=1`, still `1` on replay. `admin-api` 81 tests, `portal-api` 42 tests.
 
 ---
 
