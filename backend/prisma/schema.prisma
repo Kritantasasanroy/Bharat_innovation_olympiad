@@ -58,9 +58,12 @@ model School {
   code                  String                 @unique
   city                  String
   state                 String
+  board                 String?
+  udiseCode             String?
   createdAt             DateTime               @default(now())
   users                 User[]
   slotAssignments       SchoolSlotAssignment[]
+  accessRequest         SchoolRequest?
 
   @@index([code])
 }
@@ -242,6 +245,7 @@ enum Role {
   ADMIN
   SUPER_ADMIN
   PARTNER
+  SCHOOL
 }
 
 enum PartnerRequestStatus {
@@ -271,6 +275,59 @@ model PartnerRequest {
   decidedAt      DateTime?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+
+  /// SHA-256 of the access token issued on approval. Unique, so one token
+  /// authenticates exactly one partner. Null until approved.
+  accessTokenHash   String?   @unique
+  /// The same token sealed with AES-256-GCM, opened only when an authenticated
+  /// admin re-renders the handover card. See `common/access-token.ts`.
+  accessTokenSealed String?
+  tokenIssuedAt     DateTime?
+  tokenLastUsedAt   DateTime?
+
+  @@index([status])
+}
+
+enum SchoolRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+/// A school's request to join the platform (PRD-047), and the credential it is
+/// granted on approval. Approval provisions the `School` row and a coordinator
+/// `User` (role `SCHOOL`), then issues a single access token; `schoolId` and
+/// `coordinatorUserId` are null until then.
+///
+/// The token itself lives only as a digest (`accessTokenHash`, unique) plus a
+/// sealed copy for the admin handover card — never as plaintext.
+model SchoolRequest {
+  id               String              @id @default(uuid())
+  schoolName       String
+  board            String
+  udiseCode        String?
+  city             String
+  state            String
+  coordinatorName  String
+  coordinatorEmail String              @unique
+  coordinatorPhone String
+  status           SchoolRequestStatus @default(PENDING)
+
+  accessTokenHash   String?   @unique
+  accessTokenSealed String?
+  tokenIssuedAt     DateTime?
+  tokenLastUsedAt   DateTime?
+
+  schoolId          String? @unique
+  school            School? @relation(fields: [schoolId], references: [id])
+  coordinatorUserId String? @unique
+
+  decisionReason String?
+  decidedBy      String?
+  decidedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([status])
 }

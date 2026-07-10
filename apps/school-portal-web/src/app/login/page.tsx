@@ -3,31 +3,36 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { ApiError, backendApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 
 /**
  * Coordinator sign-in.
  *
- * A dedicated school-coordinator auth front door (SCHOOL_ADMIN role, invite
- * links) is a backend follow-up (PRD-047). Until then this mirrors the partner
- * portal: paste the shared BIO access token you were issued; every subsequent
- * request attaches it as `Authorization: Bearer <token>`.
+ * The access token staff issue on approval is the credential. It is exchanged
+ * here for a short-lived session JWT (`role: SCHOOL`), which every subsequent
+ * request carries. A token belongs to exactly one school, and stops working the
+ * moment staff revoke or rotate it.
  */
 export default function LoginPage() {
 	const { setToken } = useAuth();
 	const router = useRouter();
 	const [value, setValue] = useState("");
+	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	function handleSubmit(event: FormEvent<HTMLFormElement>) {
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const trimmed = value.trim();
-		if (trimmed.split(".").length !== 3) {
-			setError("That doesn't look like a JWT (expected header.payload.signature).");
-			return;
+		setSubmitting(true);
+		setError(null);
+		try {
+			const result = await backendApi.login(value.trim());
+			setToken(result.accessToken);
+			router.push("/dashboard");
+		} catch (cause) {
+			setError(cause instanceof ApiError ? cause.message : "Could not sign in. Please try again.");
+			setSubmitting(false);
 		}
-		setToken(trimmed);
-		router.push("/dashboard");
 	}
 
 	return (
@@ -35,25 +40,27 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>
 				<p>
-					Paste your BIO platform access token (the shared JWT issued to your school-coordinator
-					account). New to the platform? <Link href="/activate">Activate your school</Link>.
+					Enter the access token issued to your school. New to the platform?{" "}
+					<Link href="/activate">Activate your school</Link>.
 				</p>
 			</div>
 			<div className="card" style={{ maxWidth: 560 }}>
 				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
 					<div>
 						<label htmlFor="token">Access token</label>
-						<textarea
+						<input
 							id="token"
 							value={value}
 							onChange={(event) => setValue(event.target.value)}
-							placeholder="eyJhbGciOi..."
+							placeholder="BIO-SCH-XXXXX-XXXXX-XXXXX-XXXXX"
+							autoComplete="one-time-code"
+							spellCheck={false}
 							required
 						/>
 					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}
-					<button type="submit" className="button">
-						Continue to dashboard
+					<button type="submit" className="button" disabled={submitting || !value.trim()}>
+						{submitting ? "Signing in…" : "Continue to dashboard"}
 					</button>
 				</form>
 			</div>

@@ -33,15 +33,26 @@ export interface AdminApiCampaign {
 export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
 
 /**
- * admin-api sleeps on Render's free tier and takes ~20-60s to cold start. While
- * it boots, Render's edge answers callers with 502/503/504 rather than queuing
- * them, which would otherwise fail a partner's very first application. These
- * are transient by definition, so retry them with backoff. A monitor pinging
- * `/health/live` keeps the service warm, but a cold start can still happen right
- * after a deploy, so the client must not depend on that.
+ * admin-api sleeps on Render's free tier. While it boots, Render's edge answers
+ * callers 502/503/504 rather than queuing them. A measured cold start is ~33s,
+ * so a budget must clear that with margin — an earlier 20s budget gave up mid-boot
+ * and surfaced "the partner engine is starting up" to real users. A monitor
+ * pinging `/health/live` keeps it warm, but a deploy always lands cold, so the
+ * client cannot depend on that.
  */
 const RETRY_STATUSES = new Set([502, 503, 504]);
-const RETRY_BACKOFF_MS = [1_000, 3_000, 6_000, 10_000];
+
+/**
+ * `patient` (~62s) is for staff-initiated calls, where waiting out a cold start
+ * beats failing. `fast` never retries: it is for best-effort work on a path
+ * where a human is blocked, so a sleeping engine must cost milliseconds.
+ */
+const BACKOFF_MS = {
+    patient: [1_000, 2_000, 4_000, 8_000, 12_000, 15_000, 20_000],
+    fast: [] as number[],
+} as const;
+
+type RetryPolicy = keyof typeof BACKOFF_MS;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -73,16 +84,21 @@ export class PartnerAdminApiClient {
         }
     }
 
-    private async call<T>(path: string, init: RequestInit): Promise<T> {
+    private async call<T>(
+        path: string,
+        init: RequestInit,
+        policy: RetryPolicy = 'patient',
+    ): Promise<T> {
+        const backoff = BACKOFF_MS[policy];
         let res: Response | null = null;
 
-        for (let i = 0; i <= RETRY_BACKOFF_MS.length; i += 1) {
+        for (let i = 0; i <= backoff.length; i += 1) {
             res = await this.attempt(path, init);
 
             const isColdStart = res === null || RETRY_STATUSES.has(res.status);
             if (!isColdStart) break;
 
-            const delay = RETRY_BACKOFF_MS[i];
+            const delay = backoff[i];
             if (delay === undefined) break; // retries exhausted; fall through to the error below
             this.logger.warn(
                 `admin-api ${path} looks asleep (${res?.status ?? 'no response'}); retrying in ${delay}ms`,
@@ -141,15 +157,17 @@ export class PartnerAdminApiClient {
 
     // ── Referral attribution ────────────────────────────────────────────────
     //
-    // Attribution is best-effort: a referral must never break a student's
-    // registration or payment. Callers use `tryCaptureSignup` /
-    // `tryCapturePaidConversion`, which swallow (and log) failures.
+    // Attribution is best-effort: a referral must never break — or delay — a
+    // student's registration or payment. These run on the `fast` policy (no
+    // retries) and swallow failures, and callers do not await them. Losing an
+    // attribution while the engine cold-starts is the accepted trade.
 
     /** Resolve the `?ref=CODE` a student carried in to its campaign. */
     private getCampaignByCode(code: string): Promise<AdminApiCampaign> {
         return this.call<AdminApiCampaign>(
             `/campaigns/by-code/${encodeURIComponent(code)}`,
             { method: 'GET' },
+            'fast',
         );
     }
 
@@ -157,10 +175,11 @@ export class PartnerAdminApiClient {
     async tryCaptureSignup(referralCode: string, studentId: string): Promise<void> {
         try {
             const campaign = await this.getCampaignByCode(referralCode);
-            await this.call(`/campaigns/${encodeURIComponent(campaign.id)}/signup`, {
-                method: 'POST',
-                body: JSON.stringify({ studentId }),
-            });
+            await this.call(
+                `/campaigns/${encodeURIComponent(campaign.id)}/signup`,
+                { method: 'POST', body: JSON.stringify({ studentId }) },
+                'fast',
+            );
             this.logger.log(`Attributed signup of ${studentId} to campaign ${campaign.id}`);
         } catch (error) {
             this.logger.warn(
@@ -178,10 +197,14 @@ export class PartnerAdminApiClient {
     ): Promise<void> {
         try {
             const campaign = await this.getCampaignByCode(referralCode);
-            await this.call(`/campaigns/${encodeURIComponent(campaign.id)}/paid-conversion`, {
-                method: 'POST',
-                body: JSON.stringify({ studentId, registrationId, amountPaise }),
-            });
+            await this.call(
+                `/campaigns/${encodeURIComponent(campaign.id)}/paid-conversion`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ studentId, registrationId, amountPaise }),
+                },
+                'fast',
+            );
             this.logger.log(`Credited paid conversion of ${studentId} to campaign ${campaign.id}`);
         } catch (error) {
             this.logger.warn(

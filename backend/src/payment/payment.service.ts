@@ -43,7 +43,9 @@ export class PaymentService {
         // The booking is the "registration" being paid for; fall back to the
         // payment id so a booking-less (direct) payment still credits exactly once.
         const registrationId = payment.booking?.id ?? payment.id;
-        await this.partnerAdminApi.tryCapturePaidConversion(
+        // Not awaited: commission credit must never hold up a payment callback.
+        // `tryCapturePaidConversion` never rejects.
+        void this.partnerAdminApi.tryCapturePaidConversion(
             payment.user.referralCode,
             payment.userId,
             registrationId,

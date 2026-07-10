@@ -43,9 +43,11 @@ export class AuthController {
         const user = await this.authService.syncUser(dto.email, dto);
 
         // Best-effort referral attribution: credit the signup to the partner
-        // campaign the student arrived from. Never allowed to fail registration.
+        // campaign the student arrived from. Deliberately not awaited — the
+        // engine may be cold, and no student should wait on it to register.
+        // `tryCaptureSignup` never rejects.
         if (dto.referralCode) {
-            await this.partnerAdminApi.tryCaptureSignup(dto.referralCode, user.id);
+            void this.partnerAdminApi.tryCaptureSignup(dto.referralCode, user.id);
         }
 
         // Issue our own HS256 JWT — used for all subsequent API calls

@@ -1299,3 +1299,110 @@ h4 {
   }
 }
       
+/* ── Access Requests: type tags, handover card, token box ──────────────────── */
+
+.row-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.kind-tag {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border-default);
+}
+
+.kind-tag--partner {
+  color: var(--primary-400);
+  background: rgba(255, 203, 5, 0.1);
+  border-color: rgba(255, 203, 5, 0.28);
+}
+
+.kind-tag--school {
+  color: var(--success-400);
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.28);
+}
+
+.access-card {
+  max-width: 640px;
+}
+
+.access-card__head h2 {
+  margin: var(--space-2) 0 0.25rem;
+}
+
+.access-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.access-card__field dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.15rem;
+}
+
+.access-card__field dd {
+  margin: 0;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.access-card__field dd.mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.token-box {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+}
+
+.token-box__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.token-box__value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  word-break: break-all;
+  padding: var(--space-2) 0;
+}
+
+.token-box__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.token-box__note {
+  font-size: 0.78rem;
+  margin: var(--space-2) 0 0;
+}
+
+@media (max-width: 560px) {
+  .access-card__grid {
+    grid-template-columns: 1fr;
+  }
+}

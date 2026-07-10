@@ -1,4 +1,12 @@
-import { IsEmail, IsIn, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+    IsEmail,
+    IsIn,
+    IsNotEmpty,
+    IsOptional,
+    IsString,
+    MinLength,
+    ValidateIf,
+} from 'class-validator';
 
 export class ApplyPartnerDto {
     @IsString()
@@ -21,13 +29,21 @@ export class ApplyPartnerDto {
     password: string;
 }
 
+/** Either `accessToken`, or the `email` + `password` pair. Never a mix. */
 export class PartnerLoginDto {
-    @IsEmail()
-    email: string;
-
+    @IsOptional()
     @IsString()
     @IsNotEmpty()
-    password: string;
+    accessToken?: string;
+
+    @ValidateIf((dto: PartnerLoginDto) => !dto.accessToken)
+    @IsEmail()
+    email?: string;
+
+    @ValidateIf((dto: PartnerLoginDto) => !dto.accessToken)
+    @IsString()
+    @IsNotEmpty()
+    password?: string;
 }
 
 export class DecidePartnerDto {

@@ -14,9 +14,14 @@ import type {
 	StatementRequestInput,
 } from "../../../core/ports/out/index.ts";
 
-/** Render answers 502/503/504 while a sleeping free-tier service cold-starts. */
+/**
+ * Render answers 502/503/504 while a sleeping free-tier service cold-starts.
+ * A measured cold start is ~33s, so the budget has to clear that — a partner
+ * staring at a spinner is a better outcome than a dashboard that errors out
+ * because we gave up at 20s.
+ */
 const RETRY_STATUSES = new Set([502, 503, 504]);
-const RETRY_BACKOFF_MS = [1_000, 3_000, 6_000, 10_000];
+const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 12_000, 15_000];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

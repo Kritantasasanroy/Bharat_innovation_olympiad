@@ -14,6 +14,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProctorModule } from './proctor/proctor.module';
 import { RefundModule } from './refund/refund.module';
 import { ResultsModule } from './results/results.module';
+import { SchoolModule } from './school/school.module';
 import { SlotModule } from './slot/slot.module';
 import { TimerModule } from './timer/timer.module';
 import { UserModule } from './user/user.module';
@@ -32,6 +33,7 @@ import { UserModule } from './user/user.module';
         SlotModule,
         PaymentModule,
         PartnerModule,
+        SchoolModule,
         // Phase 3 — results integrity chain, decision loops, consent.
         ResultsModule,
         CertificateModule,

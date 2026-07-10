@@ -6,16 +6,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 const TOKEN_STORAGE_KEY = "bio-school-portal.access-token";
 
 /**
- * The subset of the shared-JWT payload (`{ sub, email, role }`, issued by the
- * legacy backend's `auth.controller.ts`) this app reads client-side. This is a
- * display-only decode (no signature check) — a real school-coordinator auth
- * front door (SCHOOL_ADMIN role) is a backend follow-up; until then the shared
- * token is the entry point, mirroring the partner portal.
+ * The subset of the session-JWT payload this app reads client-side. The token
+ * is minted by the backend's `POST /api/school/login` (`role: SCHOOL`, `sub` =
+ * the coordinator User id) in exchange for the school's access token.
+ *
+ * Decoded here for display only — no signature check. Authorisation happens
+ * server-side, where a revoked school's coordinator is deactivated and rejected.
  */
 export interface TokenClaims {
 	readonly sub: string;
 	readonly email?: string;
 	readonly role?: string;
+	readonly schoolId?: string;
 	readonly exp?: number;
 }
 

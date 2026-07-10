@@ -1,8 +1,8 @@
 import type {
+	AssignedInstitution,
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
-	AssignedInstitution,
 	PartnerFunnel,
 	Statement,
 	StatementRequestInput,
@@ -177,7 +177,11 @@ async function backendRequest<T>(path: string, body: unknown): Promise<T> {
 		const message = Array.isArray(err.message)
 			? (err.message[0] ?? "Request failed.")
 			: (err.message ?? `Request failed with status ${response.status}.`);
-		throw new ApiError({ code: err.error ?? "REQUEST_FAILED", message, statusCode: response.status });
+		throw new ApiError({
+			code: err.error ?? "REQUEST_FAILED",
+			message,
+			statusCode: response.status,
+		});
 	}
 	return raw as T;
 }
@@ -191,4 +195,8 @@ export const backendApi = {
 	/** Email + password sign-in; only APPROVED partners receive a token. */
 	login: (email: string, password: string) =>
 		backendRequest<PartnerLoginResult>("/partner/login", { email, password }),
+
+	/** The access token staff issue on approval, exchanged for a session JWT. */
+	loginWithToken: (accessToken: string) =>
+		backendRequest<PartnerLoginResult>("/partner/login", { accessToken }),
 };
