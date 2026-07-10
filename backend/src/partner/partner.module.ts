@@ -12,5 +12,8 @@ import { PartnerService } from './partner.service';
     ],
     controllers: [PartnerController],
     providers: [PartnerService, PartnerAdminApiClient],
+    // Exported so AuthModule (signup) and PaymentModule (paid conversion) can
+    // fire best-effort referral attribution into the partner engine.
+    exports: [PartnerAdminApiClient],
 })
 export class PartnerModule {}

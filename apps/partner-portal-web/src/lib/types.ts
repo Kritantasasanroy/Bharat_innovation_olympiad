@@ -29,12 +29,15 @@ export interface PartnerApplication {
 	readonly decidedAt?: string;
 }
 
-export interface InstitutionPerformance {
+/**
+ * An institution staff have assigned to this partner. The engine does not key
+ * attribution by institution, so there are deliberately no per-institution
+ * funnel counts — showing fabricated ones would be worse than showing none.
+ */
+export interface AssignedInstitution {
 	readonly institutionId: string;
-	readonly institutionName: string;
-	readonly leads: number;
-	readonly signups: number;
-	readonly paidConversions: number;
+	readonly effectiveFrom: string;
+	readonly effectiveTo: string | null;
 }
 
 export interface CampaignFunnelBreakdown {
@@ -43,24 +46,24 @@ export interface CampaignFunnelBreakdown {
 	readonly code: string;
 	readonly shareUrl: string;
 	readonly status: CampaignStatus;
-	readonly leads: number;
 	readonly signups: number;
-	readonly paidConversions: number;
+	readonly registrations: number;
+	readonly paid: number;
 }
 
 export interface PartnerFunnel {
 	readonly partnerId: string;
 	readonly totals: {
-		readonly leads: number;
 		readonly signups: number;
-		readonly paidConversions: number;
+		readonly registrations: number;
+		readonly paid: number;
 	};
 	readonly campaigns: readonly CampaignFunnelBreakdown[];
-	readonly institutions: readonly InstitutionPerformance[];
 	readonly generatedAt: string;
 }
 
-export type CampaignStatus = "ACTIVE" | "PAUSED";
+/** Mirrors the engine's CampaignStatus exactly. */
+export type CampaignStatus = "ACTIVE" | "DEACTIVATED";
 
 export interface CampaignInput {
 	readonly name: string;

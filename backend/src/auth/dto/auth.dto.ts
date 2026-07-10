@@ -24,6 +24,11 @@ export class SyncUserDto {
     @IsString()
     @IsOptional()
     schoolCode?: string;
+
+    /** Partner campaign referral code the student arrived with (`?ref=CODE`). */
+    @IsString()
+    @IsOptional()
+    referralCode?: string;
 }
 
 export class LoginSyncDto {

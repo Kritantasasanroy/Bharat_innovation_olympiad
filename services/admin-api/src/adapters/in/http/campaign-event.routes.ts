@@ -23,6 +23,18 @@ import { authPlugin, requireAuth } from "./auth.plugin";
 export const campaignEventRoutes = (container: PartnerContainer) =>
 	new Elysia({ name: "campaign-event-routes" })
 		.use(authPlugin)
+		/**
+		 * Resolve a referral code to its campaign. A student only ever carries the
+		 * short shared code (`?ref=CODE`), while the capture endpoints below are
+		 * keyed by campaign id — this is the seam between the two. Same
+		 * "any authenticated caller" gate: the legacy backend calls it server-side
+		 * when a referred student registers or pays.
+		 */
+		.get("/campaigns/by-code/:code", async ({ params, auth }) => {
+			requireAuth(auth);
+			const data = await container.campaignService.getByReferralCode(params.code);
+			return { success: true, data };
+		})
 		.post(
 			"/campaigns/:id/signup",
 			async ({ params, body, auth }) => {

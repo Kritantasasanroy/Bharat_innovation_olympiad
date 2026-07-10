@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
 import {
   Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
@@ -11,6 +12,8 @@ import {
 export default function LandingPage() {
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', minHeight: '100vh' }}>
+      {/* Captures a partner's `?ref=CODE` on first touch (PRD-046 attribution). */}
+      <ReferralCapture />
 
       {/* ── NAV ── */}
       <nav className="lp-nav" style={{

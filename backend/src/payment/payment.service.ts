@@ -7,17 +7,48 @@ import {
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import Razorpay from 'razorpay';
+import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PaymentService {
     private razorpay: Razorpay;
 
-    constructor(private prisma: PrismaService) {
+    constructor(
+        private prisma: PrismaService,
+        private partnerAdminApi: PartnerAdminApiClient,
+    ) {
         this.razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID!,
             key_secret: process.env.RAZORPAY_KEY_SECRET!,
         });
+    }
+
+    /**
+     * Credit a paid conversion to the referring partner's campaign, if the
+     * student arrived via a referral link (PRD-046 attribution).
+     *
+     * Best-effort and idempotent: admin-api enforces one credit per
+     * student+registration, so firing from both the webhook and the client-side
+     * verify path is safe, and any failure is swallowed rather than failing the
+     * payment.
+     */
+    private async creditReferral(paymentId: string) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { user: true, booking: true },
+        });
+        if (!payment?.user?.referralCode) return;
+
+        // The booking is the "registration" being paid for; fall back to the
+        // payment id so a booking-less (direct) payment still credits exactly once.
+        const registrationId = payment.booking?.id ?? payment.id;
+        await this.partnerAdminApi.tryCapturePaidConversion(
+            payment.user.referralCode,
+            payment.userId,
+            registrationId,
+            payment.amount,
+        );
     }
 
     async createOrder(userId: string, bookingId: string, couponCode?: string) {
@@ -177,6 +208,8 @@ export class PaymentService {
                 data: { status: BookingStatus.CONFIRMED },
             });
         }
+
+        await this.creditReferral(payment.id);
     }
 
     private async onPaymentFailed(entity: any) {
@@ -227,6 +260,8 @@ export class PaymentService {
                 data: { status: BookingStatus.CONFIRMED },
             });
         }
+
+        if (payment) await this.creditReferral(payment.id);
 
         return { success: true, payment };
     }

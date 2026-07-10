@@ -29,14 +29,14 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 			return { success: true, data: partner };
 		})
 		.get("/institutions", async ({ auth, token }) => {
-			const application = await requireApprovedPartner(auth, adminApiClient, token);
-			const funnel = await adminApiClient.getFunnel(application.partnerId, token ?? "");
-			return { success: true, data: { institutions: funnel.institutions } };
+			const partner = await requireApprovedPartner(auth, adminApiClient, token);
+			const institutions = await adminApiClient.getInstitutions(partner.partnerId, token ?? "");
+			return { success: true, data: { institutions } };
 		})
 		.get("/institutions/:institutionId", async ({ auth, token, params }) => {
-			const application = await requireApprovedPartner(auth, adminApiClient, token);
-			const funnel = await adminApiClient.getFunnel(application.partnerId, token ?? "");
-			const institution = funnel.institutions.find(
+			const partner = await requireApprovedPartner(auth, adminApiClient, token);
+			const institutions = await adminApiClient.getInstitutions(partner.partnerId, token ?? "");
+			const institution = institutions.find(
 				(candidate) => candidate.institutionId === params.institutionId,
 			);
 			if (!institution) {
@@ -69,11 +69,14 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 		.patch(
 			"/campaigns/:campaignId",
 			async ({ auth, token, params, body }) => {
-				const application = await requireApprovedPartner(auth, adminApiClient, token);
+				const partner = await requireApprovedPartner(auth, adminApiClient, token);
 				const data = await adminApiClient.updateCampaign(
-					application.partnerId,
+					partner.partnerId,
 					params.campaignId,
-					body,
+					{
+						...(body.name !== undefined ? { name: body.name } : {}),
+						...(body.status !== undefined ? { status: body.status } : {}),
+					},
 					token ?? "",
 				);
 				return { success: true, data };
@@ -82,7 +85,8 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 				body: t.Object(
 					{
 						name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-						status: t.Optional(t.UnionEnum(["ACTIVE", "PAUSED"])),
+						// Mirrors admin-api's CampaignStatus (DEACTIVATED, not "PAUSED").
+						status: t.Optional(t.UnionEnum(["ACTIVE", "DEACTIVATED"])),
 					},
 					{ additionalProperties: false },
 				),

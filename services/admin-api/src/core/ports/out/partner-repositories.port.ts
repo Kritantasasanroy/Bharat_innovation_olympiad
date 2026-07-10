@@ -76,6 +76,8 @@ export interface NewCampaign {
 /** Outbound port: Campaign (referral link + coupon) persistence. */
 export interface CampaignRepository {
 	findById(id: string): Promise<Campaign | null>;
+	/** Resolve a shared referral code (what a student carries as `?ref=`) to its campaign. */
+	findByReferralCode(referralCode: string): Promise<Campaign | null>;
 	findByPartnerId(partnerId: string): Promise<readonly Campaign[]>;
 	/** True when neither `linkToken` nor `referralCode` is already in use by any campaign. */
 	isUnique(linkToken: string, referralCode: string): Promise<boolean>;

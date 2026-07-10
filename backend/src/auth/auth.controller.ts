@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, UnauthorizedException, UseGuar
 import { JwtService } from '@nestjs/jwt';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { AuthService } from './auth.service';
 import { LoginSyncDto, SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 
@@ -13,6 +14,7 @@ export class AuthController {
     constructor(
         private authService: AuthService,
         private jwtService: JwtService,
+        private partnerAdminApi: PartnerAdminApiClient,
     ) { }
 
     /**
@@ -39,6 +41,13 @@ export class AuthController {
     @Post('sync')
     async syncUser(@Body() dto: SyncUserDto) {
         const user = await this.authService.syncUser(dto.email, dto);
+
+        // Best-effort referral attribution: credit the signup to the partner
+        // campaign the student arrived from. Never allowed to fail registration.
+        if (dto.referralCode) {
+            await this.partnerAdminApi.tryCaptureSignup(dto.referralCode, user.id);
+        }
+
         // Issue our own HS256 JWT — used for all subsequent API calls
         const token = this.jwtService.sign(
             { sub: user.id, email: user.email, role: user.role },

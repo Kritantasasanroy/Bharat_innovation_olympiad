@@ -1,5 +1,6 @@
 import type {
 	AdminApiClient,
+	AssignedInstitution,
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
@@ -33,6 +34,7 @@ export class FakeAdminApiClient implements AdminApiClient {
 	readonly #funnels = new Map<string, PartnerFunnel>();
 	readonly #campaigns = new Map<string, Campaign[]>();
 	readonly #statements = new Map<string, Statement[]>();
+	readonly #institutions = new Map<string, AssignedInstitution[]>();
 
 	seedApplication(partnerId: string, application: PartnerApplication): void {
 		this.#applications.set(partnerId, application);
@@ -54,6 +56,15 @@ export class FakeAdminApiClient implements AdminApiClient {
 
 	seedStatements(partnerId: string, statements: Statement[]): void {
 		this.#statements.set(partnerId, statements);
+	}
+
+	seedInstitutions(partnerId: string, institutions: AssignedInstitution[]): void {
+		this.#institutions.set(partnerId, institutions);
+	}
+
+	getInstitutions(partnerId: string, token: string): Promise<readonly AssignedInstitution[]> {
+		this.calls.push({ method: "getInstitutions", partnerId, token });
+		return Promise.resolve([...(this.#institutions.get(partnerId) ?? [])]);
 	}
 
 	createPartnerApplication(

@@ -160,6 +160,10 @@ export class InMemoryCampaignRepository implements CampaignRepository {
 		return this.rows.get(id) ?? null;
 	}
 
+	async findByReferralCode(referralCode: string): Promise<Campaign | null> {
+		return [...this.rows.values()].find((c) => c.referralCode === referralCode) ?? null;
+	}
+
 	async findByPartnerId(partnerId: string): Promise<readonly Campaign[]> {
 		return [...this.rows.values()].filter((c) => c.partnerId === partnerId);
 	}

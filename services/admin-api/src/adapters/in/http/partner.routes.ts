@@ -22,6 +22,12 @@ export const partnerRoutes = (container: PartnerContainer) =>
 			const data = await container.partnerQueryService.get(params.id);
 			return { success: true, data };
 		})
+		.get("/partners/:id/campaigns", async ({ params, auth }) => {
+			const user = requireAuth(auth);
+			assertOwnsPartner(user, params.id);
+			const data = await container.campaignService.listByPartner(params.id);
+			return { success: true, data };
+		})
 		.post(
 			"/partners/:id/campaigns",
 			async ({ params, body, auth }) => {

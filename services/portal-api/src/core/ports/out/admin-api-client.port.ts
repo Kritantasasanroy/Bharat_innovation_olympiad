@@ -100,40 +100,50 @@ export interface PartnerApplication {
 	readonly decidedAt?: string;
 }
 
-export interface InstitutionPerformance {
+/**
+ * An institution assigned to the partner by staff. admin-api does not key
+ * attribution by institution, so there are deliberately no per-institution
+ * funnel counts here — inventing them would be a lie.
+ */
+export interface AssignedInstitution {
 	readonly institutionId: string;
-	readonly institutionName: string;
-	readonly leads: number;
-	readonly signups: number;
-	readonly paidConversions: number;
+	readonly effectiveFrom: string;
+	readonly effectiveTo: string | null;
 }
 
+/**
+ * Per-campaign funnel counts, using the ENGINE's vocabulary (not an invented
+ * one): `signups` are signup-time touches, `paid` are credited paid
+ * conversions. `registrations` and `paid` are currently the same number in
+ * admin-api (a registration IS the paid entitlement) but are both reported so a
+ * future split is additive.
+ */
 export interface CampaignFunnelBreakdown {
 	readonly campaignId: string;
 	readonly name: string;
 	readonly code: string;
 	readonly shareUrl: string;
 	readonly status: CampaignStatus;
-	readonly leads: number;
 	readonly signups: number;
-	readonly paidConversions: number;
+	readonly registrations: number;
+	readonly paid: number;
 }
 
 export interface PartnerFunnelTotals {
-	readonly leads: number;
 	readonly signups: number;
-	readonly paidConversions: number;
+	readonly registrations: number;
+	readonly paid: number;
 }
 
 export interface PartnerFunnel {
 	readonly partnerId: string;
 	readonly totals: PartnerFunnelTotals;
 	readonly campaigns: readonly CampaignFunnelBreakdown[];
-	readonly institutions: readonly InstitutionPerformance[];
 	readonly generatedAt: string;
 }
 
-export type CampaignStatus = "ACTIVE" | "PAUSED";
+/** Mirrors admin-api's `CampaignStatus` exactly (was previously "PAUSED"). */
+export type CampaignStatus = "ACTIVE" | "DEACTIVATED";
 
 export interface CampaignInput {
 	readonly name: string;
@@ -151,6 +161,17 @@ export interface Campaign {
 	readonly name: string;
 	readonly code: string;
 	readonly shareUrl: string;
+	readonly status: CampaignStatus;
+	readonly createdAt: string;
+}
+
+/** Raw campaign row as admin-api returns it (`referralCode`, not `code`). */
+export interface AdminApiCampaignRow {
+	readonly id: string;
+	readonly partnerId: string;
+	readonly name: string;
+	readonly referralCode: string;
+	readonly linkToken: string;
 	readonly status: CampaignStatus;
 	readonly createdAt: string;
 }
@@ -194,7 +215,14 @@ export interface AdminApiClient {
 	/** The Partner aggregate — its `status` is the dashboard access gate. */
 	getPartner(partnerId: string, token: string): Promise<Partner | null>;
 
+	/**
+	 * The partner's funnel, enriched with each campaign's share code/URL and
+	 * status (admin-api splits these across `/funnel` and `/campaigns`).
+	 */
 	getFunnel(partnerId: string, token: string): Promise<PartnerFunnel>;
+
+	/** Institutions staff have assigned to this partner. */
+	getInstitutions(partnerId: string, token: string): Promise<readonly AssignedInstitution[]>;
 
 	createCampaign(partnerId: string, input: CampaignInput, token: string): Promise<Campaign>;
 

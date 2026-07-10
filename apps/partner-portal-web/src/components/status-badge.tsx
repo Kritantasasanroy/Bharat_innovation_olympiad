@@ -9,7 +9,9 @@ const TONE_BY_STATUS: Record<string, string> = {
 	OPEN: "badge badge--pending",
 	IN_PROGRESS: "badge badge--pending",
 	PAUSED: "badge badge--pending",
+	DEACTIVATED: "badge badge--pending",
 	REJECTED: "badge badge--negative",
+	REVOKED: "badge badge--negative",
 	ON_HOLD: "badge badge--negative",
 };
 

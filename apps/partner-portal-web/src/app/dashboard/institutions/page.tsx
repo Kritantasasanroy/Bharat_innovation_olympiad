@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiError, portalApi } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
-import type { InstitutionPerformance } from "../../../lib/types";
+import type { AssignedInstitution } from "../../../lib/types";
 
 export default function InstitutionsPage() {
 	const { token } = useAuth();
-	const [institutions, setInstitutions] = useState<readonly InstitutionPerformance[] | null>(null);
+	const [institutions, setInstitutions] = useState<readonly AssignedInstitution[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -23,7 +23,10 @@ export default function InstitutionsPage() {
 		<main>
 			<div className="page-header">
 				<h1>Institutions</h1>
-				<p>All institutions assigned to you, with performance for each.</p>
+				<p>
+					Institutions the BIO team has assigned to you. Conversions are tracked per referral
+					campaign rather than per institution — see the funnel for those numbers.
+				</p>
 			</div>
 
 			{error ? <div className="notice notice--error">{error}</div> : null}
@@ -35,19 +38,27 @@ export default function InstitutionsPage() {
 							<thead>
 								<tr>
 									<th>Institution</th>
-									<th>Leads</th>
-									<th>Signups</th>
-									<th>Paid conversions</th>
+									<th>Assigned from</th>
+									<th>Status</th>
 									<th />
 								</tr>
 							</thead>
 							<tbody>
 								{institutions.map((institution) => (
 									<tr key={institution.institutionId}>
-										<td>{institution.institutionName}</td>
-										<td>{institution.leads}</td>
-										<td>{institution.signups}</td>
-										<td>{institution.paidConversions}</td>
+										<td>{institution.institutionId}</td>
+										<td className="muted">
+											{new Date(institution.effectiveFrom).toLocaleDateString()}
+										</td>
+										<td>
+											<span
+												className={
+													institution.effectiveTo ? "badge badge--negative" : "badge badge--positive"
+												}
+											>
+												{institution.effectiveTo ? "Ended" : "Active"}
+											</span>
+										</td>
 										<td>
 											<Link href={`/dashboard/institutions/${institution.institutionId}`}>
 												Details →
@@ -57,8 +68,8 @@ export default function InstitutionsPage() {
 								))}
 								{institutions.length === 0 ? (
 									<tr>
-										<td colSpan={5} className="muted">
-											No institutions assigned yet — check back once you have referred one.
+										<td colSpan={4} className="muted">
+											No institutions assigned yet — the BIO team assigns these.
 										</td>
 									</tr>
 								) : null}

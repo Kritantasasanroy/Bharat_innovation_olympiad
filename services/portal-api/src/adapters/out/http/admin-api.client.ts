@@ -1,6 +1,8 @@
 import { NotFoundError, ProviderError } from "../../../core/errors";
 import type {
+	AdminApiCampaignRow,
 	AdminApiClient,
+	AssignedInstitution,
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
@@ -12,6 +14,20 @@ import type {
 	StatementRequestInput,
 } from "../../../core/ports/out/index.ts";
 
+/** The raw funnel admin-api returns: totals + counts keyed by campaign id only. */
+interface AdminApiFunnel {
+	readonly partnerId: string;
+	readonly signups: number;
+	readonly registrations: number;
+	readonly paid: number;
+	readonly byCampaign: readonly {
+		readonly campaignId: string;
+		readonly signups: number;
+		readonly registrations: number;
+		readonly paid: number;
+	}[];
+}
+
 /**
  * HTTP adapter to `admin-api`'s partner engine (PRD-046). See the docblock on
  * {@link AdminApiClient} (`core/ports/out/admin-api-client.port.ts`) for the
@@ -22,10 +38,16 @@ import type {
  */
 export class HttpAdminApiClient implements AdminApiClient {
 	readonly #baseUrl: string;
+	readonly #studentAppUrl: string;
 	readonly #fetchImpl: typeof fetch;
 
-	constructor(baseUrl: string, fetchImpl: typeof fetch = fetch) {
+	constructor(
+		baseUrl: string,
+		studentAppUrl = "http://localhost:3000",
+		fetchImpl: typeof fetch = fetch,
+	) {
 		this.#baseUrl = baseUrl.replace(/\/+$/, "");
+		this.#studentAppUrl = studentAppUrl.replace(/\/+$/, "");
 		this.#fetchImpl = fetchImpl;
 	}
 
@@ -70,12 +92,69 @@ export class HttpAdminApiClient implements AdminApiClient {
 		}
 	}
 
-	getFunnel(partnerId: string, token: string): Promise<PartnerFunnel> {
-		return this.#request<PartnerFunnel>(
+	/**
+	 * admin-api splits what the portal needs across two reads: `/funnel` gives
+	 * the per-campaign counts (keyed only by campaign id), and `/campaigns` gives
+	 * each campaign's name, referral code, and status. This merges them and
+	 * derives the shareable `?ref=` link, so the portal gets one coherent DTO.
+	 * A campaign with no attribution yet still appears, at zero.
+	 */
+	async getFunnel(partnerId: string, token: string): Promise<PartnerFunnel> {
+		const [funnel, rows] = await Promise.all([
+			this.#request<AdminApiFunnel>(
+				"GET",
+				`/partners/${encodeURIComponent(partnerId)}/funnel`,
+				token,
+			),
+			this.#listCampaigns(partnerId, token),
+		]);
+
+		const countsById = new Map(funnel.byCampaign.map((c) => [c.campaignId, c]));
+		const campaigns = rows.map((row) => {
+			const counts = countsById.get(row.id);
+			return {
+				campaignId: row.id,
+				name: row.name,
+				code: row.referralCode,
+				shareUrl: this.#shareUrl(row.referralCode),
+				status: row.status,
+				signups: counts?.signups ?? 0,
+				registrations: counts?.registrations ?? 0,
+				paid: counts?.paid ?? 0,
+			};
+		});
+
+		return {
+			partnerId: funnel.partnerId,
+			totals: {
+				signups: funnel.signups,
+				registrations: funnel.registrations,
+				paid: funnel.paid,
+			},
+			campaigns,
+			generatedAt: new Date().toISOString(),
+		};
+	}
+
+	getInstitutions(partnerId: string, token: string): Promise<readonly AssignedInstitution[]> {
+		return this.#request<readonly AssignedInstitution[]>(
 			"GET",
-			`/partners/${encodeURIComponent(partnerId)}/funnel`,
+			`/partners/${encodeURIComponent(partnerId)}/institutions`,
 			token,
 		);
+	}
+
+	#listCampaigns(partnerId: string, token: string): Promise<readonly AdminApiCampaignRow[]> {
+		return this.#request<readonly AdminApiCampaignRow[]>(
+			"GET",
+			`/partners/${encodeURIComponent(partnerId)}/campaigns`,
+			token,
+		);
+	}
+
+	/** The link a partner shares; the student app captures `?ref=` on first touch. */
+	#shareUrl(referralCode: string): string {
+		return `${this.#studentAppUrl}/?ref=${encodeURIComponent(referralCode)}`;
 	}
 
 	createCampaign(partnerId: string, input: CampaignInput, token: string): Promise<Campaign> {
@@ -87,17 +166,26 @@ export class HttpAdminApiClient implements AdminApiClient {
 		);
 	}
 
+	/**
+	 * admin-api's update takes a `deactivate` boolean, not a status string —
+	 * translate here (this adapter is the one place such assumptions become
+	 * real URLs/bodies).
+	 */
 	updateCampaign(
 		partnerId: string,
 		campaignId: string,
 		input: CampaignUpdateInput,
 		token: string,
 	): Promise<Campaign> {
+		const body: { name?: string; deactivate?: boolean } = {};
+		if (input.name !== undefined) body.name = input.name;
+		if (input.status !== undefined) body.deactivate = input.status === "DEACTIVATED";
+
 		return this.#request<Campaign>(
 			"PATCH",
 			`/partners/${encodeURIComponent(partnerId)}/campaigns/${encodeURIComponent(campaignId)}`,
 			token,
-			input,
+			body,
 		);
 	}
 

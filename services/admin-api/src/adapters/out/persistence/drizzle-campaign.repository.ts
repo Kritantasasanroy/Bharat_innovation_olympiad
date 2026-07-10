@@ -55,6 +55,16 @@ export class DrizzleCampaignRepository implements CampaignRepository {
 		return row ? toCampaign(row) : null;
 	}
 
+	async findByReferralCode(referralCode: string): Promise<Campaign | null> {
+		const rows = await this.db
+			.select()
+			.from(campaigns)
+			.where(eq(campaigns.referralCode, referralCode))
+			.limit(1);
+		const row = rows[0];
+		return row ? toCampaign(row) : null;
+	}
+
 	async findByPartnerId(partnerId: string): Promise<readonly Campaign[]> {
 		const rows = await this.db.select().from(campaigns).where(eq(campaigns.partnerId, partnerId));
 		return rows.map(toCampaign);

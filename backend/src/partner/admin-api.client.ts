@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 /**
@@ -21,10 +21,21 @@ export interface AdminApiApplication {
     status: string;
 }
 
+export interface AdminApiCampaign {
+    id: string;
+    partnerId: string;
+    name: string;
+    referralCode: string;
+    linkToken: string;
+    status: string;
+}
+
 export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
 
 @Injectable()
 export class PartnerAdminApiClient {
+    private readonly logger = new Logger(PartnerAdminApiClient.name);
+
     constructor(private jwt: JwtService) {}
 
     private staffToken(): string {
@@ -84,5 +95,56 @@ export class PartnerAdminApiClient {
             `/partners/${encodeURIComponent(partnerId)}/access`,
             { method: 'PATCH', body: JSON.stringify({ status, reason }) },
         );
+    }
+
+    // ── Referral attribution ────────────────────────────────────────────────
+    //
+    // Attribution is best-effort: a referral must never break a student's
+    // registration or payment. Callers use `tryCaptureSignup` /
+    // `tryCapturePaidConversion`, which swallow (and log) failures.
+
+    /** Resolve the `?ref=CODE` a student carried in to its campaign. */
+    private getCampaignByCode(code: string): Promise<AdminApiCampaign> {
+        return this.call<AdminApiCampaign>(
+            `/campaigns/by-code/${encodeURIComponent(code)}`,
+            { method: 'GET' },
+        );
+    }
+
+    /** Record a signup touch for a referred student. Never throws. */
+    async tryCaptureSignup(referralCode: string, studentId: string): Promise<void> {
+        try {
+            const campaign = await this.getCampaignByCode(referralCode);
+            await this.call(`/campaigns/${encodeURIComponent(campaign.id)}/signup`, {
+                method: 'POST',
+                body: JSON.stringify({ studentId }),
+            });
+            this.logger.log(`Attributed signup of ${studentId} to campaign ${campaign.id}`);
+        } catch (error) {
+            this.logger.warn(
+                `Referral signup attribution skipped (code=${referralCode}): ${(error as Error).message}`,
+            );
+        }
+    }
+
+    /** Credit a paid conversion to the student's referring campaign. Never throws. */
+    async tryCapturePaidConversion(
+        referralCode: string,
+        studentId: string,
+        registrationId: string,
+        amountPaise: number,
+    ): Promise<void> {
+        try {
+            const campaign = await this.getCampaignByCode(referralCode);
+            await this.call(`/campaigns/${encodeURIComponent(campaign.id)}/paid-conversion`, {
+                method: 'POST',
+                body: JSON.stringify({ studentId, registrationId, amountPaise }),
+            });
+            this.logger.log(`Credited paid conversion of ${studentId} to campaign ${campaign.id}`);
+        } catch (error) {
+            this.logger.warn(
+                `Referral paid-conversion attribution skipped (code=${referralCode}): ${(error as Error).message}`,
+            );
+        }
     }
 }

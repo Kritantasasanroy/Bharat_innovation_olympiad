@@ -7,6 +7,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { emailOtp } from '@/lib/auth-client';
+import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import { FormEvent, useState, useRef, useEffect } from 'react';
 import schoolsData from '@/data/schools.json';
 
@@ -87,6 +88,11 @@ export default function RegisterPage() {
         }
     };
 
+    // A partner may link straight here (`/register?ref=CODE`).
+    useEffect(() => {
+        captureReferralFromUrl();
+    }, []);
+
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -153,8 +159,16 @@ export default function RegisterPage() {
 
             // OTP verified ✓ — now create the user in our backend.
             // /auth/sync is a public endpoint that takes email in the body.
+            // A partner referral code (`?ref=`) rides along so the backend can
+            // credit the signup — and later the paid conversion — to that partner.
             const { schoolCode, ...profileData } = formData;
-            await register({ ...profileData, ...(schoolCode ? { schoolCode } : {}) });
+            const referralCode = getReferralCode();
+            await register({
+                ...profileData,
+                ...(schoolCode ? { schoolCode } : {}),
+                ...(referralCode ? { referralCode } : {}),
+            });
+            clearReferralCode();
 
             // Account created — face enrollment is mandatory for new students
             // before they can reach the dashboard.

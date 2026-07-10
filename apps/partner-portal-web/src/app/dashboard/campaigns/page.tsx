@@ -50,7 +50,7 @@ export default function CampaignsPage() {
 		setBusyCampaignId(campaignId);
 		try {
 			await portalApi.updateCampaign(token, campaignId, {
-				status: currentlyActive ? "PAUSED" : "ACTIVE",
+				status: currentlyActive ? "DEACTIVATED" : "ACTIVE",
 			});
 			await load();
 		} catch (err) {
@@ -116,18 +116,22 @@ export default function CampaignsPage() {
 								</div>
 								<CopyField label="Code" value={campaign.code} />
 								<CopyField label="Share link" value={campaign.shareUrl} />
+								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
+									Share this link. A student who lands on it and registers is credited to this
+									campaign — and so is their payment.
+								</p>
 								<div className="stat-row" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-									<div className="stat-tile">
-										<span className="stat-tile__label">Leads</span>
-										<span className="stat-tile__value">{campaign.leads}</span>
-									</div>
 									<div className="stat-tile">
 										<span className="stat-tile__label">Signups</span>
 										<span className="stat-tile__value">{campaign.signups}</span>
 									</div>
 									<div className="stat-tile">
+										<span className="stat-tile__label">Registrations</span>
+										<span className="stat-tile__value">{campaign.registrations}</span>
+									</div>
+									<div className="stat-tile">
 										<span className="stat-tile__label">Paid</span>
-										<span className="stat-tile__value">{campaign.paidConversions}</span>
+										<span className="stat-tile__value">{campaign.paid}</span>
 									</div>
 								</div>
 							</div>

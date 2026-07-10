@@ -5,13 +5,13 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, portalApi } from "../../../../lib/api-client";
 import { useAuth } from "../../../../lib/auth-context";
-import type { InstitutionPerformance } from "../../../../lib/types";
+import type { AssignedInstitution } from "../../../../lib/types";
 
 export default function InstitutionDetailPage() {
 	const { token } = useAuth();
 	const params = useParams<{ institutionId: string }>();
 	const institutionId = params.institutionId;
-	const [institution, setInstitution] = useState<InstitutionPerformance | null>(null);
+	const [institution, setInstitution] = useState<AssignedInstitution | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -39,21 +39,42 @@ export default function InstitutionDetailPage() {
 			{institution ? (
 				<>
 					<div className="page-header">
-						<h1>{institution.institutionName}</h1>
+						<h1>{institution.institutionId}</h1>
+						<p>Assignment details for this institution.</p>
 					</div>
-					<div className="stat-row">
-						<div className="stat-tile">
-							<span className="stat-tile__label">Leads</span>
-							<span className="stat-tile__value">{institution.leads}</span>
-						</div>
-						<div className="stat-tile">
-							<span className="stat-tile__label">Signups</span>
-							<span className="stat-tile__value">{institution.signups}</span>
-						</div>
-						<div className="stat-tile">
-							<span className="stat-tile__label">Paid conversions</span>
-							<span className="stat-tile__value">{institution.paidConversions}</span>
-						</div>
+					<div className="card">
+						<table>
+							<tbody>
+								<tr>
+									<th>Assigned from</th>
+									<td>{new Date(institution.effectiveFrom).toLocaleString()}</td>
+								</tr>
+								<tr>
+									<th>Assignment ended</th>
+									<td>
+										{institution.effectiveTo
+											? new Date(institution.effectiveTo).toLocaleString()
+											: "—"}
+									</td>
+								</tr>
+								<tr>
+									<th>Status</th>
+									<td>
+										<span
+											className={
+												institution.effectiveTo ? "badge badge--negative" : "badge badge--positive"
+											}
+										>
+											{institution.effectiveTo ? "Ended" : "Active"}
+										</span>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+						<p className="muted" style={{ marginTop: "1rem", marginBottom: 0 }}>
+							Conversions are attributed per referral campaign, not per institution — see the{" "}
+							<Link href="/dashboard/funnel">funnel</Link> for those numbers.
+						</p>
 					</div>
 				</>
 			) : !error ? (

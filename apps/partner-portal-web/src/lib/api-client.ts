@@ -2,7 +2,7 @@ import type {
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
-	InstitutionPerformance,
+	AssignedInstitution,
 	PartnerFunnel,
 	Statement,
 	StatementRequestInput,
@@ -93,10 +93,10 @@ export const portalApi = {
 	getMe: (token: string) => request<ApprovedPartner>("/partner/me", token),
 
 	getInstitutions: (token: string) =>
-		request<{ institutions: readonly InstitutionPerformance[] }>("/partner/institutions", token),
+		request<{ institutions: readonly AssignedInstitution[] }>("/partner/institutions", token),
 
 	getInstitution: (token: string, institutionId: string) =>
-		request<InstitutionPerformance>(
+		request<AssignedInstitution>(
 			`/partner/institutions/${encodeURIComponent(institutionId)}`,
 			token,
 		),

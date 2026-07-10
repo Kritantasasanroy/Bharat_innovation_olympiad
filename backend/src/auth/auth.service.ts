@@ -32,6 +32,9 @@ export class AuthService {
                     role: dto.role || 'STUDENT',
                     classBand: dto.classBand,
                     schoolId,
+                    // Remembered so the later paid conversion can be credited to
+                    // the referring partner's campaign (PRD-046 attribution).
+                    referralCode: dto.referralCode ?? null,
                 }
             });
 

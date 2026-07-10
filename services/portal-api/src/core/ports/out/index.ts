@@ -1,11 +1,12 @@
 export type {
+	AdminApiCampaignRow,
 	AdminApiClient,
+	AssignedInstitution,
 	Campaign,
 	CampaignFunnelBreakdown,
 	CampaignInput,
 	CampaignStatus,
 	CampaignUpdateInput,
-	InstitutionPerformance,
 	Partner,
 	PartnerAccessStatus,
 	PartnerApplication,

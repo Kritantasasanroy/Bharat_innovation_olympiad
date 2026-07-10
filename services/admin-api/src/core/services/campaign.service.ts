@@ -21,6 +21,25 @@ export interface CampaignServiceDeps {
 export class CampaignService {
 	constructor(private readonly deps: CampaignServiceDeps) {}
 
+	/**
+	 * Resolve a shared referral code (the `?ref=` a student carries in from a
+	 * partner's link) to its campaign. Only ACTIVE campaigns resolve, so a
+	 * deactivated link simply stops attributing rather than breaking signup.
+	 */
+	async getByReferralCode(referralCode: string): Promise<Campaign> {
+		if (!referralCode || referralCode.trim().length === 0) {
+			throw new ValidationError("Validation failed", [
+				{ field: "referralCode", message: "referralCode is required" },
+			]);
+		}
+		const campaign = await this.deps.campaigns.findByReferralCode(referralCode.trim());
+		if (!campaign) throw new NotFoundError("Campaign", referralCode);
+		if (campaign.status !== CampaignStatus.ACTIVE) {
+			throw new ConflictError(`Campaign ${campaign.id} is not active`, "CAMPAIGN_INACTIVE");
+		}
+		return campaign;
+	}
+
 	async create(input: CreateCampaignInput): Promise<Campaign> {
 		if (!input.name || input.name.trim().length === 0) {
 			throw new ValidationError("Validation failed", [
@@ -63,18 +82,26 @@ export class CampaignService {
 			if (!updated) throw new NotFoundError("Campaign", input.campaignId);
 		}
 
-		if (input.deactivate) {
-			const deactivated = await this.deps.campaigns.setStatus(
-				input.campaignId,
-				CampaignStatus.DEACTIVATED,
-			);
-			if (!deactivated) throw new NotFoundError("Campaign", input.campaignId);
-			return deactivated;
+		// `deactivate` is a two-way switch: true pauses the campaign, false
+		// resumes it. (Previously only the pause direction was honoured, so a
+		// paused referral link could never be brought back.)
+		if (input.deactivate !== undefined) {
+			const nextStatus = input.deactivate ? CampaignStatus.DEACTIVATED : CampaignStatus.ACTIVE;
+			const switched = await this.deps.campaigns.setStatus(input.campaignId, nextStatus);
+			if (!switched) throw new NotFoundError("Campaign", input.campaignId);
+			return switched;
 		}
 
 		const result = await this.deps.campaigns.findById(input.campaignId);
 		if (!result) throw new NotFoundError("Campaign", input.campaignId);
 		return result;
+	}
+
+	/** Every campaign belonging to a partner (referral code, link token, status). */
+	async listByPartner(partnerId: string): Promise<readonly Campaign[]> {
+		const partner = await this.deps.partners.findById(partnerId);
+		if (!partner) throw new NotFoundError("Partner", partnerId);
+		return this.deps.campaigns.findByPartnerId(partnerId);
 	}
 
 	private async generateUniqueTokens(): Promise<{ linkToken: string; referralCode: string }> {

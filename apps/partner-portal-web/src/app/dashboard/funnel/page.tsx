@@ -32,16 +32,16 @@ export default function FunnelPage() {
 				<>
 					<div className="stat-row">
 						<div className="stat-tile">
-							<span className="stat-tile__label">Leads</span>
-							<span className="stat-tile__value">{funnel.totals.leads}</span>
-						</div>
-						<div className="stat-tile">
 							<span className="stat-tile__label">Signups</span>
 							<span className="stat-tile__value">{funnel.totals.signups}</span>
 						</div>
 						<div className="stat-tile">
+							<span className="stat-tile__label">Registrations</span>
+							<span className="stat-tile__value">{funnel.totals.registrations}</span>
+						</div>
+						<div className="stat-tile">
 							<span className="stat-tile__label">Paid conversions</span>
-							<span className="stat-tile__value">{funnel.totals.paidConversions}</span>
+							<span className="stat-tile__value">{funnel.totals.paid}</span>
 						</div>
 					</div>
 
@@ -53,10 +53,9 @@ export default function FunnelPage() {
 									<tr>
 										<th>Campaign</th>
 										<th>Status</th>
-										<th>Leads</th>
 										<th>Signups</th>
+										<th>Registrations</th>
 										<th>Paid</th>
-										<th>Signup rate</th>
 										<th>Paid rate</th>
 									</tr>
 								</thead>
@@ -67,16 +66,15 @@ export default function FunnelPage() {
 											<td>
 												<StatusBadge status={campaign.status} />
 											</td>
-											<td>{campaign.leads}</td>
 											<td>{campaign.signups}</td>
-											<td>{campaign.paidConversions}</td>
-											<td>{formatRate(campaign.signups, campaign.leads)}</td>
-											<td>{formatRate(campaign.paidConversions, campaign.signups)}</td>
+											<td>{campaign.registrations}</td>
+											<td>{campaign.paid}</td>
+											<td>{formatRate(campaign.paid, campaign.signups)}</td>
 										</tr>
 									))}
 									{funnel.campaigns.length === 0 ? (
 										<tr>
-											<td colSpan={7} className="muted">
+											<td colSpan={6} className="muted">
 												No campaigns yet.
 											</td>
 										</tr>

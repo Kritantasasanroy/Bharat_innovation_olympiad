@@ -7,6 +7,8 @@ export interface Config {
 	readonly corsOrigin: string | boolean;
 	/** `mailto:` target shown as the dispute/contact link (PRD-011 — plain link, not a ticket system). */
 	readonly partnerSupportEmail: string;
+	/** Student app base URL used to build a campaign's shareable `?ref=` link. */
+	readonly studentAppUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -16,6 +18,7 @@ export function loadConfig(): Config {
 		adminApiUrl: process.env["ADMIN_API_URL"] ?? "http://localhost:4100",
 		corsOrigin: process.env["CORS_ORIGIN"] ?? true,
 		partnerSupportEmail: process.env["PARTNER_SUPPORT_EMAIL"] ?? "partners@bio.example.com",
+		studentAppUrl: process.env["STUDENT_APP_URL"] ?? "http://localhost:3000",
 	};
 }
 

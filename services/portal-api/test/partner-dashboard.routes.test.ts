@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { PartnerApplication, PartnerFunnel } from "../src/core/ports/out/index.ts";
+import type {
+	AssignedInstitution,
+	PartnerApplication,
+	PartnerFunnel,
+} from "../src/core/ports/out/index.ts";
 import { authHeader, buildTestApp, partnerToken } from "./support/build-test-app";
 
 function approvedApplication(partnerId: string): PartnerApplication {
@@ -17,30 +21,32 @@ function approvedApplication(partnerId: string): PartnerApplication {
 function fundedFunnel(partnerId: string, seed: number): PartnerFunnel {
 	return {
 		partnerId,
-		totals: { leads: seed * 10, signups: seed * 5, paidConversions: seed },
+		totals: { signups: seed * 5, registrations: seed, paid: seed },
 		campaigns: [
 			{
 				campaignId: `camp-${partnerId}`,
 				name: `${partnerId} campaign`,
 				code: `${partnerId.toUpperCase()}-CODE`,
-				shareUrl: `https://portal.bio.example.com/r/${partnerId}`,
+				shareUrl: `https://exam.bio.example.com/?ref=${partnerId.toUpperCase()}-CODE`,
 				status: "ACTIVE",
-				leads: seed * 10,
 				signups: seed * 5,
-				paidConversions: seed,
-			},
-		],
-		institutions: [
-			{
-				institutionId: `inst-${partnerId}`,
-				institutionName: `${partnerId} Institution`,
-				leads: seed * 10,
-				signups: seed * 5,
-				paidConversions: seed,
+				registrations: seed,
+				paid: seed,
 			},
 		],
 		generatedAt: new Date().toISOString(),
 	};
+}
+
+/** Institutions now come from admin-api's assignment route, not the funnel. */
+function assignedInstitutions(partnerId: string): AssignedInstitution[] {
+	return [
+		{
+			institutionId: `inst-${partnerId}`,
+			effectiveFrom: new Date().toISOString(),
+			effectiveTo: null,
+		},
+	];
 }
 
 const DASHBOARD_ROUTES = ["/partner/institutions", "/partner/funnel", "/partner/statements"];
@@ -116,7 +122,7 @@ describe("no cross-partner leakage across the dashboard", () => {
 		);
 		const bodyA = await asA.json();
 		expect(bodyA.data.partnerId).toBe("partner-a");
-		expect(bodyA.data.totals.paidConversions).toBe(1);
+		expect(bodyA.data.totals.paid).toBe(1);
 
 		const asB = await app.handle(
 			new Request("http://localhost/partner/funnel", {
@@ -125,7 +131,7 @@ describe("no cross-partner leakage across the dashboard", () => {
 		);
 		const bodyB = await asB.json();
 		expect(bodyB.data.partnerId).toBe("partner-b");
-		expect(bodyB.data.totals.paidConversions).toBe(99);
+		expect(bodyB.data.totals.paid).toBe(99);
 
 		const funnelCalls = adminApiClient.calls.filter((call) => call.method === "getFunnel");
 		expect(funnelCalls.map((call) => call.partnerId)).toEqual(["partner-a", "partner-b"]);
@@ -135,8 +141,8 @@ describe("no cross-partner leakage across the dashboard", () => {
 		const { app, adminApiClient } = buildTestApp();
 		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
 		adminApiClient.seedApplication("partner-b", approvedApplication("partner-b"));
-		adminApiClient.seedFunnel("partner-a", fundedFunnel("partner-a", 1));
-		adminApiClient.seedFunnel("partner-b", fundedFunnel("partner-b", 99));
+		adminApiClient.seedInstitutions("partner-a", assignedInstitutions("partner-a"));
+		adminApiClient.seedInstitutions("partner-b", assignedInstitutions("partner-b"));
 
 		// Attempt to smuggle partner-b's id in as a query param while authenticated as partner-a.
 		const response = await app.handle(
@@ -145,9 +151,12 @@ describe("no cross-partner leakage across the dashboard", () => {
 			}),
 		);
 		const body = await response.json();
-		expect(body.data.institutions).toEqual(fundedFunnel("partner-a", 1).institutions);
+		expect(body.data.institutions).toHaveLength(1);
+		expect(body.data.institutions[0].institutionId).toBe("inst-partner-a");
 
-		const institutionCalls = adminApiClient.calls.filter((call) => call.method === "getFunnel");
+		const institutionCalls = adminApiClient.calls.filter(
+			(call) => call.method === "getInstitutions",
+		);
 		expect(institutionCalls).toHaveLength(1);
 		expect(institutionCalls[0]?.partnerId).toBe("partner-a");
 	});
@@ -243,7 +252,7 @@ describe("GET /partner/institutions/:institutionId", () => {
 	it("returns the institution detail when it belongs to the caller", async () => {
 		const { app, adminApiClient } = buildTestApp();
 		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
-		adminApiClient.seedFunnel("partner-a", fundedFunnel("partner-a", 1));
+		adminApiClient.seedInstitutions("partner-a", assignedInstitutions("partner-a"));
 
 		const response = await app.handle(
 			new Request("http://localhost/partner/institutions/inst-partner-a", {
