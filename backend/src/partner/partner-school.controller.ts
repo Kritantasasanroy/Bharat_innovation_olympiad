@@ -42,6 +42,9 @@ export class PartnerSchoolController {
                 coordinatorName: true,
                 coordinatorEmail: true,
                 status: true,
+                // Which campaign drove this school (null for a direct onboard),
+                // so the partner portal can count schools per campaign.
+                submittedViaReferralCode: true,
                 decisionReason: true,
                 createdAt: true,
                 decidedAt: true,

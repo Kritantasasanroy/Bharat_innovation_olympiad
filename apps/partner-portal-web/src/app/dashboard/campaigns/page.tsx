@@ -1,15 +1,17 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { CopyField } from "../../../components/copy-field";
 import { StatusBadge } from "../../../components/status-badge";
-import { ApiError, portalApi } from "../../../lib/api-client";
+import { ApiError, type PartnerSchool, partnerSchoolApi, portalApi } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
 import type { CampaignFunnelBreakdown } from "../../../lib/types";
+import { usePoll } from "../../../lib/use-poll";
 
 export default function CampaignsPage() {
 	const { token } = useAuth();
 	const [campaigns, setCampaigns] = useState<readonly CampaignFunnelBreakdown[] | null>(null);
+	const [schools, setSchools] = useState<PartnerSchool[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [name, setName] = useState("");
 	const [creating, setCreating] = useState(false);
@@ -18,16 +20,29 @@ export default function CampaignsPage() {
 	const load = useCallback(async () => {
 		if (!token) return;
 		try {
-			const funnel = await portalApi.getFunnel(token);
+			// Student conversions come from the funnel; school onboards are tracked
+			// on the backend (SchoolRequest.submittedViaReferralCode), so merge both.
+			const [funnel, schoolList] = await Promise.all([
+				portalApi.getFunnel(token),
+				partnerSchoolApi.list(token),
+			]);
 			setCampaigns(funnel.campaigns);
+			setSchools(schoolList);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load campaigns.");
 		}
 	}, [token]);
 
-	useEffect(() => {
-		void load();
-	}, [load]);
+	usePoll(load);
+
+	/** Schools this campaign's link brought in, by status. */
+	const schoolsForCode = (code: string) => {
+		const matched = schools.filter((s) => s.submittedViaReferralCode === code);
+		return {
+			total: matched.length,
+			approved: matched.filter((s) => s.status === "APPROVED").length,
+		};
+	};
 
 	async function handleCreate(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -127,7 +142,7 @@ export default function CampaignsPage() {
 								</p>
 								<div className="stat-row" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
 									<div className="stat-tile">
-										<span className="stat-tile__label">Signups</span>
+										<span className="stat-tile__label">Student signups</span>
 										<span className="stat-tile__value">{campaign.signups}</span>
 									</div>
 									<div className="stat-tile">
@@ -137,6 +152,13 @@ export default function CampaignsPage() {
 									<div className="stat-tile">
 										<span className="stat-tile__label">Paid</span>
 										<span className="stat-tile__value">{campaign.paid}</span>
+									</div>
+									<div className="stat-tile">
+										<span className="stat-tile__label">Schools onboarded</span>
+										<span className="stat-tile__value">{schoolsForCode(campaign.code).total}</span>
+										<span className="muted" style={{ fontSize: "0.72rem" }}>
+											{schoolsForCode(campaign.code).approved} approved
+										</span>
 									</div>
 								</div>
 							</div>

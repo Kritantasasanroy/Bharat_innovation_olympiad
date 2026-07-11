@@ -37,20 +37,25 @@ export default function GrievancesPage() {
     const [resolution, setResolution] = useState('');
     const [busy, setBusy] = useState(false);
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async (background = false) => {
+        if (!background) setLoading(true);
         try {
             const { data } = await api.get<Grievance[]>('/admin/grievances');
             setItems(data);
+            setError(null);
         } catch {
-            setError('Could not load grievances.');
+            if (!background) setError('Could not load grievances.');
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         void load();
+        const id = setInterval(() => {
+            if (document.visibilityState === 'visible') void load(true);
+        }, 12_000);
+        return () => clearInterval(id);
     }, [load]);
 
     async function submit(event: FormEvent) {

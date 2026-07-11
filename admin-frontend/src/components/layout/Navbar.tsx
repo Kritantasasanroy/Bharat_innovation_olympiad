@@ -50,6 +50,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
         items: [
             { label: 'Live proctor', href: '/proctor' },
             { label: 'Grievances', href: '/grievances' },
+            { label: 'Support tickets', href: '/support' },
             { label: 'Refunds', href: '/refunds' },
         ],
     },

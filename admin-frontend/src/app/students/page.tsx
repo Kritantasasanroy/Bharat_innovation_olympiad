@@ -49,22 +49,26 @@ export default function StudentsAdminPage() {
     const [editing, setEditing] = useState<ManagedUser | null>(null);
     const [deleting, setDeleting] = useState<ManagedUser | null>(null);
 
-    const load = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const load = useCallback(async (background = false) => {
+        if (!background) setLoading(true);
         try {
             const params = role === 'ALL' ? {} : { role };
             const { data } = await api.get<ManagedUser[]>('/admin/manage/users', { params });
             setUsers(data);
+            setError(null);
         } catch {
-            setError('Could not load users.');
+            if (!background) setError('Could not load users.');
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, [role]);
 
     useEffect(() => {
         void load();
+        const id = setInterval(() => {
+            if (document.visibilityState === 'visible') void load(true);
+        }, 12_000);
+        return () => clearInterval(id);
     }, [load]);
 
     useEffect(() => {

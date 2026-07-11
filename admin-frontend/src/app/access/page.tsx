@@ -220,9 +220,8 @@ export default function AccessPage() {
     const [deleteReason, setDeleteReason] = useState('');
     const [deleting, setDeleting] = useState(false);
 
-    const load = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const load = useCallback(async (background = false) => {
+        if (!background) setLoading(true);
         try {
             const [p, s] = await Promise.all([
                 api.get<PartnerRow[]>('/admin/partner-requests'),
@@ -230,15 +229,21 @@ export default function AccessPage() {
             ]);
             setPartners(p.data);
             setSchools(s.data);
+            setError(null);
         } catch {
-            setError('Could not load access requests.');
+            if (!background) setError('Could not load access requests.');
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, []);
 
+    // Initial load + auto-refresh (background polls don't flash the spinner).
     useEffect(() => {
         void load();
+        const id = setInterval(() => {
+            if (document.visibilityState === 'visible') void load(true);
+        }, 12_000);
+        return () => clearInterval(id);
     }, [load]);
 
     const rows = useMemo(() => {

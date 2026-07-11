@@ -18,6 +18,7 @@ import { RefundModule } from './refund/refund.module';
 import { ResultsModule } from './results/results.module';
 import { SchoolModule } from './school/school.module';
 import { SlotModule } from './slot/slot.module';
+import { SupportModule } from './support/support.module';
 import { TimerModule } from './timer/timer.module';
 import { UserModule } from './user/user.module';
 
@@ -45,6 +46,8 @@ import { UserModule } from './user/user.module';
         ConsentModule,
         // Admin power — user/school/partner management + permanent delete.
         AdminManagementModule,
+        // Partner/school support tickets, visible to admin.
+        SupportModule,
     ],
     controllers: [HealthController],
 })

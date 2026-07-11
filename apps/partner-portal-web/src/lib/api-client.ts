@@ -236,11 +236,40 @@ export interface PartnerSchool {
 	readonly coordinatorName: string;
 	readonly coordinatorEmail: string;
 	readonly status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+	/** The campaign code the school arrived on, or null for a direct onboard. */
+	readonly submittedViaReferralCode: string | null;
 	readonly decisionReason: string | null;
 	readonly createdAt: string;
 	readonly decidedAt: string | null;
 	readonly schoolCode: string | null;
 }
+
+export interface SupportTicket {
+	readonly id: string;
+	readonly category: string;
+	readonly subject: string;
+	readonly message: string;
+	readonly status: "OPEN" | "IN_REVIEW" | "RESOLVED";
+	readonly response: string | null;
+	readonly createdAt: string;
+}
+
+export interface SupportTicketInput {
+	readonly category: string;
+	readonly subject: string;
+	readonly message: string;
+}
+
+/**
+ * Partner support tickets — raised against the **backend** (persisted, visible
+ * to admin), replacing the old portal-api in-memory store that reached no one.
+ */
+export const partnerSupportApi = {
+	create: (token: string, input: SupportTicketInput) =>
+		backendRequest<SupportTicket>("/partner/support", input, { token }),
+	list: (token: string) =>
+		backendRequest<SupportTicket[]>("/partner/support", undefined, { token }),
+};
 
 /**
  * Partners onboard schools, not just students. A partner submits a school's

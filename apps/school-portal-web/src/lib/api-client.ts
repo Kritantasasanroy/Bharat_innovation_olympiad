@@ -156,6 +156,16 @@ export const backendApi = {
  * coordinator's own school — the token carries the `schoolId`. All reads except
  * `registerStudents`, which is the only write a school is trusted with.
  */
+export interface SupportTicket {
+	readonly id: string;
+	readonly category: string;
+	readonly subject: string;
+	readonly message: string;
+	readonly status: "OPEN" | "IN_REVIEW" | "RESOLVED";
+	readonly response: string | null;
+	readonly createdAt: string;
+}
+
 export const portalApi = {
 	profile: (token: string) => authed<SchoolPortalProfile>("/school/portal/me", token),
 	overview: (token: string) => authed<SchoolOverview>("/school/portal/overview", token),
@@ -165,6 +175,11 @@ export const portalApi = {
 	results: (token: string) => authed<PortalResult[]>("/school/portal/results", token),
 	registerStudents: (token: string, students: NewStudent[]) =>
 		authedPost<RegisterStudentsResult>("/school/portal/students", token, { students }),
+
+	// Support tickets — persisted on the backend and visible to admins.
+	listSupport: (token: string) => authed<SupportTicket[]>("/school/support", token),
+	createSupport: (token: string, input: { category: string; subject: string; message: string }) =>
+		authedPost<SupportTicket>("/school/support", token, input),
 };
 
 export interface SchoolPortalProfile {

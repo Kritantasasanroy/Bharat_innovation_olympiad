@@ -8,6 +8,7 @@ import {
 	partnerSchoolApi,
 } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
+import { usePoll } from "../../../lib/use-poll";
 
 const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
 const PINCODE_LENGTH = 6;
@@ -35,19 +36,17 @@ export default function PartnerSchoolsPage() {
 	const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
 	const [locating, setLocating] = useState(false);
 
-	const load = useCallback(() => {
+	const load = useCallback(async () => {
 		if (!token) return;
-		partnerSchoolApi
-			.list(token)
-			.then(setSchools)
-			.catch((cause: unknown) =>
-				setError(cause instanceof ApiError ? cause.message : "Could not load your schools."),
-			);
+		try {
+			setSchools(await partnerSchoolApi.list(token));
+		} catch (cause) {
+			setError(cause instanceof ApiError ? cause.message : "Could not load your schools.");
+		}
 	}, [token]);
 
-	useEffect(() => {
-		load();
-	}, [load]);
+	// Auto-refresh so an admin's approval/rejection shows without a manual reload.
+	usePoll(load);
 
 	// City and state from the pincode, so they match what a student later sees.
 	useEffect(() => {
@@ -77,8 +76,10 @@ export default function PartnerSchoolsPage() {
 		setError(null);
 		setSuccess(null);
 
-		const form = new FormData(event.currentTarget);
-		const value = (name: string) => String(form.get(name) ?? "").trim();
+		// Capture the element before any await (React nulls currentTarget after).
+		const formEl = event.currentTarget;
+		const data = new FormData(formEl);
+		const value = (name: string) => String(data.get(name) ?? "").trim();
 		const input: PartnerSchoolInput = {
 			schoolName: value("schoolName"),
 			board: value("board"),
@@ -93,15 +94,27 @@ export default function PartnerSchoolsPage() {
 
 		try {
 			const result = await partnerSchoolApi.onboard(token, input);
-			setSuccess(`${result.schoolName} submitted for review.`);
-			event.currentTarget.reset();
+			setSuccess(`${result.schoolName} submitted for review — see it below.`);
+			formEl.reset();
 			setPincode("");
 			setLocation(null);
-			load();
 		} catch (cause) {
-			setError(cause instanceof ApiError ? cause.message : "Could not submit this school.");
+			// A 409 means this coordinator's school is already in the system —
+			// often because a cold-start retry created it. That's not an error:
+			// tell the partner it's already submitted, and the reload below shows it.
+			if (cause instanceof ApiError && cause.statusCode === 409) {
+				setSuccess("This school has already been submitted — see it in the list below.");
+				formEl.reset();
+				setPincode("");
+				setLocation(null);
+			} else {
+				setError(cause instanceof ApiError ? cause.message : "Could not submit this school.");
+			}
 		} finally {
 			setSubmitting(false);
+			// Always refresh: even if the request errored client-side, the row may
+			// have been created server-side (cold-start), so show reality.
+			void load();
 		}
 	}
 

@@ -798,3 +798,43 @@ model ArchivedEntity {
   @@index([email])
   @@index([originalId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Support tickets — grievances raised by partners and schools, seen by admin.
+// Distinct from the student `Grievance` (which is exam/attempt-bound): a partner
+// isn't a User at all, and these are free-form help requests, not re-attempts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SupportTicketSource {
+  PARTNER
+  SCHOOL
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+}
+
+model SupportTicket {
+  id             String              @id @default(uuid())
+  source         SupportTicketSource
+  /// The raiser's id — a partner's admin-api `Partner.id`, or a school
+  /// coordinator's `User.id`. Stored as a plain string (partners have no User row).
+  submitterId    String
+  submitterName  String
+  submitterEmail String
+  category       String
+  subject        String
+  message        String
+  status         SupportTicketStatus @default(OPEN)
+  response       String?
+  decidedBy      String?
+  decidedAt      DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([source])
+  @@index([status])
+  @@index([submitterId])
+}

@@ -1,23 +1,23 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { StatusBadge } from "../../../components/status-badge";
-import { ApiError, portalApi } from "../../../lib/api-client";
+import { ApiError, partnerSupportApi, type SupportTicket } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
-import type { SupportRequest, SupportRequestCategory } from "../../../lib/types";
+import { usePoll } from "../../../lib/use-poll";
 
-const DISPUTE_EMAIL = process.env.NEXT_PUBLIC_PARTNER_SUPPORT_EMAIL ?? "partners@bio.example.com";
+const CATEGORIES = ["CAMPAIGN", "PRICING", "PAYOUT", "OTHER"] as const;
 
 /**
- * Campaign/pricing support requests (PRD-011): submission + status only —
- * no ticket system, no admin reply thread. The dispute-contact requirement
- * is a plain `mailto:` link, not an in-portal thread.
+ * Partner support tickets. These now go to the **backend** — persisted and
+ * visible to admins on the admin Support page — replacing the earlier in-memory
+ * portal-api store that reached no one. Admin responses appear here.
  */
 export default function SupportPage() {
 	const { token } = useAuth();
-	const [requests, setRequests] = useState<SupportRequest[] | null>(null);
+	const [tickets, setTickets] = useState<SupportTicket[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [category, setCategory] = useState<SupportRequestCategory>("CAMPAIGN");
+	const [category, setCategory] = useState<string>("CAMPAIGN");
 	const [subject, setSubject] = useState("");
 	const [message, setMessage] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -25,15 +25,13 @@ export default function SupportPage() {
 	const load = useCallback(async () => {
 		if (!token) return;
 		try {
-			setRequests(await portalApi.listSupportRequests(token));
+			setTickets(await partnerSupportApi.list(token));
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to load support requests.");
+			setError(err instanceof ApiError ? err.message : "Failed to load your requests.");
 		}
 	}, [token]);
 
-	useEffect(() => {
-		void load();
-	}, [load]);
+	usePoll(load);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -41,7 +39,7 @@ export default function SupportPage() {
 		setSubmitting(true);
 		setError(null);
 		try {
-			await portalApi.createSupportRequest(token, { category, subject, message });
+			await partnerSupportApi.create(token, { category, subject, message });
 			setSubject("");
 			setMessage("");
 			await load();
@@ -55,8 +53,8 @@ export default function SupportPage() {
 	return (
 		<main>
 			<div className="page-header">
-				<h1>Campaign & pricing support</h1>
-				<p>Submit a request and track its status here. This is not a ticket system.</p>
+				<h1>Support</h1>
+				<p>Raise a request with the BIO team. It reaches an admin, who replies here.</p>
 			</div>
 
 			{error ? <div className="notice notice--error">{error}</div> : null}
@@ -69,11 +67,13 @@ export default function SupportPage() {
 						<select
 							id="category"
 							value={category}
-							onChange={(event) => setCategory(event.target.value as SupportRequestCategory)}
+							onChange={(event) => setCategory(event.target.value)}
 						>
-							<option value="CAMPAIGN">Campaign</option>
-							<option value="PRICING">Pricing</option>
-							<option value="OTHER">Other</option>
+							{CATEGORIES.map((c) => (
+								<option key={c} value={c}>
+									{c.charAt(0) + c.slice(1).toLowerCase()}
+								</option>
+							))}
 						</select>
 					</div>
 					<div>
@@ -102,8 +102,8 @@ export default function SupportPage() {
 
 			<div className="card">
 				<h2>Your requests</h2>
-				{requests ? (
-					requests.length === 0 ? (
+				{tickets ? (
+					tickets.length === 0 ? (
 						<p className="muted">No requests yet.</p>
 					) : (
 						<div className="table-wrap">
@@ -113,18 +113,20 @@ export default function SupportPage() {
 										<th>Subject</th>
 										<th>Category</th>
 										<th>Status</th>
+										<th>Response</th>
 										<th>Submitted</th>
 									</tr>
 								</thead>
 								<tbody>
-									{requests.map((request) => (
-										<tr key={request.id}>
-											<td>{request.subject}</td>
-											<td>{request.category}</td>
+									{tickets.map((ticket) => (
+										<tr key={ticket.id}>
+											<td>{ticket.subject}</td>
+											<td>{ticket.category}</td>
 											<td>
-												<StatusBadge status={request.status} />
+												<StatusBadge status={ticket.status} />
 											</td>
-											<td>{new Date(request.createdAt).toLocaleString()}</td>
+											<td className="muted">{ticket.response ?? "—"}</td>
+											<td>{new Date(ticket.createdAt).toLocaleString()}</td>
 										</tr>
 									))}
 								</tbody>
@@ -134,17 +136,6 @@ export default function SupportPage() {
 				) : !error ? (
 					<p className="muted">Loading…</p>
 				) : null}
-			</div>
-
-			<div className="card">
-				<h2>Dispute a transaction or commission calculation?</h2>
-				<p className="muted">
-					For disputes, contact the BIO partnerships team directly — this is not handled through a
-					form or ticket thread in this portal.
-				</p>
-				<a className="button button--secondary" href={`mailto:${DISPUTE_EMAIL}`}>
-					Email {DISPUTE_EMAIL}
-				</a>
 			</div>
 		</main>
 	);

@@ -1,36 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ApiError, portalApi } from "../../lib/api-client";
+import { useCallback, useState } from "react";
+import { ApiError, type PartnerSchool, partnerSchoolApi, portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
-import type { AssignedInstitution, PartnerFunnel } from "../../lib/types";
+import type { PartnerFunnel } from "../../lib/types";
+import { usePoll } from "../../lib/use-poll";
+
+const STATUS_BADGE: Record<PartnerSchool["status"], string> = {
+	PENDING: "badge badge--pending",
+	APPROVED: "badge badge--positive",
+	REJECTED: "badge badge--negative",
+	REVOKED: "badge badge--negative",
+};
 
 export default function DashboardOverviewPage() {
 	const { token } = useAuth();
 	const [funnel, setFunnel] = useState<PartnerFunnel | null>(null);
-	const [institutions, setInstitutions] = useState<readonly AssignedInstitution[] | null>(null);
+	const [schools, setSchools] = useState<PartnerSchool[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
+	const load = useCallback(async () => {
 		if (!token) return;
-		const fail = (err: unknown) =>
+		try {
+			const [f, s] = await Promise.all([portalApi.getFunnel(token), partnerSchoolApi.list(token)]);
+			setFunnel(f);
+			setSchools(s);
+		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load");
-
-		portalApi.getFunnel(token).then(setFunnel).catch(fail);
-		portalApi
-			.getInstitutions(token)
-			.then((data) => setInstitutions(data.institutions))
-			.catch(fail);
+		}
 	}, [token]);
+
+	usePoll(load);
+
+	const recentSchools = schools.slice(0, 6);
 
 	return (
 		<main>
 			<div className="page-header">
 				<h1>Overview</h1>
 				<p>
-					Signups and paid conversions credited to your referral links appear here automatically —
-					pulled live from the conversion funnel.
+					Everything you&apos;ve brought in — students credited to your referral links, and schools
+					you&apos;ve onboarded — updated live.
 				</p>
 			</div>
 
@@ -40,16 +51,16 @@ export default function DashboardOverviewPage() {
 				<>
 					<div className="stat-row">
 						<div className="stat-tile">
-							<span className="stat-tile__label">Signups</span>
+							<span className="stat-tile__label">Student signups</span>
 							<span className="stat-tile__value">{funnel.totals.signups}</span>
-						</div>
-						<div className="stat-tile">
-							<span className="stat-tile__label">Registrations</span>
-							<span className="stat-tile__value">{funnel.totals.registrations}</span>
 						</div>
 						<div className="stat-tile">
 							<span className="stat-tile__label">Paid conversions</span>
 							<span className="stat-tile__value">{funnel.totals.paid}</span>
+						</div>
+						<div className="stat-tile">
+							<span className="stat-tile__label">Schools onboarded</span>
+							<span className="stat-tile__value">{schools.length}</span>
 						</div>
 						<div className="stat-tile">
 							<span className="stat-tile__label">Campaigns</span>
@@ -58,43 +69,38 @@ export default function DashboardOverviewPage() {
 					</div>
 
 					<div className="card">
-						<h2>Your institutions</h2>
-						<p className="muted" style={{ fontSize: "0.9rem" }}>
-							Institutions assigned to you by the BIO team.
-						</p>
+						<h2>Schools you&apos;ve brought in</h2>
 						<div className="table-wrap">
 							<table>
 								<thead>
 									<tr>
-										<th>Institution</th>
-										<th>Assigned from</th>
+										<th>School</th>
+										<th>Location</th>
+										<th>Via</th>
 										<th>Status</th>
 									</tr>
 								</thead>
 								<tbody>
-									{(institutions ?? []).map((institution) => (
-										<tr key={institution.institutionId}>
-											<td>{institution.institutionId}</td>
+									{recentSchools.map((school) => (
+										<tr key={school.id}>
+											<td>
+												<strong>{school.schoolName}</strong>
+											</td>
 											<td className="muted">
-												{new Date(institution.effectiveFrom).toLocaleDateString()}
+												{school.city}, {school.state}
+											</td>
+											<td className="muted">
+												{school.submittedViaReferralCode ? "Campaign link" : "Direct"}
 											</td>
 											<td>
-												<span
-													className={
-														institution.effectiveTo
-															? "badge badge--negative"
-															: "badge badge--positive"
-													}
-												>
-													{institution.effectiveTo ? "Ended" : "Active"}
-												</span>
+												<span className={STATUS_BADGE[school.status]}>{school.status}</span>
 											</td>
 										</tr>
 									))}
-									{institutions && institutions.length === 0 ? (
+									{schools.length === 0 ? (
 										<tr>
-											<td colSpan={3} className="muted">
-												No institutions assigned yet.
+											<td colSpan={4} className="muted">
+												No schools yet — onboard one from the Schools tab.
 											</td>
 										</tr>
 									) : null}
@@ -102,7 +108,7 @@ export default function DashboardOverviewPage() {
 							</table>
 						</div>
 						<p style={{ marginTop: "1rem" }}>
-							<Link href="/dashboard/institutions">View your assigned institutions →</Link>
+							<Link href="/dashboard/schools">Onboard a school →</Link>
 						</p>
 					</div>
 				</>
