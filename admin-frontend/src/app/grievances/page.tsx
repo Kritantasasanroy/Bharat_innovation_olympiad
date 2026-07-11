@@ -86,10 +86,12 @@ export default function GrievancesPage() {
             <Navbar />
             <div className="page-content">
                 <div className="page-header">
-                    <h1>Grievances &amp; re-attempts</h1>
+                    <h1>Student grievances &amp; re-attempts</h1>
                     <p className="text-muted">
-                        Approving a re-attempt resets the student&apos;s attempt so they can sit it again. The
-                        original submission is snapshotted into the audit log first.
+                        Exam grievances raised by <strong>students</strong>, tied to a specific attempt.
+                        Approving a re-attempt resets that attempt so they can sit it again (the original
+                        submission is snapshotted into the audit log first). For partner and school help
+                        requests, see <a href="/support">Support tickets</a>.
                     </p>
                 </div>
 

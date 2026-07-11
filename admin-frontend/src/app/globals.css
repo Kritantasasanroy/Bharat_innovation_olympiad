@@ -1406,3 +1406,44 @@ h4 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Results page: info chip + help grid ─────────────────────────────────── */
+.info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--primary-400);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.info-chip:hover {
+  border-color: var(--primary-400);
+  background: rgba(255, 203, 5, 0.1);
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  margin: 0;
+}
+
+.help-grid dt {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.help-grid dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

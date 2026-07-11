@@ -29,24 +29,31 @@ export default function ResultsPage() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
+    const [showHelp, setShowHelp] = useState(false);
 
     const [releasing, setReleasing] = useState<ResultInstance | null>(null);
     const [reason, setReason] = useState('');
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async (background = false) => {
+        if (!background) setLoading(true);
         try {
             const { data } = await api.get<ResultInstance[]>('/admin/results');
             setInstances(data);
+            setError(null);
         } catch {
-            setError('Could not load exam instances.');
+            if (!background) setError('Could not load exam instances.');
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, []);
 
+    // Initial load + live refresh, so status updates without a manual reload.
     useEffect(() => {
         void load();
+        const id = setInterval(() => {
+            if (document.visibilityState === 'visible') void load(true);
+        }, 10_000);
+        return () => clearInterval(id);
     }, [load]);
 
     async function run(id: string, action: () => Promise<unknown>, success: string) {
@@ -94,10 +101,50 @@ export default function ResultsPage() {
                 <div className="page-header">
                     <h1>Results &amp; certificates</h1>
                     <p className="text-muted">
-                        Fair-score processing must complete before results can be released, and results must
-                        be released before certificates can be issued.
+                        The pipeline runs in order: <strong>Normalize → Release → Issue certificates</strong>.
+                        Each step unlocks the next.{' '}
+                        <button
+                            type="button"
+                            className="info-chip"
+                            aria-label="What do these steps mean?"
+                            onClick={() => setShowHelp((v) => !v)}
+                        >
+                            ⓘ What do these mean?
+                        </button>
                     </p>
                 </div>
+
+                {showHelp && (
+                    <div className="glass-card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
+                        <dl className="help-grid">
+                            <div>
+                                <dt>1 · Normalize (fair-score processing)</dt>
+                                <dd>
+                                    Raw marks from different question sets aren&apos;t directly comparable, so
+                                    normalization converts every attempt to a fair, comparable score and computes
+                                    each student&apos;s <strong>percentile and rank</strong>. You run this once per
+                                    exam; re-running before release just recomputes from the latest attempts. It
+                                    changes nothing students can see yet.
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>2 · Release</dt>
+                                <dd>
+                                    Publishes the normalized scorecards to students. Requires a written reason
+                                    (audit-logged) and can only happen after normalization. Once released, results
+                                    are locked — you cannot re-normalize.
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>3 · Issue certificates</dt>
+                                <dd>
+                                    Generates a verifiable certificate for each eligible student. Only possible
+                                    after results are released. The count in the table shows how many exist.
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                )}
 
                 {error && <div className="form-error">{error}</div>}
                 {notice && (
@@ -141,28 +188,58 @@ export default function ResultsPage() {
                                         <td>{row.attempts}</td>
                                         <td>
                                             {row.normalizedAt ? (
-                                                <span className="badge badge-success">Done</span>
+                                                <span
+                                                    className="badge badge-success"
+                                                    title={`Normalized ${new Date(row.normalizedAt).toLocaleString()}`}
+                                                >
+                                                    ✓ Done
+                                                </span>
                                             ) : (
                                                 <span className="badge badge-warning">Pending</span>
                                             )}
                                         </td>
                                         <td>
                                             {row.releasedAt ? (
-                                                <span className="badge badge-success">Released</span>
+                                                <span
+                                                    className="badge badge-success"
+                                                    title={`Released ${new Date(row.releasedAt).toLocaleString()}`}
+                                                >
+                                                    ✓ Released
+                                                </span>
                                             ) : (
-                                                <span className="badge">Gated</span>
+                                                <span className="badge" title="Normalize, then release">Not released</span>
                                             )}
                                         </td>
-                                        <td>{row.certificatesIssued}</td>
+                                        <td>
+                                            {row.certificatesIssued > 0 ? (
+                                                <span className="badge badge-success">
+                                                    ✓ {row.certificatesIssued} issued
+                                                </span>
+                                            ) : row.releasedAt ? (
+                                                <span className="badge badge-warning">None yet</span>
+                                            ) : (
+                                                <span className="text-muted">—</span>
+                                            )}
+                                        </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                                 <button
                                                     className="btn btn-sm btn-secondary"
                                                     disabled={busyId === row.id || Boolean(row.releasedAt)}
                                                     onClick={() => normalize(row)}
-                                                    title={row.releasedAt ? 'Cannot re-normalize released results' : ''}
+                                                    title={
+                                                        row.releasedAt
+                                                            ? 'Cannot re-normalize released results'
+                                                            : row.normalizedAt
+                                                              ? 'Already normalized — re-run only if new attempts came in'
+                                                              : 'Run fair-score processing'
+                                                    }
                                                 >
-                                                    Normalize
+                                                    {busyId === row.id
+                                                        ? 'Working…'
+                                                        : row.normalizedAt
+                                                          ? 'Re-normalize'
+                                                          : 'Normalize'}
                                                 </button>
                                                 <button
                                                     className="btn btn-sm btn-primary"

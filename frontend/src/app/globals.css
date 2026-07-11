@@ -1914,3 +1914,158 @@ h4 {
   font-size: 0.8rem;
   color: #f87171;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Shared form / table / layout classes used by support, profile, certificates,
+   consent, admit-card, verify and exams pages. These mirror the admin design
+   system's class names so those pages render with the same polish as the rest
+   of the student portal (they previously fell back to unstyled native controls).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.page-header {
+  margin-bottom: var(--space-6);
+}
+
+.page-header h1 {
+  margin: 0 0 var(--space-2);
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+/* Forms */
+.exam-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form-group > label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-control {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  transition: all var(--transition-fast);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.form-control:focus {
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px rgba(255, 203, 5, 0.15);
+}
+
+textarea.form-control {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.form-error {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger-400);
+  font-size: 0.9rem;
+}
+
+/* Utility text */
+.text-muted {
+  color: var(--text-muted);
+}
+
+.join-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Tables */
+.table-responsive {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.9rem;
+}
+
+.data-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.72rem;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-card-hover, rgba(127, 127, 127, 0.06));
+}
+
+/* Filter pills (certificates / exams) */
+.class-pill {
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.class-pill.active {
+  background: rgba(255, 203, 5, 0.12);
+  border-color: var(--primary-400);
+  color: var(--primary-400);
+}
+
+/* Modal body (overlay + actions already exist in this file) */
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg, 14px);
+  padding: var(--space-6);
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}

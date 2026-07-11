@@ -103,8 +103,9 @@ export default function AdminSupportPage() {
                 <div className="page-header">
                     <h1>Support tickets</h1>
                     <p className="text-muted">
-                        Requests raised by partners and schools. Respond and mark them resolved. This list
-                        refreshes on its own.
+                        Free-form help requests from <strong>partners and schools</strong>. Respond and mark
+                        them resolved; this list refreshes on its own. Student exam grievances and re-attempt
+                        requests are handled under <a href="/grievances">Student grievances</a>.
                     </p>
                 </div>
 
