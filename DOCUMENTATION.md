@@ -873,6 +873,33 @@ campaign-attributed school appears in the partner's list with its code and statu
 
 ---
 
+### 0.24 UI fixes — student forms, grievances vs support, results page (2026-07-11)
+
+Three presentational fixes, no schema/backend change.
+
+**Student portal forms rendered unstyled.** Seven pages (`support`, `profile`, `certificates`,
+`consent`, `admit-card`, `verify`, `exams`) used admin-design-system class names — `.form-control`,
+`.form-group`, `.exam-form`, `.data-table`, `.page-header`, `.form-error`, `.text-muted`,
+`.table-responsive`, `.class-pill`, `.modal-content` — that **were never defined in the student
+portal's `globals.css`**. The result was tiny native inputs with labels jammed against them. Added the
+classes, mirroring the student portal's own tokens, which fixes all seven pages together (the student
+portal separately uses `.input-field`/`.input-group` on its auth pages; both vocabularies now exist).
+
+**Grievances vs Support tickets.** They look similar but are not redundant. `Grievance` is a student's
+exam dispute — it carries a `userId` and an `attemptId`, and approving a `REATTEMPT` resets the
+attempt so the student can re-sit. `SupportTicket` is a free-form help request from a partner or
+school, with neither. The admin nav now reads **"Student grievances"**, each page names its audience,
+and the two cross-link.
+
+**Admin results page.** Added a collapsible **"What do these mean?"** panel explaining the
+normalize → release → issue-certificates chain (normalization = fair-score processing: comparable
+scores + percentile + rank, changing nothing students see until release). The table **auto-refreshes**
+(10s), Normalized/Released show a ✓ and a timestamp tooltip, and the Certificates column shows
+**"✓ N issued" / "None yet" / "—"** instead of a bare number. The Normalize button becomes
+"Re-normalize" once done, signalling that re-running is optional.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
