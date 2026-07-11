@@ -736,6 +736,88 @@ ones — consistent with read-only).
 
 ---
 
+### 0.22 Campaign school-onboarding, admin power, exam slot wizard, light theme (2026-07-11)
+
+Four capabilities in one pass. Everything runs on **Neon Postgres** — the whole platform shares one
+Neon instance (backend via Prisma, `admin-api` via Drizzle), standard SQL, portable by a
+connection-string change plus `pg_dump`/restore.
+
+#### 1. Campaign links onboard schools, not just students
+
+A partner campaign already produced a student link (`…/?ref=CODE`). It now also produces a
+**school-onboarding link** (`…/activate?ref=CODE`). The `portal-api` funnel adapter builds both from
+the campaign's referral code (`#shareUrl` + new `#schoolShareUrl`, keyed off a new `SCHOOL_APP_URL`
+env). The school portal captures `?ref=` with the same first-touch pattern copied from the student app
+(`referral.ts` + `ReferralCapture`), and replays it on `POST /school/apply`.
+
+`SchoolService.apply` resolves that code to the owning partner
+(`PartnerAdminApiClient.resolvePartnerIdByReferralCode` → `GET /campaigns/by-code/:code`, ACTIVE-only)
+and stamps `SchoolRequest.submittedByPartnerId` + the new `submittedViaReferralCode`. So a school that
+arrives on a partner's link shows in the admin Access queue attributed to that partner — exactly like
+a student signup. A bad or inactive code is ignored, never an error (attribution must not block an
+application). The `PartnerModule ↔ SchoolModule` cycle this created is broken with `forwardRef`.
+
+#### 2. Admin power — view, edit, permanently delete (with a Neon archive)
+
+New `backend/src/admin-management` module, staff-guarded, every mutation audited:
+`GET/PATCH /admin/manage/users`, `DELETE /admin/manage/{users,schools,school-requests,partners}/:id`,
+`GET /admin/manage/archive`.
+
+A delete is a **real Neon delete** of the operational rows — but never silent. Each first copies the
+entity's identifying details **and a full JSON snapshot** into a new **`ArchivedEntity`** table (a
+tombstone nothing references, which only grows), inside the same transaction as the removal. So a
+deletion is accountable and the contact recoverable on paper, while the operational data is genuinely
+gone (the user's answer to "permanently delete … but keep a separate table of their details").
+
+Two cascade correctness points the plan flagged and the code handles:
+- **Deleting a user** cascades their attempts/bookings/payments, but Prisma's cascade does **not**
+  decrement `ExamSlot.booked`. The service notes the affected slots and recomputes
+  `booked = count(active bookings)` for each, in the transaction.
+- **Deleting a school** *detaches* its students (`schoolId → null` — they keep their accounts,
+  attempts, results, bookings), removes its coordinator and slot assignments (`SchoolSlotAssignment`
+  is `Restrict` on the slot, so assignments go first), and archives everything.
+
+Admin UI: a new `/students` page (search/filter, edit modal, **typed-name-confirmation** delete), a
+read-only `/archive`, delete actions on `/access`, and a People nav group.
+
+#### 3. Exam-creation wizard with automatic slot assignment
+
+`POST /admin/exams/full` creates the exam, one instance, and N slots in a transaction (with **explicit**
+publish flags — the old `createExam` force-published, which this path no longer does).
+
+`SchoolSlotService.autoDistributeInstance(instanceId)` then assigns every **eligible** student — class
+band must be one the exam accepts (`Exam.classBands`); `runAllocationForSchool` is now filtered the
+same way, closing a gap where slot sweeps ignored eligibility. The distribution rule the admin asked
+for:
+- **Same school, same slot** — a school's students stay together, pinned via a `SchoolSlotAssignment`
+  so later registrations land there too.
+- **Balance** — schools are placed into the emptiest slot that fits them (largest first), so no slot
+  is crowded while others sit empty.
+- **Overflow** — a school too big for one slot fills its primary slot, then spills into the
+  next-emptiest.
+- **Never oversells** — every booking goes through the atomic `UPDATE … WHERE booked < capacity`
+  guard; an in-memory capacity mirror only decides *preference*, not permission.
+
+Admin UI: a 4-step `/exams/new` wizard (details → schedule → slots → review) that calls `createFull`,
+then offers "Auto-assign eligible students now" and reports allocated / overflowed / no-capacity.
+
+**Admin slot changes (feature 5) already existed** — individual `POST /admin/bookings/:id/reassign`
+and bulk `POST /admin/schools/:id/instances/:id/reassign-all`, with UI in `slots/page.tsx`. Verified,
+not rebuilt.
+
+#### 4. Light mode everywhere
+
+All portals now default to light with a dark toggle. The partner and school portals are token-driven
+(no hardcoded colours), so a `[data-theme="light"]` palette + a zero-dependency toggle (sharing the
+`bio-theme` localStorage key and `data-theme` attribute) reskins them with no page rewrites; student
+and admin flip their default to light. Poppins/Montserrat added for display type.
+
+**Schema is additive** (`ArchivedEntity` + `SchoolRequest.submittedViaReferralCode` — both new/nullable),
+verified no DROP, live data preserved. **179 backend tests (23 new):** campaign attribution,
+admin delete/archive + slot-counter recompute + school-detach, and 8 slot-distribution cases.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
