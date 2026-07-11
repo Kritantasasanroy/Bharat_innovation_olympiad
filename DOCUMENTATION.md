@@ -818,6 +818,61 @@ admin delete/archive + slot-counter recompute + school-detach, and 8 slot-distri
 
 ---
 
+### 0.23 Portal fixes — support to admin, campaign school counts, auto-refresh (2026-07-11)
+
+Seven reported gaps in the partner and school portals, all resolved and verified live.
+
+#### Support tickets from partners and schools now reach admin
+
+The partner "Support" form used to `POST` to an **in-memory** repository in `portal-api` — it vanished
+on restart and no admin ever saw it. The school "Support" page was a `mailto:` composer only. Neither
+reached the platform.
+
+A new backend **`SupportTicket`** model + `backend/src/support/` module fixes this. Partners raise
+tickets at `POST /partner/support` (behind `PartnerJwtGuard`, since a partner is not a `User`), school
+coordinators at `POST /school/support` (`SCHOOL` role). Both persist and appear on a **new admin
+Support page** (`/support`, `GET /admin/support-tickets`), where an admin can respond and mark a ticket
+`IN_REVIEW`/`RESOLVED`; the response flows back to the raiser's own list. Kept separate from the
+student `Grievance` table, which is bound to an exam attempt and can't represent a partner.
+
+#### Campaigns and the funnel now count schools, not just students
+
+A school that activates via a campaign's onboarding link was already attributed
+(`SchoolRequest.submittedViaReferralCode`), but nothing surfaced it. That field is now returned on the
+partner's school list, so the **Campaigns** page shows "Schools onboarded: N (X approved)" per campaign,
+and the **Funnel** shows a "Schools onboarded" total plus a per-campaign Schools column beside the
+student signup/registration/paid numbers. This is computed client-side by merging the funnel (from the
+admin-api engine, student-keyed) with the backend's partner-schools list — no engine change.
+
+#### The "onboard a school" false error
+
+A cold-started backend could create the `SchoolRequest` server-side while the browser saw a network
+error; a retry then hit the `coordinatorEmail` unique constraint (`409`) and read as "already exists".
+The submit flow now **reloads the list after every attempt** (so a server-side success is always
+shown) and treats a `409` as "already submitted" — information, not failure.
+
+#### Auto-refresh everywhere
+
+Data changed elsewhere (an admin approving a school, resolving a ticket) used to require a manual
+reload. Now: a small `usePoll` hook drives the partner pages; the school portal's `useResource` polls
+in the background (a `background` refresh updates data in place without flipping the spinner); and the
+admin access, grievances, students, and support pages poll every 12s. All polling pauses while the tab
+is hidden.
+
+#### Institutions page removed
+
+The partner **Institutions** page listed opaque `institutionId` strings from the engine's
+`PartnerInstitutionAssignment` table, with no admin way to populate it and no names — a vestige of
+PRD-011 superseded by the Schools onboarding flow. The page, its detail route, and its nav entry are
+removed; the partner **overview** now lists the partner's schools instead.
+
+**Schema additive** (`SupportTicket` + `SupportTicketSource`/`SupportTicketStatus` enums), verified no
+DROP. **184 backend tests (5 new).** Live E2E (14/14, artefacts cleaned): partner ticket → admin sees
+it → resolves → partner sees the response; school ticket → admin sees it filtered by source;
+campaign-attributed school appears in the partner's list with its code and status.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
