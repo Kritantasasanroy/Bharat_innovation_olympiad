@@ -5,15 +5,31 @@ import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
+/** The three audiences results are released to, independently (item 19). */
+const AUDIENCES = ['STUDENTS', 'SCHOOLS', 'PARTNERS'] as const;
+type Audience = (typeof AUDIENCES)[number];
+
+const AUDIENCE_LABEL: Record<Audience, string> = {
+    STUDENTS: 'Students',
+    SCHOOLS: 'Schools',
+    PARTNERS: 'Partners',
+};
+
 interface ResultInstance {
     id: string;
     examTitle: string;
     startsAt: string;
+    endsAt: string;
+    /** Results cannot be released until the exam is actually over. */
+    hasEnded: boolean;
     attempts: number;
     certificatesIssued: number;
     normalizedAt: string | null;
     releasedAt: string | null;
+    releasedTo: Record<Audience, string | null>;
     canRelease: boolean;
+    /** Why the Release button is disabled, straight from the server. */
+    releaseBlockedReason: string | null;
 }
 
 /**
@@ -33,6 +49,8 @@ export default function ResultsPage() {
 
     const [releasing, setReleasing] = useState<ResultInstance | null>(null);
     const [reason, setReason] = useState('');
+    const [audiences, setAudiences] = useState<Audience[]>(['STUDENTS']);
+    const [revoking, setRevoking] = useState(false);
 
     const load = useCallback(async (background = false) => {
         if (!background) setLoading(true);
@@ -83,16 +101,56 @@ export default function ResultsPage() {
 
     async function submitRelease(event: FormEvent) {
         event.preventDefault();
-        if (!releasing || !reason.trim()) return;
+        if (!releasing || !reason.trim() || audiences.length === 0) return;
         const row = releasing;
+        const picked = [...audiences];
+        const undo = revoking;
         setReleasing(null);
+
+        const names = picked.map((a) => AUDIENCE_LABEL[a].toLowerCase()).join(' and ');
         await run(
             row.id,
-            () => api.post(`/admin/exam-instances/${row.id}/release`, { reason: reason.trim() }),
-            'Results released to students.',
+            () =>
+                api.post(`/admin/exam-instances/${row.id}/${undo ? 'revoke' : 'release'}`, {
+                    reason: reason.trim(),
+                    audiences: picked,
+                }),
+            undo ? `Results withdrawn from ${names}.` : `Results released to ${names}.`,
         );
         setReason('');
+        setAudiences(['STUDENTS']);
+        setRevoking(false);
     }
+
+    /**
+     * Downloads the results workbook. `api` returns JSON by default, so this asks
+     * for a blob and hands it to the browser as a file — the Content-Disposition
+     * filename the server sets is not visible to fetch, so we rebuild it here.
+     */
+    async function download(row: ResultInstance) {
+        setBusyId(row.id);
+        setError(null);
+        try {
+            const { data } = await api.get(`/admin/exam-instances/${row.id}/results.xlsx`, {
+                responseType: 'blob',
+            });
+            const url = URL.createObjectURL(data as Blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `bio-results-${row.examTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            setError('Could not build the results sheet.');
+        } finally {
+            setBusyId(null);
+        }
+    }
+
+    const toggleAudience = (audience: Audience) =>
+        setAudiences((prev) =>
+            prev.includes(audience) ? prev.filter((a) => a !== audience) : [...prev, audience],
+        );
 
     return (
         <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
@@ -199,16 +257,26 @@ export default function ResultsPage() {
                                             )}
                                         </td>
                                         <td>
-                                            {row.releasedAt ? (
-                                                <span
-                                                    className="badge badge-success"
-                                                    title={`Released ${new Date(row.releasedAt).toLocaleString()}`}
-                                                >
-                                                    ✓ Released
-                                                </span>
-                                            ) : (
-                                                <span className="badge" title="Normalize, then release">Not released</span>
-                                            )}
+                                            {/* Each audience is released independently, so show all
+                                                three rather than one collapsed "Released" flag. */}
+                                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                                {AUDIENCES.map((audience) => {
+                                                    const at = row.releasedTo?.[audience];
+                                                    return (
+                                                        <span
+                                                            key={audience}
+                                                            className={`badge ${at ? 'badge-success' : 'badge-muted'}`}
+                                                            title={
+                                                                at
+                                                                    ? `${AUDIENCE_LABEL[audience]} — released ${new Date(at).toLocaleString()}`
+                                                                    : `${AUDIENCE_LABEL[audience]} cannot see these results`
+                                                            }
+                                                        >
+                                                            {at ? '✓' : '·'} {AUDIENCE_LABEL[audience]}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
                                         </td>
                                         <td>
                                             {row.certificatesIssued > 0 ? (
@@ -246,17 +314,48 @@ export default function ResultsPage() {
                                                     disabled={busyId === row.id || !row.canRelease}
                                                     onClick={() => {
                                                         setReleasing(row);
+                                                        setRevoking(false);
                                                         setReason('');
+                                                        setAudiences(['STUDENTS']);
                                                     }}
-                                                    title={!row.canRelease ? 'Normalize first' : ''}
+                                                    title={row.releaseBlockedReason ?? 'Release to students, schools or partners'}
                                                 >
-                                                    Release
+                                                    Release…
                                                 </button>
                                                 <button
                                                     className="btn btn-sm btn-secondary"
                                                     disabled={busyId === row.id || !row.releasedAt}
+                                                    onClick={() => {
+                                                        setReleasing(row);
+                                                        setRevoking(true);
+                                                        setReason('');
+                                                        setAudiences([]);
+                                                    }}
+                                                    title={
+                                                        row.releasedAt
+                                                            ? 'Withdraw results from an audience'
+                                                            : 'Nothing has been released yet'
+                                                    }
+                                                >
+                                                    Withdraw…
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm btn-secondary"
+                                                    disabled={busyId === row.id || row.attempts === 0}
+                                                    onClick={() => download(row)}
+                                                    title="Download every student's result as an Excel sheet"
+                                                >
+                                                    ⬇ Excel
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm btn-secondary"
+                                                    disabled={busyId === row.id || !row.releasedTo?.STUDENTS}
                                                     onClick={() => generate(row)}
-                                                    title={!row.releasedAt ? 'Release results first' : ''}
+                                                    title={
+                                                        row.releasedTo?.STUDENTS
+                                                            ? 'Issue certificates'
+                                                            : 'Release results to students first'
+                                                    }
                                                 >
                                                     Issue certificates
                                                 </button>
@@ -273,12 +372,59 @@ export default function ResultsPage() {
             {releasing && (
                 <div className="modal-overlay" onClick={() => setReleasing(null)}>
                     <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
-                        <h2>Release results</h2>
+                        <h2>{revoking ? 'Withdraw results' : 'Release results'}</h2>
                         <p className="text-muted">
-                            {releasing.examTitle} · {releasing.attempts} attempts. Students will immediately be
-                            able to see their scorecard.
+                            {releasing.examTitle} · {releasing.attempts} attempts.
                         </p>
+
                         <form className="exam-form" onSubmit={submitRelease}>
+                            <div className="form-group">
+                                <label>{revoking ? 'Withdraw from' : 'Release to'}</label>
+                                <p className="hint hint-muted" style={{ marginBottom: '0.75rem' }}>
+                                    {revoking
+                                        ? 'Withdrawing from students closes their scorecards immediately.'
+                                        : 'Each audience is independent. You can give schools their results to check before students see them, and never release to partners at all.'}
+                                </p>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                    {AUDIENCES.map((audience) => {
+                                        const already = Boolean(releasing.releasedTo?.[audience]);
+                                        // Releasing: only audiences that don't have it yet.
+                                        // Withdrawing: only audiences that do.
+                                        const applicable = revoking ? already : !already;
+
+                                        return (
+                                            <label
+                                                key={audience}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.6rem',
+                                                    opacity: applicable ? 1 : 0.45,
+                                                    cursor: applicable ? 'pointer' : 'not-allowed',
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    disabled={!applicable}
+                                                    checked={audiences.includes(audience)}
+                                                    onChange={() => toggleAudience(audience)}
+                                                />
+                                                <span>
+                                                    <strong>{AUDIENCE_LABEL[audience]}</strong>
+                                                    {already && !revoking && (
+                                                        <span className="text-muted"> — already released</span>
+                                                    )}
+                                                    {!already && revoking && (
+                                                        <span className="text-muted"> — not released</span>
+                                                    )}
+                                                </span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <div className="form-group">
                                 <label htmlFor="reason">Reason (required, recorded in the audit log)</label>
                                 <textarea
@@ -289,15 +435,24 @@ export default function ResultsPage() {
                                     autoFocus
                                     value={reason}
                                     onChange={(e) => setReason(e.target.value)}
-                                    placeholder="e.g. QC complete; ranks and normalization verified."
+                                    placeholder={
+                                        revoking
+                                            ? 'e.g. Scoring error found in section 2; withdrawing pending re-run.'
+                                            : 'e.g. QC complete; ranks and normalization verified.'
+                                    }
                                 />
                             </div>
+
                             <div className="modal-actions">
                                 <button type="button" className="btn btn-secondary" onClick={() => setReleasing(null)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={!reason.trim()}>
-                                    Release results
+                                <button
+                                    type="submit"
+                                    className={`btn ${revoking ? 'btn-danger' : 'btn-primary'}`}
+                                    disabled={!reason.trim() || audiences.length === 0}
+                                >
+                                    {revoking ? 'Withdraw results' : 'Release results'}
                                 </button>
                             </div>
                         </form>

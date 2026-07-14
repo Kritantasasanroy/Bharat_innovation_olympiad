@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
+import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 
 // Fields returned to students — correctAnswer intentionally excluded
 const QUESTION_SELECT = {
@@ -15,6 +16,8 @@ const QUESTION_SELECT = {
     timeLimitSecs: true,
     mediaUrl: true,
     mediaType: true,
+    imageUrl: true,
+    videoUrl: true,
     tags: true,
     explanation: true,
 } as const;
@@ -250,31 +253,50 @@ export class AttemptService {
         if (!instance) throw new NotFoundException('Exam instance not found');
 
         const now = new Date();
-        if (now < instance.startsAt) throw new BadRequestException('Exam has not started yet');
-        if (now > instance.endsAt) throw new BadRequestException('Exam window has closed');
 
-        // Slot booking gate — skip for demo exams; skip if exam has no slots
-        if (!isDemoExam(instance.examId)) {
-            const hasSlots = await this.prisma.examSlot.count({ where: { examInstanceId: instanceId } });
-            if (hasSlots > 0) {
-                const booking = await this.prisma.booking.findFirst({
-                    where: {
-                        userId,
-                        status: BookingStatus.CONFIRMED,
-                        slot: { examInstanceId: instanceId },
-                    },
-                    include: { slot: true },
-                });
-                if (!booking) {
-                    throw new ForbiddenException('You need a confirmed slot booking to start this exam');
-                }
-                if (now < booking.slot.startsAt || now > booking.slot.endsAt) {
-                    throw new ForbiddenException('You are outside your booked slot window');
-                }
+        // The authoritative start gate. It re-derives the phase from the same pure
+        // rules the exam list uses (`exam-lifecycle.ts`), so a student cannot start
+        // an exam by calling this endpoint directly — publication, the exam window
+        // and the student's own slot window are all checked here, server-side,
+        // regardless of what the UI showed.
+        const demo = isDemoExam(instance.examId);
+
+        const booking = demo
+            ? null
+            : await this.prisma.booking.findFirst({
+                  where: {
+                      userId,
+                      status: BookingStatus.CONFIRMED,
+                      slot: { examInstanceId: instanceId },
+                  },
+                  include: { slot: true },
+              });
+
+        const hasSlots = demo
+            ? false
+            : (await this.prisma.examSlot.count({ where: { examInstanceId: instanceId } })) > 0;
+
+        const phase = examPhase({
+            // A demo/practice exam is exempt from the publication gate by design —
+            // it exists to be taken at will and is never listed as a real exam.
+            isPublished: demo ? true : instance.exam.isPublished,
+            instance,
+            slot: booking?.slot ?? null,
+            hasSlots,
+            now,
+        });
+
+        if (!isStartable(phase)) {
+            const reason = startRefusalReason(phase) ?? 'This exam cannot be started right now.';
+            // A missing slot or a closed slot window is an authorisation failure;
+            // the exam simply not being open yet is a bad request.
+            if (phase === 'NEEDS_SLOT' || phase === 'SLOT_UPCOMING' || phase === 'SLOT_MISSED') {
+                throw new ForbiddenException(reason);
             }
+            throw new BadRequestException(reason);
         }
 
-        if (isDemoExam(instance.examId)) {
+        if (demo) {
             return this.startDemoAttempt(userId, instance, now, ipAddress);
         }
 

@@ -13,6 +13,7 @@ export class UserService {
                 email: true,
                 firstName: true,
                 lastName: true,
+                phone: true,
                 role: true,
                 classBand: true,
                 school: { select: { id: true, name: true, code: true } },
@@ -27,8 +28,41 @@ export class UserService {
         return this.prisma.user.findUnique({ where: { email } });
     }
 
-    async updateProfile(id: string, data: { firstName?: string; lastName?: string; profileImageUrl?: string }) {
-        return this.prisma.user.update({ where: { id }, data });
+    /**
+     * Updates only the fields a student owns. The keys are picked out explicitly
+     * rather than spreading `data` — the caller's DTO already whitelists them, and
+     * this makes the endpoint safe even if someone later loosens that DTO.
+     */
+    async updateProfile(
+        id: string,
+        data: {
+            firstName?: string;
+            lastName?: string;
+            phone?: string;
+            profileImageUrl?: string;
+        },
+    ) {
+        return this.prisma.user.update({
+            where: { id },
+            data: {
+                ...(data.firstName !== undefined ? { firstName: data.firstName.trim() } : {}),
+                ...(data.lastName !== undefined ? { lastName: data.lastName.trim() } : {}),
+                ...(data.phone !== undefined ? { phone: data.phone.trim() || null } : {}),
+                ...(data.profileImageUrl !== undefined
+                    ? { profileImageUrl: data.profileImageUrl }
+                    : {}),
+            },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                role: true,
+                classBand: true,
+                profileImageUrl: true,
+            },
+        });
     }
 
     async storeFaceEmbedding(userId: string, embedding: Buffer) {

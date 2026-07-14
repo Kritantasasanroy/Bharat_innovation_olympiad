@@ -224,6 +224,13 @@ export class SchoolService {
                     where: { nameKey_pincode: { nameKey, pincode } },
                 });
 
+                // The partner that brought this school in owns the relationship from
+                // here on: it is how the partner portal scopes the school's students
+                // and results, and how the school portal knows who its partner is.
+                // A school that self-applied has none, and falls back to the house
+                // partner at read time (see `PartnerDirectoryService`).
+                const partnerId = request.submittedByPartnerId ?? null;
+
                 const school = existing
                     ? await tx.school.update({
                           where: { id: existing.id },
@@ -235,6 +242,9 @@ export class SchoolService {
                               state: request.state || existing.state,
                               board: request.board,
                               udiseCode: request.udiseCode,
+                              // Never clear an existing partner by adopting a
+                              // self-applied request over a partner-onboarded school.
+                              ...(partnerId ? { partnerId } : {}),
                               onboardedAt: now,
                           },
                       })
@@ -248,6 +258,7 @@ export class SchoolService {
                               pincode,
                               board: request.board,
                               udiseCode: request.udiseCode,
+                              partnerId,
                               onboardedAt: now,
                           },
                       });

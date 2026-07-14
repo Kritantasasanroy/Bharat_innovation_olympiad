@@ -2,6 +2,7 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import QuestionMediaUploader from '@/components/questions/QuestionMediaUploader';
 import api from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
@@ -41,12 +42,16 @@ type QFormShape = {
     negativeMarks: number;
     timeLimitSecs: number;
     explanation: string;
+    /** A question may carry a picture and a video at once — two slots, not one. */
+    imageUrl: string | null;
+    videoUrl: string | null;
     options: { text: string; isCorrect: boolean }[];
 };
 
 const BLANK_Q_FORM: QFormShape = {
     text: '', type: 'MCQ', difficulty: 'MEDIUM', marks: 1, negativeMarks: 0,
     timeLimitSecs: 0, explanation: '',
+    imageUrl: null, videoUrl: null,
     options: [
         { text: '', isCorrect: true }, { text: '', isCorrect: false },
         { text: '', isCorrect: false }, { text: '', isCorrect: false },
@@ -143,6 +148,8 @@ function GlobalBankView() {
             negativeMarks: q.negativeMarks ?? 0,
             timeLimitSecs: q.timeLimitSecs ?? 0,
             explanation: q.explanation || '',
+            imageUrl: q.imageUrl ?? null,
+            videoUrl: q.videoUrl ?? null,
             options: opts,
         });
         setModalError('');
@@ -164,6 +171,8 @@ function GlobalBankView() {
             negativeMarks: qForm.negativeMarks,
             timeLimitSecs: qForm.timeLimitSecs > 0 ? qForm.timeLimitSecs : null,
             explanation: qForm.explanation || null,
+            imageUrl: qForm.imageUrl,
+            videoUrl: qForm.videoUrl,
             options: validOptions,
         };
 
@@ -425,6 +434,13 @@ function GlobalBankView() {
                             </div>
                         </div>
 
+                        <div style={{ marginTop: '1rem' }}>
+                            <QuestionMediaUploader
+                                value={{ imageUrl: qForm.imageUrl, videoUrl: qForm.videoUrl }}
+                                onChange={(media) => setQForm({ ...qForm, ...media })}
+                            />
+                        </div>
+
                         <div className="form-group" style={{ marginTop: '1rem' }}>
                             <label>Explanation (Optional)</label>
                             <textarea
@@ -507,6 +523,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
     const blankQForm = {
         text: '', type: 'MCQ', difficulty: 'MEDIUM', marks: 1, negativeMarks: 0,
         timeLimitSecs: 0, explanation: '',
+        imageUrl: null as string | null, videoUrl: null as string | null,
         options: [
             { text: '', isCorrect: true }, { text: '', isCorrect: false },
             { text: '', isCorrect: false }, { text: '', isCorrect: false },
@@ -525,7 +542,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
         const qOptions = Array.isArray(question.options) && question.options.length > 0
             ? question.options
             : [{ text: '', isCorrect: true }, { text: '', isCorrect: false }, { text: '', isCorrect: false }, { text: '', isCorrect: false }];
-        setQFormData({ text: question.text || '', type: 'MCQ', difficulty: question.difficulty || 'MEDIUM', marks: question.marks || 1, negativeMarks: question.negativeMarks || 0, timeLimitSecs: question.timeLimitSecs || 0, explanation: question.explanation || '', options: qOptions });
+        setQFormData({ text: question.text || '', type: 'MCQ', difficulty: question.difficulty || 'MEDIUM', marks: question.marks || 1, negativeMarks: question.negativeMarks || 0, timeLimitSecs: question.timeLimitSecs || 0, explanation: question.explanation || '', imageUrl: question.imageUrl ?? null, videoUrl: question.videoUrl ?? null, options: qOptions });
         setIsQuestionModalOpen(true);
     };
 
@@ -675,7 +692,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
         const validOptions = qFormData.options.filter(o => o.text.trim());
         if (validOptions.length < 2) { setError('At least two options are required.'); return; }
         if (!validOptions.some(o => o.isCorrect)) { setError('Mark at least one option as correct.'); return; }
-        const payload = { text: qFormData.text, type: 'MCQ', difficulty: qFormData.difficulty, marks: qFormData.marks, negativeMarks: qFormData.negativeMarks, timeLimitSecs: qFormData.timeLimitSecs > 0 ? qFormData.timeLimitSecs : null, explanation: qFormData.explanation || null, options: validOptions };
+        const payload = { text: qFormData.text, type: 'MCQ', difficulty: qFormData.difficulty, marks: qFormData.marks, negativeMarks: qFormData.negativeMarks, timeLimitSecs: qFormData.timeLimitSecs > 0 ? qFormData.timeLimitSecs : null, explanation: qFormData.explanation || null, imageUrl: qFormData.imageUrl, videoUrl: qFormData.videoUrl, options: validOptions };
         try {
             if (isEditingQuestion && editingQuestionId) {
                 await api.put(`/admin/questions/${editingQuestionId}`, payload);
@@ -941,6 +958,12 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                                 <label>Per-Question Time Limit (s, 0 = none)</label>
                                 <input type="number" min="0" className="form-control" value={qFormData.timeLimitSecs} onChange={(e) => setQFormData({ ...qFormData, timeLimitSecs: Number(e.target.value) })} />
                             </div>
+                        </div>
+                        <div style={{ marginTop: '1rem' }}>
+                            <QuestionMediaUploader
+                                value={{ imageUrl: qFormData.imageUrl, videoUrl: qFormData.videoUrl }}
+                                onChange={(media) => setQFormData({ ...qFormData, ...media })}
+                            />
                         </div>
                         <div className="form-group" style={{ marginTop: '1rem' }}>
                             <label>Explanation (Optional)</label>

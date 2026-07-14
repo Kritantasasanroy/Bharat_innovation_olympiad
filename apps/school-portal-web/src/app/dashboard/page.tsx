@@ -96,29 +96,40 @@ export default function OverviewPage() {
 							</tr>
 						</thead>
 						<tbody>
-							{(slots ?? []).map((w) => (
-								<tr key={w.assignmentId}>
-									<td>{w.examTitle}</td>
-									<td>
-										{new Date(w.startsAt).toLocaleString("en-IN", {
-											dateStyle: "medium",
-											timeStyle: "short",
-										})}
-									</td>
-									<td>
-										{w.booked}/{w.capacity}
-									</td>
-									<td>
-										<span
-											className={
-												w.status === "FULL" ? "badge badge--pending" : "badge badge--positive"
-											}
-										>
-											{w.status}
-										</span>
-									</td>
-								</tr>
-							))}
+							{/* The slots endpoint now returns the whole board per exam, not just
+							    the one slot staff assigned. Pick out our own, and say plainly when
+							    we hold none rather than rendering a blank row. */}
+							{(slots ?? []).map((board) => {
+								const ours = board.slots.find((s) => s.isAssignedToUs) ?? null;
+
+								return (
+									<tr key={board.examInstanceId}>
+										<td>{board.examTitle}</td>
+										<td>
+											{new Date(ours?.startsAt ?? board.startsAt).toLocaleString("en-IN", {
+												dateStyle: "medium",
+												timeStyle: "short",
+											})}
+										</td>
+										<td>{ours ? `${ours.booked}/${ours.capacity}` : "—"}</td>
+										<td>
+											{ours ? (
+												<span
+													className={
+														ours.remaining <= 0 ? "badge badge--pending" : "badge badge--positive"
+													}
+												>
+													{ours.remaining <= 0 ? "FULL" : "OPEN"}
+												</span>
+											) : (
+												<a href="/dashboard/slots" className="badge badge--pending">
+													Pick a slot
+												</a>
+											)}
+										</td>
+									</tr>
+								);
+							})}
 							{slots && slots.length === 0 && (
 								<tr>
 									<td

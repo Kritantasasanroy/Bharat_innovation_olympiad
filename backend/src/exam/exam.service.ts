@@ -1,10 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttemptStatus, Prisma } from '@prisma/client';
+import { AttemptStatus, BookingStatus, Prisma } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
-import { S3Service } from '../common/services/s3.service';
+import { MediaKind, ObjectStorageService } from '../common/services/object-storage.service';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import {
+    canPublish,
+    canReleaseResults,
+    examPhase,
+    isStartable,
+    startRefusalReason,
+    validateSlotWindow,
+} from './exam-lifecycle';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
 // Uses a simple mulberry32 PRNG seeded from the userId hash so each
@@ -56,44 +63,125 @@ function flattenSection(section: any, includeAnswer = true) {
 export class ExamService {
     constructor(
         private prisma: PrismaService,
-        private s3: S3Service,
+        private storage: ObjectStorageService,
         private config: ConfigService,
     ) { }
 
     // ── Student-facing ──
 
+    /**
+     * The exams a student may see, each stamped with the phase it is in *for that
+     * student* (see `exam-lifecycle.ts`).
+     *
+     * Two rules this query is responsible for, and previously enforced neither of:
+     *
+     *  - **Unpublished exams are never returned.** There is no `isPublished`
+     *    filter to forget further down the stack; a draft exam simply is not in
+     *    this result set.
+     *  - **A scheduled exam is returned, but marked `SCHEDULED`, not startable.**
+     *    Students should be able to see what is coming (and which slot they hold)
+     *    without being able to walk into it early — the `phase` says which, and
+     *    the start gate independently re-checks it server-side.
+     */
     async findAvailableExams(classBand: number, userId: string) {
+        const now = new Date();
+
         const exams = await this.prisma.exam.findMany({
             where: {
+                isPublished: true,
                 classBands: { has: classBand },
-                instances: { some: { endsAt: { gte: new Date() } } },
+                instances: { some: { endsAt: { gte: now } } },
             },
             include: {
                 sections: { select: { id: true, title: true, sortOrder: true } },
                 instances: {
-                    where: { endsAt: { gte: new Date() } },
+                    where: { endsAt: { gte: now } },
                     orderBy: { startsAt: 'asc' },
-                    include: { attempts: { where: { userId } } },
+                    include: {
+                        attempts: { where: { userId } },
+                        _count: { select: { slots: true } },
+                    },
                 },
             },
             orderBy: { createdAt: 'desc' },
         });
 
+        const instanceIds = exams.flatMap((e) => e.instances.map((i) => i.id));
+
+        // The student's slot for each instance — the thing item 11 asks us to show
+        // them, and the thing the start gate actually turns on.
+        const bookings = await this.prisma.booking.findMany({
+            where: {
+                userId,
+                status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+                slot: { examInstanceId: { in: instanceIds } },
+            },
+            include: { slot: true },
+        });
+        const slotByInstance = new Map(bookings.map((b) => [b.slot.examInstanceId, b]));
+
         const completedAttempts = await this.prisma.attempt.findMany({
             where: {
                 userId,
                 status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
-                examInstance: { examId: { in: exams.map(e => e.id) } },
+                examInstance: { examId: { in: exams.map((e) => e.id) } },
             },
             include: { examInstance: { select: { examId: true } } },
         });
+        const completedExamIds = new Set(completedAttempts.map((a) => a.examInstance.examId));
 
-        const completedExamIds = new Set(completedAttempts.map(a => a.examInstance.examId));
+        return exams.map((exam) => {
+            const demo = isDemoExam(exam.id);
 
-        return exams.map(exam => ({
-            ...exam,
-            isCompleted: isDemoExam(exam.id) ? false : completedExamIds.has(exam.id),
-        }));
+            const instances = exam.instances.map((instance) => {
+                const booking = slotByInstance.get(instance.id);
+                // A demo/practice exam is always open inside its window — it runs no
+                // slots and exists precisely to be taken at will.
+                const phase = demo
+                    ? examPhase({
+                          isPublished: exam.isPublished,
+                          instance,
+                          hasSlots: false,
+                          now,
+                      })
+                    : examPhase({
+                          isPublished: exam.isPublished,
+                          instance,
+                          slot: booking?.slot ?? null,
+                          hasSlots: instance._count.slots > 0,
+                          now,
+                      });
+
+                return {
+                    ...instance,
+                    phase,
+                    canStart: isStartable(phase),
+                    startBlockedReason: startRefusalReason(phase),
+                    /** The student's own slot, so the UI can say when their turn is. */
+                    mySlot: booking
+                        ? {
+                              bookingId: booking.id,
+                              bookingStatus: booking.status,
+                              slotId: booking.slot.id,
+                              label: booking.slot.label,
+                              startsAt: booking.slot.startsAt,
+                              endsAt: booking.slot.endsAt,
+                          }
+                        : null,
+                };
+            });
+
+            // The exam as a whole is startable if any of its instances is.
+            const phase = instances.find((i) => i.canStart)?.phase ?? instances[0]?.phase ?? 'ENDED';
+
+            return {
+                ...exam,
+                instances,
+                phase,
+                canStart: instances.some((i) => i.canStart),
+                isCompleted: demo ? false : completedExamIds.has(exam.id),
+            };
+        });
     }
 
     async findExamById(id: string, userId?: string) {
@@ -122,6 +210,8 @@ export class ExamService {
                                         timeLimitSecs: true,
                                         mediaUrl: true,
                                         mediaType: true,
+                                        imageUrl: true,
+                                        videoUrl: true,
                                         tags: true,
                                         explanation: true,
                                         // correctAnswer always excluded at the
@@ -168,12 +258,65 @@ export class ExamService {
 
     // ── Admin: exams ──
 
+    /**
+     * The admin exam list, each row carrying **why** it can or cannot be published
+     * and released. The buttons were previously always enabled and simply failed
+     * with a server error; now the page can disable them and say what is missing.
+     */
     async findAllExamsForAdmin() {
-        return this.prisma.exam.findMany({
+        const exams = await this.prisma.exam.findMany({
             include: {
                 _count: { select: { sections: true, instances: true } },
+                instances: { orderBy: { startsAt: 'asc' } },
             },
             orderBy: { createdAt: 'desc' },
+        });
+
+        // One grouped count rather than one query per exam.
+        const counts = await this.prisma.sectionQuestion.groupBy({
+            by: ['sectionId'],
+            _count: { _all: true },
+        });
+        const sections = await this.prisma.examSection.findMany({
+            select: { id: true, examId: true },
+        });
+        const examOfSection = new Map(sections.map((s) => [s.id, s.examId]));
+
+        const questionCount = new Map<string, number>();
+        for (const row of counts) {
+            const examId = examOfSection.get(row.sectionId);
+            if (!examId) continue;
+            questionCount.set(examId, (questionCount.get(examId) ?? 0) + row._count._all);
+        }
+
+        const now = new Date();
+
+        return exams.map((exam) => {
+            const questions = questionCount.get(exam.id) ?? 0;
+            const publish = canPublish({
+                questionCount: questions,
+                instanceCount: exam._count.instances,
+            });
+
+            // The latest-ending sitting decides whether the exam is over.
+            const last = [...exam.instances].sort((a, b) => +b.endsAt - +a.endsAt)[0];
+            const release = last
+                ? canReleaseResults({
+                      instance: last,
+                      normalizedAt: last.resultsNormalizedAt ?? new Date(0),
+                      now,
+                  })
+                : { ok: false, reason: 'This exam has no schedule, so it has no results to release.' };
+
+            return {
+                ...exam,
+                questionCount: questions,
+                canPublish: publish.ok,
+                publishBlockedReason: publish.ok ? null : publish.reason,
+                canReleaseResults: release.ok,
+                releaseBlockedReason: release.ok ? null : release.reason,
+                hasEnded: last ? now > last.endsAt : false,
+            };
         });
     }
 
@@ -188,8 +331,11 @@ export class ExamService {
         mediumPct?: number;
         hardPct?: number;
     }) {
+        // A new exam starts as a DRAFT with results hidden. It used to be created
+        // published *and* results-released, which is why an exam with no paper and
+        // no schedule was immediately visible to students.
         return this.prisma.exam.create({
-            data: { ...data, isPublished: true, isResultReleased: true },
+            data: { ...data, isPublished: false, isResultReleased: false },
         });
     }
 
@@ -236,6 +382,27 @@ export class ExamService {
 
         const { instance, slots, isPublished, isResultReleased, ...examData } = input;
 
+        // Slots must sit inside the exam window. A slot scheduled before the exam
+        // opens can never be sat: the attempt gate refuses every start before
+        // `instance.startsAt`, so its students would watch the slot expire against
+        // a Start button that never enables.
+        const instanceWindow = {
+            startsAt: new Date(instance.startsAt),
+            endsAt: new Date(instance.endsAt),
+        };
+        if (instanceWindow.endsAt <= instanceWindow.startsAt) {
+            throw new BadRequestException('The exam window must end after it starts.');
+        }
+        slots.forEach((s, i) => {
+            const check = validateSlotWindow(
+                { startsAt: new Date(s.startsAt), endsAt: new Date(s.endsAt) },
+                instanceWindow,
+            );
+            if (!check.ok) {
+                throw new BadRequestException(`Slot ${i + 1} (${s.label ?? 'unnamed'}): ${check.reason}`);
+            }
+        });
+
         return this.prisma.$transaction(async (tx) => {
             const exam = await tx.exam.create({
                 data: {
@@ -280,6 +447,16 @@ export class ExamService {
         await this.prisma.exam.delete({ where: { id } });
     }
 
+    /**
+     * The general exam edit. It is also where the admin UI flips `isPublished` and
+     * `isResultReleased` from the exam cards, so **the publish and release gates
+     * are enforced here**, not only on the dedicated `/publish` and
+     * `/release-results` routes.
+     *
+     * That distinction is the whole point: putting the checks only on the named
+     * routes left this one as an unguarded side door, and it is the door the UI
+     * actually used. A rule that lives on one of two write paths is not a rule.
+     */
     async updateExam(id: string, data: {
         title?: string;
         description?: string | null;
@@ -293,6 +470,26 @@ export class ExamService {
         isPublished?: boolean;
         isResultReleased?: boolean;
     }) {
+        // Turning a flag ON is gated; turning it OFF is always allowed — taking a
+        // bad exam down or pulling back a wrong result must never be blocked.
+        if (data.isPublished === true) {
+            const exam = await this.prisma.exam.findUnique({
+                where: { id },
+                select: { _count: { select: { instances: true } } },
+            });
+            if (!exam) throw new NotFoundException('Exam not found');
+
+            const check = canPublish({
+                questionCount: await this.questionCountFor(id),
+                instanceCount: exam._count.instances,
+            });
+            if (!check.ok) throw new BadRequestException(check.reason);
+        }
+
+        if (data.isResultReleased === true) {
+            await this.assertExamIsOver(id);
+        }
+
         return this.prisma.$transaction(async (tx) => {
             const updated = await tx.exam.update({ where: { id }, data });
             if (data.totalMarks !== undefined) {
@@ -305,22 +502,55 @@ export class ExamService {
         });
     }
 
+    /** Throws unless every sitting of this exam has finished. */
+    private async assertExamIsOver(examId: string) {
+        const instances = await this.prisma.examInstance.findMany({
+            where: { examId },
+            orderBy: { endsAt: 'desc' },
+            take: 1,
+        });
+        if (instances.length === 0) {
+            throw new BadRequestException(
+                'This exam has no schedule, so it has no results to release.',
+            );
+        }
+
+        // The latest-ending instance decides: while any sitting is still open, the
+        // cohort is incomplete and a rank or percentile would be meaningless.
+        const check = canReleaseResults({
+            instance: instances[0],
+            // The exam-level switch predates normalization and does not require it —
+            // only that the exam is genuinely over.
+            normalizedAt: instances[0].resultsNormalizedAt ?? new Date(0),
+            now: new Date(),
+        });
+        if (!check.ok) throw new BadRequestException(check.reason);
+    }
+
     // ── Admin: sections ──
 
     async createSection(examId: string, data: { title: string; sortOrder: number; questionsToAssign?: number }) {
         return this.prisma.examSection.create({ data: { ...data, examId } });
     }
 
-    // Returns a presigned S3 PUT URL so admin can upload question media directly.
-    // Also returns the permanent public URL to store as Question.mediaUrl.
+    /**
+     * Signs a direct browser → bucket upload for a question's picture or video.
+     *
+     * The file never passes through the API — see `ObjectStorageService` for why
+     * (Render's 512 MB would not survive a video). The admin uploads to the
+     * returned `uploadUrl`, then saves `publicUrl` onto the question's
+     * `imageUrl` / `videoUrl`.
+     */
     async getQuestionMediaUploadUrl(
+        kind: MediaKind,
         filename: string,
         contentType: string,
-    ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
-        const key = S3Service.questionMediaKey(randomUUID(), filename);
-        const uploadUrl = await this.s3.getPresignedPutUrl(key, contentType, 600);
-        const publicUrl = this.s3.publicUrl(key);
-        return { uploadUrl, publicUrl, key };
+        contentLength: number,
+    ) {
+        if (kind !== 'image' && kind !== 'video') {
+            throw new BadRequestException('kind must be "image" or "video".');
+        }
+        return this.storage.presignQuestionMedia(kind, filename, contentType, contentLength);
     }
 
     async updateSection(id: string, data: any) {
@@ -484,6 +714,16 @@ export class ExamService {
         return this.prisma.examInstance.create({ data: { ...data, examId } });
     }
 
+    /**
+     * Edits an instance's window (item 6 — this is what the admin "edit exam"
+     * screen now writes to).
+     *
+     * Moving the window can strand slots outside it, so the new window is checked
+     * against every existing slot first. We refuse rather than silently dragging
+     * the slots along: a slot is a commitment students have already been booked
+     * into, and moving one under them is not a decision this endpoint should make
+     * on its own.
+     */
     async updateInstance(id: string, data: {
         startsAt?: Date;
         endsAt?: Date;
@@ -492,6 +732,33 @@ export class ExamService {
         configKey?: string;
         quitUrl?: string;
     }) {
+        if (data.startsAt || data.endsAt) {
+            const current = await this.prisma.examInstance.findUnique({
+                where: { id },
+                include: { slots: { orderBy: { startsAt: 'asc' } } },
+            });
+            if (!current) throw new NotFoundException('Exam instance not found');
+
+            const next = {
+                startsAt: data.startsAt ?? current.startsAt,
+                endsAt: data.endsAt ?? current.endsAt,
+            };
+            if (next.endsAt <= next.startsAt) {
+                throw new BadRequestException('The exam window must end after it starts.');
+            }
+
+            const stranded = current.slots
+                .map((s) => ({ slot: s, check: validateSlotWindow(s, next) }))
+                .filter((r) => !r.check.ok);
+
+            if (stranded.length > 0) {
+                const names = stranded.map((r) => r.slot.label ?? 'unnamed').join(', ');
+                throw new BadRequestException(
+                    `This window would leave ${stranded.length} slot(s) outside the exam: ${names}. Move those slots first, or widen the window.`,
+                );
+            }
+        }
+
         return this.prisma.examInstance.update({ where: { id }, data });
     }
 
@@ -499,15 +766,55 @@ export class ExamService {
         return this.prisma.examInstance.delete({ where: { id } });
     }
 
+    /**
+     * Counts the questions actually attached to an exam's sections. This is the
+     * number that decides whether there is a paper to publish — a bank question
+     * that no section links to would never be served to a student.
+     */
+    private async questionCountFor(examId: string): Promise<number> {
+        return this.prisma.sectionQuestion.count({ where: { section: { examId } } });
+    }
+
+    /** Publishing is refused for an exam with no paper or no schedule. */
     async publishExam(id: string) {
+        const exam = await this.prisma.exam.findUnique({
+            where: { id },
+            select: { id: true, _count: { select: { instances: true } } },
+        });
+        if (!exam) throw new NotFoundException('Exam not found');
+
+        const check = canPublish({
+            questionCount: await this.questionCountFor(id),
+            instanceCount: exam._count.instances,
+        });
+        if (!check.ok) throw new BadRequestException(check.reason);
+
         return this.prisma.exam.update({ where: { id }, data: { isPublished: true } });
+    }
+
+    /** Un-publishes an exam, taking it straight back out of every student's list. */
+    async unpublishExam(id: string) {
+        return this.prisma.exam.update({ where: { id }, data: { isPublished: false } });
     }
 
     async releaseQuestionPaper(id: string) {
-        return this.prisma.exam.update({ where: { id }, data: { isPublished: true } });
+        return this.publishExam(id);
     }
 
+    /**
+     * The legacy exam-level release switch (`Exam.isResultReleased`). It is gated
+     * on the same rule as the per-instance release: **every** instance of the exam
+     * must have finished. Releasing a result for an exam nobody has sat yet was
+     * the defect this closes.
+     *
+     * The richer per-audience release lives in `ResultsService.release`.
+     */
     async releaseResults(id: string) {
+        const exam = await this.prisma.exam.findUnique({ where: { id }, select: { id: true } });
+        if (!exam) throw new NotFoundException('Exam not found');
+
+        await this.assertExamIsOver(id);
+
         return this.prisma.exam.update({ where: { id }, data: { isResultReleased: true } });
     }
 

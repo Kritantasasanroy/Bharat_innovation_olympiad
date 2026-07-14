@@ -12,7 +12,7 @@ interface AuthState {
     loginWithEmail: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
-    updateProfile: (data: { firstName: string; lastName: string; classBand: number }) => Promise<void>;
+    updateProfile: (data: { firstName: string; lastName: string; phone?: string; classBand: number }) => Promise<void>;
     setUser: (user: User | null) => void;
 }
 

@@ -54,3 +54,28 @@ export class DecidePartnerDto {
     @IsNotEmpty()
     reason: string;
 }
+
+/**
+ * A partner editing its own contact details (item 14).
+ *
+ * Deliberately excludes `status`, `partnerId` and the access token: those are
+ * staff decisions and credentials, not profile fields. The email is *not* editable
+ * either — it is a login identity, and changing it here would silently orphan the
+ * password credential. Staff can change it from the admin console.
+ */
+export class UpdatePartnerProfileDto {
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    orgName?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    contactPerson?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    phone?: string;
+}

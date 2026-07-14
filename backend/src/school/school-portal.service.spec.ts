@@ -38,7 +38,18 @@ function createFakeDb() {
 
 function setup() {
     const db = createFakeDb();
-    return { ...db, service: new SchoolPortalService(db.prisma as never) };
+    // The collaborators added for the partner card, slot self-pick and result
+    // export are not exercised by these roster/read tests, so they are stubbed to
+    // nothing rather than faked — a fake would only assert against itself here.
+    return {
+        ...db,
+        service: new SchoolPortalService(
+            db.prisma as never,
+            {} as never, // PartnerDirectoryService
+            {} as never, // SchoolSlotService
+            {} as never, // ResultsExportService
+        ),
+    };
 }
 
 const roster = (students: { name: string; email: string; classBand: number }[]) => ({ students });
@@ -214,8 +225,26 @@ describe('profile', () => {
             city: 'Nagpur',
             pincode: '441108',
             status: 'ACTIVE',
-            readOnly: true,
             coordinator: { name: 'Anita Rao', email: 'anita@x.test' },
         });
+    });
+
+    it('advertises which fields the coordinator may edit — and which it may not', async () => {
+        const { service } = setup();
+
+        const profile = await service.profile('school-1');
+
+        // A school owns its contact details (item 14)...
+        expect(profile.editable).toEqual(
+            expect.arrayContaining(['board', 'coordinatorName', 'coordinatorPhone']),
+        );
+        // ...but never its identity. `(nameKey, pincode)` is the directory's
+        // uniqueness key and `code` is what students type at registration; a
+        // coordinator rewriting either would collide with another school or break
+        // every student already pointing at this one.
+        expect(profile.editable).not.toContain('name');
+        expect(profile.editable).not.toContain('pincode');
+        expect(profile.editable).not.toContain('code');
+        expect(profile.editable).not.toContain('coordinatorEmail');
     });
 });

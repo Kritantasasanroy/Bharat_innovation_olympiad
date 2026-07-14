@@ -6,6 +6,12 @@ import api from '@/lib/api';
 import { CLASS_BANDS } from '@/lib/constants';
 import { FormEvent, useEffect, useState } from 'react';
 
+interface ExamInstance {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+}
+
 interface Exam {
     id: string;
     title: string;
@@ -16,7 +22,39 @@ interface Exam {
     isPublished: boolean;
     isResultReleased: boolean;
     createdAt: string;
+    instances: ExamInstance[];
+    /** Questions actually attached to this exam's sections. */
+    questionCount: number;
+    /** The server's decision, mirrored here so the button can explain itself. */
+    canPublish: boolean;
+    publishBlockedReason: string | null;
+    canReleaseResults: boolean;
+    releaseBlockedReason: string | null;
+    hasEnded: boolean;
     _count: { sections: number; instances: number };
+}
+
+const fmt = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+const formatWindow = (startsAt: string, endsAt: string) => `${fmt(startsAt)} → ${fmt(endsAt)}`;
+
+/** Where an exam window sits relative to now — the same three states students see. */
+function scheduleBadge(instance: ExamInstance): { label: string; cls: string } {
+    const now = Date.now();
+    if (now < new Date(instance.startsAt).getTime()) {
+        return { label: 'Upcoming', cls: 'badge-warning' };
+    }
+    if (now > new Date(instance.endsAt).getTime()) {
+        return { label: 'Ended', cls: 'badge-muted' };
+    }
+    return { label: 'Live', cls: 'badge-success' };
 }
 
 export default function AdminExamsPage() {
@@ -227,9 +265,27 @@ export default function AdminExamsPage() {
                                         {exam.isResultReleased ? 'Results Released' : 'Results Hidden'}
                                     </span>
                                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        {exam._count.sections} sections · {exam._count.instances} instances
+                                        {exam.questionCount} questions · {exam._count.instances} instances
                                     </span>
                                 </div>
+
+                                {/* Schedule — the exam window(s) students are gated by. */}
+                                {exam.instances.length > 0 ? (
+                                    <div className="schedule-strip">
+                                        {exam.instances.map((instance) => (
+                                            <div key={instance.id} className="schedule-row">
+                                                <span>{formatWindow(instance.startsAt, instance.endsAt)}</span>
+                                                <span className={`badge ${scheduleBadge(instance).cls}`}>
+                                                    {scheduleBadge(instance).label}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="hint hint-warn">
+                                        No schedule yet — add a date window before publishing.
+                                    </p>
+                                )}
 
                                 {/* Action row 1: edit + publish */}
                                 <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
@@ -239,21 +295,65 @@ export default function AdminExamsPage() {
                                     <button
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => togglePublish(exam)}
-                                        disabled={activeExamAction === `publish-${exam.id}`}
+                                        // A draft exam with no paper or no schedule cannot be published —
+                                        // the server refuses it, so the button says so rather than failing.
+                                        disabled={
+                                            activeExamAction === `publish-${exam.id}` ||
+                                            (!exam.isPublished && !exam.canPublish)
+                                        }
+                                        title={
+                                            !exam.isPublished && exam.publishBlockedReason
+                                                ? exam.publishBlockedReason
+                                                : undefined
+                                        }
                                     >
-                                        {activeExamAction === `publish-${exam.id}` ? '...' : (exam.isPublished ? 'Unpublish' : 'Publish')}
+                                        {activeExamAction === `publish-${exam.id}`
+                                            ? '...'
+                                            : exam.isPublished
+                                              ? 'Unpublish'
+                                              : 'Publish'}
                                     </button>
                                 </div>
+
+                                {!exam.isPublished && exam.publishBlockedReason && (
+                                    <p className="hint hint-warn">⚠ {exam.publishBlockedReason}</p>
+                                )}
 
                                 {/* Action row 2: results toggle */}
                                 <button
                                     className="btn btn-secondary btn-sm"
                                     style={{ width: '100%' }}
                                     onClick={() => toggleResults(exam)}
-                                    disabled={activeExamAction === `result-${exam.id}`}
+                                    // Results cannot be released for an exam that has not finished.
+                                    disabled={
+                                        activeExamAction === `result-${exam.id}` ||
+                                        (!exam.isResultReleased && !exam.canReleaseResults)
+                                    }
+                                    title={
+                                        !exam.isResultReleased && exam.releaseBlockedReason
+                                            ? exam.releaseBlockedReason
+                                            : undefined
+                                    }
                                 >
-                                    {activeExamAction === `result-${exam.id}` ? '...' : (exam.isResultReleased ? 'Hide Results' : 'Release Results')}
+                                    {activeExamAction === `result-${exam.id}`
+                                        ? '...'
+                                        : exam.isResultReleased
+                                          ? 'Hide Results'
+                                          : 'Release Results'}
                                 </button>
+
+                                {!exam.isResultReleased && exam.releaseBlockedReason && (
+                                    <p className="hint hint-muted">🔒 {exam.releaseBlockedReason}</p>
+                                )}
+
+                                {/* Timings + slots (item 6) */}
+                                <a
+                                    href={`/exams/${exam.id}/schedule`}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}
+                                >
+                                    🗓 Edit Schedule &amp; Slots
+                                </a>
 
                                 {/* Manage Questions — primary CTA */}
                                 <a

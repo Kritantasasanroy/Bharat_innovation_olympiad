@@ -400,6 +400,94 @@ h4 {
   color: var(--danger-400);
 }
 
+/* A finished / inactive state — present but no longer actionable. */
+.badge-muted {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+/* ── Inline explanations ───────────────────────────────────────────────────
+   A disabled button has to say why. These carry the server's own reason
+   ("this exam has no questions", "results can only be released after the exam
+   window closes") right under the control it blocks. */
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.hint-warn {
+  color: var(--warning-400);
+}
+
+.hint-muted {
+  color: var(--text-muted);
+}
+
+/* ── Question media slots (picture + video per question) ──────────────────── */
+.media-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.media-slot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.media-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.media-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.media-drop:hover {
+  border-color: var(--primary-400);
+  color: var(--text-secondary);
+}
+
+/* ── Exam schedule strip (the window students are gated by) ───────────────── */
+.schedule-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+}
+
 .badge-primary {
   background: rgba(255, 203, 5, 0.12);
   color: var(--primary-400);

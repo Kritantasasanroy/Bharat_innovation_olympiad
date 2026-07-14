@@ -289,6 +289,80 @@ h4 {
 .meta-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .meta-value { font-size: 1rem; font-weight: 500; margin-top: 2px; }
 .exam-footer { margin-top: auto; }
+
+/* ── Exam phase + slot (what gates the Start button) ───────────────────────
+   A student must be able to tell at a glance whether an exam is merely
+   scheduled, waiting on their slot, or genuinely open right now. */
+.exam-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.phase-pill {
+    flex-shrink: 0;
+    padding: 2px var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.phase-success { background: rgba(34, 197, 94, 0.16); color: var(--success-400); }
+.phase-info    { background: rgba(59, 130, 246, 0.16); color: #60a5fa; }
+.phase-warn    { background: rgba(245, 158, 11, 0.16); color: var(--warning-400); }
+.phase-danger  { background: rgba(239, 68, 68, 0.16);  color: var(--danger-400); }
+.phase-muted   { background: var(--bg-input); color: var(--text-muted); }
+
+.exam-schedule {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+}
+
+.slot-card {
+    padding: var(--space-3);
+    margin-bottom: var(--space-4);
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+/* The student's slot is open — this is the one state that enables Start. */
+.slot-card-live {
+    border-color: var(--success-400);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.slot-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: 2px;
+}
+
+.slot-card-time {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.slot-note {
+    margin: var(--space-2) 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.slot-note-warn  { color: var(--warning-400); }
+.slot-note-muted { color: var(--text-muted); }
+
 .empty-state {
     padding: var(--space-12) var(--space-6);
     text-align: center; margin-top: var(--space-8);
@@ -1000,6 +1074,18 @@ h4 {
             background: var(--bg-card);
             border-radius: var(--radius-md);
             border: 1px solid var(--border-subtle);
+          }
+          /* A question's picture / video. Capped so a tall image cannot push the
+             options below the fold on a laptop mid-exam. */
+          .question-media {
+            display: block;
+            width: 100%;
+            max-width: 640px;
+            max-height: 400px;
+            object-fit: contain;
+            margin-top: var(--space-4);
+            border-radius: var(--radius-md);
+            background: rgba(0, 0, 0, 0.2);
           }
           .options-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); }
           .option-item.disabled { opacity: 0.5; cursor: not-allowed; }

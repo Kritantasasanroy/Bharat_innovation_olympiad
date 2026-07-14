@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { BookingStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateUserDto } from './dto/admin-management.dto';
+import { schoolNameKey } from '../school/school-directory.helpers';
+import {
+    UpdatePartnerDto,
+    UpdateSchoolDto,
+    UpdateUserDto,
+} from './dto/admin-management.dto';
 
 interface Actor {
     id: string;
@@ -93,6 +98,7 @@ export class AdminManagementService {
         const data: Prisma.UserUpdateInput = {};
         if (dto.firstName !== undefined) data.firstName = dto.firstName;
         if (dto.lastName !== undefined) data.lastName = dto.lastName;
+        if (dto.phone !== undefined) data.phone = dto.phone.trim() || null;
         if (dto.classBand !== undefined) data.classBand = dto.classBand;
         if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
@@ -127,6 +133,245 @@ export class AdminManagementService {
         });
 
         return { id: updated.id, email: updated.email };
+    }
+
+    /**
+     * Moves several students to a school (or detaches them) in one call — the
+     * "student shuffling" of item 20.
+     *
+     * Doing it one PATCH at a time is not equivalent: a partial failure halfway
+     * through a class list leaves the roster split across two schools with no
+     * record of intent. This runs as one transaction and one audit entry.
+     *
+     * Moving a student does **not** move their bookings. Their old school's slot
+     * assignment no longer applies to them, and the new school's may differ — so
+     * their slot is re-derived by auto-allocation rather than silently carried
+     * over into a slot the new school does not hold.
+     */
+    async moveStudents(
+        userIds: string[],
+        schoolId: string | null,
+        actor: Actor,
+    ): Promise<{ moved: number; schoolId: string | null }> {
+        if (!userIds.length) throw new BadRequestException('Pick at least one student.');
+
+        if (schoolId) {
+            const school = await this.prisma.school.findUnique({ where: { id: schoolId } });
+            if (!school) throw new BadRequestException('Target school not found.');
+        }
+
+        const students = await this.prisma.user.findMany({
+            where: { id: { in: userIds }, role: Role.STUDENT },
+            select: { id: true },
+        });
+        if (students.length !== userIds.length) {
+            throw new BadRequestException(
+                'Some of those ids are not students, or do not exist. Nothing was moved.',
+            );
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.user.updateMany({
+                where: { id: { in: userIds } },
+                data: { schoolId },
+            }),
+            this.prisma.auditLog.create({
+                data: {
+                    userId: actor.id,
+                    action: 'admin.students.moved',
+                    resource: 'user',
+                    details: { userIds, schoolId, count: userIds.length },
+                },
+            }),
+        ]);
+
+        return { moved: userIds.length, schoolId };
+    }
+
+    // ── Schools ──────────────────────────────────────────────────────────────
+
+    /** Every school, with its partner and roster size. Powers the admin schools page. */
+    async listSchools(params: { q?: string; partnerId?: string } = {}) {
+        const where: Prisma.SchoolWhereInput = {};
+        if (params.partnerId) where.partnerId = params.partnerId;
+        if (params.q?.trim()) {
+            const q = params.q.trim();
+            where.OR = [
+                { name: { contains: q, mode: 'insensitive' } },
+                { code: { contains: q, mode: 'insensitive' } },
+                { city: { contains: q, mode: 'insensitive' } },
+                { pincode: { contains: q } },
+            ];
+        }
+
+        const schools = await this.prisma.school.findMany({
+            where,
+            orderBy: { name: 'asc' },
+            take: 500,
+            include: {
+                _count: { select: { users: true } },
+                accessRequest: {
+                    select: {
+                        coordinatorName: true,
+                        coordinatorEmail: true,
+                        coordinatorPhone: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+
+        // One lookup for the partner names, rather than N.
+        const partnerIds = [...new Set(schools.map((s) => s.partnerId).filter(Boolean))] as string[];
+        const partners = await this.prisma.partnerRequest.findMany({
+            where: { partnerId: { in: partnerIds } },
+            select: { partnerId: true, orgName: true },
+        });
+        const partnerName = new Map(partners.map((p) => [p.partnerId, p.orgName]));
+
+        return schools.map((s) => ({
+            id: s.id,
+            name: s.name,
+            code: s.code,
+            city: s.city,
+            state: s.state,
+            pincode: s.pincode,
+            board: s.board,
+            udiseCode: s.udiseCode,
+            partnerId: s.partnerId,
+            partnerName: s.partnerId ? (partnerName.get(s.partnerId) ?? null) : null,
+            onboardedAt: s.onboardedAt,
+            status: s.onboardedAt ? 'ACTIVE' : 'DIRECTORY_ONLY',
+            members: s._count.users,
+            coordinator: s.accessRequest,
+        }));
+    }
+
+    /**
+     * Edit a school, including **reassigning it to a different partner** (item 20).
+     *
+     * Renaming or re-pincoding a school rewrites `nameKey`, which is half of the
+     * `(nameKey, pincode)` uniqueness key — so a rename can collide with a school
+     * that already exists. We check first and refuse, rather than letting the
+     * database throw a P2002 that the UI would have to decode.
+     */
+    async updateSchool(id: string, dto: UpdateSchoolDto, actor: Actor) {
+        const school = await this.prisma.school.findUnique({ where: { id } });
+        if (!school) throw new NotFoundException('School not found.');
+
+        const data: Prisma.SchoolUpdateInput = {};
+        if (dto.city !== undefined) data.city = dto.city;
+        if (dto.state !== undefined) data.state = dto.state;
+        if (dto.board !== undefined) data.board = dto.board || null;
+        if (dto.udiseCode !== undefined) data.udiseCode = dto.udiseCode || null;
+
+        // `null` deliberately means "no partner" — the school then falls back to
+        // the house partner at read time.
+        if (dto.partnerId !== undefined) {
+            data.partnerId = dto.partnerId?.trim() || null;
+        }
+
+        const nextName = dto.name ?? school.name;
+        const nextPincode = dto.pincode ?? school.pincode;
+
+        if (dto.name !== undefined || dto.pincode !== undefined) {
+            const nameKey = schoolNameKey(nextName);
+            const clash = await this.prisma.school.findUnique({
+                where: { nameKey_pincode: { nameKey, pincode: nextPincode } },
+            });
+            if (clash && clash.id !== id) {
+                throw new ConflictException(
+                    `Another school ("${clash.name}", ${clash.code}) already exists at pincode ${nextPincode}. Merge them instead of renaming.`,
+                );
+            }
+            data.name = nextName;
+            data.nameKey = nameKey;
+            data.pincode = nextPincode;
+        }
+
+        const updated = await this.prisma.school.update({ where: { id }, data });
+
+        await this.prisma.auditLog.create({
+            data: {
+                userId: actor.id,
+                action: 'admin.school.updated',
+                resource: 'school',
+                details: { schoolId: id, changed: Object.keys(dto) },
+            },
+        });
+
+        return { id: updated.id, name: updated.name, code: updated.code };
+    }
+
+    // ── Partners ─────────────────────────────────────────────────────────────
+
+    /** Every partner, for the admin console and the school→partner assignment picker. */
+    async listPartners() {
+        const requests = await this.prisma.partnerRequest.findMany({
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                partnerId: true,
+                orgName: true,
+                contactPerson: true,
+                email: true,
+                phone: true,
+                status: true,
+                createdAt: true,
+                decidedAt: true,
+            },
+        });
+
+        const partnerIds = requests.map((r) => r.partnerId).filter(Boolean) as string[];
+        const counts = await this.prisma.school.groupBy({
+            by: ['partnerId'],
+            where: { partnerId: { in: partnerIds } },
+            _count: { _all: true },
+        });
+        const schoolCount = new Map(counts.map((c) => [c.partnerId, c._count._all]));
+
+        return requests.map((r) => ({
+            ...r,
+            schools: r.partnerId ? (schoolCount.get(r.partnerId) ?? 0) : 0,
+        }));
+    }
+
+    /**
+     * Edit a partner's details (item 20). Staff *can* change the email here — it is
+     * the partner's login identity, and only staff should be able to move it.
+     * The password and access token are untouched; use the existing rotate-token
+     * route to reissue the credential.
+     */
+    async updatePartner(id: string, dto: UpdatePartnerDto, actor: Actor) {
+        const request = await this.prisma.partnerRequest.findUnique({ where: { id } });
+        if (!request) throw new NotFoundException('Partner not found.');
+
+        const data: Prisma.PartnerRequestUpdateInput = {};
+        if (dto.orgName !== undefined) data.orgName = dto.orgName.trim();
+        if (dto.contactPerson !== undefined) data.contactPerson = dto.contactPerson.trim();
+        if (dto.phone !== undefined) data.phone = dto.phone.trim();
+
+        if (dto.email !== undefined) {
+            const email = dto.email.trim().toLowerCase();
+            if (email !== request.email) {
+                const clash = await this.prisma.partnerRequest.findUnique({ where: { email } });
+                if (clash) throw new ConflictException('That email is already used by a partner.');
+                data.email = email;
+            }
+        }
+
+        const updated = await this.prisma.partnerRequest.update({ where: { id }, data });
+
+        await this.prisma.auditLog.create({
+            data: {
+                userId: actor.id,
+                action: 'admin.partner.updated',
+                resource: 'partner-request',
+                details: { partnerRequestId: id, changed: Object.keys(dto) },
+            },
+        });
+
+        return { id: updated.id, orgName: updated.orgName, email: updated.email };
     }
 
     // ── Permanent delete (archive first, then hard-delete) ────────────────────

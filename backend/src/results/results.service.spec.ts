@@ -6,10 +6,28 @@ import { ResultsService } from './results.service';
  * so the gating assertions below (normalize-before-release, no re-normalizing a
  * released instance) test actual behaviour rather than stubbed return values.
  */
-function createFakeDb() {
+const HOUR = 3_600_000;
+/** By default the exam is over — releasing is only legal once it is (item 1). */
+const ENDED_WINDOW = {
+    startsAt: new Date(Date.now() - 4 * HOUR),
+    endsAt: new Date(Date.now() - 2 * HOUR),
+};
+
+function createFakeDb(window: { startsAt: Date; endsAt: Date } = ENDED_WINDOW) {
     const exams: any[] = [{ id: 'exam-1', title: 'Science Olympiad', totalMarks: 100, isResultReleased: false }];
     const instances: any[] = [
-        { id: 'inst-1', examId: 'exam-1', resultsNormalizedAt: null, resultsReleasedAt: null, resultsReleasedBy: null },
+        {
+            id: 'inst-1',
+            examId: 'exam-1',
+            startsAt: window.startsAt,
+            endsAt: window.endsAt,
+            resultsNormalizedAt: null,
+            resultsReleasedAt: null,
+            resultsReleasedBy: null,
+            resultsReleasedToStudentsAt: null,
+            resultsReleasedToSchoolsAt: null,
+            resultsReleasedToPartnersAt: null,
+        },
     ];
     const attempts: any[] = [];
     const auditLogs: any[] = [];
@@ -153,7 +171,7 @@ describe('ResultsService.release — the gate', () => {
         const service = new ResultsService(db.prisma);
 
         await expect(service.release('inst-1', 'admin', 'Looks fine')).rejects.toThrow(
-            /must be normalized before/i,
+            /normaliz/i,
         );
         expect(db.instances[0].resultsReleasedAt).toBeNull();
         expect(db.exams[0].isResultReleased).toBe(false);
@@ -197,18 +215,137 @@ describe('ResultsService.release — the gate', () => {
     });
 });
 
+describe('ResultsService.release — the exam must be over (item 1)', () => {
+    const HOUR_MS = 3_600_000;
+
+    it('REFUSES to release for an exam that has not started', async () => {
+        const db = createFakeDb({
+            startsAt: new Date(Date.now() + 2 * HOUR_MS),
+            endsAt: new Date(Date.now() + 4 * HOUR_MS),
+        });
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        db.instances[0].resultsNormalizedAt = new Date();
+
+        await expect(service.release('inst-1', 'admin', 'Eager')).rejects.toThrow(
+            /not started/i,
+        );
+        expect(db.instances[0].resultsReleasedAt).toBeNull();
+        expect(db.exams[0].isResultReleased).toBe(false);
+    });
+
+    it('REFUSES to release while the exam is still running', async () => {
+        const db = createFakeDb({
+            startsAt: new Date(Date.now() - HOUR_MS),
+            endsAt: new Date(Date.now() + HOUR_MS),
+        });
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        db.instances[0].resultsNormalizedAt = new Date();
+
+        await expect(service.release('inst-1', 'admin', 'Early')).rejects.toThrow(
+            /still in progress/i,
+        );
+        expect(db.instances[0].resultsReleasedAt).toBeNull();
+    });
+});
+
+describe('ResultsService.release — per audience (item 19)', () => {
+    it('releasing to schools does NOT hand students their scores', async () => {
+        const db = createFakeDb();
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        await service.normalize('inst-1', 'admin');
+
+        await service.release('inst-1', 'admin', 'School QC first.', ['SCHOOLS']);
+
+        expect(db.instances[0].resultsReleasedToSchoolsAt).toBeInstanceOf(Date);
+        expect(db.instances[0].resultsReleasedToStudentsAt).toBeNull();
+        // The legacy student-facing gate tracks STUDENTS only.
+        expect(db.exams[0].isResultReleased).toBe(false);
+    });
+
+    it('adds a further audience later without re-releasing the ones already out', async () => {
+        const db = createFakeDb();
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        await service.normalize('inst-1', 'admin');
+
+        await service.release('inst-1', 'admin', 'Schools first.', ['SCHOOLS']);
+        const schoolsAt = db.instances[0].resultsReleasedToSchoolsAt;
+
+        const second = await service.release('inst-1', 'admin', 'Now students.', [
+            'SCHOOLS',
+            'STUDENTS',
+        ]);
+
+        // Only the genuinely new audience was released.
+        expect(second.released).toEqual(['STUDENTS']);
+        // The school release timestamp was not overwritten.
+        expect(db.instances[0].resultsReleasedToSchoolsAt).toBe(schoolsAt);
+        expect(db.exams[0].isResultReleased).toBe(true);
+    });
+
+    it('refuses when every requested audience already has the results', async () => {
+        const db = createFakeDb();
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        await service.normalize('inst-1', 'admin');
+        await service.release('inst-1', 'admin', 'Out.', ['PARTNERS']);
+
+        await expect(
+            service.release('inst-1', 'admin', 'Again', ['PARTNERS']),
+        ).rejects.toThrow(/already released to partners/i);
+    });
+
+    it('revoking from students closes the student result pages again', async () => {
+        const db = createFakeDb();
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        await service.normalize('inst-1', 'admin');
+        await service.release('inst-1', 'admin', 'Out.', ['STUDENTS', 'SCHOOLS']);
+        expect(db.exams[0].isResultReleased).toBe(true);
+
+        await service.revoke('inst-1', 'admin', 'Scoring error found.', ['STUDENTS']);
+
+        expect(db.instances[0].resultsReleasedToStudentsAt).toBeNull();
+        expect(db.exams[0].isResultReleased).toBe(false);
+        // Schools keep theirs — the revoke was scoped.
+        expect(db.instances[0].resultsReleasedToSchoolsAt).toBeInstanceOf(Date);
+        expect(db.auditLogs.some((a) => a.action === 'results.revoked')).toBe(true);
+    });
+});
+
 describe('ResultsService.getStatus', () => {
-    it('reports canRelease only after normalization and before release', async () => {
+    it('reports canRelease only after normalization, and says why when it cannot', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
         const service = new ResultsService(db.prisma);
 
-        expect((await service.getStatus('inst-1')).canRelease).toBe(false);
+        const before = await service.getStatus('inst-1');
+        expect(before.canRelease).toBe(false);
+        expect(before.releaseBlockedReason).toMatch(/normaliz/i);
+        expect(before.hasEnded).toBe(true);
 
         await service.normalize('inst-1', 'admin');
-        expect((await service.getStatus('inst-1')).canRelease).toBe(true);
+        const after = await service.getStatus('inst-1');
+        expect(after.canRelease).toBe(true);
+        expect(after.releaseBlockedReason).toBeNull();
+        expect(after.releasedTo.STUDENTS).toBeNull();
+    });
 
-        await service.release('inst-1', 'admin', 'Done.');
-        expect((await service.getStatus('inst-1')).canRelease).toBe(false);
+    it('reports the exam-still-running block, not a normalization block', async () => {
+        const db = createFakeDb({
+            startsAt: new Date(Date.now() - 3_600_000),
+            endsAt: new Date(Date.now() + 3_600_000),
+        });
+        seedAttempts(db, [90, 50]);
+        const service = new ResultsService(db.prisma);
+        await service.normalize('inst-1', 'admin');
+
+        const status = await service.getStatus('inst-1');
+        expect(status.canRelease).toBe(false);
+        expect(status.hasEnded).toBe(false);
+        expect(status.releaseBlockedReason).toMatch(/still in progress/i);
     });
 });

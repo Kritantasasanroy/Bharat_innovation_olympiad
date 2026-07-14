@@ -11,6 +11,7 @@ export default function ProfilePage() {
     const { user, updateProfile } = useAuthStore();
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
+    const [phone, setPhone] = useState('');
     const [classBand, setClassBand] = useState<number>(6);
 
     const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +37,7 @@ export default function ProfilePage() {
         if (user) {
             setFirstName(user.firstName || '');
             setLastName(user.lastName || '');
+            setPhone(user.phone || '');
             setClassBand(user.classBand || 6);
         }
     }, [user]);
@@ -86,7 +88,7 @@ export default function ProfilePage() {
         setMessage(null);
 
         try {
-            await updateProfile({ firstName, lastName, classBand });
+            await updateProfile({ firstName, lastName, phone, classBand });
             setMessage({ text: 'Profile updated successfully!', type: 'success' });
             
             // Clear message after 3 seconds
@@ -179,10 +181,24 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="input-group">
+                            <label className="input-label">Contact number</label>
+                            <input
+                                type="tel"
+                                className="input-field"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                placeholder="e.g. 9812345678"
+                            />
+                            <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
+                                Used to reach you about your exam slot and results.
+                            </small>
+                        </div>
+
+                        <div className="input-group">
                             <label className="input-label">Class</label>
-                            <select 
-                                className="input-field" 
-                                value={classBand} 
+                            <select
+                                className="input-field"
+                                value={classBand}
                                 onChange={(e) => setClassBand(parseInt(e.target.value))}
                                 required
                             >
@@ -196,11 +212,17 @@ export default function ProfilePage() {
                             </select>
                         </div>
 
-                        <button 
-                            type="submit" 
-                            className="btn btn-primary" 
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
                             style={{ marginTop: '1rem' }}
-                            disabled={isLoading || (firstName === user.firstName && lastName === user.lastName && classBand === user.classBand)}
+                            disabled={
+                                isLoading ||
+                                (firstName === user.firstName &&
+                                    lastName === user.lastName &&
+                                    phone === (user.phone ?? '') &&
+                                    classBand === user.classBand)
+                            }
                         >
                             {isLoading ? 'Saving...' : 'Save Changes'}
                         </button>

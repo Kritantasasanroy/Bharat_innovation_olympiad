@@ -16,6 +16,9 @@ model User {
   role            Role           @default(STUDENT)
   classBand       Int?
   schoolId        String?
+  /// Contact number. Editable by the account holder from their profile page
+  /// (students) — schools and partners keep theirs on their request rows.
+  phone           String?
   faceEmbedding   Bytes?
   profileImageUrl String?
   isActive        Boolean        @default(true)
@@ -80,6 +83,11 @@ model School {
   pincode               String
   board                 String?
   udiseCode             String?
+  /// The admin-api `Partner.id` this school belongs to. Set when a partner
+  /// onboards the school (or when staff reassign it). A school with no partner
+  /// falls back to the house partner (`DEFAULT_PARTNER_ID`) at read time, so the
+  /// school portal always has a partner to show — see `PartnerDirectoryService`.
+  partnerId             String?
   onboardedAt           DateTime?
   createdAt             DateTime               @default(now())
   users                 User[]
@@ -89,6 +97,7 @@ model School {
   @@unique([nameKey, pincode])
   @@index([code])
   @@index([pincode])
+  @@index([partnerId])
 }
 
 model Exam {
@@ -134,8 +143,13 @@ model Question {
   marks         Int               @default(1)
   negativeMarks Float             @default(0)
   timeLimitSecs Int?
-  mediaUrl      String?           // S3 URL or external URL for attached media
+  mediaUrl      String?           // legacy single-media slot (still rendered)
   mediaType     MediaType?        // IMAGE | VIDEO | AUDIO | DIAGRAM
+  /// A question can carry a picture **and** a video at once, so these are
+  /// separate columns rather than another `mediaUrl`/`mediaType` pair. Both are
+  /// public object-storage URLs (see `common/services/object-storage.service.ts`).
+  imageUrl      String?
+  videoUrl      String?
   tags          String[]
   explanation   String?
   createdAt     DateTime          @default(now())
@@ -173,8 +187,18 @@ model ExamInstance {
   /// Result-release gating (ADMIN-20). Results cannot be released until a
   /// normalization run has completed; releasing is an audited human decision.
   resultsNormalizedAt DateTime?
+  /// Set the first time results are released to *any* audience. Kept as the
+  /// "has this instance been released at all" flag the certificate and legacy
+  /// student gates already read.
   resultsReleasedAt   DateTime?
   resultsReleasedBy   String?
+  /// Per-audience release (ADMIN-19 extension). Admin releases to students,
+  /// schools and partners **independently** — a school can be given results to
+  /// review before students see them, and a partner may never see them at all.
+  /// Null = that audience cannot see results for this instance.
+  resultsReleasedToStudentsAt DateTime?
+  resultsReleasedToSchoolsAt  DateTime?
+  resultsReleasedToPartnersAt DateTime?
   createdAt        DateTime               @default(now())
   attempts         Attempt[]
   slots            ExamSlot[]

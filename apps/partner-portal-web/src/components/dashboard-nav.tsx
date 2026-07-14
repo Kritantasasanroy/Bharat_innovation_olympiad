@@ -6,9 +6,13 @@ import { usePathname } from "next/navigation";
 const LINKS = [
 	{ href: "/dashboard", label: "Overview" },
 	{ href: "/dashboard/schools", label: "Schools" },
+	// Every student across the partner's schools, and their released results.
+	{ href: "/dashboard/students", label: "Students" },
+	{ href: "/dashboard/results", label: "Results" },
 	{ href: "/dashboard/campaigns", label: "Campaigns & links" },
 	{ href: "/dashboard/funnel", label: "Funnel" },
 	{ href: "/dashboard/payouts", label: "Payouts & statements" },
+	{ href: "/dashboard/profile", label: "Profile" },
 	{ href: "/dashboard/support", label: "Support" },
 ] as const;
 

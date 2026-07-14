@@ -7,6 +7,8 @@ export interface User {
     email: string;
     firstName: string;
     lastName: string;
+    /** Contact number, editable by the student from their profile page. */
+    phone?: string | null;
     role: Role;
     classBand?: number;
     schoolId?: string;

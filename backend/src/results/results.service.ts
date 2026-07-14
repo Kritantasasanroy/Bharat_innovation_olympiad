@@ -1,10 +1,25 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { canReleaseResults } from '../exam/exam-lifecycle';
 import { normalizeScores } from './normalization';
 
 /** Attempt states that count as "sat the exam" for normalization and certificates. */
 export const SUBMITTED_STATUSES = [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED];
+
+/** Who a result release is visible to. Each is granted and revoked separately. */
+export type ResultAudience = 'STUDENTS' | 'SCHOOLS' | 'PARTNERS';
+
+export const RESULT_AUDIENCES: ResultAudience[] = ['STUDENTS', 'SCHOOLS', 'PARTNERS'];
+
+/** The `ExamInstance` column that records each audience's release. */
+export const AUDIENCE_FIELD = {
+    STUDENTS: 'resultsReleasedToStudentsAt',
+    SCHOOLS: 'resultsReleasedToSchoolsAt',
+    PARTNERS: 'resultsReleasedToPartnersAt',
+} as const satisfies Record<ResultAudience, string>;
+
+const labelOf = (audience: ResultAudience) => audience.toLowerCase();
 
 /**
  * Results integrity chain (spec Admin §19 + §20).
@@ -33,15 +48,32 @@ export class ResultsService {
         });
         const certificates = await this.prisma.certificate.count({ where: { examInstanceId } });
 
+        const now = new Date();
+        const gate = canReleaseResults({
+            instance,
+            normalizedAt: instance.resultsNormalizedAt,
+            now,
+        });
+
         return {
             examInstanceId,
             examTitle: instance.exam.title,
+            startsAt: instance.startsAt,
+            endsAt: instance.endsAt,
+            hasEnded: now > instance.endsAt,
             submittedAttempts: submitted,
             certificatesIssued: certificates,
             normalizedAt: instance.resultsNormalizedAt,
             releasedAt: instance.resultsReleasedAt,
             releasedBy: instance.resultsReleasedBy,
-            canRelease: Boolean(instance.resultsNormalizedAt) && !instance.resultsReleasedAt,
+            releasedTo: {
+                STUDENTS: instance.resultsReleasedToStudentsAt,
+                SCHOOLS: instance.resultsReleasedToSchoolsAt,
+                PARTNERS: instance.resultsReleasedToPartnersAt,
+            },
+            canRelease: gate.ok,
+            /** Why the Release button is disabled, so the admin UI need not guess. */
+            releaseBlockedReason: gate.ok ? null : gate.reason,
         };
     }
 
@@ -55,16 +87,33 @@ export class ResultsService {
             },
         });
 
-        return instances.map((instance) => ({
-            id: instance.id,
-            examTitle: instance.exam.title,
-            startsAt: instance.startsAt,
-            attempts: instance._count.attempts,
-            certificatesIssued: instance._count.certificates,
-            normalizedAt: instance.resultsNormalizedAt,
-            releasedAt: instance.resultsReleasedAt,
-            canRelease: Boolean(instance.resultsNormalizedAt) && !instance.resultsReleasedAt,
-        }));
+        const now = new Date();
+
+        return instances.map((instance) => {
+            const gate = canReleaseResults({
+                instance,
+                normalizedAt: instance.resultsNormalizedAt,
+                now,
+            });
+            return {
+                id: instance.id,
+                examTitle: instance.exam.title,
+                startsAt: instance.startsAt,
+                endsAt: instance.endsAt,
+                hasEnded: now > instance.endsAt,
+                attempts: instance._count.attempts,
+                certificatesIssued: instance._count.certificates,
+                normalizedAt: instance.resultsNormalizedAt,
+                releasedAt: instance.resultsReleasedAt,
+                releasedTo: {
+                    STUDENTS: instance.resultsReleasedToStudentsAt,
+                    SCHOOLS: instance.resultsReleasedToSchoolsAt,
+                    PARTNERS: instance.resultsReleasedToPartnersAt,
+                },
+                canRelease: gate.ok,
+                releaseBlockedReason: gate.ok ? null : gate.reason,
+            };
+        });
     }
 
     /**
@@ -129,42 +178,124 @@ export class ResultsService {
     }
 
     /**
-     * Release gating — the human decision. Requires a completed normalization
-     * run and a written reason; both are recorded in the audit log.
+     * Release gating — the human decision.
+     *
+     * Three things must hold, and the first is the one that was missing: **the
+     * exam must actually be over**. Releasing mid-window publishes a rank and a
+     * percentile computed over whoever happened to have submitted so far, and
+     * tells students still sitting the paper what they "scored".
+     *
+     * Release is **per audience** (item 19). Students, schools and partners are
+     * released to independently and incrementally: a school can be given the
+     * results to sanity-check a day before students see them, and a partner may
+     * never be given them at all. Calling this again with a new audience adds it
+     * rather than re-releasing the ones already out.
      */
-    async release(examInstanceId: string, adminId: string, reason: string) {
+    async release(
+        examInstanceId: string,
+        adminId: string,
+        reason: string,
+        audiences: ResultAudience[] = ['STUDENTS'],
+    ) {
         if (!reason?.trim()) throw new BadRequestException('A reason is required to release results.');
+        if (!audiences.length) {
+            throw new BadRequestException('Pick at least one audience to release results to.');
+        }
 
         const instance = await this.prisma.examInstance.findUnique({ where: { id: examInstanceId } });
         if (!instance) throw new NotFoundException('Exam instance not found');
-        if (!instance.resultsNormalizedAt) {
-            throw new ConflictException('Results must be normalized before they can be released.');
-        }
-        if (instance.resultsReleasedAt) {
-            throw new ConflictException('Results are already released.');
-        }
 
         const now = new Date();
+        const check = canReleaseResults({
+            instance,
+            normalizedAt: instance.resultsNormalizedAt,
+            now,
+        });
+        if (!check.ok) throw new ConflictException(check.reason);
+
+        const already = audiences.filter((a) => instance[AUDIENCE_FIELD[a]] !== null);
+        if (already.length === audiences.length) {
+            throw new ConflictException(
+                `Results are already released to ${already.map(labelOf).join(' and ')}.`,
+            );
+        }
+
+        const toRelease = audiences.filter((a) => instance[AUDIENCE_FIELD[a]] === null);
+        const data: Record<string, Date | string> = {
+            resultsReleasedBy: adminId,
+            // The first release of any audience stamps the instance as released.
+            ...(instance.resultsReleasedAt ? {} : { resultsReleasedAt: now }),
+        };
+        for (const audience of toRelease) data[AUDIENCE_FIELD[audience]] = now;
+
         await this.prisma.$transaction([
-            this.prisma.examInstance.update({
-                where: { id: examInstanceId },
-                data: { resultsReleasedAt: now, resultsReleasedBy: adminId },
-            }),
-            // Keeps the legacy student-facing gate (`exam.isResultReleased`) in step.
-            this.prisma.exam.update({
-                where: { id: instance.examId },
-                data: { isResultReleased: true },
-            }),
+            this.prisma.examInstance.update({ where: { id: examInstanceId }, data }),
+            // The legacy student-facing gate (`exam.isResultReleased`) tracks the
+            // STUDENTS audience only — releasing to a school must not hand students
+            // their scores as a side effect.
+            ...(toRelease.includes('STUDENTS')
+                ? [
+                      this.prisma.exam.update({
+                          where: { id: instance.examId },
+                          data: { isResultReleased: true },
+                      }),
+                  ]
+                : []),
             this.prisma.auditLog.create({
                 data: {
                     userId: adminId,
                     action: 'results.released',
                     resource: 'exam-instance',
-                    details: { examInstanceId, reason: reason.trim() },
+                    details: { examInstanceId, reason: reason.trim(), audiences: toRelease },
                 },
             }),
         ]);
 
-        return { examInstanceId, releasedAt: now };
+        return { examInstanceId, releasedAt: now, released: toRelease };
+    }
+
+    /**
+     * Takes results back from an audience (item 19 — "limited access").
+     *
+     * Used when results go out and turn out to be wrong. Revoking from students
+     * also flips the legacy `Exam.isResultReleased` back off, so the student
+     * result pages close again immediately.
+     */
+    async revoke(
+        examInstanceId: string,
+        adminId: string,
+        reason: string,
+        audiences: ResultAudience[],
+    ) {
+        if (!reason?.trim()) throw new BadRequestException('A reason is required to revoke results.');
+        if (!audiences.length) throw new BadRequestException('Pick at least one audience.');
+
+        const instance = await this.prisma.examInstance.findUnique({ where: { id: examInstanceId } });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const data: Record<string, null> = {};
+        for (const audience of audiences) data[AUDIENCE_FIELD[audience]] = null;
+
+        await this.prisma.$transaction([
+            this.prisma.examInstance.update({ where: { id: examInstanceId }, data }),
+            ...(audiences.includes('STUDENTS')
+                ? [
+                      this.prisma.exam.update({
+                          where: { id: instance.examId },
+                          data: { isResultReleased: false },
+                      }),
+                  ]
+                : []),
+            this.prisma.auditLog.create({
+                data: {
+                    userId: adminId,
+                    action: 'results.revoked',
+                    resource: 'exam-instance',
+                    details: { examInstanceId, reason: reason.trim(), audiences },
+                },
+            }),
+        ]);
+
+        return { examInstanceId, revoked: audiences };
     }
 }

@@ -111,3 +111,52 @@ export class RegisterStudentsDto {
     @Type(() => RegisterStudentDto)
     students: RegisterStudentDto[];
 }
+
+/**
+ * A school coordinator editing their own contact details (item 14).
+ *
+ * Name, pincode and school code are absent on purpose. `(nameKey, pincode)` is the
+ * directory's uniqueness key and the code is what students type at registration —
+ * letting a coordinator rewrite either would collide with another school or break
+ * every student already pointing at this one. Those stay a staff action.
+ */
+export class UpdateSchoolProfileDto {
+    @IsOptional()
+    @IsString()
+    board?: string;
+
+    @IsOptional()
+    @IsString()
+    udiseCode?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    city?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    state?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    coordinatorName?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    coordinatorPhone?: string;
+}
+
+/** A school picking one of the slots offered for an exam (item 15). */
+export class PickSlotDto {
+    @IsString()
+    @IsNotEmpty()
+    examInstanceId: string;
+
+    @IsString()
+    @IsNotEmpty()
+    slotId: string;
+}

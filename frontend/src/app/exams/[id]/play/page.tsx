@@ -450,11 +450,33 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                         <div className="question-text">
                             <p>{currentQuestion.text}</p>
+
+                            {/* A question can carry a picture AND a video at once, so these
+                                are independent slots rather than one switched-on media type. */}
+                            {currentQuestion.imageUrl && (
+                                <img
+                                    src={currentQuestion.imageUrl}
+                                    alt="Question illustration"
+                                    className="question-media"
+                                />
+                            )}
+                            {currentQuestion.videoUrl && (
+                                <video
+                                    src={currentQuestion.videoUrl}
+                                    controls
+                                    // No autoplay: a video starting on its own during a timed
+                                    // exam is startling, and several questions may carry one.
+                                    preload="metadata"
+                                    className="question-media"
+                                />
+                            )}
+
+                            {/* Legacy single-media questions authored before the split. */}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'IMAGE' && (
-                                <img src={currentQuestion.mediaUrl} alt="Question Media" style={{ maxWidth: '100%', maxHeight: '400px', marginTop: '1rem', borderRadius: 'var(--radius-md)' }} />
+                                <img src={currentQuestion.mediaUrl} alt="Question Media" className="question-media" />
                             )}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'VIDEO' && (
-                                <video src={currentQuestion.mediaUrl} controls style={{ maxWidth: '100%', maxHeight: '400px', marginTop: '1rem', borderRadius: 'var(--radius-md)' }} />
+                                <video src={currentQuestion.mediaUrl} controls preload="metadata" className="question-media" />
                             )}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'AUDIO' && (
                                 <audio src={currentQuestion.mediaUrl} controls style={{ width: '100%', marginTop: '1rem' }} />

@@ -290,3 +290,161 @@ export const partnerSchoolApi = {
 	list: (token: string) =>
 		backendRequest<PartnerSchool[]>("/partner/schools", undefined, { token }),
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The partner's own footprint: its schools, their students, and released results.
+// Every route is scoped server-side to the `partnerId` on the token — a partner
+// cannot address another partner's schools by guessing an id.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PartnerOverview {
+	readonly schools: number;
+	readonly activeSchools: number;
+	readonly students: number;
+	readonly invited: number;
+	readonly registered: number;
+	readonly paid: number;
+	readonly completed: number;
+}
+
+export interface AssignedSchool {
+	readonly id: string;
+	readonly name: string;
+	readonly code: string;
+	readonly city: string;
+	readonly state: string;
+	readonly pincode: string;
+	readonly board: string | null;
+	readonly status: "ACTIVE" | "PENDING";
+	readonly onboardedAt: string | null;
+	readonly memberCount: number;
+}
+
+export interface PartnerStudent {
+	readonly id: string;
+	readonly name: string;
+	readonly email: string;
+	readonly phone: string | null;
+	readonly classBand: number | null;
+	readonly schoolId: string | null;
+	readonly schoolName: string;
+	readonly schoolCode: string | null;
+	readonly status: "INVITED" | "REGISTERED" | "PAID" | "COMPLETED";
+	readonly invitedAt: string | null;
+	readonly activatedAt: string | null;
+}
+
+export interface PartnerReleasedInstance {
+	readonly examInstanceId: string;
+	readonly examTitle: string;
+	readonly totalMarks: number;
+	readonly startsAt: string;
+	readonly endsAt: string;
+	readonly releasedAt: string;
+	readonly students: number;
+}
+
+export interface PartnerResultRow {
+	readonly studentName: string;
+	readonly email: string;
+	readonly classBand: number | null;
+	readonly schoolName: string;
+	readonly schoolCode: string;
+	readonly examTitle: string;
+	readonly rawScore: number | null;
+	readonly maxScore: number | null;
+	readonly normalizedScore: number | null;
+	readonly percentile: number | null;
+	readonly rank: number | null;
+	readonly submittedAt: string | null;
+}
+
+export interface PartnerProfile {
+	readonly id: string;
+	readonly partnerId: string | null;
+	readonly orgName: string;
+	readonly contactPerson: string;
+	readonly email: string;
+	readonly phone: string;
+	readonly status: string;
+	readonly createdAt: string;
+	/** Fields this partner may change. The email is a staff-only edit. */
+	readonly editable: string[];
+}
+
+export interface PartnerProfileUpdate {
+	readonly orgName?: string;
+	readonly contactPerson?: string;
+	readonly phone?: string;
+}
+
+/**
+ * Downloads the results workbook. It cannot go through `backendRequest`, which
+ * parses every response as JSON.
+ */
+async function downloadXlsx(path: string, token: string, filename: string): Promise<void> {
+	const response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		headers: { authorization: `Bearer ${token}` },
+	});
+	if (!response.ok) {
+		const raw = (await response.json().catch(() => null)) as NestErrorBody | null;
+		const message = Array.isArray(raw?.message) ? raw?.message[0] : raw?.message;
+		throw new ApiError({
+			code: "DOWNLOAD_FAILED",
+			message: message ?? "Could not download that file.",
+			statusCode: response.status,
+		});
+	}
+
+	const url = URL.createObjectURL(await response.blob());
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = filename;
+	link.click();
+	URL.revokeObjectURL(url);
+}
+
+export const partnerPortalApi = {
+	overview: (token: string) =>
+		backendRequest<PartnerOverview>("/partner/portal/overview", undefined, { token }),
+
+	/** The schools assigned to this partner. */
+	schools: (token: string) =>
+		backendRequest<AssignedSchool[]>("/partner/portal/schools", undefined, { token }),
+
+	/** Every student across those schools (item 9). */
+	students: (token: string, schoolId?: string) =>
+		backendRequest<PartnerStudent[]>(
+			`/partner/portal/students${schoolId ? `?schoolId=${encodeURIComponent(schoolId)}` : ""}`,
+			undefined,
+			{ token },
+		),
+
+	/** Exams whose results an admin has released to partners. May be none. */
+	releasedInstances: (token: string) =>
+		backendRequest<PartnerReleasedInstance[]>("/partner/portal/results", undefined, { token }),
+
+	/** Student-level results for one released exam (item 17). */
+	results: (token: string, examInstanceId: string) =>
+		backendRequest<PartnerResultRow[]>(`/partner/portal/results/${examInstanceId}`, undefined, {
+			token,
+		}),
+
+	/** The same results as a downloadable Excel workbook (item 16). */
+	downloadResults: (token: string, examInstanceId: string, examTitle: string) =>
+		downloadXlsx(
+			`/partner/portal/results/${examInstanceId}/export.xlsx`,
+			token,
+			`bio-results-${examTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.xlsx`,
+		),
+
+	profile: (token: string) =>
+		backendRequest<PartnerProfile>("/partner/portal/profile", undefined, { token }),
+
+	/** A partner edits its own contact details (item 14). */
+	updateProfile: (token: string, input: PartnerProfileUpdate) =>
+		backendRequest<PartnerProfile>("/partner/portal/profile", input, {
+			token,
+			method: "PATCH",
+		}),
+};

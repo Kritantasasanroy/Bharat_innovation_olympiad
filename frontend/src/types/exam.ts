@@ -44,8 +44,16 @@ export interface Question {
     marks: number;
     negativeMarks: number;
     timeLimitSecs?: number;
+    /** Legacy single-media slot, kept for questions authored before the split. */
     mediaUrl?: string;
     mediaType?: MediaType;
+    /**
+     * A question can carry a picture **and** a video at the same time, so these
+     * are two independent fields rather than another `mediaUrl`/`mediaType` pair.
+     * Both are public object-storage URLs.
+     */
+    imageUrl?: string | null;
+    videoUrl?: string | null;
     tags: string[];
     explanation?: string;
 }

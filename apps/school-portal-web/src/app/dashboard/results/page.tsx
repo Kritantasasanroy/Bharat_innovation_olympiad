@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { type PortalResult, portalApi } from "../../../lib/api-client";
+import { ApiError, type PortalResult, portalApi } from "../../../lib/api-client";
+import { useAuth } from "../../../lib/auth-context";
 import { useResource } from "../../../lib/use-resource";
 
 interface ClassRow {
@@ -19,10 +20,40 @@ interface ClassRow {
  * can never see scores before its students do.
  */
 export default function ResultsPage() {
+	const { token } = useAuth();
 	const { data: results, loading, error } = useResource(portalApi.results);
+	// Which exams have been released *to schools* — the Excel sheet is per exam.
+	const { data: released } = useResource(portalApi.resultInstances);
+
 	const [sortByScore, setSortByScore] = useState(true);
+	const [downloading, setDownloading] = useState<string | null>(null);
+	const [downloadError, setDownloadError] = useState<string | null>(null);
 
 	const rows = results ?? [];
+	const instances = released ?? [];
+
+	/**
+	 * Downloads the real `.xlsx` the backend builds — typed number cells, a frozen
+	 * header, and the normalized score and percentile, which the flat CSV above
+	 * does not carry. If several exams have been released, the most recent wins;
+	 * the CSV remains for a quick, unformatted dump of what is on screen.
+	 */
+	async function downloadExcel() {
+		const target = instances[0];
+		if (!token || !target) return;
+
+		setDownloading(target.examInstanceId);
+		setDownloadError(null);
+		try {
+			await portalApi.downloadResults(token, target.examInstanceId, target.examTitle);
+		} catch (err) {
+			setDownloadError(
+				err instanceof ApiError ? err.message : "Could not build the results sheet.",
+			);
+		} finally {
+			setDownloading(null);
+		}
+	}
 
 	const classPerformance = useMemo<ClassRow[]>(() => {
 		const byClass = new Map<number, { total: number; count: number }>();
@@ -96,14 +127,31 @@ export default function ResultsPage() {
 							Released after fair-score processing (normalization) is complete.
 						</p>
 					</div>
-					<button
-						type="button"
-						className="button button--secondary button--small"
-						onClick={exportCsv}
-					>
-						⬇ Export reports (CSV)
-					</button>
+					<div className="row" style={{ gap: "0.5rem" }}>
+						<button
+							type="button"
+							className="button button--secondary button--small"
+							onClick={exportCsv}
+						>
+							⬇ CSV
+						</button>
+						<button
+							type="button"
+							className="button button--small"
+							disabled={downloading !== null || instances.length === 0}
+							onClick={() => void downloadExcel()}
+							title={
+								instances.length === 0
+									? "No released exams to download yet."
+									: "Download the full result sheet as Excel"
+							}
+						>
+							{downloading ? "Building…" : "⬇ Excel"}
+						</button>
+					</div>
 				</div>
+
+				{downloadError && <div className="notice notice--error">{downloadError}</div>}
 			</div>
 
 			<div className="card">

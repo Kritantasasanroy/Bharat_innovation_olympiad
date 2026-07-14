@@ -1,7 +1,7 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: 2026-07-02 (BIO pnpm-workspace re-architecture · exam-api hexagonal port · scaffolded services/apps/packages from the org)  
-> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · AWS S3 · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
+> Last updated: 2026-07-14 (exam lifecycle gating · school slot self-service · per-audience result release + Excel · question picture/video on S3-compatible storage — see **§0.25**)  
+> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · S3-compatible object storage (Cloudflare R2) · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
 > **Target stack (migrating to):** pnpm workspace · Bun/Elysia · Drizzle · Biome · Lefthook · hexagonal — mirrors `github.com/bharat-innovation-olympiad` (`bio-exam`, `bio-admin`, `bio-portal`, `bio-contracts`; `bio-proctor` intentionally kept as the existing face-api.js client).  
 > Architecture reference: golden PRDs now live in-repo at `ai/output/prds/`; agent rules in `ai/steering/`. See `AGENTS.md`, `BIO-REPOS.md`, and §0 below.
 
@@ -900,6 +900,216 @@ scores + percentile + rank, changing nothing students see until release). The ta
 
 ---
 
+### 0.25 Exam lifecycle, slot self-service, per-audience results, question media (2026-07-14)
+
+Twenty-one reported defects and gaps, most of them tracing back to **four missing rules** and **two
+missing relationships**. This section is organised by the underlying cause rather than by the bug
+list, because fixing them one at a time is exactly how they got this way.
+
+#### The root cause: exam lifecycle rules lived nowhere
+
+An exam's state was implied by scattered date comparisons, and each caller made its own. So:
+unpublished exams were listed to students; an exam scheduled for next month rendered a live "Start"
+button; an exam with **no questions at all** could be published; results were released for exams that
+had not been sat; and slots could be scheduled *before* the exam window opened, which made them
+unsittable — the start gate refuses every attempt before `instance.startsAt`, so those students would
+have watched their slot expire against a button that never enabled.
+
+All of it now derives from one pure module, **`backend/src/exam/exam-lifecycle.ts`**, which is
+exhaustively unit-tested (29 cases) with no database:
+
+```
+examPhase(exam, instance, mySlot, now) →
+  DRAFT → SCHEDULED → NEEDS_SLOT → SLOT_UPCOMING → OPEN → SLOT_MISSED → ENDED
+                                                     ↑
+                                        the ONLY startable phase
+```
+
+The ordering is the substance: **publication beats scheduling, and scheduling beats slots.** An
+unpublished exam is `DRAFT` however its dates read; a closed exam window is `ENDED` even if a
+misconfigured slot still looks open, so a slot can never authorise an attempt outside its exam.
+
+| Gate | Rule | Where enforced |
+|---|---|---|
+| `canPublish` | Needs ≥1 question **attached to a section**, and ≥1 scheduled instance | `publishExam` **and** `updateExam` |
+| `canReleaseResults` | The exam must be **over** (`now > endsAt`), and normalized | `ResultsService.release` **and** `updateExam` |
+| `validateSlotWindow` | A slot must sit **inside** its exam window | `createSlot`, `updateSlot`, `createFull`, `updateInstance` |
+| `examPhase` | Only `OPEN` may start an attempt | `AttemptService.startAttempt` **and** the exam list |
+
+**The "and" in that table is the point.** The gates were initially added only to the dedicated
+`/publish` and `/release-results` routes — and the admin UI does not use those routes. It flips both
+flags through `PUT /admin/exams/:id`, which was an unguarded side door straight to
+`prisma.exam.update`. A rule that lives on one of two write paths is not a rule. Turning a flag **on**
+is now gated wherever it is written; turning it **off** never is, so taking a bad exam down or pulling
+back a wrong result is always possible.
+
+`ExamService.createExam` also stopped force-setting `isPublished: true, isResultReleased: true` on
+every new exam — which is *why* an exam with no paper and no schedule was instantly visible to
+students with its results already "released".
+
+#### Students see what is coming, and start only when their slot opens
+
+Items 5 and 11 read as opposites and are not. `GET /exams` now returns each exam stamped with its
+phase **for that student**, plus `mySlot` — so a scheduled exam is visible (the student can see the
+date and which slot they hold) but is not startable, and the Start button enables the moment their
+own slot opens, not merely when the exam window does. The page re-polls every 30s so it enables on
+its own. `startAttempt` re-derives the same phase server-side, so calling the API directly gets a
+student nothing.
+
+#### The two missing relationships
+
+**1. `School.partnerId`** (new, nullable). This is what scopes a partner's view and what a school
+reads to know who its partner is. It is set when a partner onboards a school (from
+`SchoolRequest.submittedByPartnerId`, at approval) and is editable by staff.
+
+A school with **no** partner falls back to the **house partner** — Lemon Ideas, operating the olympiad
+directly (`PartnerDirectoryService`, `DEFAULT_PARTNER_ID`, default
+`e95c5ab7-9edc-438e-a846-9f770ebbce11`). That fallback is what makes "if no partner, default to
+*Bharat Innovation Olympiad — Partner access*" true **without backfilling a partnerId onto every
+existing school row**. The school portal therefore always has a partner card to render. The partner's
+**access token is never exposed to schools** — it is that partner's sign-in credential; schools get
+contact details and the portal URL, nothing more.
+
+**2. Students were never linked on the path that mattered.** `AuthService.syncUser` had two branches.
+The new-user branch resolved a school and ran auto-allocation. The branch that **claims an invited
+roster entry** — the common case for a school-run exam — did neither: it never re-linked a school, and
+it never ran allocation. So a school's own invited students registered, and were never booked into
+their school's slot. That is the real content of "slot assign shows 0 students allocated" and "school
+can't see its students".
+
+#### Slot assignment: the reassign bug, and why "0" looked broken
+
+`reassignSchool` moved the bookings but left `SchoolSlotAssignment` pointing at the **old** slot. So
+the next student from that school to register was auto-allocated straight back into the slot the admin
+had just emptied, and the school ended up split across two slots — precisely what "same school, same
+slot" exists to prevent. It now re-points the assignment.
+
+Separately, `setSchoolSlotAssignment` returned a bare count. "0 student(s) auto-allocated" is true in
+half a dozen unrelated situations — no students on the roster, all in the wrong class for this exam,
+all already booked, slot full, slot ended — and reporting a bare zero for all of them is what made a
+*working* screen look broken. It now returns a breakdown with human-readable `notes`.
+
+#### Schools pick their own slots (item 15)
+
+The school portal's slots page showed only the one slot staff had already assigned — so a coordinator
+with no assignment saw an empty page and no way to ask for one. It now shows the **whole board** for
+every published exam: every slot, how full each is, how many of the school's students are eligible,
+and which slot the school holds. A coordinator can claim an open slot themselves
+(`POST /school/portal/slots`), which runs the **same** auto-allocation staff use — so a school-picked
+slot and a staff-assigned one behave identically, and the atomic
+`UPDATE … WHERE booked < capacity` guard means two schools racing for the last seats cannot oversell.
+
+#### Results: per-audience release, and Excel
+
+Release is no longer one boolean. `ExamInstance` gained
+`resultsReleasedToStudentsAt` / `…ToSchoolsAt` / `…ToPartnersAt`, and each audience is granted and
+revoked **independently** (`POST /admin/exam-instances/:id/release` and `…/revoke`, both audited, both
+requiring a written reason). A school can be given results to sanity-check a day before students see
+them; a partner may never be given them at all. The legacy `Exam.isResultReleased` tracks the
+**STUDENTS** audience only, so releasing to a school does not hand students their scores as a side
+effect. Revoking from students closes their scorecards immediately.
+
+`ResultsExportService` builds a real `.xlsx` (exceljs — typed number cells, frozen header, column
+widths), and the **same builder serves all three audiences**; only the scope differs, and the scope is
+always derived from the caller's identity, never from a parameter they send. Every non-admin read
+passes through `assertReleased`, so the download is not a side door around the release gate:
+
+| Caller | Sees | Gate |
+|---|---|---|
+| Admin | Every student | none (staff decide *whether* to release, so they need the sheet first) |
+| School | Its own students | `resultsReleasedToSchoolsAt` |
+| Partner | Students of the schools assigned to it | `resultsReleasedToPartnersAt` |
+
+#### Question media — pictures and video, and why not on Render
+
+A question can now carry a **picture and a video at the same time** (`Question.imageUrl`,
+`Question.videoUrl` — two independent columns, not another `mediaUrl`/`mediaType` pair), rendered to
+the student in the exam player.
+
+**The bytes never touch the API.** Render's instance has 512 MB of RAM and an ephemeral disk:
+streaming a 200 MB question video through the Node process would blow the memory budget, and anything
+written to its disk vanishes on the next deploy. So the admin browser asks for a **presigned PUT URL**
+and uploads **straight to object storage**; the API only ever handles the signature.
+
+`ObjectStorageService` speaks the S3 API against a **configurable endpoint**, so it runs unchanged on
+Cloudflare R2 (the default and the recommendation — 10 GB free and, the reason it matters for video,
+**zero egress fees**), Backblaze B2, Supabase Storage, MinIO, or plain AWS S3. `Content-Length` is
+signed into the URL, so a client cannot upload a file larger than the one it declared. Limits: 10 MB
+per image, 200 MB per video. The service **warns rather than crashing at boot** when unconfigured —
+media is not worth taking the platform down for.
+
+New env vars (see §4): `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`,
+`STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, `STORAGE_PUBLIC_BASE_URL`. The legacy `AWS_*`
+names are still honoured. The bucket needs public read on `questions/` and a CORS rule allowing `PUT`
+from the admin origin.
+
+#### A privilege-escalation bug found on the way
+
+`PUT /users/profile` took an **inline-typed body** (`@Body() data: { firstName?: string }`) and passed
+it straight to `prisma.user.update`. An inline TypeScript type erases to `Object` at runtime, and
+Nest's `ValidationPipe` **skips any body whose metatype is a native type** — so `whitelist` and
+`forbidNonWhitelisted` never engaged, and the *entire request body* reached Prisma. A student could
+have sent `{"role": "SUPER_ADMIN"}` or `{"schoolId": "…"}` and escalated themselves. It now takes a
+decorated DTO class (`UpdateUserProfileDto`), which is what makes the pipe strip unknown fields. The
+distinction between a decorated DTO and an inline type is load-bearing, not stylistic.
+
+#### Profile editing (item 14) and admin power (item 20)
+
+Students, schools and partners each edit their own contact details — and each is bounded by what they
+must **not** change:
+
+- **Student** (`PUT /auth/me`): name, phone. Not role, school, or email.
+- **School** (`PATCH /school/portal/me`): board, UDISE, city, state, coordinator name + phone. **Not**
+  the school name, pincode or code — `(nameKey, pincode)` is the directory's uniqueness key and the
+  code is what students type at registration, so a coordinator rewriting either would collide with
+  another school or break every student already pointing at this one. Not the coordinator email — it
+  is the identity the access token was issued against.
+- **Partner** (`PATCH /partner/portal/profile`): org name, contact person, phone. Not the email (its
+  sign-in identity), status, or commission.
+
+Admin gets what each of those withholds, plus the relationships: `GET/PATCH /admin/manage/schools`
+(including **assigning a school to a partner**), `GET/PATCH /admin/manage/partners`, and
+`POST /admin/manage/students/move` for bulk student shuffling in one transaction and one audit entry.
+
+#### New / changed surfaces
+
+| Actor | Route |
+|---|---|
+| Admin | `POST /admin/exams/:id/unpublish` · `GET /admin/manage/{schools,partners}` · `PATCH /admin/manage/{schools,partners}/:id` · `POST /admin/manage/students/move` · `POST /admin/exam-instances/:id/{release,revoke}` (audiences) · `GET /admin/exam-instances/:id/results.xlsx` · `GET /admin/questions/media-upload-url?kind=image|video` |
+| School | `PATCH /school/portal/me` · `GET /school/portal/partner` · `POST /school/portal/slots` · `GET /school/portal/results/instances` · `GET /school/portal/results/:id/export.xlsx` |
+| Partner | `GET /partner/portal/{overview,schools,students,results,profile}` · `PATCH /partner/portal/profile` · `GET /partner/portal/results/:id/export.xlsx` |
+| Student | `GET /exams` now returns `phase`, `canStart`, `startBlockedReason`, `mySlot` per instance |
+
+New admin pages: **`/schools`** (edit + assign partner) and **`/exams/[id]/schedule`** (edit the exam
+window, and add / edit / delete slots — both were previously write-once, so a rescheduled exam meant
+deleting it and losing its questions). New partner pages: **`/dashboard/students`**,
+**`/dashboard/results`**, **`/dashboard/profile`**.
+
+#### Schema (additive — verified no DROP)
+
+`School.partnerId` · `User.phone` · `Question.imageUrl` · `Question.videoUrl` ·
+`ExamInstance.resultsReleasedTo{Students,Schools,Partners}At`. `prisma migrate diff` emitted only
+`ADD COLUMN` / `CREATE INDEX` before the push, so the live Drizzle-owned partner-engine tables were
+never at risk (see §0.18's `db push` hazard).
+
+#### Testing
+
+**235 backend tests pass (56 new).** The two new suites test the invariants that actually broke:
+
+- `exam-lifecycle.spec.ts` (29) — pure, fixed-clock. Unpublished-is-invisible; scheduled-is-visible-
+  but-not-startable; the slot window, not the exam window, enables Start; a closed exam beats an open
+  slot; `OPEN` is the **only** startable phase (asserted by filtering all seven); publish needs a
+  paper; release needs the exam to be **over**; and a property test that any slot passing
+  `validateSlotWindow` is `OPEN` at every instant inside it — which is exactly what an out-of-window
+  slot violates.
+- `school-slot.assignment.spec.ts` (14) — against an in-memory Prisma fake with **real** capacity
+  semantics (the same atomic compare-and-increment). It pins the reassign regression directly: after a
+  bulk move, a student registering *afterwards* must land with their school, not back in the old slot.
+
+All four frontends typecheck and build.
+
+---
+
 ## 1. Project Overview
 
 Bharat Innovation Olympiad is a **national online competitive examination platform** for Indian school students (classes 6–12). It provides:
@@ -1187,10 +1397,43 @@ Student Browser
 | `RAZORPAY_KEY_ID` | Razorpay API key ID (test: `rzp_test_...`) | from Razorpay dashboard |
 | `RAZORPAY_KEY_SECRET` | Razorpay API key secret | from Razorpay dashboard |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | from Razorpay dashboard |
-| `AWS_REGION` | AWS region for S3 and other services | `ap-south-1` |
-| `AWS_ACCESS_KEY_ID` | IAM access key ID | from AWS console |
-| `AWS_SECRET_ACCESS_KEY` | IAM secret access key | from AWS console |
-| `AWS_S3_BUCKET` | S3 bucket name | `bio-olympiad-prod` |
+| `DEFAULT_PARTNER_ID` | The **house partner** every school with no partner of its own falls back to (§0.25). Overridable so staging is not pointed at the live partner. | `e95c5ab7-9edc-438e-a846-9f770ebbce11` |
+| `PARTNER_APP_URL` | Partner portal origin, shown on a school's partner card | `https://bio-partner-portal.vercel.app` |
+| `AWS_REGION` | Legacy alias for `STORAGE_REGION` | `ap-south-1` |
+| `AWS_ACCESS_KEY_ID` | Legacy alias for `STORAGE_ACCESS_KEY_ID` | from provider console |
+| `AWS_SECRET_ACCESS_KEY` | Legacy alias for `STORAGE_SECRET_ACCESS_KEY` | from provider console |
+| `AWS_S3_BUCKET` | Legacy alias for `STORAGE_BUCKET` | `bio-olympiad-prod` |
+
+#### Object storage — question media (§0.25)
+
+`ObjectStorageService` speaks the S3 API against a **configurable endpoint**, so the same code runs on
+Cloudflare R2, Backblaze B2, Supabase Storage, MinIO or AWS S3. **R2 is the default recommendation:**
+10 GB free and — the reason it matters when questions carry video — **zero egress fees**. Question
+media is uploaded **browser → bucket** via a presigned PUT; it never passes through the API, because
+Render's 512 MB instance cannot stream a 200 MB video and its disk is ephemeral.
+
+| Variable | Description | Example (Cloudflare R2) |
+|---|---|---|
+| `STORAGE_ENDPOINT` | S3-compatible endpoint. Omit entirely for AWS S3. | `https://<account-id>.r2.cloudflarestorage.com` |
+| `STORAGE_REGION` | Region. R2 wants the literal `auto`. | `auto` |
+| `STORAGE_BUCKET` | Bucket name | `bio-media` |
+| `STORAGE_ACCESS_KEY_ID` | Access key | from R2 → Manage API tokens |
+| `STORAGE_SECRET_ACCESS_KEY` | Secret key | from R2 → Manage API tokens |
+| `STORAGE_PUBLIC_BASE_URL` | Public read base for the bucket (or your CDN domain). This is what gets stored on `Question.imageUrl` / `videoUrl`. | `https://pub-<hash>.r2.dev` |
+
+The bucket needs **public read on the `questions/` prefix** and a **CORS rule allowing `PUT` from the
+admin origin** — the browser uploads directly, so without CORS the upload is blocked before it starts:
+
+```json
+[{ "AllowedOrigins": ["https://olympiad-admin-frontend.vercel.app"],
+   "AllowedMethods": ["PUT"],
+   "AllowedHeaders": ["content-type", "content-length"],
+   "MaxAgeSeconds": 3600 }]
+```
+
+If these are unset the API **logs a warning and boots normally** — media upload returns a 503 with a
+clear message, rather than taking the whole platform down. (That is deliberately unlike
+`PaymentService`, which still crashes at boot without dummy `RAZORPAY_*` values; see §15.)
 
 ### Student Frontend (`frontend/.env`)
 

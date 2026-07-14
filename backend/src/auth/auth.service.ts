@@ -38,16 +38,36 @@ export class AuthService {
         // keeping the school that invited them.
         if (existing) {
             if (existing.activatedAt) return existing;
-            return this.prisma.user.update({
+
+            // The inviting school wins — a student cannot register their way out
+            // of the roster that invited them. But an invited row with no school
+            // (or a student who picked one at registration) still needs linking,
+            // otherwise they stay invisible to every school-scoped query.
+            const schoolId =
+                existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+
+            const claimed = await this.prisma.user.update({
                 where: { id: existing.id },
                 data: {
                     firstName: dto.firstName || existing.firstName,
                     lastName: dto.lastName || existing.lastName,
                     classBand: dto.classBand ?? existing.classBand,
+                    schoolId,
                     activatedAt: new Date(),
                     ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
                 },
             });
+
+            // This was missing: only brand-new users were ever auto-allocated, so
+            // a student who came in through a school's roster — the common case for
+            // a school-run exam — was never booked into their school's slot, and the
+            // admin slot page reported "0 student(s) auto-allocated" for a school
+            // that plainly had students.
+            if (schoolId) {
+                await this.schoolSlotService.autoAllocateForNewStudent(claimed.id, schoolId);
+            }
+
+            return claimed;
         }
 
         const schoolId = await this.resolveSchoolId(dto.schoolCode);
@@ -136,6 +156,8 @@ export class AuthService {
             data: {
                 firstName: dto.firstName,
                 lastName: dto.lastName,
+                // An empty string clears the number rather than storing "".
+                ...(dto.phone !== undefined ? { phone: dto.phone.trim() || null } : {}),
                 classBand: dto.classBand,
             },
             select: {
@@ -143,6 +165,7 @@ export class AuthService {
                 email: true,
                 firstName: true,
                 lastName: true,
+                phone: true,
                 role: true,
                 classBand: true,
                 schoolId: true,

@@ -166,13 +166,76 @@ export interface SupportTicket {
 	readonly createdAt: string;
 }
 
+async function authedPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+	let response: Response;
+	try {
+		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+			method: "PATCH",
+			headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+			body: JSON.stringify(body),
+		});
+	} catch {
+		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
+	}
+	const raw: unknown = await response.json().catch(() => null);
+	if (!response.ok) {
+		const error = (raw ?? {}) as NestErrorBody;
+		const message = Array.isArray(error.message)
+			? (error.message[0] ?? "Request failed.")
+			: (error.message ?? `Request failed with status ${response.status}.`);
+		throw new ApiError(message, response.status);
+	}
+	return raw as T;
+}
+
+/**
+ * Downloads a binary response (the results workbook) and hands it to the browser
+ * as a file. It cannot go through `authed`, which parses every response as JSON.
+ */
+async function authedDownload(path: string, token: string, filename: string): Promise<void> {
+	const response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		headers: { authorization: `Bearer ${token}` },
+	});
+	if (!response.ok) {
+		const raw = (await response.json().catch(() => null)) as NestErrorBody | null;
+		const message = Array.isArray(raw?.message) ? raw?.message[0] : raw?.message;
+		throw new ApiError(message ?? "Could not download that file.", response.status);
+	}
+
+	const url = URL.createObjectURL(await response.blob());
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = filename;
+	link.click();
+	URL.revokeObjectURL(url);
+}
+
 export const portalApi = {
 	profile: (token: string) => authed<SchoolPortalProfile>("/school/portal/me", token),
+	/** A coordinator edits its own contact details (item 14). */
+	updateProfile: (token: string, input: SchoolProfileUpdate) =>
+		authedPatch<SchoolPortalProfile>("/school/portal/me", token, input),
+	/** Who this school's partner is — the house partner if it has none (item 10). */
+	partner: (token: string) => authed<SchoolPartner>("/school/portal/partner", token),
 	overview: (token: string) => authed<SchoolOverview>("/school/portal/overview", token),
 	students: (token: string) => authed<PortalStudent[]>("/school/portal/students", token),
-	slots: (token: string) => authed<PortalSlot[]>("/school/portal/slots", token),
+	/** Every exam's slots, how full each is, and which one this school holds (item 15). */
+	slots: (token: string) => authed<SlotBoard[]>("/school/portal/slots", token),
+	/** The school picks (or changes) its slot for one exam (item 15). */
+	pickSlot: (token: string, examInstanceId: string, slotId: string) =>
+		authedPost<PickSlotResult>("/school/portal/slots", token, { examInstanceId, slotId }),
 	monitoring: (token: string) => authed<PortalMonitoring>("/school/portal/monitoring", token),
 	results: (token: string) => authed<PortalResult[]>("/school/portal/results", token),
+	/** Exams whose results have been released to schools (item 18). */
+	resultInstances: (token: string) =>
+		authed<ReleasedInstance[]>("/school/portal/results/instances", token),
+	/** The school's own results for one exam, as an Excel workbook (item 16). */
+	downloadResults: (token: string, examInstanceId: string, examTitle: string) =>
+		authedDownload(
+			`/school/portal/results/${examInstanceId}/export.xlsx`,
+			token,
+			`bio-results-${examTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.xlsx`,
+		),
 	registerStudents: (token: string, students: NewStudent[]) =>
 		authedPost<RegisterStudentsResult>("/school/portal/students", token, { students }),
 
@@ -181,6 +244,80 @@ export const portalApi = {
 	createSupport: (token: string, input: { category: string; subject: string; message: string }) =>
 		authedPost<SupportTicket>("/school/support", token, input),
 };
+
+/** What a coordinator may change about their school. Name/pincode/code are staff-only. */
+export interface SchoolProfileUpdate {
+	readonly board?: string;
+	readonly udiseCode?: string;
+	readonly city?: string;
+	readonly state?: string;
+	readonly coordinatorName?: string;
+	readonly coordinatorPhone?: string;
+}
+
+export interface SchoolPartner {
+	readonly partnerId: string;
+	readonly orgName: string;
+	readonly contactPerson: string;
+	readonly email: string;
+	readonly phone: string;
+	readonly portalUrl: string;
+	/** True when this is the house partner rather than one that onboarded the school. */
+	readonly isDefault: boolean;
+	readonly label: string;
+}
+
+export interface BoardSlot {
+	readonly slotId: string;
+	readonly label: string | null;
+	readonly startsAt: string;
+	readonly endsAt: string;
+	readonly capacity: number;
+	readonly booked: number;
+	readonly remaining: number;
+	readonly fillPct: number;
+	readonly isAssignedToUs: boolean;
+	readonly hasEnded: boolean;
+	readonly selectable: boolean;
+	readonly fitsAllStudents: boolean;
+}
+
+export interface SlotBoard {
+	readonly examInstanceId: string;
+	readonly examId: string;
+	readonly examTitle: string;
+	readonly classBands: number[];
+	readonly durationMinutes: number;
+	readonly startsAt: string;
+	readonly endsAt: string;
+	readonly eligibleStudents: number;
+	readonly assignedSlotId: string | null;
+	readonly slots: BoardSlot[];
+}
+
+export interface PickSlotResult {
+	readonly changed: boolean;
+	readonly booked?: number;
+	readonly summary?: {
+		readonly totalStudents: number;
+		readonly eligibleStudents: number;
+		readonly allocated: number;
+		readonly alreadyBooked: number;
+		readonly noCapacity: number;
+		readonly ineligible: number;
+		readonly notes: string[];
+	};
+}
+
+export interface ReleasedInstance {
+	readonly examInstanceId: string;
+	readonly examTitle: string;
+	readonly totalMarks: number;
+	readonly startsAt: string;
+	readonly endsAt: string;
+	readonly releasedAt: string;
+	readonly students: number;
+}
 
 export interface SchoolPortalProfile {
 	id: string;
@@ -192,7 +329,8 @@ export interface SchoolPortalProfile {
 	state: string;
 	pincode: string;
 	status: "ACTIVE" | "PENDING";
-	readOnly: boolean;
+	/** Which fields the coordinator may change. Identity fields are staff-only. */
+	editable: string[];
 	onboardedAt: string | null;
 	coordinator: { name: string; email: string; phone: string } | null;
 }

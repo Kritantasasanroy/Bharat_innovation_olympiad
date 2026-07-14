@@ -150,8 +150,9 @@ export class SlotController {
         @Param('schoolId') schoolId: string,
         @Param('instanceId') instanceId: string,
         @Body() dto: AssignSlotDto,
+        @CurrentUser('id') adminId: string,
     ) {
-        return this.schoolSlotService.reassignSchool(schoolId, instanceId, dto.slotId);
+        return this.schoolSlotService.reassignSchool(schoolId, instanceId, dto.slotId, adminId);
     }
 
     /**

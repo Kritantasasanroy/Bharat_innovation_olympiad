@@ -45,6 +45,11 @@ export class UpdateProfileDto {
     @IsOptional()
     lastName?: string;
 
+    /** The student's contact number (item 14). Blank clears it. */
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
     @IsInt()
     @Min(6)
     @Max(12)

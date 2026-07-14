@@ -36,7 +36,16 @@ export interface ReassignSchoolResult {
 export class SchoolSlotService {
     constructor(private prisma: PrismaService) {}
 
-    /** Assigns (or edits) the slot a school's students use for an exam instance, then sweeps currently-unbooked eligible students into it. */
+    /**
+     * Assigns (or edits) the slot a school's students use for an exam instance,
+     * then sweeps currently-unbooked eligible students into it.
+     *
+     * Returns a **breakdown**, not just a count. "0 student(s) auto-allocated" is
+     * true in half a dozen different situations — the school has no students yet,
+     * they are all in the wrong class for this exam, they are already booked, the
+     * slot is full — and reporting a bare zero for all of them is what made this
+     * screen look broken when it was in fact working. `summary` says which.
+     */
     async setSchoolSlotAssignment(
         schoolId: string,
         examInstanceId: string,
@@ -56,7 +65,69 @@ export class SchoolSlotService {
         });
 
         const allocation = await this.runAllocationForSchool(schoolId, examInstanceId);
-        return { assignment, allocation };
+        const summary = await this.summarise(schoolId, examInstanceId, allocation);
+
+        return { assignment, allocation, summary };
+    }
+
+    /**
+     * Turns the per-student allocation outcomes into something an admin can read,
+     * with the context needed to act on it.
+     */
+    private async summarise(
+        schoolId: string,
+        examInstanceId: string,
+        allocation: Record<string, AllocationOutcome>,
+    ) {
+        const outcomes = Object.values(allocation);
+        const count = (status: AllocationStatus) =>
+            outcomes.filter((o) => o.status === status).length;
+
+        const [totalStudents, classBands] = await Promise.all([
+            this.prisma.user.count({ where: { schoolId, role: Role.STUDENT } }),
+            this.eligibleClassBands(examInstanceId),
+        ]);
+
+        const allocated = count('ALLOCATED');
+        const alreadyBooked = count('MANUALLY_BOOKED');
+        const noCapacity = count('UNALLOCATED_NO_CAPACITY');
+        const slotEnded = count('SLOT_ENDED');
+
+        // `allocation` only contains *eligible* students, so anyone missing from it
+        // was filtered out by the exam's class bands.
+        const ineligible = Math.max(0, totalStudents - outcomes.length);
+
+        const notes: string[] = [];
+        if (totalStudents === 0) {
+            notes.push('This school has no students on its roster yet.');
+        }
+        if (ineligible > 0) {
+            notes.push(
+                `${ineligible} student(s) are not in a class this exam accepts (${(classBands ?? []).join(', ') || 'none'}).`,
+            );
+        }
+        if (alreadyBooked > 0) {
+            notes.push(
+                `${alreadyBooked} student(s) already hold a booking for this exam and were left where they are. Use "Reassign all" to move them.`,
+            );
+        }
+        if (noCapacity > 0) {
+            notes.push(`${noCapacity} student(s) could not fit — the slot is full.`);
+        }
+        if (slotEnded > 0) {
+            notes.push(`${slotEnded} student(s) were skipped because the slot has already ended.`);
+        }
+
+        return {
+            totalStudents,
+            eligibleStudents: outcomes.length,
+            allocated,
+            alreadyBooked,
+            noCapacity,
+            slotEnded,
+            ineligible,
+            notes,
+        };
     }
 
     /** Minimal school directory for the admin assignment UI (the full School module in ROADMAP §Step 2.3 is unbuilt; this is just a read list, not a replacement for it). */
@@ -216,12 +287,33 @@ export class SchoolSlotService {
         });
     }
 
-    /** Bulk-moves every active booking of a school's students, for one exam instance, to a new slot. Reports per-booking success/failure — a capacity shortfall for some students never rolls back the ones that already succeeded. */
+    /**
+     * Bulk-moves every active booking of a school's students, for one exam
+     * instance, to a new slot — and **re-points the school's assignment at that
+     * slot**.
+     *
+     * Re-pointing the assignment is the part that was missing. Moving the
+     * bookings alone left `SchoolSlotAssignment` on the old slot, so the next
+     * student from that school to register was auto-allocated straight back into
+     * the slot the admin had just moved everyone out of, and the school ended up
+     * split across two slots — exactly what "same school, same slot" exists to
+     * prevent.
+     *
+     * Reports per-booking success/failure: a capacity shortfall for some students
+     * never rolls back the ones that already moved.
+     */
     async reassignSchool(
         schoolId: string,
         examInstanceId: string,
         newSlotId: string,
+        assignedBy?: string,
     ): Promise<ReassignSchoolResult> {
+        const slot = await this.prisma.examSlot.findUnique({ where: { id: newSlotId } });
+        if (!slot) throw new NotFoundException('Destination slot not found');
+        if (slot.examInstanceId !== examInstanceId) {
+            throw new BadRequestException('Slot does not belong to this exam instance');
+        }
+
         const bookings = await this.prisma.booking.findMany({
             where: {
                 status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
@@ -243,6 +335,14 @@ export class SchoolSlotService {
                 });
             }
         }
+
+        // Future registrations from this school must follow the students who moved.
+        await this.prisma.schoolSlotAssignment.upsert({
+            where: { schoolId_examInstanceId: { schoolId, examInstanceId } },
+            update: { slotId: newSlotId, assignedBy },
+            create: { schoolId, examInstanceId, slotId: newSlotId, assignedBy },
+        });
+
         return { total: bookings.length, succeeded, failed };
     }
 

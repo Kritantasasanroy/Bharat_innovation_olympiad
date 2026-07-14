@@ -4,6 +4,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import type { MediaKind } from '../common/services/object-storage.service';
 import { ExamService } from './exam.service';
 
 @Controller()
@@ -100,6 +101,14 @@ export class ExamController {
         return this.examService.publishExam(id);
     }
 
+    /** Takes a published exam back to draft — it leaves every student's list at once. */
+    @Post('admin/exams/:id/unpublish')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async unpublishExam(@Param('id') id: string) {
+        return this.examService.unpublishExam(id);
+    }
+
     @Post('admin/exams/:id/release-question-paper')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
@@ -135,14 +144,25 @@ export class ExamController {
 
     // ── Admin: question media upload ──
 
+    /**
+     * A presigned URL the admin browser PUTs the file straight to. The API never
+     * sees the bytes, so a 200 MB video costs Render nothing.
+     */
     @Get('admin/questions/media-upload-url')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async getQuestionMediaUploadUrl(
+        @Query('kind') kind: MediaKind,
         @Query('filename') filename: string,
         @Query('contentType') contentType: string,
+        @Query('contentLength') contentLength: string,
     ) {
-        return this.examService.getQuestionMediaUploadUrl(filename, contentType);
+        return this.examService.getQuestionMediaUploadUrl(
+            kind,
+            filename,
+            contentType,
+            Number(contentLength),
+        );
     }
 
     @Put('admin/sections/:id')

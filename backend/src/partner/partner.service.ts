@@ -277,4 +277,78 @@ export class PartnerService {
 
         return this.card(id);
     }
+
+    // ── Partner self-service profile (item 14) ───────────────────────────────
+
+    /**
+     * A partner's own profile, keyed by the `partnerId` on its JWT — the same id
+     * that is the token's `sub`, so a partner can only ever read its own.
+     */
+    async profile(partnerId: string) {
+        const request = await this.prisma.partnerRequest.findFirst({
+            where: { partnerId },
+            select: {
+                id: true,
+                orgName: true,
+                contactPerson: true,
+                email: true,
+                phone: true,
+                status: true,
+                partnerId: true,
+                createdAt: true,
+                decidedAt: true,
+            },
+        });
+        if (!request) throw new NotFoundException('Partner profile not found.');
+
+        return {
+            ...request,
+            /** The email is the sign-in identity; changing it is a staff action. */
+            editable: ['orgName', 'contactPerson', 'phone'],
+        };
+    }
+
+    /**
+     * Updates the partner's contact details, and mirrors them into the partner
+     * engine so the admin console and the payout statements do not drift from
+     * what the partner sees in its own portal.
+     *
+     * The engine mirror is best-effort: admin-api sleeps on Render's free tier,
+     * and a cold start there must not fail a partner's attempt to fix their own
+     * phone number. The backend row is authoritative for contact details.
+     */
+    async updateProfile(
+        partnerId: string,
+        dto: { orgName?: string; contactPerson?: string; phone?: string },
+    ) {
+        const request = await this.prisma.partnerRequest.findFirst({
+            where: { partnerId },
+            select: { id: true },
+        });
+        if (!request) throw new NotFoundException('Partner profile not found.');
+
+        const data = {
+            ...(dto.orgName !== undefined ? { orgName: dto.orgName.trim() } : {}),
+            ...(dto.contactPerson !== undefined
+                ? { contactPerson: dto.contactPerson.trim() }
+                : {}),
+            ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
+        };
+        if (Object.keys(data).length === 0) {
+            return this.profile(partnerId);
+        }
+
+        await this.prisma.partnerRequest.update({ where: { id: request.id }, data });
+
+        await this.prisma.auditLog.create({
+            data: {
+                userId: partnerId,
+                action: 'partner.profile.updated',
+                resource: 'partner-request',
+                details: { partnerRequestId: request.id, fields: Object.keys(data) },
+            },
+        });
+
+        return this.profile(partnerId);
+    }
 }
