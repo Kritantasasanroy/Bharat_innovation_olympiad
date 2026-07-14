@@ -321,6 +321,18 @@ function GlobalBankView() {
                                     </div>
                                     <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.5 }}>{q.text}</p>
 
+                                    {(q.imageUrl || q.videoUrl) && (
+                                        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                                            {q.imageUrl && (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={q.imageUrl} alt="Question attachment" className="media-preview" style={{ width: 'auto', maxWidth: '180px', maxHeight: '110px' }} />
+                                            )}
+                                            {q.videoUrl && (
+                                                <video src={q.videoUrl} controls className="media-preview" style={{ width: 'auto', maxWidth: '220px', maxHeight: '110px' }} />
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Inline option preview */}
                                     {Array.isArray(q.options) && q.options.length > 0 && (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.4rem', marginTop: '0.6rem' }}>
@@ -885,6 +897,18 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{q.marks} marks{q.negativeMarks > 0 ? ` / -${q.negativeMarks}` : ''}</span>
                                                         </div>
                                                         <p style={{ fontSize: '1rem', lineHeight: 1.5, whiteSpace: 'pre-wrap', margin: 0 }}>{q.text}</p>
+
+                                                        {(q.imageUrl || q.videoUrl) && (
+                                                            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                                                                {q.imageUrl && (
+                                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                                    <img src={q.imageUrl} alt="Question attachment" className="media-preview" style={{ width: 'auto', maxWidth: '200px', maxHeight: '130px' }} />
+                                                                )}
+                                                                {q.videoUrl && (
+                                                                    <video src={q.videoUrl} controls className="media-preview" style={{ width: 'auto', maxWidth: '260px', maxHeight: '130px' }} />
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
                                                         <button className="btn btn-sm btn-secondary" disabled={reorderBusy === q.id || i === 0} onClick={() => reorderQuestion(section.id, q.id, 'up')} title="Move up"><ArrowUp size={14} /></button>

@@ -84,6 +84,8 @@ export interface UploadTicket {
     headers?: Record<string, string>;
     /** s3 only: the permanent URL. Cloudinary returns its own on upload. */
     publicUrl?: string;
+    /** s3 only: the object key — what a later delete needs, since `publicUrl` alone doesn't identify it to the S3 API. */
+    key?: string;
     /** Echoed back so the client can refuse an oversized file before it starts. */
     maxBytes: number;
 }
@@ -306,6 +308,7 @@ export class ObjectStorageService {
                 'Content-Length': String(contentLength),
             },
             publicUrl: `${this.publicBaseUrl}/${key}`,
+            key,
             maxBytes,
         };
     }
@@ -348,6 +351,55 @@ export class ObjectStorageService {
             throw new ServiceUnavailableException('Deletes require the S3 provider.');
         }
         await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    }
+
+    // ── Gallery deletes (permanent, provider-side) ─────────────────────────────
+
+    /**
+     * Permanently removes one gallery asset at the provider that stores it.
+     * `publicId` is the Cloudinary public_id or the S3 key — whichever this
+     * asset's `provider` was uploaded through (see {@link MediaAsset}).
+     */
+    async deleteAsset(kind: MediaKind, provider: 'cloudinary' | 's3', publicId: string): Promise<void> {
+        if (provider === 's3') return this.deleteObject(publicId);
+        return this.deleteCloudinaryAsset(kind, publicId);
+    }
+
+    /**
+     * Same signed-destroy scheme as the live spec exercises against the real
+     * account: SHA-1 of sorted `k=v&k=v` + secret. `result: "not found"` is
+     * treated as success — the asset is already gone either way, and the admin
+     * gallery row should still clear.
+     */
+    private async deleteCloudinaryAsset(kind: MediaKind, publicId: string): Promise<void> {
+        if (!this.cloudName || !this.apiKey || !this.apiSecret) {
+            throw new ServiceUnavailableException('Media storage is not configured.');
+        }
+
+        const resourceType = kind === 'video' ? 'video' : 'image';
+        const timestamp = Math.floor(Date.now() / 1000);
+        const signed: Record<string, string> = { public_id: publicId, timestamp: String(timestamp) };
+        const toSign = Object.keys(signed)
+            .sort()
+            .map((key) => `${key}=${signed[key]}`)
+            .join('&');
+        const signature = createHash('sha1').update(`${toSign}${this.apiSecret}`).digest('hex');
+
+        const form = new FormData();
+        form.append('public_id', publicId);
+        form.append('timestamp', String(timestamp));
+        form.append('api_key', this.apiKey);
+        form.append('signature', signature);
+
+        const response = await fetch(
+            `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/destroy`,
+            { method: 'POST', body: form },
+        );
+        const body = await response.json().catch(() => ({}) as { result?: string });
+        if (!response.ok || (body.result !== 'ok' && body.result !== 'not found')) {
+            this.logger.error(`Cloudinary destroy failed for ${publicId}: ${JSON.stringify(body)}`);
+            throw new BadRequestException('Cloudinary refused to delete that asset.');
+        }
     }
 }
 

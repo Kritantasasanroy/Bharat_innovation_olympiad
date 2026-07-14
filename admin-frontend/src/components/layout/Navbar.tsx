@@ -28,6 +28,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
         items: [
             { label: 'Exams', href: '/exams' },
             { label: 'Question bank', href: '/questions' },
+            { label: 'Media gallery', href: '/media' },
             { label: 'Slots & windows', href: '/slots' },
         ],
     },

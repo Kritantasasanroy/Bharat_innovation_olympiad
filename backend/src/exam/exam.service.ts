@@ -554,6 +554,66 @@ export class ExamService {
         return this.storage.createUploadTicket(kind, filename, contentType, contentLength);
     }
 
+    // ── Admin: media gallery ─────────────────────────────────────────────────
+    //
+    // The upload ticket above only gets a file to the storage provider. These
+    // three methods are the gallery on top of it: every finished upload is
+    // recorded here so it can be reused across questions (not just the one it
+    // was uploaded for) and permanently deleted independent of any question.
+
+    /** Called once the browser's direct upload to the provider has finished. */
+    async recordMediaAsset(data: {
+        kind: 'IMAGE' | 'VIDEO';
+        provider: 'cloudinary' | 's3';
+        url: string;
+        publicId: string;
+        filename?: string;
+        bytes?: number;
+    }) {
+        return this.prisma.mediaAsset.create({ data });
+    }
+
+    /** Every gallery item, newest first, flagged with which questions still use it. */
+    async listMediaAssets(kind?: 'IMAGE' | 'VIDEO') {
+        const [assets, questions] = await Promise.all([
+            this.prisma.mediaAsset.findMany({
+                where: kind ? { kind } : undefined,
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.question.findMany({ select: { imageUrl: true, videoUrl: true } }),
+        ]);
+        const inUse = new Set<string>();
+        for (const q of questions) {
+            if (q.imageUrl) inUse.add(q.imageUrl);
+            if (q.videoUrl) inUse.add(q.videoUrl);
+        }
+        return assets.map((asset) => ({ ...asset, inUse: inUse.has(asset.url) }));
+    }
+
+    /** Permanently deletes at the storage provider, then drops the gallery row. Refuses while a question still points at it. */
+    async deleteMediaAsset(id: string) {
+        const asset = await this.prisma.mediaAsset.findUnique({ where: { id } });
+        if (!asset) throw new NotFoundException('Media asset not found.');
+
+        const inUse = await this.prisma.question.findFirst({
+            where: { OR: [{ imageUrl: asset.url }, { videoUrl: asset.url }] },
+            select: { id: true, text: true },
+        });
+        if (inUse) {
+            throw new BadRequestException(
+                `Still attached to a question ("${inUse.text.slice(0, 60)}"). Remove it from that question first.`,
+            );
+        }
+
+        await this.storage.deleteAsset(
+            asset.kind === 'VIDEO' ? 'video' : 'image',
+            asset.provider as 'cloudinary' | 's3',
+            asset.publicId,
+        );
+        await this.prisma.mediaAsset.delete({ where: { id } });
+        return { deleted: true };
+    }
+
     async updateSection(id: string, data: any) {
         return this.prisma.examSection.update({ where: { id }, data });
     }

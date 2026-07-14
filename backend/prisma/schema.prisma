@@ -160,6 +160,30 @@ model Question {
   @@index([difficulty])
 }
 
+/// The admin media gallery: every picture/video an admin has uploaded for
+/// question authoring, independent of any one question. A question's
+/// `imageUrl`/`videoUrl` just stores the `url` here — there is no FK, because
+/// the same asset can be reused across many questions and outlives any one of
+/// them. `publicId` is what a delete needs at the provider (Cloudinary
+/// public_id, or the S3 object key) — the `url` alone isn't enough to remove it.
+model MediaAsset {
+  id        String         @id @default(uuid())
+  kind      MediaAssetKind
+  provider  String
+  url       String
+  publicId  String
+  filename  String?
+  bytes     Int?
+  createdAt DateTime       @default(now())
+
+  @@index([kind])
+}
+
+enum MediaAssetKind {
+  IMAGE
+  VIDEO
+}
+
 model SectionQuestion {
   id         String      @id @default(uuid())
   sectionId  String

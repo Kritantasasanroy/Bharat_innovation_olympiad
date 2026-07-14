@@ -165,6 +165,37 @@ export class ExamController {
         );
     }
 
+    // ── Admin: media gallery ──
+
+    @Get('admin/media')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listMediaAssets(@Query('kind') kind?: 'IMAGE' | 'VIDEO') {
+        return this.examService.listMediaAssets(kind);
+    }
+
+    /** Records a browser → provider upload that already finished, so it shows up in the gallery. */
+    @Post('admin/media')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async recordMediaAsset(@Body() body: {
+        kind: 'IMAGE' | 'VIDEO';
+        provider: 'cloudinary' | 's3';
+        url: string;
+        publicId: string;
+        filename?: string;
+        bytes?: number;
+    }) {
+        return this.examService.recordMediaAsset(body);
+    }
+
+    @Delete('admin/media/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async deleteMediaAsset(@Param('id') id: string) {
+        return this.examService.deleteMediaAsset(id);
+    }
+
     @Put('admin/sections/:id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)

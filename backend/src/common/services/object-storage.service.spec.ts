@@ -206,3 +206,68 @@ describe('Cloudinary ticket', () => {
         expect(result.publicUrl).toBeUndefined();
     });
 });
+
+describe('deleteAsset (gallery permanent delete)', () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('routes s3 deletes through deleteObject with the given key', async () => {
+        const s3 = service({
+            STORAGE_PROVIDER: 's3',
+            STORAGE_BUCKET: 'bio-media',
+            STORAGE_ACCESS_KEY_ID: 'key',
+            STORAGE_SECRET_ACCESS_KEY: 'secret',
+        });
+        const spy = jest.spyOn(s3, 'deleteObject').mockResolvedValue(undefined);
+
+        await s3.deleteAsset('image', 's3', 'questions/images/abc.png');
+
+        expect(spy).toHaveBeenCalledWith('questions/images/abc.png');
+    });
+
+    it('signs a Cloudinary destroy the same way the live spec does — SHA-1 of sorted public_id/timestamp + secret', async () => {
+        const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ result: 'ok' }) });
+        (global as unknown as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
+
+        await service().deleteAsset('image', 'cloudinary', 'bio/questions/images/abc');
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe('https://api.cloudinary.com/v1_1/bio-test/image/destroy');
+
+        const form = init.body as FormData;
+        const publicId = form.get('public_id');
+        const timestamp = form.get('timestamp');
+        const expected = createHash('sha1')
+            .update(`public_id=${publicId}&timestamp=${timestamp}${CLOUDINARY.CLOUDINARY_API_SECRET}`)
+            .digest('hex');
+
+        expect(form.get('signature')).toBe(expected);
+    });
+
+    it('routes a video delete to the video destroy endpoint', async () => {
+        const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ result: 'ok' }) });
+        (global as unknown as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
+
+        await service().deleteAsset('video', 'cloudinary', 'bio/questions/videos/abc');
+
+        expect(fetchMock.mock.calls[0][0]).toBe('https://api.cloudinary.com/v1_1/bio-test/video/destroy');
+    });
+
+    it('treats Cloudinary "not found" as success — the gallery row should still clear', async () => {
+        (global as unknown as { fetch: typeof fetch }).fetch = jest
+            .fn()
+            .mockResolvedValue({ ok: true, json: async () => ({ result: 'not found' }) }) as unknown as typeof fetch;
+
+        await expect(service().deleteAsset('image', 'cloudinary', 'x')).resolves.toBeUndefined();
+    });
+
+    it('throws when Cloudinary refuses the delete', async () => {
+        (global as unknown as { fetch: typeof fetch }).fetch = jest
+            .fn()
+            .mockResolvedValue({ ok: false, json: async () => ({ result: 'error' }) }) as unknown as typeof fetch;
+
+        await expect(service().deleteAsset('image', 'cloudinary', 'x')).rejects.toThrow(BadRequestException);
+    });
+});
