@@ -7,14 +7,20 @@ import { useState } from 'react';
  * Attaches a picture and/or a video to a question (item 13).
  *
  * **The file never passes through our API.** The browser asks the backend for a
- * presigned PUT URL and uploads straight to object storage (Cloudflare R2 by
- * default). Render's API instance has 512 MB of RAM and an ephemeral disk —
- * streaming a 200 MB question video through it would blow the memory budget, and
- * anything written to its disk vanishes on the next deploy. So the only thing the
- * API handles is the signature.
+ * short-lived *upload ticket* and sends the file straight to the storage provider
+ * (Cloudinary today). Render's API instance has 512 MB of RAM and an ephemeral
+ * disk — streaming a 100 MB question video through it would blow the memory
+ * budget, and anything written to its disk vanishes on the next deploy. The API
+ * only ever handles the signature.
  *
- * A question can carry a picture **and** a video at the same time, so these are
- * two independent slots rather than one "media" field.
+ * Two upload shapes, because the providers genuinely differ (see
+ * `ObjectStorageService`):
+ *  - **cloudinary** — multipart `POST`; the public URL is only known *after* the
+ *    upload, from `secure_url` on the response.
+ *  - **s3** — raw `PUT`; the public URL is known up front.
+ *
+ * A question can carry a picture **and** a video at once, so these are two
+ * independent slots rather than one "media" field.
  */
 
 export interface QuestionMedia {
@@ -22,9 +28,18 @@ export interface QuestionMedia {
     videoUrl: string | null;
 }
 
+interface UploadTicket {
+    provider: 'cloudinary' | 's3';
+    uploadUrl: string;
+    fields?: Record<string, string>;
+    headers?: Record<string, string>;
+    publicUrl?: string;
+    maxBytes: number;
+}
+
 const LIMITS = {
     image: { label: 'Picture', accept: 'image/*', maxMb: 10 },
-    video: { label: 'Video', accept: 'video/mp4,video/webm,video/quicktime', maxMb: 200 },
+    video: { label: 'Video', accept: 'video/mp4,video/webm,video/quicktime', maxMb: 100 },
 } as const;
 
 type Kind = keyof typeof LIMITS;
@@ -54,35 +69,29 @@ export default function QuestionMediaUploader({
         setProgress(0);
 
         try {
-            // 1. Ask our API to sign an upload. The size is signed into the URL, so
-            //    the browser cannot then push a bigger file than it declared.
-            const { data: signed } = await api.get<{
-                uploadUrl: string;
-                publicUrl: string;
-                requiredHeaders: Record<string, string>;
-            }>('/admin/questions/media-upload-url', {
-                params: {
-                    kind,
-                    filename: file.name,
-                    contentType: file.type,
-                    contentLength: file.size,
+            // 1. Ask our API to authorise the upload. This is the only call that
+            //    carries our JWT — the storage provider must never see it.
+            const { data: ticket } = await api.get<UploadTicket>(
+                '/admin/questions/media-upload-url',
+                {
+                    params: {
+                        kind,
+                        filename: file.name,
+                        contentType: file.type,
+                        contentLength: file.size,
+                    },
                 },
-            });
+            );
 
-            // 2. Upload straight to the bucket. Note this is a bare fetch, NOT our
-            //    `api` client — sending our Authorization header to the storage
-            //    provider would break the presigned signature.
-            const res = await fetch(signed.uploadUrl, {
-                method: 'PUT',
-                headers: signed.requiredHeaders,
-                body: file,
-            });
-            if (!res.ok) {
-                throw new Error(`Storage rejected the upload (${res.status}).`);
-            }
+            // 2. Upload straight to the provider. A bare fetch/XHR, NOT our `api`
+            //    client — attaching our Authorization header here would break the
+            //    provider's own signature check.
+            const url =
+                ticket.provider === 'cloudinary'
+                    ? await uploadToCloudinary(ticket, file, setProgress)
+                    : await uploadToS3(ticket, file, setProgress);
 
-            setProgress(100);
-            onChange({ ...value, [kind === 'image' ? 'imageUrl' : 'videoUrl']: signed.publicUrl });
+            onChange({ ...value, [kind === 'image' ? 'imageUrl' : 'videoUrl']: url });
         } catch (err: unknown) {
             const message =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -164,4 +173,97 @@ export default function QuestionMediaUploader({
             </div>
         </div>
     );
+}
+
+/**
+ * Cloudinary wants a multipart POST of the signed fields plus the file, and only
+ * then tells us the URL. XHR rather than fetch, because a 100 MB video on a slow
+ * connection needs a real progress bar — `fetch` cannot report upload progress.
+ */
+function uploadToCloudinary(
+    ticket: UploadTicket,
+    file: File,
+    onProgress: (pct: number) => void,
+): Promise<string> {
+    const form = new FormData();
+    for (const [key, val] of Object.entries(ticket.fields ?? {})) form.append(key, val);
+    form.append('file', file);
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', ticket.uploadUrl);
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                onProgress(Math.round((event.loaded / event.total) * 100));
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status < 200 || xhr.status >= 300) {
+                // Cloudinary reports its own reason in the body; surface it rather
+                // than a bare status code.
+                let reason = `Upload failed (${xhr.status}).`;
+                try {
+                    reason = JSON.parse(xhr.responseText)?.error?.message ?? reason;
+                } catch {
+                    /* keep the status-code message */
+                }
+                reject(new Error(reason));
+                return;
+            }
+
+            try {
+                const body = JSON.parse(xhr.responseText);
+                // `secure_url` is the https one. `url` is plain http and would be
+                // blocked as mixed content on our HTTPS pages.
+                if (!body.secure_url) throw new Error('Upload succeeded but returned no URL.');
+                resolve(body.secure_url as string);
+            } catch (err) {
+                reject(err instanceof Error ? err : new Error('Could not read the upload response.'));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Could not reach the storage provider.'));
+        xhr.send(form);
+    });
+}
+
+/** S3-compatible: a raw PUT with exactly the signed headers. The URL is known already. */
+function uploadToS3(
+    ticket: UploadTicket,
+    file: File,
+    onProgress: (pct: number) => void,
+): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', ticket.uploadUrl);
+
+        for (const [key, val] of Object.entries(ticket.headers ?? {})) {
+            // The browser sets Content-Length itself and forbids setting it here.
+            if (key.toLowerCase() === 'content-length') continue;
+            xhr.setRequestHeader(key, val);
+        }
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                onProgress(Math.round((event.loaded / event.total) * 100));
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status < 200 || xhr.status >= 300) {
+                reject(new Error(`Storage rejected the upload (${xhr.status}).`));
+                return;
+            }
+            if (!ticket.publicUrl) {
+                reject(new Error('Upload succeeded but no public URL was issued.'));
+                return;
+            }
+            resolve(ticket.publicUrl);
+        };
+
+        xhr.onerror = () => reject(new Error('Could not reach the storage provider.'));
+        xhr.send(file);
+    });
 }

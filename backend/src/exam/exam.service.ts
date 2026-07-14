@@ -534,12 +534,13 @@ export class ExamService {
     }
 
     /**
-     * Signs a direct browser → bucket upload for a question's picture or video.
+     * Authorises a direct browser → storage upload for a question's picture or
+     * video, and returns the ticket that permits it.
      *
      * The file never passes through the API — see `ObjectStorageService` for why
-     * (Render's 512 MB would not survive a video). The admin uploads to the
-     * returned `uploadUrl`, then saves `publicUrl` onto the question's
-     * `imageUrl` / `videoUrl`.
+     * (Render's 512 MB would not survive a video). The admin uploads with the
+     * ticket, then saves the resulting URL onto the question's `imageUrl` /
+     * `videoUrl`.
      */
     async getQuestionMediaUploadUrl(
         kind: MediaKind,
@@ -550,7 +551,7 @@ export class ExamService {
         if (kind !== 'image' && kind !== 'video') {
             throw new BadRequestException('kind must be "image" or "video".');
         }
-        return this.storage.presignQuestionMedia(kind, filename, contentType, contentLength);
+        return this.storage.createUploadTicket(kind, filename, contentType, contentLength);
     }
 
     async updateSection(id: string, data: any) {

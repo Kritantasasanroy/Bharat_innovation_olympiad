@@ -1,7 +1,7 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: 2026-07-14 (exam lifecycle gating · school slot self-service · per-audience result release + Excel · question picture/video on S3-compatible storage — see **§0.25**)  
-> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · S3-compatible object storage (Cloudflare R2) · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
+> Last updated: 2026-07-14 (exam lifecycle gating · school slot self-service · per-audience result release + Excel · question picture/video on Cloudinary — see **§0.25**)  
+> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · **Cloudinary** (question media; S3-compatible providers supported behind the same seam) · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
 > **Target stack (migrating to):** pnpm workspace · Bun/Elysia · Drizzle · Biome · Lefthook · hexagonal — mirrors `github.com/bharat-innovation-olympiad` (`bio-exam`, `bio-admin`, `bio-portal`, `bio-contracts`; `bio-proctor` intentionally kept as the existing face-api.js client).  
 > Architecture reference: golden PRDs now live in-repo at `ai/output/prds/`; agent rules in `ai/steering/`. See `AGENTS.md`, `BIO-REPOS.md`, and §0 below.
 
@@ -1020,28 +1020,37 @@ passes through `assertReleased`, so the download is not a side door around the r
 | School | Its own students | `resultsReleasedToSchoolsAt` |
 | Partner | Students of the schools assigned to it | `resultsReleasedToPartnersAt` |
 
-#### Question media — pictures and video, and why not on Render
+#### Question media — pictures and video, on Cloudinary (no AWS)
 
 A question can now carry a **picture and a video at the same time** (`Question.imageUrl`,
 `Question.videoUrl` — two independent columns, not another `mediaUrl`/`mediaType` pair), rendered to
 the student in the exam player.
 
 **The bytes never touch the API.** Render's instance has 512 MB of RAM and an ephemeral disk:
-streaming a 200 MB question video through the Node process would blow the memory budget, and anything
-written to its disk vanishes on the next deploy. So the admin browser asks for a **presigned PUT URL**
-and uploads **straight to object storage**; the API only ever handles the signature.
+streaming a 100 MB question video through the Node process would blow the memory budget, and anything
+written to its disk vanishes on the next deploy. So the admin browser asks for a short-lived **upload
+ticket** and sends the file **straight to the storage provider**; the API only ever handles the
+signature.
 
-`ObjectStorageService` speaks the S3 API against a **configurable endpoint**, so it runs unchanged on
-Cloudflare R2 (the default and the recommendation — 10 GB free and, the reason it matters for video,
-**zero egress fees**), Backblaze B2, Supabase Storage, MinIO, or plain AWS S3. `Content-Length` is
-signed into the URL, so a client cannot upload a file larger than the one it declared. Limits: 10 MB
-per image, 200 MB per video. The service **warns rather than crashing at boot** when unconfigured —
-media is not worth taking the platform down for.
+**Provider: Cloudinary** (see §4 for setup). Picked for the testing phase because it needs **no bucket,
+no CORS rule and no IAM policy** — three env vars and it works. 25 GB free, and it transcodes video and
+makes poster frames for free, which a question video played inline mid-exam actually needs.
 
-New env vars (see §4): `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`,
-`STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, `STORAGE_PUBLIC_BASE_URL`. The legacy `AWS_*`
-names are still honoured. The bucket needs public read on `questions/` and a CORS rule allowing `PUT`
-from the admin origin.
+Uploads are **signed, not unsigned-preset**. An unsigned preset needs no server at all, but the preset
+name necessarily reaches the browser, and anyone who reads it can upload to the account forever.
+Signing costs one SHA-1 and **no new npm dependency**, and means only a request that has already passed
+the admin JWT guard can obtain the right to upload. The signature is timestamped and Cloudinary rejects
+one over an hour old, so a leaked ticket is not a standing permit.
+
+`ObjectStorageService` keeps a **second provider behind the same seam** (`STORAGE_PROVIDER=s3` → any
+S3-compatible endpoint: Cloudflare R2, B2, Supabase, MinIO, AWS) for when 25 GB runs out. Nothing
+upstream knows which is live — both return an `UploadTicket`, and the ticket says which shape to use,
+because the two genuinely differ: Cloudinary reveals the public URL only *on* upload (`secure_url`),
+while S3 knows it up front.
+
+Limits, enforced server-side before anything is signed: **10 MB per image, 100 MB per video** — both
+Cloudinary's free-plan ceilings, so a bigger file would fail at their end regardless. Unconfigured, the
+service **warns and boots**; upload returns a 503. Media is not worth taking the platform down for.
 
 #### A privilege-escalation bug found on the way
 
@@ -1404,35 +1413,65 @@ Student Browser
 | `AWS_SECRET_ACCESS_KEY` | Legacy alias for `STORAGE_SECRET_ACCESS_KEY` | from provider console |
 | `AWS_S3_BUCKET` | Legacy alias for `STORAGE_BUCKET` | `bio-olympiad-prod` |
 
-#### Object storage — question media (§0.25)
+#### Question media storage — Cloudinary (§0.25)
 
-`ObjectStorageService` speaks the S3 API against a **configurable endpoint**, so the same code runs on
-Cloudflare R2, Backblaze B2, Supabase Storage, MinIO or AWS S3. **R2 is the default recommendation:**
-10 GB free and — the reason it matters when questions carry video — **zero egress fees**. Question
-media is uploaded **browser → bucket** via a presigned PUT; it never passes through the API, because
-Render's 512 MB instance cannot stream a 200 MB video and its disk is ephemeral.
+**No AWS.** Question media lives on **Cloudinary**, chosen for the testing phase because it needs no
+bucket, no CORS rule and no IAM policy: sign up, copy three values, done. Its free tier (25 GB storage
++ 25 GB bandwidth) is the most generous of the options, and — the reason it actually matters here — it
+**transcodes video and generates poster frames for free**, which a question video played inline
+mid-exam needs.
+
+**Setup (about two minutes):**
+1. Sign up at `cloudinary.com`.
+2. Dashboard → **Product Environment Credentials** → copy *Cloud name*, *API Key*, *API Secret*.
+3. Put them on the backend (Render). Nothing else — no bucket, no upload preset, no CORS.
+
+| Variable | Description |
+|---|---|
+| `CLOUDINARY_CLOUD_NAME` | From the Cloudinary dashboard |
+| `CLOUDINARY_API_KEY` | From the Cloudinary dashboard |
+| `CLOUDINARY_API_SECRET` | From the Cloudinary dashboard — **backend only**, never shipped to a browser |
+
+**Signed uploads, not an unsigned preset.** Cloudinary's "unsigned upload preset" needs no server at
+all, but the preset name necessarily travels to the browser, and anyone who reads it can then upload
+to the account for free, forever. Instead the backend signs each upload (a SHA-1 of the sorted signed
+params plus the API secret — **no extra npm dependency**), so only a request that has already passed
+the admin JWT guard can obtain the right to upload. The signature is timestamped, and Cloudinary
+rejects one over an hour old, so a leaked ticket is not a standing upload permit.
+
+**Bytes never touch the API.** The browser asks `GET /admin/questions/media-upload-url` for an
+*upload ticket*, then POSTs the file **straight to Cloudinary** and reads `secure_url` off the
+response — which is what gets stored on `Question.imageUrl` / `videoUrl`. Render's 512 MB instance
+cannot stream a 100 MB video, and its disk is ephemeral, so this is not an optimisation but a
+requirement.
+
+Limits enforced server-side before anything is signed: **10 MB per image, 100 MB per video** (both are
+Cloudinary's free-plan ceilings, so a larger file would fail at their end anyway).
+
+#### Switching to S3 later (`STORAGE_PROVIDER=s3`)
+
+`ObjectStorageService` keeps a second provider behind the same seam, for when 25 GB runs out. It
+speaks the S3 API against a **configurable endpoint**, so it runs unchanged on Cloudflare R2 (10 GB
+free, **zero egress**), Backblaze B2, Supabase Storage, MinIO or AWS S3 — only env vars change, and
+nothing upstream (`ExamService`, the admin uploader) knows which provider is live.
 
 | Variable | Description | Example (Cloudflare R2) |
 |---|---|---|
-| `STORAGE_ENDPOINT` | S3-compatible endpoint. Omit entirely for AWS S3. | `https://<account-id>.r2.cloudflarestorage.com` |
+| `STORAGE_PROVIDER` | `cloudinary` (default) or `s3` | `s3` |
+| `STORAGE_ENDPOINT` | S3-compatible endpoint. Omit for AWS S3. | `https://<account-id>.r2.cloudflarestorage.com` |
 | `STORAGE_REGION` | Region. R2 wants the literal `auto`. | `auto` |
 | `STORAGE_BUCKET` | Bucket name | `bio-media` |
-| `STORAGE_ACCESS_KEY_ID` | Access key | from R2 → Manage API tokens |
-| `STORAGE_SECRET_ACCESS_KEY` | Secret key | from R2 → Manage API tokens |
-| `STORAGE_PUBLIC_BASE_URL` | Public read base for the bucket (or your CDN domain). This is what gets stored on `Question.imageUrl` / `videoUrl`. | `https://pub-<hash>.r2.dev` |
+| `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY` | Access keys | from the provider console |
+| `STORAGE_PUBLIC_BASE_URL` | Public-read base for the bucket | `https://pub-<hash>.r2.dev` |
 
-The bucket needs **public read on the `questions/` prefix** and a **CORS rule allowing `PUT` from the
-admin origin** — the browser uploads directly, so without CORS the upload is blocked before it starts:
+On this path the bucket needs public read on `questions/` **and** a CORS rule allowing `PUT` from the
+admin origin — the browser uploads directly, so without CORS it is blocked before it starts. (Avoiding
+exactly this setup is why Cloudinary is the default for now.) The provider is also **inferred**: with
+only Cloudinary keys set it picks Cloudinary; with a bucket and access key set it picks S3; an explicit
+`STORAGE_PROVIDER` overrides both.
 
-```json
-[{ "AllowedOrigins": ["https://olympiad-admin-frontend.vercel.app"],
-   "AllowedMethods": ["PUT"],
-   "AllowedHeaders": ["content-type", "content-length"],
-   "MaxAgeSeconds": 3600 }]
-```
-
-If these are unset the API **logs a warning and boots normally** — media upload returns a 503 with a
-clear message, rather than taking the whole platform down. (That is deliberately unlike
+If storage is unset entirely the API **logs a warning and boots normally** — media upload returns a
+503 with a clear message rather than taking the whole platform down. (Deliberately unlike
 `PaymentService`, which still crashes at boot without dummy `RAZORPAY_*` values; see §15.)
 
 ### Student Frontend (`frontend/.env`)

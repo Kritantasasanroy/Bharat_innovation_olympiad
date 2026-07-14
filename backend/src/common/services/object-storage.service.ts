@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+    BadRequestException,
+    Injectable,
+    Logger,
+    ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
     DeleteObjectCommand,
@@ -7,79 +12,109 @@ import {
     S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 /**
- * Object storage for question media, proctor snapshots and exports.
+ * Storage for question media (pictures and video).
  *
- * **Why not Render.** Render's free tier gives the API 512 MB of RAM and an
- * ephemeral disk. Streaming a 100 MB question video through the Node process
- * would blow the memory budget, and anything written to disk vanishes on the
- * next deploy. So bytes never touch the API at all: the browser asks for a
- * **presigned PUT URL** and uploads straight to the bucket. The API only ever
- * handles the (tiny) signature and the resulting public URL.
+ * ## The one rule: bytes never touch the API
  *
- * **Provider-agnostic.** This speaks the S3 API against a configurable endpoint,
- * so it runs unchanged on **Cloudflare R2** (the default and the recommendation:
- * 10 GB free, and — the reason it matters here — **zero egress fees**, which a
- * video-heavy exam will otherwise rack up fast), Backblaze B2, Supabase Storage,
- * MinIO, or plain AWS S3. Only env vars change.
+ * Render gives this API 512 MB of RAM and an **ephemeral disk**. Streaming a
+ * 100 MB question video through the Node process would blow the memory budget,
+ * and anything written to its disk vanishes on the next deploy. So the API only
+ * ever issues a short-lived **upload ticket**; the admin's browser uploads
+ * straight to the storage provider and hands us back the resulting URL.
  *
- * Set:
- *   STORAGE_ENDPOINT          https://<account-id>.r2.cloudflarestorage.com
- *   STORAGE_REGION            auto            (R2; AWS wants a real region)
- *   STORAGE_BUCKET            bio-media
- *   STORAGE_ACCESS_KEY_ID     …
- *   STORAGE_SECRET_ACCESS_KEY …
- *   STORAGE_PUBLIC_BASE_URL   https://pub-<hash>.r2.dev   (or your CDN domain)
+ * ## Two providers, one seam
  *
- * The bucket needs public read on the `questions/` prefix and a CORS rule
- * allowing `PUT` from the admin origin — see DOCUMENTATION.md §4.
+ * | `STORAGE_PROVIDER` | Used for | Why |
+ * |---|---|---|
+ * | `cloudinary` (default) | **Testing / now** | 25 GB free, no bucket, no CORS, no IAM. Transcodes video and generates poster frames for free, which matters because a question video is played inline mid-exam. |
+ * | `s3` | Later / production | Any S3-compatible endpoint — Cloudflare R2, Backblaze B2, Supabase Storage, MinIO, AWS. The escape hatch when 25 GB runs out. |
+ *
+ * The provider is chosen once, here. Everything upstream (`ExamService`, the
+ * admin uploader) talks to {@link UploadTicket} and does not know which is live.
+ *
+ * ## Why signed uploads, not an unsigned preset
+ *
+ * Cloudinary's "unsigned upload preset" needs no server involvement at all — but
+ * the preset name travels to the browser, and anyone who reads it can then upload
+ * to our account for free, forever. Signing costs one SHA-1 and no extra
+ * dependency, and it means only a request that has already passed the admin JWT
+ * guard can obtain the right to upload.
  */
 
 export type MediaKind = 'image' | 'video';
 
-/** What each kind of media is allowed to be, and how big it may get. */
+/**
+ * What each kind of media may be, and how big it may get.
+ *
+ * The video ceiling is Cloudinary's **free-plan hard limit** (100 MB), not a
+ * number we invented — going over it fails at their end regardless of what we
+ * allow, so refusing early gives a better error than a 400 from a third party.
+ */
 export const MEDIA_RULES: Record<MediaKind, { types: string[]; maxBytes: number }> = {
     image: {
         types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'],
-        maxBytes: 10 * 1024 * 1024, // 10 MB
+        maxBytes: 10 * 1024 * 1024, // 10 MB — Cloudinary free-plan image limit
     },
     video: {
         types: ['video/mp4', 'video/webm', 'video/quicktime'],
-        // Generous, but bounded: the signed URL pins Content-Length, so a client
-        // cannot upload more than it declared, and it cannot declare more than this.
-        maxBytes: 200 * 1024 * 1024, // 200 MB
+        maxBytes: 100 * 1024 * 1024, // 100 MB — Cloudinary free-plan video limit
     },
 };
 
-export interface PresignedUpload {
+/**
+ * Everything the browser needs to upload one file, and to tell us where it landed.
+ *
+ * The two providers upload differently, so the ticket says which shape to use
+ * rather than pretending they are the same:
+ *
+ * - **cloudinary** — `POST` a multipart form of `fields` + the file to `uploadUrl`.
+ *   The public URL is **not known in advance**; read `secure_url` off the response.
+ * - **s3** — `PUT` the raw file to `uploadUrl` with exactly `headers`. The public
+ *   URL **is** known in advance; it is `publicUrl`.
+ */
+export interface UploadTicket {
+    provider: 'cloudinary' | 's3';
     uploadUrl: string;
-    publicUrl: string;
-    key: string;
-    /** Echoed back so the client can fail fast before it starts the PUT. */
+    /** cloudinary: multipart form fields to send alongside the file. */
+    fields?: Record<string, string>;
+    /** s3: the exact headers the PUT must carry, or the signature fails. */
+    headers?: Record<string, string>;
+    /** s3 only: the permanent URL. Cloudinary returns its own on upload. */
+    publicUrl?: string;
+    /** Echoed back so the client can refuse an oversized file before it starts. */
     maxBytes: number;
-    /** The client must send exactly these headers on the PUT, or the signature fails. */
-    requiredHeaders: Record<string, string>;
 }
 
 @Injectable()
 export class ObjectStorageService {
     private readonly logger = new Logger(ObjectStorageService.name);
-    private readonly client: S3Client | null;
+    private readonly provider: 'cloudinary' | 's3';
+
+    // ── Cloudinary ───────────────────────────────────────────────────────────
+    private readonly cloudName: string;
+    private readonly apiKey: string;
+    private readonly apiSecret: string;
+
+    // ── S3-compatible ────────────────────────────────────────────────────────
+    private readonly s3: S3Client | null = null;
     private readonly bucket: string;
     private readonly region: string;
     private readonly publicBaseUrl: string;
 
     constructor(private config: ConfigService) {
-        // Legacy AWS_* names are still honoured so an existing deployment keeps
-        // working without an env change.
+        this.cloudName = config.get<string>('CLOUDINARY_CLOUD_NAME') ?? '';
+        this.apiKey = config.get<string>('CLOUDINARY_API_KEY') ?? '';
+        this.apiSecret = config.get<string>('CLOUDINARY_API_SECRET') ?? '';
+
+        // Legacy AWS_* names still work, so an older deployment keeps running.
         const endpoint = config.get<string>('STORAGE_ENDPOINT') || undefined;
         this.region =
             config.get<string>('STORAGE_REGION') || config.get<string>('AWS_REGION') || 'auto';
         this.bucket =
             config.get<string>('STORAGE_BUCKET') || config.get<string>('AWS_S3_BUCKET') || '';
-
         const accessKeyId =
             config.get<string>('STORAGE_ACCESS_KEY_ID') ||
             config.get<string>('AWS_ACCESS_KEY_ID') ||
@@ -88,82 +123,82 @@ export class ObjectStorageService {
             config.get<string>('STORAGE_SECRET_ACCESS_KEY') ||
             config.get<string>('AWS_SECRET_ACCESS_KEY') ||
             '';
+        this.publicBaseUrl = (config.get<string>('STORAGE_PUBLIC_BASE_URL') ?? '').replace(
+            /\/$/,
+            '',
+        );
 
-        this.publicBaseUrl = (
-            config.get<string>('STORAGE_PUBLIC_BASE_URL') ||
-            (this.bucket ? `https://${this.bucket}.s3.${this.region}.amazonaws.com` : '')
-        ).replace(/\/$/, '');
+        // Provider selection, in strict priority order:
+        //   1. An explicit STORAGE_PROVIDER always wins.
+        //   2. Otherwise, **Cloudinary wins if it is fully configured.**
+        //   3. Otherwise fall back to S3 if a bucket + key are present.
+        //
+        // Step 2 is deliberately ahead of step 3, and that ordering is load-bearing.
+        // The reverse ("a bucket is set, so use S3") means a *stale* `AWS_S3_BUCKET`
+        // left on a deployment from an earlier config silently hijacks the provider
+        // — the Cloudinary keys are present and correct, and media still 503s with a
+        // message about a bucket nobody meant to use. That is precisely what was
+        // happening on Render. Configuring Cloudinary should be enough to select it.
+        const explicit = config.get<string>('STORAGE_PROVIDER')?.toLowerCase();
+        const cloudinaryReady = Boolean(this.cloudName && this.apiKey && this.apiSecret);
 
-        if (!this.bucket || !accessKeyId || !secretAccessKey) {
-            // Boot must not fail — the rest of the platform works fine without
-            // media, and a missing bucket should surface when someone tries to
-            // upload, not take the whole API down. (This is the mistake
-            // PaymentService made with Razorpay; see DOCUMENTATION.md §15.)
-            this.client = null;
-            this.logger.warn(
-                'Object storage is not configured (STORAGE_BUCKET / STORAGE_ACCESS_KEY_ID / STORAGE_SECRET_ACCESS_KEY). Question media upload will be unavailable.',
-            );
-            return;
+        this.provider =
+            explicit === 's3' || explicit === 'cloudinary'
+                ? explicit
+                : cloudinaryReady
+                  ? 'cloudinary'
+                  : this.bucket && accessKeyId
+                    ? 's3'
+                    : 'cloudinary';
+
+        if (this.provider === 's3' && this.bucket && accessKeyId && secretAccessKey) {
+            this.s3 = new S3Client({
+                region: this.region,
+                ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+                credentials: { accessKeyId, secretAccessKey },
+            });
         }
 
-        this.client = new S3Client({
-            region: this.region,
-            ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-            credentials: { accessKeyId, secretAccessKey },
-        });
+        if (!this.isConfigured) {
+            // Never fail the boot. The rest of the platform works fine without
+            // media, and a missing storage key should surface when someone tries
+            // to upload — not take the whole API down. (This is exactly the
+            // mistake `PaymentService` makes with Razorpay; see DOCUMENTATION §15.)
+            this.logger.warn(
+                `Media storage is not configured (provider "${this.provider}"). Question media upload will return 503 until it is.`,
+            );
+        }
     }
 
     get isConfigured(): boolean {
-        return this.client !== null;
+        return this.provider === 'cloudinary'
+            ? Boolean(this.cloudName && this.apiKey && this.apiSecret)
+            : this.s3 !== null;
     }
 
-    private require(): S3Client {
-        if (!this.client) {
-            throw new ServiceUnavailableException(
-                'Media storage is not configured on this environment. Set STORAGE_BUCKET, STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY and STORAGE_PUBLIC_BASE_URL.',
-            );
-        }
-        return this.client;
+    /** The knobs the admin UI shows next to the upload box. */
+    get limits() {
+        return {
+            provider: this.provider,
+            image: MEDIA_RULES.image,
+            video: MEDIA_RULES.video,
+        };
     }
 
-    // ── Key generators ───────────────────────────────────────────────────────
-
-    static questionMediaKey(kind: MediaKind, filename: string) {
-        const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
-        // The uploaded name is never trusted into the key — a filename can carry
-        // path separators, unicode tricks, or someone else's question id.
-        return `questions/${kind}s/${randomUUID()}${ext}`;
-    }
-
-    static profilePhotoKey(userId: string) {
-        return `profiles/${userId}.jpg`;
-    }
-
-    static proctorSnapshotKey(attemptId: string, timestamp: number) {
-        return `proctoring/${attemptId}/${timestamp}.jpg`;
-    }
-
-    static exportKey(filename: string) {
-        return `exports/${filename}`;
-    }
-
-    // ── Upload ───────────────────────────────────────────────────────────────
+    // ── Upload tickets ───────────────────────────────────────────────────────
 
     /**
-     * Signs a direct browser → bucket upload for one piece of question media.
-     *
-     * `contentLength` is signed into the URL, so the client cannot upload a file
-     * larger than the one it declared — without it, a 200 MB cap on the request
-     * body would be a suggestion rather than a limit.
+     * Authorises one direct browser → provider upload of a question's picture or
+     * video. Validates kind, MIME type and declared size before signing anything.
      */
-    async presignQuestionMedia(
+    async createUploadTicket(
         kind: MediaKind,
         filename: string,
         contentType: string,
         contentLength: number,
-    ): Promise<PresignedUpload> {
+    ): Promise<UploadTicket> {
         const rules = MEDIA_RULES[kind];
-        if (!rules) throw new BadRequestException(`Unsupported media kind: ${kind}`);
+        if (!rules) throw new BadRequestException('kind must be "image" or "video".');
 
         if (!rules.types.includes(contentType)) {
             throw new BadRequestException(
@@ -179,8 +214,78 @@ export class ObjectStorageService {
             );
         }
 
-        const client = this.require();
-        const key = ObjectStorageService.questionMediaKey(kind, filename);
+        if (!this.isConfigured) {
+            throw new ServiceUnavailableException(
+                this.provider === 'cloudinary'
+                    ? 'Media storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.'
+                    : 'Media storage is not configured. Set STORAGE_BUCKET, STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY and STORAGE_PUBLIC_BASE_URL.',
+            );
+        }
+
+        return this.provider === 'cloudinary'
+            ? this.cloudinaryTicket(kind, rules.maxBytes)
+            : this.s3Ticket(kind, filename, contentType, contentLength, rules.maxBytes);
+    }
+
+    /**
+     * A signed Cloudinary upload.
+     *
+     * The signature is a SHA-1 of the signed parameters (alphabetical,
+     * `k=v&k=v`) with the API secret appended — Cloudinary's scheme. Only the
+     * params we sign are covered, so `file` and `api_key` are deliberately absent
+     * from the string: they are not signed, by design.
+     *
+     * `timestamp` is what bounds the ticket — Cloudinary rejects a signature more
+     * than an hour old, so a leaked ticket is not a standing upload permit.
+     */
+    private cloudinaryTicket(kind: MediaKind, maxBytes: number): UploadTicket {
+        const timestamp = Math.floor(Date.now() / 1000);
+        // Foldering keeps question media separate from anything else in the account,
+        // so it can be listed, quota'd or purged on its own.
+        const folder = `bio/questions/${kind}s`;
+
+        const signed: Record<string, string> = {
+            folder,
+            timestamp: String(timestamp),
+        };
+
+        const toSign = Object.keys(signed)
+            .sort()
+            .map((key) => `${key}=${signed[key]}`)
+            .join('&');
+        const signature = createHash('sha1').update(`${toSign}${this.apiSecret}`).digest('hex');
+
+        // `video` also covers audio; `image` covers stills. Cloudinary picks the
+        // transcoding pipeline from this, so it must match the kind.
+        const resourceType = kind === 'video' ? 'video' : 'image';
+
+        return {
+            provider: 'cloudinary',
+            uploadUrl: `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`,
+            fields: {
+                ...signed,
+                api_key: this.apiKey,
+                signature,
+            },
+            maxBytes,
+        };
+    }
+
+    /** A presigned S3 PUT. `ContentLength` is signed in, so the client cannot exceed what it declared. */
+    private async s3Ticket(
+        kind: MediaKind,
+        filename: string,
+        contentType: string,
+        contentLength: number,
+        maxBytes: number,
+    ): Promise<UploadTicket> {
+        const client = this.s3;
+        if (!client) throw new ServiceUnavailableException('S3 storage is not configured.');
+
+        // The uploaded name is never trusted into the key — a filename can carry
+        // path separators, unicode tricks, or someone else's question id.
+        const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
+        const key = `questions/${kind}s/${randomUUID()}${ext}`;
 
         const uploadUrl = await getSignedUrl(
             client,
@@ -190,24 +295,35 @@ export class ObjectStorageService {
                 ContentType: contentType,
                 ContentLength: contentLength,
             }),
-            { expiresIn: 900 }, // 15 min — a 200 MB video on a slow line needs the room
+            { expiresIn: 900 }, // 15 min — a 100 MB video on a slow line needs the room
         );
 
         return {
+            provider: 's3',
             uploadUrl,
-            publicUrl: this.publicUrl(key),
-            key,
-            maxBytes: rules.maxBytes,
-            requiredHeaders: {
+            headers: {
                 'Content-Type': contentType,
                 'Content-Length': String(contentLength),
             },
+            publicUrl: `${this.publicBaseUrl}/${key}`,
+            maxBytes,
         };
     }
 
-    /** Server-side upload, for things the API itself generates (exports, snapshots). */
+    // ── Server-side helpers (exports, proctor snapshots) ──────────────────────
+
+    /**
+     * Uploads a buffer the API itself produced. Only available on the S3 provider —
+     * Cloudinary is configured here purely for question media, and routing anything
+     * large through this process is the thing this file exists to prevent.
+     */
     async uploadBuffer(key: string, buffer: Buffer, contentType: string): Promise<string> {
-        await this.require().send(
+        if (!this.s3) {
+            throw new ServiceUnavailableException(
+                'Server-side upload requires the S3 provider (STORAGE_PROVIDER=s3).',
+            );
+        }
+        await this.s3.send(
             new PutObjectCommand({
                 Bucket: this.bucket,
                 Key: key,
@@ -215,24 +331,23 @@ export class ObjectStorageService {
                 ContentType: contentType,
             }),
         );
-        return this.publicUrl(key);
+        return `${this.publicBaseUrl}/${key}`;
     }
 
     async getPresignedGetUrl(key: string, expiresIn = 3600): Promise<string> {
-        return getSignedUrl(
-            this.require(),
-            new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-            { expiresIn },
-        );
+        if (!this.s3) {
+            throw new ServiceUnavailableException('Signed reads require the S3 provider.');
+        }
+        return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+            expiresIn,
+        });
     }
 
     async deleteObject(key: string): Promise<void> {
-        await this.require().send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
-    }
-
-    /** The permanent, public URL for a key. Stored on `Question.imageUrl` / `videoUrl`. */
-    publicUrl(key: string): string {
-        return `${this.publicBaseUrl}/${key}`;
+        if (!this.s3) {
+            throw new ServiceUnavailableException('Deletes require the S3 provider.');
+        }
+        await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     }
 }
 
