@@ -5,6 +5,7 @@ import Navbar from '@/components/layout/Navbar';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
+import { isValidPhone, normalizePhone, phoneOtp } from '@/lib/auth-client';
 import { FormEvent, useEffect, useState } from 'react';
 
 export default function ProfilePage() {
@@ -16,6 +17,14 @@ export default function ProfilePage() {
 
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+
+    // Phone change requires an SMS code — the number doubles as a login
+    // identifier, so an unverified change could hand the account to whoever owns
+    // the typed-in number.
+    const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+    const [phoneOtpCode, setPhoneOtpCode] = useState('');
+    const [phoneBusy, setPhoneBusy] = useState(false);
+    const [phoneMsg, setPhoneMsg] = useState<{ text: string; type: 'error' | 'info' } | null>(null);
 
     // Face enrollment state
     const [enrollmentStatus, setEnrollmentStatus] = useState<'unknown' | 'enrolled' | 'not_enrolled'>('unknown');
@@ -82,13 +91,54 @@ export default function ProfilePage() {
         }
     };
 
+    const currentPhone = user?.phone ?? '';
+    const phoneIsNew = phone.trim() !== '' && normalizePhone(phone) !== currentPhone;
+
+    const handleSendPhoneOtp = async () => {
+        setPhoneMsg(null);
+        if (!isValidPhone(phone)) {
+            setPhoneMsg({ text: 'Enter a valid mobile number.', type: 'error' });
+            return;
+        }
+        setPhoneBusy(true);
+        try {
+            const { error } = await phoneOtp.sendOtp(phone);
+            if (error) {
+                setPhoneMsg({ text: error.message || 'Could not send the code.', type: 'error' });
+            } else {
+                setPhoneOtpSent(true);
+                setPhoneMsg({ text: 'Code sent by SMS.', type: 'info' });
+            }
+        } catch {
+            setPhoneMsg({ text: 'Network error. Please try again.', type: 'error' });
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
         setMessage(null);
 
+        // A changed number must carry its SMS code, or the save is rejected with
+        // the same opaque error the user reported having no way to satisfy.
+        if (phoneIsNew && phoneOtpCode.length !== 6) {
+            setMessage({ text: 'Enter the 6-digit code sent to your new number.', type: 'error' });
+            return;
+        }
+
+        setIsLoading(true);
         try {
-            await updateProfile({ firstName, lastName, phone, classBand });
+            await updateProfile({
+                firstName,
+                lastName,
+                phone,
+                classBand,
+                ...(phoneIsNew ? { phoneCode: phoneOtpCode } : {}),
+            });
+            setPhoneOtpSent(false);
+            setPhoneOtpCode('');
+            setPhoneMsg(null);
             setMessage({ text: 'Profile updated successfully!', type: 'success' });
             
             // Clear message after 3 seconds
@@ -182,16 +232,58 @@ export default function ProfilePage() {
 
                         <div className="input-group">
                             <label className="input-label">Contact number</label>
-                            <input
-                                type="tel"
-                                className="input-field"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                placeholder="e.g. 9812345678"
-                            />
-                            <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
-                                Used to reach you about your exam slot and results.
-                            </small>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    type="tel"
+                                    inputMode="tel"
+                                    className="input-field"
+                                    value={phone}
+                                    onChange={(e) => {
+                                        setPhone(e.target.value);
+                                        setPhoneOtpSent(false);
+                                        setPhoneOtpCode('');
+                                        setPhoneMsg(null);
+                                    }}
+                                    placeholder="e.g. 9812345678"
+                                    style={{ flex: 1 }}
+                                />
+                                {phoneIsNew && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={handleSendPhoneOtp}
+                                        disabled={phoneBusy || !isValidPhone(phone)}
+                                        style={{ whiteSpace: 'nowrap' }}
+                                    >
+                                        {phoneBusy ? 'Sending…' : phoneOtpSent ? 'Resend' : 'Send code'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {phoneIsNew && phoneOtpSent && (
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    className="input-field"
+                                    placeholder="6-digit code from SMS"
+                                    maxLength={6}
+                                    value={phoneOtpCode}
+                                    onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
+                                />
+                            )}
+
+                            {phoneMsg ? (
+                                <small style={{ marginTop: '0.25rem', display: 'block', color: phoneMsg.type === 'error' ? 'var(--danger-500)' : 'var(--text-secondary)' }}>
+                                    {phoneMsg.text}
+                                </small>
+                            ) : (
+                                <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
+                                    {phoneIsNew
+                                        ? 'Changing your number needs a quick SMS verification.'
+                                        : 'Used to reach you about your exam slot and results.'}
+                                </small>
+                            )}
                         </div>
 
                         <div className="input-group">
@@ -218,6 +310,7 @@ export default function ProfilePage() {
                             style={{ marginTop: '1rem' }}
                             disabled={
                                 isLoading ||
+                                (phoneIsNew && phoneOtpCode.length !== 6) ||
                                 (firstName === user.firstName &&
                                     lastName === user.lastName &&
                                     phone === (user.phone ?? '') &&

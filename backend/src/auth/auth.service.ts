@@ -218,12 +218,31 @@ export class AuthService {
         // Normalised on the way in so a self-edited number stays in the same
         // E.164 form phone sign-in looks accounts up by, and cannot collide
         // with a number another account already holds.
-        const phoneUpdate =
-            dto.phone === undefined
-                ? {}
-                : dto.phone.trim()
-                    ? { phone: await this.resolveVerifiedPhone(dto.phone, userId, dto.phoneCode) }
-                    : { phone: null };
+        //
+        // Verification (an SMS code) is only demanded when the number actually
+        // *changes*. Otherwise every profile save — even one that only edits the
+        // name — would fail for any student who already has a phone on file,
+        // because there is nothing in the form to satisfy the code check.
+        let phoneUpdate: { phone?: string | null } = {};
+        if (dto.phone !== undefined) {
+            if (!dto.phone.trim()) {
+                phoneUpdate = { phone: null };
+            } else {
+                const incoming = normalizePhone(dto.phone);
+                const current = await this.prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { phone: true },
+                });
+                if (current?.phone === incoming) {
+                    // Unchanged — no re-verification, nothing to write.
+                    phoneUpdate = {};
+                } else {
+                    phoneUpdate = {
+                        phone: await this.resolveVerifiedPhone(dto.phone, userId, dto.phoneCode),
+                    };
+                }
+            }
+        }
 
         const user = await this.prisma.user.update({
             where: { id: userId },

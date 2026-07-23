@@ -13,7 +13,7 @@ export interface SmsProvider {
 }
 
 /** Indian OTP routes address the subscriber number without the country code. */
-function toIndianLocal(toE164: string): string {
+export function toIndianLocal(toE164: string): string {
     const digits = toE164.replace(/\D/g, '');
     return digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
 }

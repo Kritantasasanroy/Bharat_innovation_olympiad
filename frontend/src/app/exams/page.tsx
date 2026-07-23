@@ -2,6 +2,7 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import PayToUnlockBanner from '@/components/PayToUnlockBanner';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -119,12 +120,15 @@ export default function StudentExamsPage() {
         <AuthGuard allowedRoles={['STUDENT']}>
             <Navbar />
             <main className="container page-content animate-fade-in">
-                <div className="page-header" style={{ marginBottom: 'var(--space-8)' }}>
+                <div className="page-header" style={{ marginBottom: 'var(--space-6)' }}>
                     <h1>My Exams</h1>
                     <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)' }}>
                         Your upcoming and open exams. You can start an exam once your slot opens.
                     </p>
                 </div>
+
+                {/* Paywall prompt — hidden once the student has an active pass. */}
+                <PayToUnlockBanner />
 
                 {loading ? (
                     <div className="loading-container" style={{ minHeight: '300px' }}>

@@ -16,6 +16,7 @@ import {
     Fast2SmsProvider,
     SmsProvider,
     TwoFactorSmsProvider,
+    toIndianLocal,
 } from './sms.provider';
 
 @Injectable()
@@ -125,6 +126,47 @@ export class NotificationService implements OnModuleInit {
             return true;
         } catch (err) {
             this.logger.error(`Admin mail to ${to} failed: ${(err as Error).message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Send an admin-composed SMS to one number via 2Factor's transactional route.
+     *
+     * Unlike OTP (which rides 2Factor's own DLT-registered template), free-text
+     * transactional SMS in India needs the account's **own** DLT sender id +
+     * approved template. So this needs `TWOFACTOR_SENDER_ID` and
+     * `TWOFACTOR_SMS_TEMPLATE` (a template whose single variable is the message).
+     * Without them, it logs and reports failure rather than silently dropping.
+     */
+    async sendAdminSms(toE164: string, message: string): Promise<boolean> {
+        const apiKey = process.env.TWOFACTOR_API_KEY?.trim();
+        const sender = process.env.TWOFACTOR_SENDER_ID?.trim();
+        const template = process.env.TWOFACTOR_SMS_TEMPLATE?.trim();
+
+        if (!apiKey || !sender || !template) {
+            this.logger.warn(
+                `SMS to ${toE164} not sent — TWOFACTOR_SENDER_ID / TWOFACTOR_SMS_TEMPLATE not configured.`,
+            );
+            return false;
+        }
+
+        const number = toIndianLocal(toE164);
+        const url =
+            `https://2factor.in/API/R1/?module=TRANS_SMS&apikey=${encodeURIComponent(apiKey)}` +
+            `&to=${encodeURIComponent(number)}&from=${encodeURIComponent(sender)}` +
+            `&templatename=${encodeURIComponent(template)}&var1=${encodeURIComponent(message)}`;
+
+        try {
+            const res = await fetch(url, { method: 'GET' });
+            const body = await res.text().catch(() => '');
+            // A 200 can still carry Status:"Error" (bad template, DLT mismatch…).
+            if (!res.ok || /"Status"\s*:\s*"Error"/i.test(body)) {
+                throw new Error(`2Factor ${res.status}: ${body.slice(0, 200)}`);
+            }
+            return true;
+        } catch (err) {
+            this.logger.error(`Admin SMS to ${toE164} failed: ${(err as Error).message}`);
             return false;
         }
     }

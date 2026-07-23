@@ -11,11 +11,17 @@ import {
 } from 'class-validator';
 
 export type MailAudience = 'ALL_STUDENTS' | 'CLASS' | 'CUSTOM';
+export type MailChannel = 'EMAIL' | 'SMS' | 'BOTH';
 
-/** An admin-composed email and who it goes to. */
+/** An admin-composed message, its channel(s), and who it goes to. */
 export class SendAdminMailDto {
     @IsIn(['ALL_STUDENTS', 'CLASS', 'CUSTOM'])
     audience: MailAudience;
+
+    /** Delivery channel. Defaults to EMAIL when omitted. */
+    @IsOptional()
+    @IsIn(['EMAIL', 'SMS', 'BOTH'])
+    channel?: MailChannel;
 
     /** Required when `audience` is `CLASS`. */
     @IsOptional()
@@ -24,16 +30,23 @@ export class SendAdminMailDto {
     @Max(12)
     classBand?: number;
 
-    /** The explicit recipient list, used when `audience` is `CUSTOM`. */
+    /** Explicit email recipients, used when `audience` is `CUSTOM`. */
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
     emails?: string[];
 
+    /** Explicit SMS recipients (phone numbers), used when `audience` is `CUSTOM`. */
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    phones?: string[];
+
+    /** Required for the email channel; ignored for SMS-only sends. */
+    @IsOptional()
     @IsString()
-    @MinLength(1)
     @MaxLength(200)
-    subject: string;
+    subject?: string;
 
     @IsString()
     @MinLength(1)

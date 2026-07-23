@@ -6,97 +6,108 @@ import api from '@/lib/api';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 type Audience = 'ALL_STUDENTS' | 'CLASS' | 'CUSTOM';
+type Channel = 'EMAIL' | 'SMS' | 'BOTH';
 
 const CLASS_OPTIONS = [6, 7, 8, 9, 10, 11, 12];
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const PHONE_RE = /^\+?\d[\d\s-]{8,}$/;
 
-interface SendResult {
+interface ChannelResult {
     total: number;
     sent: number;
     failed: number;
 }
+interface SendResult {
+    email?: ChannelResult;
+    sms?: ChannelResult;
+}
 
 /**
- * Admin outbound email. Compose an announcement and send it to every student,
- * a single class, or a typed list of addresses. Delivery goes through the same
- * Resend provider the transactional mails use.
+ * Admin outbound messaging. Compose an announcement and send it by email, SMS,
+ * or both — to every student, one class, or a typed list. Email goes through
+ * Resend; SMS through 2Factor's transactional route.
  */
 export default function AdminMailPage() {
     const [audience, setAudience] = useState<Audience>('ALL_STUDENTS');
+    const [channel, setChannel] = useState<Channel>('EMAIL');
     const [classBand, setClassBand] = useState(6);
-    const [customEmailsText, setCustomEmailsText] = useState('');
+    const [customText, setCustomText] = useState('');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
 
-    const [audienceCount, setAudienceCount] = useState<number | null>(null);
+    const [counts, setCounts] = useState<{ total: number; withPhone: number } | null>(null);
     const [sending, setSending] = useState(false);
     const [result, setResult] = useState<SendResult | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Parse the typed list into valid, deduplicated addresses.
-    const customEmails = useMemo(() => {
-        const parts = customEmailsText.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
-        return Array.from(new Set(parts.filter((e) => EMAIL_RE.test(e))));
-    }, [customEmailsText]);
+    const wantEmail = channel === 'EMAIL' || channel === 'BOTH';
+    const wantSms = channel === 'SMS' || channel === 'BOTH';
 
-    const recipientCount = audience === 'CUSTOM' ? customEmails.length : audienceCount;
+    // Split the custom list into valid emails and phone numbers.
+    const { customEmails, customPhones } = useMemo(() => {
+        const entries = customText.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+        const emails = Array.from(new Set(entries.map((e) => e.toLowerCase()).filter((e) => EMAIL_RE.test(e))));
+        const phones = Array.from(new Set(entries.filter((e) => PHONE_RE.test(e))));
+        return { customEmails: emails, customPhones: phones };
+    }, [customText]);
 
-    // For ALL/CLASS, ask the server how many students the audience resolves to.
-    const loadCount = useCallback(async () => {
+    const emailCount = audience === 'CUSTOM' ? customEmails.length : counts?.total ?? null;
+    const smsCount = audience === 'CUSTOM' ? customPhones.length : counts?.withPhone ?? null;
+
+    const loadCounts = useCallback(async () => {
         if (audience === 'CUSTOM') return;
-        setAudienceCount(null);
+        setCounts(null);
         try {
-            const { data } = await api.get<{ total: number }>('/admin/mail/audience-count', {
+            const { data } = await api.get<{ total: number; withPhone: number }>('/admin/mail/audience-count', {
                 params: { audience, ...(audience === 'CLASS' ? { classBand } : {}) },
             });
-            setAudienceCount(data.total);
+            setCounts(data);
         } catch {
-            setAudienceCount(null);
+            setCounts(null);
         }
     }, [audience, classBand]);
 
     useEffect(() => {
-        void loadCount();
-    }, [loadCount]);
+        void loadCounts();
+    }, [loadCounts]);
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
         setError(null);
         setResult(null);
 
-        if (!subject.trim() || !message.trim()) {
-            setError('Add a subject and a message.');
+        if (!message.trim()) {
+            setError('Write a message.');
             return;
         }
-        if (audience === 'CUSTOM' && customEmails.length === 0) {
-            setError('Add at least one valid email address.');
+        if (wantEmail && !subject.trim()) {
+            setError('Add a subject for the email.');
             return;
         }
-        if (recipientCount === 0) {
-            setError('No recipients match this audience.');
+        const totalTargets = (wantEmail ? emailCount ?? 0 : 0) + (wantSms ? smsCount ?? 0 : 0);
+        if (totalTargets === 0) {
+            setError('No recipients match this audience and channel.');
             return;
         }
 
-        const label =
-            audience === 'ALL_STUDENTS'
-                ? `all ${recipientCount ?? ''} active students`
-                : audience === 'CLASS'
-                    ? `${recipientCount ?? ''} students in Class ${classBand}`
-                    : `${customEmails.length} address${customEmails.length === 1 ? '' : 'es'}`;
-        if (!window.confirm(`Send this email to ${label}?`)) return;
+        const parts: string[] = [];
+        if (wantEmail) parts.push(`${emailCount ?? 0} by email`);
+        if (wantSms) parts.push(`${smsCount ?? 0} by SMS`);
+        if (!window.confirm(`Send this to ${parts.join(' and ')}?`)) return;
 
         setSending(true);
         try {
             const { data } = await api.post<SendResult>('/admin/mail/send', {
                 audience,
+                channel,
                 ...(audience === 'CLASS' ? { classBand } : {}),
-                ...(audience === 'CUSTOM' ? { emails: customEmails } : {}),
-                subject: subject.trim(),
+                ...(audience === 'CUSTOM' ? { emails: customEmails, phones: customPhones } : {}),
+                ...(wantEmail ? { subject: subject.trim() } : {}),
                 message,
             });
             setResult(data);
         } catch (err: any) {
-            setError(err?.response?.data?.message || 'Could not send the email. Please try again.');
+            setError(err?.response?.data?.message || 'Could not send. Please try again.');
         } finally {
             setSending(false);
         }
@@ -107,22 +118,48 @@ export default function AdminMailPage() {
             <Navbar />
             <div className="page-content">
                 <div className="page-header">
-                    <h1>Send email</h1>
+                    <h1>Send message</h1>
                     <p className="text-muted">
-                        Send an announcement to students. Choose an audience, write your message, and send —
-                        delivery is handled by the platform&apos;s email provider.
+                        Send an announcement to students by email, SMS, or both. Choose an audience,
+                        write your message, and send.
                     </p>
                 </div>
 
                 <form onSubmit={handleSubmit} style={{ maxWidth: 720 }}>
                     <div className="glass-card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
                         <div className="form-group">
+                            <label>Channel</label>
+                            <div className="class-pills">
+                                {([
+                                    ['EMAIL', 'Email'],
+                                    ['SMS', 'SMS'],
+                                    ['BOTH', 'Email + SMS'],
+                                ] as const).map(([value, text]) => (
+                                    <button
+                                        type="button"
+                                        key={value}
+                                        className={`class-pill ${channel === value ? 'active' : ''}`}
+                                        onClick={() => { setChannel(value); setResult(null); }}
+                                    >
+                                        {text}
+                                    </button>
+                                ))}
+                            </div>
+                            {wantSms && (
+                                <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                    SMS uses 2Factor&apos;s transactional route — it needs a DLT sender ID and
+                                    approved template configured on the server.
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="form-group">
                             <label>Audience</label>
                             <div className="class-pills">
                                 {([
                                     ['ALL_STUDENTS', 'All students'],
                                     ['CLASS', 'By class'],
-                                    ['CUSTOM', 'Specific emails'],
+                                    ['CUSTOM', 'Specific recipients'],
                                 ] as const).map(([value, text]) => (
                                     <button
                                         type="button"
@@ -154,55 +191,68 @@ export default function AdminMailPage() {
 
                         {audience === 'CUSTOM' && (
                             <div className="form-group">
-                                <label htmlFor="emails">Email addresses</label>
+                                <label htmlFor="recipients">
+                                    {channel === 'SMS' ? 'Mobile numbers' : channel === 'EMAIL' ? 'Email addresses' : 'Emails and mobile numbers'}
+                                </label>
                                 <textarea
-                                    id="emails"
+                                    id="recipients"
                                     className="form-control"
                                     rows={4}
                                     placeholder="Separate with commas, spaces or new lines"
-                                    value={customEmailsText}
-                                    onChange={(e) => setCustomEmailsText(e.target.value)}
+                                    value={customText}
+                                    onChange={(e) => setCustomText(e.target.value)}
                                 />
                                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                    {customEmails.length} valid address{customEmails.length === 1 ? '' : 'es'}
+                                    {wantEmail && `${customEmails.length} email${customEmails.length === 1 ? '' : 's'}`}
+                                    {wantEmail && wantSms && ' · '}
+                                    {wantSms && `${customPhones.length} number${customPhones.length === 1 ? '' : 's'}`}
                                 </span>
                             </div>
                         )}
 
-                        <div style={{ marginTop: 'var(--space-2)' }}>
-                            <span className="stats-pill">
-                                {recipientCount === null
-                                    ? 'Counting recipients…'
-                                    : `${recipientCount} recipient${recipientCount === 1 ? '' : 's'}`}
-                            </span>
+                        <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {wantEmail && (
+                                <span className="stats-pill">
+                                    {emailCount === null ? 'Counting…' : `${emailCount} by email`}
+                                </span>
+                            )}
+                            {wantSms && (
+                                <span className="stats-pill">
+                                    {smsCount === null ? 'Counting…' : `${smsCount} by SMS`}
+                                </span>
+                            )}
                         </div>
                     </div>
 
                     <div className="glass-card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
-                        <div className="form-group">
-                            <label htmlFor="subject">Subject</label>
-                            <input
-                                id="subject"
-                                className="form-control"
-                                maxLength={200}
-                                placeholder="e.g. Your Olympiad exam is this Saturday"
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
-                            />
-                        </div>
+                        {wantEmail && (
+                            <div className="form-group">
+                                <label htmlFor="subject">Subject <span className="text-muted">(email)</span></label>
+                                <input
+                                    id="subject"
+                                    className="form-control"
+                                    maxLength={200}
+                                    placeholder="e.g. Your Olympiad exam is this Saturday"
+                                    value={subject}
+                                    onChange={(e) => setSubject(e.target.value)}
+                                />
+                            </div>
+                        )}
                         <div className="form-group">
                             <label htmlFor="message">Message</label>
                             <textarea
                                 id="message"
                                 className="form-control"
-                                rows={10}
+                                rows={9}
                                 maxLength={10000}
-                                placeholder="Write your announcement here. Blank lines become paragraphs."
+                                placeholder="Write your announcement here."
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                             />
                             <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                Plain text only — it is sent inside the branded email template.
+                                {wantSms
+                                    ? 'Keep SMS short — long messages are billed as multiple parts.'
+                                    : 'Blank lines become paragraphs in the branded email template.'}
                             </span>
                         </div>
                     </div>
@@ -210,24 +260,17 @@ export default function AdminMailPage() {
                     {error && <div className="form-error" style={{ marginBottom: 'var(--space-3)' }}>{error}</div>}
 
                     {result && (
-                        <div
-                            className="glass-card"
-                            style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-3)' }}
-                        >
+                        <div className="glass-card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-3)' }}>
                             <strong>Sent.</strong>{' '}
                             <span className="text-muted">
-                                {result.sent} delivered
-                                {result.failed > 0 ? `, ${result.failed} failed` : ''} of {result.total}.
+                                {result.email && `Email: ${result.email.sent}/${result.email.total} delivered${result.email.failed ? `, ${result.email.failed} failed` : ''}. `}
+                                {result.sms && `SMS: ${result.sms.sent}/${result.sms.total} delivered${result.sms.failed ? `, ${result.sms.failed} failed` : ''}.`}
                             </span>
                         </div>
                     )}
 
-                    <button
-                        type="submit"
-                        className="btn btn-primary"
-                        disabled={sending || recipientCount === 0}
-                    >
-                        {sending ? 'Sending…' : 'Send email'}
+                    <button type="submit" className="btn btn-primary" disabled={sending}>
+                        {sending ? 'Sending…' : 'Send message'}
                     </button>
                 </form>
             </div>

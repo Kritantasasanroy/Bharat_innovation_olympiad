@@ -2,20 +2,37 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import PayToUnlockBanner from '@/components/PayToUnlockBanner';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-interface UpcomingExam {
+type Phase =
+    | 'DRAFT'
+    | 'SCHEDULED'
+    | 'NEEDS_SLOT'
+    | 'SLOT_UPCOMING'
+    | 'OPEN'
+    | 'SLOT_MISSED'
+    | 'ENDED';
+
+interface ExamInstance {
+    id: string;
+    startsAt: string;
+    phase: Phase;
+    canStart: boolean;
+}
+
+interface AvailableExam {
     id: string;
     title: string;
     durationMinutes: number;
+    phase: Phase;
+    canStart: boolean;
     isCompleted?: boolean;
-    instances?: {
-        startsAt: string;
-        attempts: { status: string }[];
-    }[];
+    startBlockedReason?: string | null;
+    instances?: ExamInstance[];
 }
 
 interface ResultSummary {
@@ -28,40 +45,49 @@ interface ResultSummary {
     isReleased?: boolean;
 }
 
+/** What the non-startable phases say on the dashboard, in the student's words. */
+const PHASE_LABEL: Record<Phase, string> = {
+    DRAFT: 'Unavailable',
+    SCHEDULED: 'Not open yet',
+    NEEDS_SLOT: 'Slot needed',
+    SLOT_UPCOMING: 'Your slot is coming up',
+    OPEN: 'Open now',
+    SLOT_MISSED: 'Slot missed',
+    ENDED: 'Closed',
+};
+
 export default function StudentDashboard() {
     const { user } = useAuth();
-    const [upcomingExams, setUpcomingExams] = useState<UpcomingExam[]>([]);
+    const [exams, setExams] = useState<AvailableExam[]>([]);
     const [recentResults, setRecentResults] = useState<ResultSummary[]>([]);
-    const [stats, setStats] = useState({ upcoming: 0, completed: 0, avgScore: '—' });
+    const [stats, setStats] = useState({ open: 0, completed: 0, avgScore: '—' });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch upcoming exams
-                const examsRes = await api.get<UpcomingExam[]>('/exams/upcoming');
-                setUpcomingExams(examsRes.data || []);
-
-                // Fetch recent results
-                const resultsRes = await api.get<ResultSummary[]>('/attempts/recent');
-                setRecentResults(resultsRes.data || []);
-
-                // Calculate stats from results
-                const releasedData = resultsRes.data || [];
-                const completed = releasedData.length;
-                const avg = completed > 0
-                    ? Math.round(releasedData.reduce((sum: number, r: ResultSummary) => sum + (r.score! / (r.totalMarks || 1)) * 100, 0) / completed)
-                    : 0;
-                setStats({
-                    upcoming: examsRes.data?.length || 0,
-                    completed,
-                    avgScore: completed > 0 ? `${avg}%` : '—'
-                });
+                const examsRes = await api.get<AvailableExam[]>('/exams/upcoming');
+                const list = examsRes.data || [];
+                setExams(list);
+                setStats((s) => ({ ...s, open: list.filter((e) => e.canStart).length }));
             } catch {
-                // API endpoints may not exist yet — show empty state
-            } finally {
-                setLoading(false);
+                // Leave the empty state.
             }
+            try {
+                const resultsRes = await api.get<ResultSummary[]>('/attempts/recent');
+                const released = resultsRes.data || [];
+                setRecentResults(released);
+                const completed = released.length;
+                const avg = completed > 0
+                    ? Math.round(
+                        released.reduce((sum, r) => sum + (r.score / (r.totalMarks || 1)) * 100, 0) / completed,
+                    )
+                    : 0;
+                setStats((s) => ({ ...s, completed, avgScore: completed > 0 ? `${avg}%` : '—' }));
+            } catch {
+                // Results endpoint optional — leave defaults.
+            }
+            setLoading(false);
         };
         fetchData();
     }, []);
@@ -79,11 +105,14 @@ export default function StudentDashboard() {
                     </div>
                 </div>
 
+                {/* Paywall prompt — hidden once the student has an active pass. */}
+                <PayToUnlockBanner />
+
                 {/* Stats */}
                 <div className="grid-3 dashboard-stats">
                     <div className="stat-card">
-                        <div className="stat-value">{stats.upcoming}</div>
-                        <div className="stat-label">Upcoming Exams</div>
+                        <div className="stat-value">{stats.open}</div>
+                        <div className="stat-label">Open Now</div>
                     </div>
                     <div className="stat-card">
                         <div className="stat-value">{stats.completed}</div>
@@ -95,21 +124,29 @@ export default function StudentDashboard() {
                     </div>
                 </div>
 
-                {/* Upcoming Exams */}
+                {/* Exams */}
                 <section className="dashboard-section">
-                    <h2>Upcoming Exams</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <h2>Your Exams</h2>
+                        <Link href="/exams" style={{ fontSize: '0.9rem' }}>View all →</Link>
+                    </div>
                     <div className="exam-list">
                         {loading ? (
                             <div className="loading-container" style={{ minHeight: '120px' }}>
                                 <div className="spinner" />
                             </div>
-                        ) : upcomingExams.length > 0 ? (
-                            upcomingExams.map((exam) => {
+                        ) : exams.length > 0 ? (
+                            exams.map((exam) => {
                                 const nextInstance = exam.instances?.[0];
                                 const isCompleted = exam.isCompleted || false;
-                                
+                                const startable = !isCompleted && exam.canStart;
+
                                 return (
-                                    <div key={exam.id} className="glass-card exam-item" style={isCompleted ? { filter: 'grayscale(1)', opacity: 0.7 } : {}}>
+                                    <div
+                                        key={exam.id}
+                                        className="glass-card exam-item"
+                                        style={isCompleted ? { filter: 'grayscale(1)', opacity: 0.7 } : {}}
+                                    >
                                         <div className="exam-item-info">
                                             <h3>{exam.title}</h3>
                                             <div className="exam-meta">
@@ -122,18 +159,26 @@ export default function StudentDashboard() {
                                                 <button className="btn btn-secondary btn-sm" disabled style={{ cursor: 'not-allowed' }}>
                                                     ✓ Completed
                                                 </button>
-                                            ) : (
+                                            ) : startable ? (
                                                 <Link href={`/exams/${exam.id}/instructions`} className="btn btn-primary btn-sm">
                                                     Start Exam
+                                                </Link>
+                                            ) : (
+                                                <Link
+                                                    href="/exams"
+                                                    className="btn btn-secondary btn-sm"
+                                                    title={exam.startBlockedReason || undefined}
+                                                >
+                                                    {PHASE_LABEL[exam.phase] ?? 'View'}
                                                 </Link>
                                             )}
                                         </div>
                                     </div>
-                                )
+                                );
                             })
                         ) : (
                             <div className="glass-card exam-item" style={{ justifyContent: 'center', color: 'var(--text-muted)', padding: 'var(--space-8)' }}>
-                                No upcoming exams at the moment. Check back soon!
+                                No exams available for your class yet. Check back soon!
                             </div>
                         )}
                     </div>
@@ -176,8 +221,6 @@ export default function StudentDashboard() {
                         )}
                     </div>
                 </section>
-
-                
             </main>
         </AuthGuard>
     );

@@ -13,7 +13,7 @@ interface AuthState {
     loginWithPhone: (phone: string, code: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
-    updateProfile: (data: { firstName: string; lastName: string; phone?: string; classBand: number }) => Promise<void>;
+    updateProfile: (data: { firstName: string; lastName: string; phone?: string; phoneCode?: string; classBand: number }) => Promise<void>;
     setUser: (user: User | null) => void;
 }
 
