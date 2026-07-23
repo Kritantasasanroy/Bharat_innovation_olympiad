@@ -55,3 +55,53 @@ export const emailOtp = {
         neonFetch('/sign-in/email-otp', { email, otp }),
 };
 
+/**
+ * Normalise a typed number to E.164 (`+91XXXXXXXXXX`).
+ *
+ * Mirrors `backend/src/auth/phone.helpers.ts`: Neon Auth keys its OTP on the
+ * exact string sent, so "send" and "verify" must agree, and the backend looks
+ * the account up by the same normalised form.
+ */
+export function normalizePhone(raw: string): string {
+    const trimmed = (raw ?? '').trim();
+    const hasPlus = trimmed.startsWith('+');
+    let digits = trimmed.replace(/\D/g, '');
+
+    if (!hasPlus) {
+        if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+        if (digits.length === 10) digits = `91${digits}`;
+    }
+    return `+${digits}`;
+}
+
+export function isValidPhone(raw: string): boolean {
+    const digits = normalizePhone(raw).replace(/\D/g, '');
+    return digits.length >= 8 && digits.length <= 15;
+}
+
+/**
+ * OTP helpers for phone sign-in.
+ *
+ * These hit *our* backend, not Neon. Neon's phone plugin accepts a send request
+ * and returns 200, but its `send.otp` webhook payload carries no recipient
+ * phone number, so there is no way to actually deliver the code — nothing ever
+ * arrives. We issue and verify phone codes ourselves and deliver them over
+ * WhatsApp (SMS to Indian numbers is carrier-blocked without DLT registration).
+ * Email OTP still goes through Neon, above.
+ */
+export const phoneOtp = {
+    /** Ask the backend to send a 6-digit code over WhatsApp. */
+    sendOtp: async (phone: string) => {
+        try {
+            const { default: api } = await import('@/lib/api');
+            const { data } = await api.post('/auth/phone/send-otp', { phone: normalizePhone(phone) });
+            return { data, error: null };
+        } catch (e: any) {
+            return {
+                data: null,
+                error: { message: e?.response?.data?.message || 'Could not send the code.' },
+            };
+        }
+    },
+};
+

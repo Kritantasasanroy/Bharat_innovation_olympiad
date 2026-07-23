@@ -16,9 +16,11 @@ model User {
   role            Role           @default(STUDENT)
   classBand       Int?
   schoolId        String?
-  /// Contact number. Editable by the account holder from their profile page
-  /// (students) — schools and partners keep theirs on their request rows.
-  phone           String?
+  /// Contact number in E.164 (`+91XXXXXXXXXX`). Editable by the account holder
+  /// from their profile page (students) — schools and partners keep theirs on
+  /// their request rows. Unique because it doubles as a login identifier for
+  /// phone-OTP sign-in, which resolves an account by this column alone.
+  phone           String?        @unique
   faceEmbedding   Bytes?
   profileImageUrl String?
   isActive        Boolean        @default(true)
@@ -40,6 +42,7 @@ model User {
   school          School?        @relation(fields: [schoolId], references: [id])
   bookings        Booking[]
   payments        Payment[]
+  accessPass      AccessPass?
   certificates    Certificate[]
   grievances      Grievance[]
   refundRequests  RefundRequest[]
@@ -777,6 +780,7 @@ model Payment {
   couponId            String?
   coupon              Coupon?       @relation(fields: [couponId], references: [id])
   booking             Booking?
+  accessPass          AccessPass?
   refundRequest       RefundRequest?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -784,6 +788,60 @@ model Payment {
   @@index([userId])
   @@index([status])
   @@index([razorpayOrderId])
+}
+
+/// A student's one-off platform fee. Paying once grants access to *every*
+/// exam, so this is account-level (`userId` unique) rather than per-slot —
+/// unlike `Booking`, which reserves a specific seat. `AttemptService`
+/// treats an ACTIVE pass as the authorisation to sit any real exam.
+model AccessPass {
+  id        String           @id @default(uuid())
+  userId    String           @unique
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The payment that bought this pass. Null only while an order is being
+  /// created; set for the lifetime of the pass afterwards.
+  paymentId String?          @unique
+  payment   Payment?         @relation(fields: [paymentId], references: [id])
+  status    AccessPassStatus @default(PENDING)
+  /// Amount actually charged, in paise — kept here so a later price change
+  /// never rewrites what a student was billed.
+  amount    Int
+  grantedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([status])
+}
+
+/// A pending phone sign-in code.
+///
+/// Issued and verified by this backend rather than Neon Auth: Neon's `send.otp`
+/// webhook payload carries no recipient phone number, so it cannot address a
+/// WhatsApp message. Email OTP still goes through Neon untouched.
+model PhoneOtp {
+  id        String    @id @default(uuid())
+  /// E.164, normalised by `normalizePhone` so lookups match what was sent.
+  phone     String
+  /// SHA-256 of the code — a leaked DB row must not hand over a live code.
+  codeHash  String
+  expiresAt DateTime
+  /// Set once redeemed; a code is single-use.
+  consumedAt DateTime?
+  /// Wrong guesses so far. Caps brute-forcing a 6-digit code.
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([phone, expiresAt])
+}
+
+enum AccessPassStatus {
+  /// Order created, payment not yet confirmed — grants nothing.
+  PENDING
+  /// Paid and confirmed — unlocks every exam.
+  ACTIVE
+  /// Refunded or revoked by an admin — no longer unlocks anything.
+  REVOKED
 }
 
 model Coupon {

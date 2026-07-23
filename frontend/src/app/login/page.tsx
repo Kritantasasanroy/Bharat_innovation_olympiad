@@ -5,32 +5,52 @@ import { useAuthStore } from '@/store/authStore';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { emailOtp } from '@/lib/auth-client';
+import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
 import { FormEvent, useState } from 'react';
 
-type Step = 'email' | 'otp';
+type Step = 'identifier' | 'otp';
+type Method = 'email' | 'phone';
 
 export default function LoginPage() {
-    const [step, setStep] = useState<Step>('email');
+    const [step, setStep] = useState<Step>('identifier');
+    const [method, setMethod] = useState<Method>('email');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     const loginWithEmail = useAuthStore((s) => s.loginWithEmail);
+    const loginWithPhone = useAuthStore((s) => s.loginWithPhone);
     const router = useRouter();
+
+    const isPhone = method === 'phone';
+    const identifier = isPhone ? phone : email;
+
+    /** Send the code, shared by the first submit and the resend button. */
+    const sendCode = async () => {
+        return isPhone ? phoneOtp.sendOtp(phone) : emailOtp.sendSignInOtp(email);
+    };
+
     // Step 1: Send OTP
     const handleSendOtp = async (e: FormEvent) => {
         e.preventDefault();
         setError('');
+        if (isPhone && !isValidPhone(phone)) {
+            setError('Enter a valid mobile number.');
+            return;
+        }
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendSignInOtp(email);
+            const { error: otpError } = await sendCode();
             if (otpError) {
-                setError(otpError.message || 'Failed to send code. Make sure this email is registered.');
+                setError(
+                    otpError.message ||
+                    `Failed to send code. Make sure this ${isPhone ? 'number' : 'email'} is registered.`,
+                );
             } else {
-                setSuccess(`A 6-digit code has been sent to ${email}`);
+                setSuccess(`A 6-digit code has been sent to ${identifier}`);
                 setStep('otp');
             }
         } catch (err: any) {
@@ -51,16 +71,19 @@ export default function LoginPage() {
         }
         setIsLoading(true);
         try {
-            // Verify OTP with Neon Auth
-            const { error: signInError } = await emailOtp.signIn(email, otp);
-            if (signInError) {
-                setError(signInError.message || 'Invalid or expired code. Please try again.');
-                setIsLoading(false);
-                return;
+            if (isPhone) {
+                // The phone code is verified by our backend as part of signing
+                // in — there is no separate verify step to run first.
+                await loginWithPhone(phone, otp);
+            } else {
+                const { error: signInError } = await emailOtp.signIn(email, otp);
+                if (signInError) {
+                    setError(signInError.message || 'Invalid or expired code. Please try again.');
+                    setIsLoading(false);
+                    return;
+                }
+                await loginWithEmail(email);
             }
-
-            // OTP verified ✓ — exchange email for our own JWT via /auth/login-sync
-            await loginWithEmail(email);
             router.push('/dashboard');
         } catch (err: any) {
             console.error('OTP sign in error:', err);
@@ -80,17 +103,23 @@ export default function LoginPage() {
         setSuccess('');
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendSignInOtp(email);
+            const { error: otpError } = await sendCode();
             if (otpError) {
                 setError(otpError.message || 'Failed to resend code.');
             } else {
-                setSuccess('A new code has been sent to your email.');
+                setSuccess(`A new code has been sent to your ${isPhone ? 'phone' : 'email'}.`);
             }
         } catch {
             setError('Network error. Please try again.');
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const switchMethod = (next: Method) => {
+        setMethod(next);
+        setError('');
+        setSuccess('');
     };
 
     return (
@@ -109,7 +138,7 @@ export default function LoginPage() {
                         <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '18px', width: 'auto' }} />
                     </p>
                     <p className="auth-subtitle">
-                        {step === 'email' ? 'Sign in to your account' : 'Enter verification code'}
+                        {step === 'identifier' ? 'Sign in to your account' : 'Enter verification code'}
                     </p>
                 </div>
 
@@ -124,21 +153,68 @@ export default function LoginPage() {
                     </div>
                 )}
 
-                {step === 'email' ? (
+                {step === 'identifier' ? (
                     <form onSubmit={handleSendOtp} className="auth-form">
-                        <div className="input-group">
-                            <label className="input-label" htmlFor="student-email">Email Address</label>
-                            <input
-                                id="student-email"
-                                type="email"
-                                className="input-field"
-                                placeholder="you@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                                suppressHydrationWarning
-                            />
+                        <div
+                            role="tablist"
+                            aria-label="Sign-in method"
+                            style={{
+                                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem',
+                                background: 'var(--bg-tertiary, rgba(127,127,127,0.12))',
+                                borderRadius: '10px', padding: '0.25rem', marginBottom: '1.25rem',
+                            }}
+                        >
+                            {(['email', 'phone'] as const).map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={method === m}
+                                    onClick={() => switchMethod(m)}
+                                    className="btn"
+                                    style={{
+                                        padding: '0.6rem 0.5rem', borderRadius: '8px', fontSize: '0.9rem',
+                                        fontWeight: 600, border: 'none',
+                                        background: method === m ? 'var(--color-primary)' : 'transparent',
+                                        color: method === m ? '#fff' : 'var(--text-secondary)',
+                                    }}
+                                >
+                                    {m === 'email' ? 'Email' : 'Mobile'}
+                                </button>
+                            ))}
                         </div>
+
+                        {isPhone ? (
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="student-phone">Mobile Number</label>
+                                <input
+                                    id="student-phone"
+                                    type="tel"
+                                    inputMode="tel"
+                                    autoComplete="tel"
+                                    className="input-field"
+                                    placeholder="+91 98765 43210"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    required
+                                    suppressHydrationWarning
+                                />
+                            </div>
+                        ) : (
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="student-email">Email Address</label>
+                                <input
+                                    id="student-email"
+                                    type="email"
+                                    className="input-field"
+                                    placeholder="you@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    suppressHydrationWarning
+                                />
+                            </div>
+                        )}
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
                             {isLoading ? 'Sending Code...' : 'Send Verification Code →'}
                         </button>
@@ -146,7 +222,7 @@ export default function LoginPage() {
                 ) : (
                     <form onSubmit={handleVerifyOtp} className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', textAlign: 'center', fontSize: '0.95rem' }}>
-                            Enter the 6-digit code sent to <strong>{email}</strong>
+                            Enter the 6-digit code sent to <strong>{identifier}</strong>
                         </p>
                         <div className="input-group">
                             <label className="input-label" htmlFor="otp">Verification Code</label>
@@ -170,11 +246,11 @@ export default function LoginPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                             <button
                                 type="button"
-                                onClick={() => { setStep('email'); setOtp(''); setError(''); setSuccess(''); }}
+                                onClick={() => { setStep('identifier'); setOtp(''); setError(''); setSuccess(''); }}
                                 className="btn"
                                 style={{ background: 'transparent', color: 'var(--text-secondary)', padding: '0.5rem' }}
                             >
-                                ← Change email
+                                {isPhone ? '← Change number' : '← Change email'}
                             </button>
                             <button
                                 type="button"

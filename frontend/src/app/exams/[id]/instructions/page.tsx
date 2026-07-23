@@ -49,6 +49,20 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
             .catch(() => setFaceEnrollStatus('not_enrolled'));
     }, []);
 
+    // Exam access pass — the server refuses to start an exam without one, so
+    // surface it here rather than letting the student finish every device
+    // check only to be turned away by the player. `requiredForExam` keeps the
+    // free practice paper from showing a lock it will never hit.
+    const [passStatus, setPassStatus] = useState<'checking' | 'active' | 'locked'>('checking');
+    useEffect(() => {
+        api.get('/access-pass/me', { params: { examId: id } })
+            .then((r) => {
+                const needsPass = r.data.requiredForExam !== false;
+                setPassStatus(!needsPass || r.data.isActive ? 'active' : 'locked');
+            })
+            .catch(() => setPassStatus('locked'));
+    }, [id]);
+
     // Once camera permission is granted, also warm up face-api.js so Capture is instant.
     useEffect(() => {
         if (deviceChecks.webcam && faceEnrollStatus === 'not_enrolled') {
@@ -247,11 +261,28 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         </div>
                     )}
 
+                    {/* Access pass gate — mirrors the server-side paywall */}
+                    {passStatus === 'locked' && (
+                        <div
+                            className="glass-card"
+                            style={{ padding: '1.25rem', marginTop: '1rem', borderLeft: '4px solid var(--color-primary)' }}
+                        >
+                            <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.05rem' }}>🔒 Exam access locked</h3>
+                            <p style={{ color: 'var(--text-secondary)', margin: '0 0 1rem', fontSize: '0.92rem' }}>
+                                One payment unlocks every olympiad exam. You only pay once — the free
+                                practice paper stays available either way.
+                            </p>
+                            <button className="btn btn-primary" onClick={() => router.push('/unlock')}>
+                                Unlock All Exams
+                            </button>
+                        </div>
+                    )}
+
                     {/* Start Button */}
                     <div className="instructions-actions">
                         <button
                             className="btn btn-primary btn-lg"
-                            disabled={!deviceChecks.viewport || !deviceChecks.fullscreen || !webcamStarted || faceEnrollStatus !== 'enrolled'}
+                            disabled={!deviceChecks.viewport || !deviceChecks.fullscreen || !webcamStarted || faceEnrollStatus !== 'enrolled' || passStatus === 'locked'}
                             onClick={handleStartClick}
                         >
                             ✅ Start Exam

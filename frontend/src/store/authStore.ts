@@ -10,6 +10,7 @@ interface AuthState {
     login: (email: string, password: string) => Promise<void>;
     register: (data: any) => Promise<void>;
     loginWithEmail: (email: string) => Promise<void>;
+    loginWithPhone: (phone: string, code: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
     updateProfile: (data: { firstName: string; lastName: string; phone?: string; classBand: number }) => Promise<void>;
@@ -52,6 +53,13 @@ export const useAuthStore = create<AuthState>((set) => ({
      */
     loginWithEmail: async (email: string) => {
         const { data } = await api.post<{ accessToken: string; user: User }>('/auth/login-sync', { email });
+        localStorage.setItem('accessToken', data.accessToken);
+        set({ user: data.user, isAuthenticated: true, isLoading: false });
+    },
+
+    loginWithPhone: async (phone: string, code: string) => {
+        // The code goes to the server — it verifies and only then issues a JWT.
+        const { data } = await api.post<{ accessToken: string; user: User }>('/auth/login-sync-phone', { phone, code });
         localStorage.setItem('accessToken', data.accessToken);
         set({ user: data.user, isAuthenticated: true, isLoading: false });
     },

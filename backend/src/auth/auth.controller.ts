@@ -4,7 +4,14 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { AuthService } from './auth.service';
-import { LoginSyncDto, SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
+import {
+    LoginSyncDto,
+    PhoneLoginSyncDto,
+    SendPhoneOtpDto,
+    SyncUserDto,
+    UpdateProfileDto,
+} from './dto/auth.dto';
+import { PhoneOtpService } from './phone-otp.service';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -15,6 +22,7 @@ export class AuthController {
         private authService: AuthService,
         private jwtService: JwtService,
         private partnerAdminApi: PartnerAdminApiClient,
+        private phoneOtpService: PhoneOtpService,
     ) { }
 
     /**
@@ -67,6 +75,36 @@ export class AuthController {
         const user = await this.authService.getUserByEmail(dto.email);
         if (!user) {
             throw new UnauthorizedException('No account found for this email. Please register first.');
+        }
+        const token = this.jwtService.sign(
+            { sub: user.id, email: user.email, role: user.role },
+            { expiresIn: '24h' },
+        );
+        return { accessToken: token, user };
+    }
+
+    /** PUBLIC — issue a WhatsApp sign-in code for a phone number. */
+    @Post('phone/send-otp')
+    async sendPhoneOtp(@Body() dto: SendPhoneOtpDto) {
+        return this.phoneOtpService.sendOtp(dto.phone);
+    }
+
+    /**
+     * PUBLIC — verify the code and sign in.
+     *
+     * The code is checked here rather than trusting the client's word that it
+     * verified: an endpoint that issued a JWT for any phone number in the body
+     * would let anyone sign in as anyone.
+     */
+    @Post('login-sync-phone')
+    async loginSyncPhone(@Body() dto: PhoneLoginSyncDto) {
+        const phone = await this.phoneOtpService.verifyOtp(dto.phone, dto.code);
+
+        const user = await this.authService.getUserByPhone(phone);
+        if (!user) {
+            throw new UnauthorizedException(
+                'No account found for this phone number. Please register first.',
+            );
         }
         const token = this.jwtService.sign(
             { sub: user.id, email: user.email, role: user.role },

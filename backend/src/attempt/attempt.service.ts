@@ -3,6 +3,7 @@ import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
+import { AccessPassService } from '../payment/access-pass.service';
 
 // Fields returned to students — correctAnswer intentionally excluded
 const QUESTION_SELECT = {
@@ -87,7 +88,10 @@ function scoreQuestion(question: any, answer: any): ScoringResult {
 
 @Injectable()
 export class AttemptService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private accessPassService: AccessPassService,
+    ) { }
 
     // ── Seeded PRNG helpers ─────────────────────────────────────────────────
 
@@ -260,6 +264,15 @@ export class AttemptService {
         // and the student's own slot window are all checked here, server-side,
         // regardless of what the UI showed.
         const demo = isDemoExam(instance.examId);
+
+        // The paywall. Every route into the exam player funnels through
+        // startAttempt, so checking here — rather than in the UI — is what
+        // makes it unbypassable: a student calling this endpoint directly,
+        // deep-linking to /play, or replaying an old attempt id all land here.
+        // Practice exams stay free by design.
+        if (!demo && !(await this.accessPassService.hasActivePass(userId))) {
+            throw new ForbiddenException('ACCESS_PASS_REQUIRED');
+        }
 
         const booking = demo
             ? null

@@ -6,7 +6,7 @@ import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { emailOtp } from '@/lib/auth-client';
+import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import SchoolPicker from '@/components/SchoolPicker';
 import type { DirectorySchool } from '@/lib/schools';
@@ -30,6 +30,42 @@ export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
     const register = useAuthStore((s) => s.register);
     const router = useRouter();
+
+    // Optional mobile number, verified inline by its own OTP. Only a *verified*
+    // number is submitted — an unverified one would let a student claim someone
+    // else's number and lock the real owner out of registering it.
+    const [phone, setPhone] = useState('');
+    const [phoneOtpCode, setPhoneOtpCode] = useState('');
+    const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+    const [phoneVerified, setPhoneVerified] = useState(false);
+    const [phoneBusy, setPhoneBusy] = useState(false);
+    const [phoneMsg, setPhoneMsg] = useState('');
+
+    const handleSendPhoneOtp = async () => {
+        setPhoneMsg('');
+        if (!isValidPhone(phone)) {
+            setPhoneMsg('Enter a valid mobile number.');
+            return;
+        }
+        setPhoneBusy(true);
+        try {
+            const { error: otpError } = await phoneOtp.sendOtp(phone);
+            if (otpError) {
+                setPhoneMsg(otpError.message || 'Could not send the code.');
+            } else {
+                setPhoneOtpSent(true);
+                setPhoneMsg('Code sent by SMS.');
+            }
+        } catch {
+            setPhoneMsg('Network error. Please try again.');
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
+
+    // No inline verify step: the code is submitted with the form and checked
+    // server-side at /auth/sync. Verifying here would consume the single-use
+    // code before registration could use it.
 
     // Mandatory face enrollment (step 3, after account creation)
     const [faceCameraOn, setFaceCameraOn] = useState(false);
@@ -144,6 +180,10 @@ export default function RegisterPage() {
                 ...formData,
                 ...(school ? { schoolCode: school.code } : {}),
                 ...(referralCode ? { referralCode } : {}),
+                // Both, or neither — the backend rejects a phone without a code.
+                ...(phone.trim() && phoneOtpCode.length === 6
+                    ? { phone, phoneCode: phoneOtpCode }
+                    : {}),
             });
             clearReferralCode();
 
@@ -271,6 +311,44 @@ export default function RegisterPage() {
                                 placeholder="you@example.com" value={formData.email}
                                 onChange={handleChange} required suppressHydrationWarning
                             />
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="phone">
+                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional — lets you sign in by OTP)</span>
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
+                                    className="input-field" placeholder="+91 98765 43210"
+                                    value={phone}
+                                    onChange={(e) => { setPhone(e.target.value); setPhoneOtpSent(false); setPhoneMsg(''); }}
+                                    suppressHydrationWarning
+                                />
+                                <button
+                                    type="button" className="btn"
+                                    onClick={handleSendPhoneOtp}
+                                    disabled={phoneBusy || !phone.trim()}
+                                    style={{ whiteSpace: 'nowrap', background: 'var(--bg-tertiary, rgba(127,127,127,0.15))', color: 'var(--text-primary)' }}
+                                >
+                                    {phoneOtpSent ? 'Resend' : 'Send code'}
+                                </button>
+                            </div>
+
+                            {phoneOtpSent && (
+                                <input
+                                    type="text" inputMode="numeric" className="input-field"
+                                    placeholder="6-digit code from WhatsApp" maxLength={6} value={phoneOtpCode}
+                                    onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
+                                />
+                            )}
+
+                            {phoneMsg && (
+                                <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {phoneMsg}
+                                </p>
+                            )}
                         </div>
 
                         <div className="input-group">

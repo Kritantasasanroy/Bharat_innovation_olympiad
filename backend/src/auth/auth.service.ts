@@ -1,14 +1,19 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
 import { SchoolSlotService } from '../slot/school-slot.service';
 import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
+import { PhoneOtpService } from './phone-otp.service';
+import { normalizePhone } from './phone.helpers';
 
 @Injectable()
 export class AuthService {
     constructor(
         private prisma: PrismaService,
         private schoolSlotService: SchoolSlotService,
+        private notifications: NotificationService,
+        private phoneOtpService: PhoneOtpService,
     ) { }
 
     /**
@@ -30,6 +35,38 @@ export class AuthService {
         return school.id;
     }
 
+    /**
+     * A verified phone can only back one account, so reject a number already
+     * held by someone else before writing — the unique index would otherwise
+     * surface as an opaque 500 at the end of registration.
+     */
+    private async resolveVerifiedPhone(
+        rawPhone: string | undefined,
+        currentUserId?: string,
+        otpCode?: string,
+    ): Promise<string | undefined> {
+        if (!rawPhone?.trim()) return undefined;
+
+        // Ownership is proven server-side, always. Storing a client-supplied
+        // number unchecked would let someone claim a stranger's number and
+        // then sign in as them by phone OTP.
+        if (!otpCode?.trim()) {
+            throw new BadRequestException('Verify your mobile number with the code we sent you.');
+        }
+        const phone = await this.phoneOtpService.verifyOtp(rawPhone, otpCode);
+
+        const holder = await this.prisma.user.findUnique({
+            where: { phone },
+            select: { id: true },
+        });
+        if (holder && holder.id !== currentUserId) {
+            throw new BadRequestException(
+                'That phone number is already registered to another account. Sign in with it instead.',
+            );
+        }
+        return phone;
+    }
+
     async syncUser(email: string, dto: SyncUserDto) {
         const existing = await this.prisma.user.findUnique({ where: { email } });
 
@@ -45,6 +82,7 @@ export class AuthService {
             // otherwise they stay invisible to every school-scoped query.
             const schoolId =
                 existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+            const phone = await this.resolveVerifiedPhone(dto.phone, existing.id, dto.phoneCode);
 
             const claimed = await this.prisma.user.update({
                 where: { id: existing.id },
@@ -54,6 +92,7 @@ export class AuthService {
                     classBand: dto.classBand ?? existing.classBand,
                     schoolId,
                     activatedAt: new Date(),
+                    ...(phone ? { phone } : {}),
                     ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
                 },
             });
@@ -71,10 +110,12 @@ export class AuthService {
         }
 
         const schoolId = await this.resolveSchoolId(dto.schoolCode);
+        const phone = await this.resolveVerifiedPhone(dto.phone, undefined, dto.phoneCode);
 
         const user = await this.prisma.user.create({
             data: {
                 email,
+                phone,
                 firstName: dto.firstName,
                 lastName: dto.lastName,
                 role: dto.role || 'STUDENT',
@@ -96,6 +137,10 @@ export class AuthService {
             await this.schoolSlotService.autoAllocateForNewStudent(user.id, schoolId);
         }
 
+        // Only for genuinely new accounts — claiming an invited roster row
+        // returns earlier, so a student is never welcomed twice.
+        await this.notifications.sendWelcome(user.email, user.firstName);
+
         return user;
     }
 
@@ -105,6 +150,25 @@ export class AuthService {
             select: {
                 id: true,
                 email: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                classBand: true,
+                schoolId: true,
+                school: { select: { name: true } },
+                isActive: true,
+            },
+        });
+    }
+
+    /** Resolve an account from a verified phone OTP sign-in. */
+    async getUserByPhone(phone: string) {
+        return this.prisma.user.findUnique({
+            where: { phone: normalizePhone(phone) },
+            select: {
+                id: true,
+                email: true,
+                phone: true,
                 firstName: true,
                 lastName: true,
                 role: true,
@@ -151,13 +215,22 @@ export class AuthService {
     }
 
     async updateProfile(userId: string, dto: UpdateProfileDto) {
+        // Normalised on the way in so a self-edited number stays in the same
+        // E.164 form phone sign-in looks accounts up by, and cannot collide
+        // with a number another account already holds.
+        const phoneUpdate =
+            dto.phone === undefined
+                ? {}
+                : dto.phone.trim()
+                    ? { phone: await this.resolveVerifiedPhone(dto.phone, userId, dto.phoneCode) }
+                    : { phone: null };
+
         const user = await this.prisma.user.update({
             where: { id: userId },
             data: {
                 firstName: dto.firstName,
                 lastName: dto.lastName,
-                // An empty string clears the number rather than storing "".
-                ...(dto.phone !== undefined ? { phone: dto.phone.trim() || null } : {}),
+                ...phoneUpdate,
                 classBand: dto.classBand,
             },
             select: {

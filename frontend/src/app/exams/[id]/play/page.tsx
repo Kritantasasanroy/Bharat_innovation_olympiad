@@ -232,6 +232,24 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         );
     }
 
+    if (error === 'ACCESS_PASS_REQUIRED') {
+        return (
+            <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '500px' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
+                    <h2 style={{ marginBottom: '1rem' }}>Exam Access Locked</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        Your exam access pass is not active yet. One payment unlocks every olympiad
+                        exam — the practice paper stays free.
+                    </p>
+                    <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/unlock'}>
+                        Unlock All Exams
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (error) {
         return (
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>

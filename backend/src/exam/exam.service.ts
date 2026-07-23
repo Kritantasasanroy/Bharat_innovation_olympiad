@@ -230,12 +230,18 @@ export class ExamService {
 
         const flattenedSections = exam.sections.map(s => flattenSection(s));
 
+        // Mirrors the paywall in `AttemptService.startAttempt` so the device-check
+        // page can warn about a locked pass up front. Advisory only — the server
+        // gate is what actually enforces it.
+        const requiresAccessPass = !isDemoExam(exam.id);
+
         if (userId) {
             const allQuestions = flattenedSections.flatMap(s => s.questions);
             const seed = hashString(userId + exam.id);
             const shuffledQuestions = seededShuffle(allQuestions, seed);
             return {
                 ...exam,
+                requiresAccessPass,
                 sections: [{
                     id: 'shuffled',
                     title: 'All Questions',
@@ -246,7 +252,7 @@ export class ExamService {
             };
         }
 
-        return { ...exam, sections: flattenedSections };
+        return { ...exam, requiresAccessPass, sections: flattenedSections };
     }
 
     async findInstanceById(instanceId: string) {

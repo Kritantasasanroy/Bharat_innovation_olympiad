@@ -5,6 +5,7 @@ import { PartnerModule } from '../partner/partner.module';
 import { SlotModule } from '../slot/slot.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PhoneOtpService } from './phone-otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -18,7 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         PartnerModule,
     ],
     controllers: [AuthController],
-    providers: [AuthService, JwtStrategy],
+    providers: [AuthService, PhoneOtpService, JwtStrategy],
     exports: [AuthService, JwtModule],
 })
 export class AuthModule { }

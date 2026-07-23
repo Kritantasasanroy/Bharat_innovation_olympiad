@@ -5,6 +5,19 @@ export class SyncUserDto {
     @IsEmail()
     email: string;  // ← email now comes in the body (no JwtAuthGuard needed)
 
+    /**
+     * Optional mobile number. Stored only when `phoneCode` proves ownership —
+     * see `AuthService.syncUser`.
+     */
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
+    /** The WhatsApp code for `phone`. Required whenever `phone` is supplied. */
+    @IsString()
+    @IsOptional()
+    phoneCode?: string;
+
     @IsString()
     firstName: string;
 
@@ -36,6 +49,30 @@ export class LoginSyncDto {
     email: string;  // For login flow: just sync/retrieve by email and return our JWT
 }
 
+export class SendPhoneOtpDto {
+    @IsString()
+    phone: string;
+}
+
+/** Login flow for students who verified a phone OTP instead of an email one. */
+export class PhoneLoginSyncDto {
+    @IsString()
+    phone: string;
+
+    /** The 6-digit code sent over WhatsApp — verified server-side. */
+    @IsString()
+    code: string;
+}
+
+/** Proves phone ownership during registration before the number is stored. */
+export class VerifyPhoneOtpDto {
+    @IsString()
+    phone: string;
+
+    @IsString()
+    code: string;
+}
+
 export class UpdateProfileDto {
     @IsString()
     @IsOptional()
@@ -45,10 +82,19 @@ export class UpdateProfileDto {
     @IsOptional()
     lastName?: string;
 
-    /** The student's contact number (item 14). Blank clears it. */
+    /**
+     * The student's contact number (item 14). Blank clears it. Setting a new
+     * number requires `phoneCode`, since the number doubles as a login
+     * identifier — an unverified change would hand the account to whoever
+     * owns the number typed in.
+     */
     @IsString()
     @IsOptional()
     phone?: string;
+
+    @IsString()
+    @IsOptional()
+    phoneCode?: string;
 
     @IsInt()
     @Min(6)

@@ -5,6 +5,7 @@ import { AttemptModule } from './attempt/attempt.module';
 import { AuthModule } from './auth/auth.module';
 import { CertificateModule } from './certificate/certificate.module';
 import { S3Module } from './common/services/s3.module';
+import { NotificationModule } from './notification/notification.module';
 import { ConsentModule } from './consent/consent.module';
 import { ExamModule } from './exam/exam.module';
 import { GeoModule } from './geo/geo.module';
@@ -27,6 +28,7 @@ import { UserModule } from './user/user.module';
         ConfigModule.forRoot({ isGlobal: true }),
         PrismaModule,
         S3Module,
+        NotificationModule,
         GeoModule,
         AuthModule,
         UserModule,
