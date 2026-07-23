@@ -11,16 +11,17 @@ import {
     welcomeEmail,
 } from './templates';
 import {
-    ConsoleWhatsAppProvider,
-    MetaWhatsAppProvider,
-    WhatsAppProvider,
-} from './whatsapp.provider';
+    ConsoleSmsProvider,
+    Fast2SmsProvider,
+    SmsProvider,
+    TwoFactorSmsProvider,
+} from './sms.provider';
 
 @Injectable()
 export class NotificationService implements OnModuleInit {
     private readonly logger = new Logger(NotificationService.name);
     private email: EmailProvider = new ConsoleEmailProvider();
-    private whatsapp: WhatsAppProvider = new ConsoleWhatsAppProvider();
+    private sms: SmsProvider = new ConsoleSmsProvider();
 
     onModuleInit() {
         const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -37,33 +38,37 @@ export class NotificationService implements OnModuleInit {
             );
         }
 
-        const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-        const accessToken = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
-        if (phoneNumberId && accessToken) {
-            this.whatsapp = new MetaWhatsAppProvider(
-                phoneNumberId,
-                accessToken,
-                process.env.WHATSAPP_OTP_TEMPLATE?.trim() || 'otp_verification',
-                process.env.WHATSAPP_OTP_LANGUAGE?.trim() || 'en',
-                process.env.WHATSAPP_API_VERSION?.trim() || 'v21.0',
+        // Both gateways send under their own DLT-registered header, so OTP
+        // delivery to Indian numbers works without the 2–4 week TRAI/DLT
+        // registration a self-registered sender ID would require.
+        const twoFactorKey = process.env.TWOFACTOR_API_KEY?.trim();
+        const fast2smsKey = process.env.FAST2SMS_API_KEY?.trim();
+
+        if (twoFactorKey) {
+            this.sms = new TwoFactorSmsProvider(
+                twoFactorKey,
+                process.env.TWOFACTOR_OTP_TEMPLATE?.trim() || 'AUTOGEN',
             );
-            this.logger.log('WhatsApp provider: meta-cloud-api');
+            this.logger.log('SMS provider: 2factor');
+        } else if (fast2smsKey) {
+            this.sms = new Fast2SmsProvider(fast2smsKey);
+            this.logger.log('SMS provider: fast2sms');
         } else {
             this.logger.warn(
-                'WHATSAPP_PHONE_NUMBER_ID/WHATSAPP_ACCESS_TOKEN not set — OTPs will be logged, not delivered.',
+                'TWOFACTOR_API_KEY / FAST2SMS_API_KEY not set — OTPs will be logged, not delivered.',
             );
         }
     }
 
     /**
-     * Deliver a login OTP over WhatsApp.
+     * Deliver a login OTP by SMS.
      *
      * Unlike the transactional mails above, failures here DO propagate: the
      * student is waiting on this code, and silently swallowing the error would
      * leave them staring at a code-entry box that can never be satisfied.
      */
-    async sendOtpViaWhatsApp(toE164: string, code: string): Promise<void> {
-        await this.whatsapp.sendOtp(toE164, code);
+    async sendOtpSms(toE164: string, code: string): Promise<void> {
+        await this.sms.sendOtp(toE164, code);
     }
 
     private get appUrl(): string {

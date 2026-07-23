@@ -83,7 +83,7 @@ export class AuthController {
         return { accessToken: token, user };
     }
 
-    /** PUBLIC — issue a WhatsApp sign-in code for a phone number. */
+    /** PUBLIC — issue an SMS sign-in code for a phone number. */
     @Post('phone/send-otp')
     async sendPhoneOtp(@Body() dto: SendPhoneOtpDto) {
         return this.phoneOtpService.sendOtp(dto.phone);

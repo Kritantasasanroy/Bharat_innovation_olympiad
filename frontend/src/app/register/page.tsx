@@ -31,7 +31,7 @@ export default function RegisterPage() {
     const register = useAuthStore((s) => s.register);
     const router = useRouter();
 
-    // Optional mobile number, verified inline by its own OTP. Only a *verified*
+    // Optional mobile number, proven by an SMS code submitted with the form.
     // number is submitted — an unverified one would let a student claim someone
     // else's number and lock the real owner out of registering it.
     const [phone, setPhone] = useState('');
@@ -338,7 +338,7 @@ export default function RegisterPage() {
                             {phoneOtpSent && (
                                 <input
                                     type="text" inputMode="numeric" className="input-field"
-                                    placeholder="6-digit code from WhatsApp" maxLength={6} value={phoneOtpCode}
+                                    placeholder="6-digit code from SMS" maxLength={6} value={phoneOtpCode}
                                     onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                     style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
                                 />

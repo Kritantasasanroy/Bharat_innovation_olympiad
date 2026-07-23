@@ -61,7 +61,7 @@ export class PhoneOtpService {
         // Deliberately not caught: the student is waiting on this code, so a
         // delivery failure must surface rather than leave them at a dead
         // code-entry box.
-        await this.notifications.sendOtpViaWhatsApp(phone, code);
+        await this.notifications.sendOtpSms(phone, code);
 
         return { sent: true, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };
     }

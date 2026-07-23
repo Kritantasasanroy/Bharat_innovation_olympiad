@@ -1,0 +1,107 @@
+import { Logger } from '@nestjs/common';
+
+export interface SmsProvider {
+    readonly name: string;
+    /**
+     * Deliver a one-time code.
+     *
+     * `code` is passed separately from any message body because Indian OTP
+     * routes take it as a template variable, not as free-form text — the
+     * wording itself belongs to the provider's DLT-registered template.
+     */
+    sendOtp(toE164: string, code: string): Promise<void>;
+}
+
+/** Indian OTP routes address the subscriber number without the country code. */
+function toIndianLocal(toE164: string): string {
+    const digits = toE164.replace(/\D/g, '');
+    return digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
+}
+
+/** No credentials configured — log instead of failing the caller. */
+export class ConsoleSmsProvider implements SmsProvider {
+    readonly name = 'console';
+    private readonly logger = new Logger('SmsProvider:console');
+
+    async sendOtp(toE164: string, code: string): Promise<void> {
+        this.logger.log(`[not sent — no provider configured] otp for ${toE164}: ${code}`);
+    }
+}
+
+/**
+ * 2Factor (https://2factor.in) — OTP-specialised Indian gateway.
+ *
+ * Sends under 2Factor's own DLT-registered header, so it works without the
+ * 2–4 week TRAI/DLT entity+template registration a self-registered sender ID
+ * would need. Billed per *delivered* message.
+ *
+ * Endpoint: /API/V1/{apiKey}/SMS/{number}/{otp}/{template}
+ * A 200 can still carry Status: "Error", so the body is checked too.
+ */
+export class TwoFactorSmsProvider implements SmsProvider {
+    readonly name = '2factor';
+    private readonly logger = new Logger('SmsProvider:2factor');
+
+    constructor(
+        private readonly apiKey: string,
+        private readonly templateName: string,
+    ) {}
+
+    async sendOtp(toE164: string, code: string): Promise<void> {
+        const number = toIndianLocal(toE164);
+        const url =
+            `https://2factor.in/API/V1/${encodeURIComponent(this.apiKey)}/SMS/` +
+            `${encodeURIComponent(number)}/${encodeURIComponent(code)}/` +
+            `${encodeURIComponent(this.templateName)}`;
+
+        const res = await fetch(url, { method: 'GET' });
+        const body = await res.text().catch(() => '');
+
+        if (!res.ok) {
+            throw new Error(`2Factor responded ${res.status}: ${body.slice(0, 300)}`);
+        }
+        // Success looks like {"Status":"Success","Details":"<session id>"}.
+        if (!/"Status"\s*:\s*"Success"/i.test(body)) {
+            throw new Error(`2Factor rejected the send: ${body.slice(0, 300)}`);
+        }
+        this.logger.log(`OTP sent to ${toE164}`);
+    }
+}
+
+/**
+ * Fast2SMS (https://fast2sms.com) — alternative Indian gateway.
+ *
+ * Its `otp` route also sends under Fast2SMS's own registered header, so no
+ * own-DLT registration is required. Kept as a swap-in second option so a
+ * delivery problem with one gateway is a config change, not a code change.
+ */
+export class Fast2SmsProvider implements SmsProvider {
+    readonly name = 'fast2sms';
+    private readonly logger = new Logger('SmsProvider:fast2sms');
+
+    constructor(private readonly apiKey: string) {}
+
+    async sendOtp(toE164: string, code: string): Promise<void> {
+        const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+            method: 'POST',
+            headers: {
+                authorization: this.apiKey,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                route: 'otp',
+                variables_values: code,
+                numbers: toIndianLocal(toE164),
+            }),
+        });
+        const body = await res.text().catch(() => '');
+
+        if (!res.ok) {
+            throw new Error(`Fast2SMS responded ${res.status}: ${body.slice(0, 300)}`);
+        }
+        if (!/"return"\s*:\s*true/i.test(body)) {
+            throw new Error(`Fast2SMS rejected the send: ${body.slice(0, 300)}`);
+        }
+        this.logger.log(`OTP sent to ${toE164}`);
+    }
+}

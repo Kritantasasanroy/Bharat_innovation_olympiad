@@ -85,12 +85,11 @@ export function isValidPhone(raw: string): boolean {
  * These hit *our* backend, not Neon. Neon's phone plugin accepts a send request
  * and returns 200, but its `send.otp` webhook payload carries no recipient
  * phone number, so there is no way to actually deliver the code — nothing ever
- * arrives. We issue and verify phone codes ourselves and deliver them over
- * WhatsApp (SMS to Indian numbers is carrier-blocked without DLT registration).
- * Email OTP still goes through Neon, above.
+ * arrives. We issue and verify phone codes ourselves and deliver them by SMS
+ * through an Indian gateway. Email OTP still goes through Neon, above.
  */
 export const phoneOtp = {
-    /** Ask the backend to send a 6-digit code over WhatsApp. */
+    /** Ask the backend to send a 6-digit code by SMS. */
     sendOtp: async (phone: string) => {
         try {
             const { default: api } = await import('@/lib/api');

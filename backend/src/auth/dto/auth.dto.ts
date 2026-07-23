@@ -13,7 +13,7 @@ export class SyncUserDto {
     @IsOptional()
     phone?: string;
 
-    /** The WhatsApp code for `phone`. Required whenever `phone` is supplied. */
+    /** The SMS code for `phone`. Required whenever `phone` is supplied. */
     @IsString()
     @IsOptional()
     phoneCode?: string;
@@ -59,7 +59,7 @@ export class PhoneLoginSyncDto {
     @IsString()
     phone: string;
 
-    /** The 6-digit code sent over WhatsApp — verified server-side. */
+    /** The 6-digit code sent by SMS — verified server-side. */
     @IsString()
     code: string;
 }
