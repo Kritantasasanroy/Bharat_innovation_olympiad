@@ -88,3 +88,28 @@ export function examSubmittedEmail(vars: {
         { label: 'View your results', url: `${vars.appUrl}/results` },
     );
 }
+
+/** Escape admin-typed text before it goes into an HTML email body. */
+function escapeHtml(s: string): string {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/**
+ * An admin-composed message to students, sent from the admin portal.
+ *
+ * The body is treated as plain text — escaped, with blank lines becoming
+ * paragraphs and single newlines becoming line breaks — so an admin can never
+ * (accidentally or otherwise) inject markup that breaks the mail or the
+ * recipient's inbox. The subject doubles as the heading.
+ */
+export function adminBroadcastEmail(vars: { subject: string; message: string; appUrl: string }): RenderedEmail {
+    const body = vars.message
+        .split(/\n{2,}/)
+        .map((block) => `<p style="margin:0 0 12px;">${escapeHtml(block).replace(/\n/g, '<br/>')}</p>`)
+        .join('');
+    return build(vars.subject, vars.subject, body);
+}

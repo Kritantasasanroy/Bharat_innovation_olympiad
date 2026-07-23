@@ -7,6 +7,7 @@ import {
 import {
     RenderedEmail,
     accessPassActivatedEmail,
+    adminBroadcastEmail,
     examSubmittedEmail,
     welcomeEmail,
 } from './templates';
@@ -108,5 +109,23 @@ export class NotificationService implements OnModuleInit {
 
     async sendExamSubmitted(to: string, firstName: string, examTitle: string): Promise<void> {
         await this.deliver(to, examSubmittedEmail({ firstName, examTitle, appUrl: this.appUrl }));
+    }
+
+    /**
+     * Deliver an admin-composed message to one recipient.
+     *
+     * Unlike the transactional mails above, the caller (an admin broadcast) needs
+     * a per-recipient success/failure count, so this returns a boolean instead of
+     * swallowing to void.
+     */
+    async sendAdminBroadcast(to: string, subject: string, message: string): Promise<boolean> {
+        const mail = adminBroadcastEmail({ subject, message, appUrl: this.appUrl });
+        try {
+            await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
+            return true;
+        } catch (err) {
+            this.logger.error(`Admin mail to ${to} failed: ${(err as Error).message}`);
+            return false;
+        }
     }
 }
