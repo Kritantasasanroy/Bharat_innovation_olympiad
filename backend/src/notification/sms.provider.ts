@@ -49,10 +49,19 @@ export class TwoFactorSmsProvider implements SmsProvider {
 
     async sendOtp(toE164: string, code: string): Promise<void> {
         const number = toIndianLocal(toE164);
-        const url =
+        // A fresh 2Factor account has no custom template yet, and passing a
+        // template name that doesn't exist is rejected. "AUTOGEN"/blank means
+        // "use 2Factor's own pre-approved default OTP template" — the
+        // segment-less form `/SMS/{number}/{otp}`. A real named template is
+        // only appended once the account actually has one.
+        const base =
             `https://2factor.in/API/V1/${encodeURIComponent(this.apiKey)}/SMS/` +
-            `${encodeURIComponent(number)}/${encodeURIComponent(code)}/` +
-            `${encodeURIComponent(this.templateName)}`;
+            `${encodeURIComponent(number)}/${encodeURIComponent(code)}`;
+        const useDefaultTemplate =
+            !this.templateName || /^autogen$/i.test(this.templateName);
+        const url = useDefaultTemplate
+            ? base
+            : `${base}/${encodeURIComponent(this.templateName)}`;
 
         const res = await fetch(url, { method: 'GET' });
         const body = await res.text().catch(() => '');
