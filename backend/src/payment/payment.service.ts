@@ -199,11 +199,20 @@ export class PaymentService {
     }
 
     private async onPaymentCaptured(entity: any) {
-        const payment = await this.prisma.payment.findUnique({
-            where: { razorpayOrderId: entity.order_id },
-            include: { booking: true, accessPass: true },
-        });
-        if (!payment) return;
+        const payment = entity.order_id
+            ? await this.prisma.payment.findUnique({
+                  where: { razorpayOrderId: entity.order_id },
+                  include: { booking: true, accessPass: true },
+              })
+            : null;
+
+        // Not an order this backend created — it's a payment made straight on
+        // the shared Razorpay payment page (the ₹1 access link). Match the buyer
+        // by the email/phone they entered and unlock their pass.
+        if (!payment) {
+            await this.accessPassService.grantFromSharedLink(entity);
+            return;
+        }
 
         await this.prisma.payment.update({
             where: { id: payment.id },

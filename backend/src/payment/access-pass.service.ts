@@ -10,12 +10,21 @@ import Razorpay from 'razorpay';
 import { isDemoExam } from '../common/demo-exams';
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizePhone } from '../auth/phone.helpers';
 
 /**
  * The one-off platform fee, in paise. A student pays this once and can then sit
  * every exam, so it is deliberately account-level rather than per-slot.
  */
 export const ACCESS_PASS_AMOUNT_PAISE = Number(process.env.ACCESS_PASS_AMOUNT_PAISE ?? 49900);
+
+/**
+ * The exact amount, in paise, that the shared Razorpay payment page charges for
+ * an access pass (the ₹1 link). The account-wide webhook also receives the
+ * CEO's other product sales (₹799/₹999/…), so a shared-link unlock is gated to
+ * *exactly* this amount — nothing else on the account unlocks an exam pass.
+ */
+export const SHARED_LINK_UNLOCK_PAISE = Number(process.env.SHARED_LINK_UNLOCK_PAISE ?? 100);
 
 @Injectable()
 export class AccessPassService {
@@ -243,6 +252,118 @@ export class AccessPassService {
             data: { status: AccessPassStatus.REVOKED, revokedAt: new Date() },
         });
         this.logger.warn(`Access pass ${pass.id} revoked (payment ${paymentId})`);
+    }
+
+    /**
+     * Unlock a pass from a payment made on the shared Razorpay payment page
+     * (the ₹1 access link), rather than an order this backend created.
+     *
+     * Such a payment has no Payment row of ours to key on, so the buyer is
+     * matched to an account by the email / phone they typed on the hosted page.
+     * This is only ever reached from the webhook, which has already verified
+     * Razorpay's HMAC signature — a forged "someone paid" event cannot get here,
+     * which is exactly the hole the unauthenticated Apps Script version has.
+     *
+     * Gated to the exact ₹1 amount so the CEO's other product links that share
+     * the same account webhook (₹799/₹999/…) never hand out an exam pass.
+     * Idempotent per Razorpay payment id, since webhooks are retried.
+     */
+    async grantFromSharedLink(entity: any): Promise<
+        { status: 'granted' | 'already' | 'ignored' | 'unmatched' }
+    > {
+        const amount = Number(entity?.amount);
+        if (!Number.isFinite(amount) || amount !== SHARED_LINK_UNLOCK_PAISE) {
+            this.logger.log(
+                `Shared-link webhook ignored: amount ${entity?.amount} ≠ ${SHARED_LINK_UNLOCK_PAISE} paise.`,
+            );
+            return { status: 'ignored' };
+        }
+
+        const razorpayPaymentId: string | undefined = entity?.id;
+        if (!razorpayPaymentId) return { status: 'ignored' };
+
+        // Webhooks are retried — if this exact payment is already recorded, the
+        // pass was handled on the first delivery. Nothing more to do.
+        const seen = await this.prisma.payment.findUnique({
+            where: { razorpayPaymentId },
+            select: { id: true },
+        });
+        if (seen) return { status: 'already' };
+
+        // Match the payer to an account by what they entered on the hosted page.
+        const email = String(entity?.email ?? '').trim();
+        const contact = entity?.contact ? normalizePhone(String(entity.contact)) : null;
+
+        let user = email
+            ? await this.prisma.user.findFirst({
+                  where: { email: { equals: email, mode: 'insensitive' } },
+                  select: { id: true, email: true, firstName: true },
+              })
+            : null;
+        if (!user && contact) {
+            user = await this.prisma.user.findUnique({
+                where: { phone: contact },
+                select: { id: true, email: true, firstName: true },
+            });
+        }
+
+        if (!user) {
+            // A real ₹1 payment landed but we can't tie it to an account — the
+            // payer used a different email/phone than they registered with.
+            // Surface it for a manual grant rather than silently dropping money.
+            this.logger.warn(
+                `Shared-link ₹1 payment ${razorpayPaymentId} matched no account ` +
+                    `(email="${email}", contact="${contact ?? ''}") — needs a manual grant.`,
+            );
+            return { status: 'unmatched' };
+        }
+
+        // Record the payment so the pass has an auditable money trail. A payment
+        // page still carries an order_id; fall back to a synthetic unique id if
+        // Razorpay ever omits it, so the required unique column is always filled.
+        const orderId: string = entity?.order_id ?? `sharedlink_${razorpayPaymentId}`;
+        const payment = await this.prisma.payment.create({
+            data: {
+                userId: user.id,
+                razorpayOrderId: orderId,
+                razorpayPaymentId,
+                amount,
+                currency: String(entity?.currency ?? 'INR'),
+                status: PaymentStatus.PAID,
+            },
+        });
+
+        const before = await this.prisma.accessPass.findUnique({
+            where: { userId: user.id },
+            select: { status: true },
+        });
+
+        await this.prisma.accessPass.upsert({
+            where: { userId: user.id },
+            create: {
+                userId: user.id,
+                paymentId: payment.id,
+                amount,
+                status: AccessPassStatus.ACTIVE,
+                grantedAt: new Date(),
+            },
+            update: {
+                paymentId: payment.id,
+                amount,
+                status: AccessPassStatus.ACTIVE,
+                grantedAt: new Date(),
+                revokedAt: null,
+            },
+        });
+
+        // Only mail on the transition into ACTIVE, so a retried webhook or a
+        // student who was already unlocked isn't thanked twice.
+        if (before?.status !== AccessPassStatus.ACTIVE) {
+            await this.notifications.sendAccessPassActivated(user.email, user.firstName, amount);
+        }
+
+        this.logger.log(`Shared-link ₹1 unlock granted to ${user.email} (payment ${razorpayPaymentId}).`);
+        return { status: 'granted' };
     }
 
     // ── Admin ────────────────────────────────────────────────────────────────

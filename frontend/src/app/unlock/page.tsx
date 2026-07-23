@@ -2,16 +2,9 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
-import Script from 'next/script';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-declare global {
-    interface Window {
-        Razorpay: any;
-    }
-}
 
 interface AccessPass {
     status: 'PENDING' | 'ACTIVE' | 'REVOKED' | null;
@@ -19,6 +12,15 @@ interface AccessPass {
     amount: number;
     grantedAt: string | null;
 }
+
+// The shared Razorpay payment page (the ₹1 access link). Students pay here; the
+// signed webhook unlocks their account by the email/phone they enter.
+const PAYMENT_URL =
+    process.env.NEXT_PUBLIC_UNLOCK_PAYMENT_URL || 'https://rzp.io/rzp/ABtT74d';
+
+// ~3 minutes of polling after the payment page is opened.
+const MAX_POLLS = 45;
+const POLL_MS = 4000;
 
 const BENEFITS = [
     'Sit every published olympiad exam — no per-exam fee',
@@ -28,113 +30,89 @@ const BENEFITS = [
 ];
 
 export default function UnlockPage() {
-    const router = useRouter();
+    const user = useAuthStore((s) => s.user);
     const [pass, setPass] = useState<AccessPass | null>(null);
     const [loading, setLoading] = useState(true);
-    const [payLoading, setPayLoading] = useState(false);
+    const [waiting, setWaiting] = useState(false);
+    const [checking, setChecking] = useState(false);
     const [error, setError] = useState('');
-    const rzpScriptLoaded = useRef(false);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const loadPass = useCallback(async () => {
-        try {
-            const res = await api.get<AccessPass>('/access-pass/me');
-            setPass(res.data);
-        } catch (e: any) {
-            setError(e.response?.data?.message || 'Could not load your access status.');
-        } finally {
-            setLoading(false);
-        }
+        const res = await api.get<AccessPass>('/access-pass/me');
+        setPass(res.data);
+        return res.data;
     }, []);
 
     useEffect(() => {
-        void loadPass();
+        loadPass()
+            .catch((e: any) =>
+                setError(e.response?.data?.message || 'Could not load your access status.'),
+            )
+            .finally(() => setLoading(false));
     }, [loadPass]);
 
-    const handlePay = async () => {
-        if (!rzpScriptLoaded.current) {
-            setError('Payment library is still loading. Please try again in a moment.');
-            return;
+    const stopPolling = useCallback(() => {
+        if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
         }
-        setPayLoading(true);
-        setError('');
+        setWaiting(false);
+    }, []);
 
-        try {
-            const orderRes = await api.post('/access-pass/create-order');
+    // Once the pass goes active, stop polling. Always clear the timer on unmount.
+    useEffect(() => {
+        if (pass?.isActive) stopPolling();
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
+    }, [pass?.isActive, stopPolling]);
 
-            // Already paid (e.g. the webhook landed while this tab was open) —
-            // don't open checkout and charge a second time.
-            if (orderRes.data.alreadyActive) {
-                await loadPass();
-                setPayLoading(false);
-                return;
+    const startPolling = useCallback(() => {
+        setWaiting(true);
+        let ticks = 0;
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = setInterval(async () => {
+            ticks += 1;
+            try {
+                const p = await loadPass();
+                if (p.isActive) {
+                    stopPolling();
+                    return;
+                }
+            } catch {
+                // Transient — keep polling.
             }
+            if (ticks >= MAX_POLLS) stopPolling();
+        }, POLL_MS);
+    }, [loadPass, stopPolling]);
 
-            const { orderId, amount, currency, key } = orderRes.data;
+    const handlePay = () => {
+        setError('');
+        // Open the hosted ₹1 page in a new tab so this one can watch for unlock.
+        window.open(PAYMENT_URL, '_blank', 'noopener,noreferrer');
+        startPolling();
+    };
 
-            const options = {
-                key,
-                amount,
-                currency,
-                name: 'Bharat Innovation Olympiad',
-                description: 'Exam Access Pass — one payment, all exams',
-                image: '/bio-logo.png',
-                order_id: orderId,
-                handler: async (response: any) => {
-                    try {
-                        await api.post('/access-pass/verify', {
-                            razorpayOrderId: response.razorpay_order_id,
-                            razorpayPaymentId: response.razorpay_payment_id,
-                            razorpaySignature: response.razorpay_signature,
-                        });
-                        await loadPass();
-                        router.push('/exams');
-                    } catch {
-                        // The webhook confirms the same payment server-side, so
-                        // the pass may still activate shortly — say so rather
-                        // than implying the money is lost.
-                        setError(
-                            'We could not confirm the payment in this tab. If it was debited, your access will unlock shortly — refresh this page.',
-                        );
-                        setPayLoading(false);
-                    }
-                },
-                prefill: {
-                    name: localStorage.getItem('userName') || '',
-                    email: localStorage.getItem('userEmail') || '',
-                },
-                theme: { color: '#ffcb05' },
-                modal: {
-                    ondismiss: () => {
-                        setPayLoading(false);
-                        setError('Payment cancelled. You can try again whenever you are ready.');
-                    },
-                },
-            };
-
-            const rzp = new window.Razorpay(options);
-            rzp.on('payment.failed', (resp: any) => {
-                setPayLoading(false);
-                setError(`Payment failed: ${resp.error?.description || 'Please try another method.'}`);
-            });
-            rzp.open();
+    const handleCheckNow = async () => {
+        setChecking(true);
+        setError('');
+        try {
+            await loadPass();
         } catch (e: any) {
-            setError(e.response?.data?.message || 'Could not start the payment. Please try again.');
-            setPayLoading(false);
+            setError(e.response?.data?.message || 'Could not refresh — please try again.');
+        } finally {
+            setChecking(false);
         }
     };
 
-    const rupees = ((pass?.amount ?? 0) / 100).toLocaleString('en-IN', {
+    const rupees = ((pass?.amount ?? 100) / 100).toLocaleString('en-IN', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
     });
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
-            <Script
-                src="https://checkout.razorpay.com/v1/checkout.js"
-                onLoad={() => { rzpScriptLoaded.current = true; }}
-            />
-
             <div style={{ maxWidth: '640px', margin: '0 auto', padding: 'var(--space-6, 1.5rem)' }}>
                 {loading ? (
                     <div style={{ display: 'flex', justifyContent: 'center', minHeight: '50vh', alignItems: 'center' }}>
@@ -170,7 +148,7 @@ export default function UnlockPage() {
                             <span style={{ color: 'var(--text-secondary)' }}>one-time · no renewal</span>
                         </div>
 
-                        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.75rem' }}>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem' }}>
                             {BENEFITS.map((b) => (
                                 <li
                                     key={b}
@@ -185,17 +163,56 @@ export default function UnlockPage() {
                             ))}
                         </ul>
 
+                        {/* Matching is by the contact details entered on the hosted page, so
+                            spell out exactly what to type or the webhook can't find the account. */}
+                        <div
+                            style={{
+                                padding: '0.9rem 1rem', borderRadius: '10px', marginBottom: '1.25rem',
+                                background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.3)',
+                                fontSize: '0.9rem', color: 'var(--text-secondary)',
+                            }}
+                        >
+                            On the payment page, enter the email your account uses
+                            {user?.email ? (
+                                <> — <strong style={{ color: 'var(--text-primary)' }}>{user.email}</strong></>
+                            ) : null}
+                            . That&apos;s how we unlock your access automatically after payment.
+                        </div>
+
                         {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-lg"
-                            style={{ width: '100%' }}
-                            onClick={handlePay}
-                            disabled={payLoading}
-                        >
-                            {payLoading ? 'Opening payment…' : `Pay ₹${rupees} and unlock`}
-                        </button>
+                        {waiting ? (
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <div className="spinner" style={{ width: '18px', height: '18px' }} />
+                                    <span style={{ color: 'var(--text-secondary)' }}>
+                                        Waiting for payment confirmation…
+                                    </span>
+                                </div>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', marginBottom: '1rem' }}>
+                                    Finish the ₹{rupees} payment in the other tab. This unlocks automatically —
+                                    usually within a few seconds.
+                                </p>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    style={{ width: '100%' }}
+                                    onClick={handleCheckNow}
+                                    disabled={checking}
+                                >
+                                    {checking ? 'Checking…' : "I've paid — check now"}
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-lg"
+                                style={{ width: '100%' }}
+                                onClick={handlePay}
+                            >
+                                Pay ₹{rupees} and unlock
+                            </button>
+                        )}
 
                         <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
                             Payments are processed securely by Razorpay. The practice exam stays free.
