@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Role } from '@prisma/client';
 
 export class SyncUserDto {
@@ -52,6 +52,11 @@ export class LoginSyncDto {
 export class SendPhoneOtpDto {
     @IsString()
     phone: string;
+
+    /** How to deliver the code: `sms` (default) or `voice` for an automated call. */
+    @IsIn(['sms', 'voice'])
+    @IsOptional()
+    channel?: 'sms' | 'voice';
 }
 
 /** Login flow for students who verified a phone OTP instead of an email one. */

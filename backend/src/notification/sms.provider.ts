@@ -10,6 +10,9 @@ export interface SmsProvider {
      * wording itself belongs to the provider's DLT-registered template.
      */
     sendOtp(toE164: string, code: string): Promise<void>;
+
+    /** Deliver the same one-time code by an automated voice call instead of SMS. */
+    sendOtpVoice(toE164: string, code: string): Promise<void>;
 }
 
 /** Indian OTP routes address the subscriber number without the country code. */
@@ -25,6 +28,10 @@ export class ConsoleSmsProvider implements SmsProvider {
 
     async sendOtp(toE164: string, code: string): Promise<void> {
         this.logger.log(`[not sent — no provider configured] otp for ${toE164}: ${code}`);
+    }
+
+    async sendOtpVoice(toE164: string, code: string): Promise<void> {
+        this.logger.log(`[not sent — no provider configured] voice otp for ${toE164}: ${code}`);
     }
 }
 
@@ -75,6 +82,29 @@ export class TwoFactorSmsProvider implements SmsProvider {
         }
         this.logger.log(`OTP sent to ${toE164}`);
     }
+
+    /**
+     * Deliver the code as an automated phone call.
+     * Endpoint: /API/V1/{apiKey}/VOICE/{number}/{otp} — reads the digits aloud.
+     * Billed against the separate Voice-OTP balance, not the SMS one.
+     */
+    async sendOtpVoice(toE164: string, code: string): Promise<void> {
+        const number = toIndianLocal(toE164);
+        const url =
+            `https://2factor.in/API/V1/${encodeURIComponent(this.apiKey)}/VOICE/` +
+            `${encodeURIComponent(number)}/${encodeURIComponent(code)}`;
+
+        const res = await fetch(url, { method: 'GET' });
+        const body = await res.text().catch(() => '');
+
+        if (!res.ok) {
+            throw new Error(`2Factor (voice) responded ${res.status}: ${body.slice(0, 300)}`);
+        }
+        if (!/"Status"\s*:\s*"Success"/i.test(body)) {
+            throw new Error(`2Factor rejected the voice call: ${body.slice(0, 300)}`);
+        }
+        this.logger.log(`Voice OTP call placed to ${toE164}`);
+    }
 }
 
 /**
@@ -112,5 +142,10 @@ export class Fast2SmsProvider implements SmsProvider {
             throw new Error(`Fast2SMS rejected the send: ${body.slice(0, 300)}`);
         }
         this.logger.log(`OTP sent to ${toE164}`);
+    }
+
+    async sendOtpVoice(_toE164: string, _code: string): Promise<void> {
+        // Fast2SMS has no voice-call OTP product; callers fall back to SMS.
+        throw new Error('Voice OTP is not supported by the Fast2SMS provider.');
     }
 }

@@ -89,11 +89,17 @@ export function isValidPhone(raw: string): boolean {
  * through an Indian gateway. Email OTP still goes through Neon, above.
  */
 export const phoneOtp = {
-    /** Ask the backend to send a 6-digit code by SMS. */
-    sendOtp: async (phone: string) => {
+    /**
+     * Ask the backend to send a 6-digit code to a phone number.
+     * `channel` is `sms` by default, or `voice` for an automated call.
+     */
+    sendOtp: async (phone: string, channel: 'sms' | 'voice' = 'sms') => {
         try {
             const { default: api } = await import('@/lib/api');
-            const { data } = await api.post('/auth/phone/send-otp', { phone: normalizePhone(phone) });
+            const { data } = await api.post('/auth/phone/send-otp', {
+                phone: normalizePhone(phone),
+                channel,
+            });
             return { data, error: null };
         } catch (e: any) {
             return {

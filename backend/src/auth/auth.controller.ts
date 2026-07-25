@@ -83,10 +83,10 @@ export class AuthController {
         return { accessToken: token, user };
     }
 
-    /** PUBLIC — issue an SMS sign-in code for a phone number. */
+    /** PUBLIC — issue a sign-in code for a phone number, by SMS (default) or call. */
     @Post('phone/send-otp')
     async sendPhoneOtp(@Body() dto: SendPhoneOtpDto) {
-        return this.phoneOtpService.sendOtp(dto.phone);
+        return this.phoneOtpService.sendOtp(dto.phone, dto.channel ?? 'sms');
     }
 
     /**

@@ -94,7 +94,7 @@ export default function ProfilePage() {
     const currentPhone = user?.phone ?? '';
     const phoneIsNew = phone.trim() !== '' && normalizePhone(phone) !== currentPhone;
 
-    const handleSendPhoneOtp = async () => {
+    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = 'sms') => {
         setPhoneMsg(null);
         if (!isValidPhone(phone)) {
             setPhoneMsg({ text: 'Enter a valid mobile number.', type: 'error' });
@@ -102,12 +102,15 @@ export default function ProfilePage() {
         }
         setPhoneBusy(true);
         try {
-            const { error } = await phoneOtp.sendOtp(phone);
+            const { error } = await phoneOtp.sendOtp(phone, channel);
             if (error) {
                 setPhoneMsg({ text: error.message || 'Could not send the code.', type: 'error' });
             } else {
                 setPhoneOtpSent(true);
-                setPhoneMsg({ text: 'Code sent by SMS.', type: 'info' });
+                setPhoneMsg({
+                    text: channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.',
+                    type: 'info',
+                });
             }
         } catch {
             setPhoneMsg({ text: 'Network error. Please try again.', type: 'error' });
@@ -251,14 +254,33 @@ export default function ProfilePage() {
                                     <button
                                         type="button"
                                         className="btn btn-secondary"
-                                        onClick={handleSendPhoneOtp}
+                                        onClick={() => handleSendPhoneOtp('sms')}
                                         disabled={phoneBusy || !isValidPhone(phone)}
                                         style={{ whiteSpace: 'nowrap' }}
                                     >
-                                        {phoneBusy ? 'Sending…' : phoneOtpSent ? 'Resend' : 'Send code'}
+                                        {phoneBusy ? 'Sending…' : phoneOtpSent ? 'Resend SMS' : 'Send code'}
                                     </button>
                                 )}
                             </div>
+
+                            {phoneIsNew && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendPhoneOtp('voice')}
+                                    disabled={phoneBusy || !isValidPhone(phone)}
+                                    className="btn"
+                                    style={{
+                                        marginTop: '0.4rem',
+                                        background: 'transparent',
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.85rem',
+                                        padding: '0.3rem 0',
+                                        textAlign: 'left',
+                                    }}
+                                >
+                                    📞 Get the code by call instead
+                                </button>
+                            )}
 
                             {phoneIsNew && phoneOtpSent && (
                                 <input

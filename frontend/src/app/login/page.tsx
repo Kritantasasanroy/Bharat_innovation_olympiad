@@ -28,14 +28,13 @@ export default function LoginPage() {
     const isPhone = method === 'phone';
     const identifier = isPhone ? phone : email;
 
-    /** Send the code, shared by the first submit and the resend button. */
-    const sendCode = async () => {
-        return isPhone ? phoneOtp.sendOtp(phone) : emailOtp.sendSignInOtp(email);
+    /** Send the code by SMS (default) or an automated voice call. */
+    const sendCode = async (channel: 'sms' | 'voice' = 'sms') => {
+        return isPhone ? phoneOtp.sendOtp(phone, channel) : emailOtp.sendSignInOtp(email);
     };
 
-    // Step 1: Send OTP
-    const handleSendOtp = async (e: FormEvent) => {
-        e.preventDefault();
+    // Step 1: Send OTP — `channel` only matters for phone sign-in.
+    const submitIdentifier = async (channel: 'sms' | 'voice') => {
         setError('');
         if (isPhone && !isValidPhone(phone)) {
             setError('Enter a valid mobile number.');
@@ -43,14 +42,18 @@ export default function LoginPage() {
         }
         setIsLoading(true);
         try {
-            const { error: otpError } = await sendCode();
+            const { error: otpError } = await sendCode(channel);
             if (otpError) {
                 setError(
                     otpError.message ||
                     `Failed to send code. Make sure this ${isPhone ? 'number' : 'email'} is registered.`,
                 );
             } else {
-                setSuccess(`A 6-digit code has been sent to ${identifier}`);
+                setSuccess(
+                    isPhone && channel === 'voice'
+                        ? `Calling ${identifier} now with your 6-digit code…`
+                        : `A 6-digit code has been sent to ${identifier}`,
+                );
                 setStep('otp');
             }
         } catch (err: any) {
@@ -59,6 +62,11 @@ export default function LoginPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSendOtp = async (e: FormEvent) => {
+        e.preventDefault();
+        await submitIdentifier('sms');
     };
 
     // Step 2: Verify OTP and sign in
@@ -103,7 +111,7 @@ export default function LoginPage() {
         setSuccess('');
         setIsLoading(true);
         try {
-            const { error: otpError } = await sendCode();
+            const { error: otpError } = await sendCode('sms');
             if (otpError) {
                 setError(otpError.message || 'Failed to resend code.');
             } else {
@@ -216,8 +224,24 @@ export default function LoginPage() {
                             </div>
                         )}
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
-                            {isLoading ? 'Sending Code...' : 'Send Verification Code →'}
+                            {isLoading ? 'Sending Code...' : isPhone ? 'Send Code by SMS →' : 'Send Verification Code →'}
                         </button>
+                        {isPhone && (
+                            <button
+                                type="button"
+                                className="btn auth-submit"
+                                onClick={() => submitIdentifier('voice')}
+                                disabled={isLoading}
+                                style={{
+                                    marginTop: '0.6rem',
+                                    background: 'transparent',
+                                    border: '1px solid var(--border-color, rgba(127,127,127,0.35))',
+                                    color: 'var(--text-secondary)',
+                                }}
+                            >
+                                📞 Get the code by call instead
+                            </button>
+                        )}
                     </form>
                 ) : (
                     <form onSubmit={handleVerifyOtp} className="auth-form">

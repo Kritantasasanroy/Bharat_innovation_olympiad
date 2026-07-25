@@ -73,6 +73,11 @@ export class NotificationService implements OnModuleInit {
         await this.sms.sendOtp(toE164, code);
     }
 
+    /** Same code, delivered as an automated voice call. Failures propagate. */
+    async sendOtpVoice(toE164: string, code: string): Promise<void> {
+        await this.sms.sendOtpVoice(toE164, code);
+    }
+
     private get appUrl(): string {
         return process.env.FRONTEND_URL?.replace(/\/$/, '') || 'http://localhost:3000';
     }

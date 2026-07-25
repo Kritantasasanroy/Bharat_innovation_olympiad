@@ -33,7 +33,10 @@ export class PhoneOtpService {
         return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
     }
 
-    async sendOtp(rawPhone: string): Promise<{ sent: true; expiresInSeconds: number }> {
+    async sendOtp(
+        rawPhone: string,
+        channel: 'sms' | 'voice' = 'sms',
+    ): Promise<{ sent: true; channel: 'sms' | 'voice'; expiresInSeconds: number }> {
         const phone = normalizePhone(rawPhone);
 
         const recentSends = await this.prisma.phoneOtp.count({
@@ -61,9 +64,13 @@ export class PhoneOtpService {
         // Deliberately not caught: the student is waiting on this code, so a
         // delivery failure must surface rather than leave them at a dead
         // code-entry box.
-        await this.notifications.sendOtpSms(phone, code);
+        if (channel === 'voice') {
+            await this.notifications.sendOtpVoice(phone, code);
+        } else {
+            await this.notifications.sendOtpSms(phone, code);
+        }
 
-        return { sent: true, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };
+        return { sent: true, channel, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };
     }
 
     /**
