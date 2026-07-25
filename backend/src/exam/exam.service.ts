@@ -1,8 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptStatus, BookingStatus, Prisma } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
+import { GoogleDriveService } from '../common/services/google-drive.service';
 import { MediaKind, ObjectStorageService } from '../common/services/object-storage.service';
+import { ImportQuestionDto, ImportQuestionsDto } from './dto/import-questions.dto';
 import { ConfigService } from '@nestjs/config';
 import {
     canPublish,
@@ -61,10 +63,13 @@ function flattenSection(section: any, includeAnswer = true) {
 
 @Injectable()
 export class ExamService {
+    private readonly logger = new Logger(ExamService.name);
+
     constructor(
         private prisma: PrismaService,
         private storage: ObjectStorageService,
         private config: ConfigService,
+        private drive: GoogleDriveService,
     ) { }
 
     // ── Student-facing ──
@@ -89,11 +94,25 @@ export class ExamService {
         const exams = await this.prisma.exam.findMany({
             where: {
                 isPublished: true,
+                // Retired exams stay in the database for their attempts and
+                // certificates but must not reappear in the catalogue.
+                isArchived: false,
+                // The rehearsal paper is reached through the exam it gates, not
+                // by picking it out of the list.
+                isTrial: false,
                 classBands: { has: classBand },
                 instances: { some: { endsAt: { gte: now } } },
             },
             include: {
-                sections: { select: { id: true, title: true, sortOrder: true } },
+                sections: {
+                    select: {
+                        id: true,
+                        title: true,
+                        sortOrder: true,
+                        _count: { select: { sectionQuestions: true } },
+                    },
+                    orderBy: { sortOrder: 'asc' },
+                },
                 instances: {
                     where: { endsAt: { gte: now } },
                     orderBy: { startsAt: 'asc' },
@@ -184,6 +203,37 @@ export class ExamService {
         });
     }
 
+    /**
+     * The rehearsal paper: a trial exam that runs the full proctored
+     * environment but is never scored or ranked.
+     *
+     * Returns the newest non-archived one, so replacing the trial is a matter
+     * of creating and publishing a new one rather than finding and editing the
+     * old. Returns null rather than throwing — "no trial configured" is a valid
+     * state that must not strand every student behind a paper that does not
+     * exist, and the caller decides what to do about it.
+     */
+    async findActiveTrialExam() {
+        return this.prisma.exam.findFirst({
+            where: { isTrial: true, isArchived: false },
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                durationMinutes: true,
+                totalMarks: true,
+                isTrial: true,
+                instances: {
+                    orderBy: { startsAt: 'asc' },
+                    take: 1,
+                    select: { id: true, startsAt: true, endsAt: true },
+                },
+                _count: { select: { sections: true } },
+            },
+        });
+    }
+
     async findExamById(id: string, userId?: string) {
         const exam = await this.prisma.exam.findUnique({
             where: { id },
@@ -214,6 +264,19 @@ export class ExamService {
                                         videoUrl: true,
                                         tags: true,
                                         explanation: true,
+                                        // Olympiad-format fields the student is
+                                        // meant to see. Authoring-only columns
+                                        // (learningObjective, competency,
+                                        // metadata) are deliberately absent.
+                                        externalId: true,
+                                        partCode: true,
+                                        partName: true,
+                                        sectionCode: true,
+                                        sectionName: true,
+                                        topic: true,
+                                        questionCategory: true,
+                                        bloomLevel: true,
+                                        futureReadyInsight: true,
                                         // correctAnswer always excluded at the
                                         // student-facing layer; admin reads it via
                                         // GET /admin/questions
@@ -228,6 +291,15 @@ export class ExamService {
 
         if (!exam) throw new NotFoundException('Exam not found');
 
+        // A `userId` means this is the student-facing read. The list query
+        // filters archived exams out, so this route must too — otherwise a
+        // retired exam stays fully readable to anyone who kept its URL, which
+        // would defeat the point of archiving it. Trial exams are exempt: they
+        // are fetched by id on purpose, from the exam they gate.
+        if (userId && exam.isArchived && !exam.isTrial) {
+            throw new NotFoundException('Exam not found');
+        }
+
         const flattenedSections = exam.sections.map(s => flattenSection(s));
 
         // Mirrors the paywall in `AttemptService.startAttempt` so the device-check
@@ -236,19 +308,21 @@ export class ExamService {
         const requiresAccessPass = !isDemoExam(exam.id);
 
         if (userId) {
-            const allQuestions = flattenedSections.flatMap(s => s.questions);
-            const seed = hashString(userId + exam.id);
-            const shuffledQuestions = seededShuffle(allQuestions, seed);
+            // Sections are preserved, not collapsed. Each pillar is sat as a
+            // block with its name on screen, so shuffling happens *within* a
+            // section only — a cross-section shuffle used to run here and made
+            // the headings meaningless. The per-section seed still gives every
+            // student a different order.
             return {
                 ...exam,
                 requiresAccessPass,
-                sections: [{
-                    id: 'shuffled',
-                    title: 'All Questions',
-                    sortOrder: 0,
-                    examId: exam.id,
-                    questions: shuffledQuestions,
-                }],
+                sections: flattenedSections.map((section) => ({
+                    ...section,
+                    questions: seededShuffle(
+                        section.questions,
+                        hashString(`${userId}:${exam.id}:${section.id}`),
+                    ),
+                })),
             };
         }
 
@@ -269,8 +343,11 @@ export class ExamService {
      * and released. The buttons were previously always enabled and simply failed
      * with a server error; now the page can disable them and say what is missing.
      */
-    async findAllExamsForAdmin() {
+    async findAllExamsForAdmin(includeArchived = false) {
         const exams = await this.prisma.exam.findMany({
+            // Archived exams are hidden by default but never deleted — the admin
+            // page has a "Show archived" toggle to bring them back into view.
+            where: includeArchived ? {} : { isArchived: false },
             include: {
                 _count: { select: { sections: true, instances: true } },
                 instances: { orderBy: { startsAt: 'asc' } },
@@ -336,6 +413,8 @@ export class ExamService {
         easyPct?: number;
         mediumPct?: number;
         hardPct?: number;
+        isTrial?: boolean;
+        requiresTrial?: boolean;
     }) {
         // A new exam starts as a DRAFT with results hidden. It used to be created
         // published *and* results-released, which is why an exam with no paper and
@@ -475,6 +554,8 @@ export class ExamService {
         hardPct?: number;
         isPublished?: boolean;
         isResultReleased?: boolean;
+        isTrial?: boolean;
+        requiresTrial?: boolean;
     }) {
         // Turning a flag ON is gated; turning it OFF is always allowed — taking a
         // bad exam down or pulling back a wrong result must never be blocked.
@@ -596,6 +677,83 @@ export class ExamService {
         return assets.map((asset) => ({ ...asset, inUse: inUse.has(asset.url) }));
     }
 
+    /** Whether the Drive gallery is reachable, and where it is. */
+    driveGalleryStatus() {
+        const folderId = this.drive.defaultFolderId;
+        return {
+            configured: this.drive.isConfigured && Boolean(folderId),
+            hasApiKey: this.drive.isConfigured,
+            folderId: folderId || null,
+            folderUrl: folderId ? `https://drive.google.com/drive/folders/${folderId}` : null,
+            hint: !this.drive.isConfigured
+                ? 'Set GOOGLE_DRIVE_API_KEY (Drive API enabled) to sync from Drive.'
+                : !folderId
+                  ? 'Set GOOGLE_DRIVE_GALLERY_FOLDER_ID to the shared gallery folder.'
+                  : 'The folder must be shared "Anyone with the link — Viewer".',
+        };
+    }
+
+    /**
+     * Mirrors every image in the shared Google Drive gallery folder into object
+     * storage and records each one in the media gallery.
+     *
+     * Files already mirrored (matched on `MediaAsset.filename`) are skipped, so
+     * this is safe to run repeatedly — an admin re-runs it after adding images
+     * to the folder and only the new ones move.
+     *
+     * One failing image never fails the run. A folder of fifty where three are
+     * not shared should import forty-seven and *say* which three did not, not
+     * roll everything back over an authoring mistake.
+     */
+    async syncDriveGallery(folderId?: string) {
+        const files = await this.drive.listFolder(folderId);
+
+        const existing = await this.prisma.mediaAsset.findMany({
+            where: { kind: 'IMAGE' },
+            select: { filename: true },
+        });
+        const alreadyMirrored = new Set(
+            existing.map((a) => a.filename).filter((f): f is string => Boolean(f)),
+        );
+
+        const imported: { filename: string; url: string }[] = [];
+        const skipped: string[] = [];
+        const failed: { filename: string; reason: string }[] = [];
+
+        for (const file of files) {
+            if (alreadyMirrored.has(file.name)) {
+                skipped.push(file.name);
+                continue;
+            }
+            try {
+                const { buffer, contentType } = await this.drive.fetchImage(file.id);
+                const uploaded = await this.storage.uploadImageBuffer(
+                    buffer,
+                    file.name,
+                    contentType,
+                );
+                await this.prisma.mediaAsset.create({
+                    data: {
+                        kind: 'IMAGE',
+                        provider: uploaded.provider,
+                        url: uploaded.url,
+                        publicId: uploaded.publicId,
+                        filename: file.name,
+                        bytes: buffer.byteLength,
+                    },
+                });
+                imported.push({ filename: file.name, url: uploaded.url });
+            } catch (err) {
+                failed.push({ filename: file.name, reason: (err as Error).message });
+            }
+        }
+
+        this.logger.log(
+            `Drive gallery sync: ${imported.length} imported, ${skipped.length} already present, ${failed.length} failed.`,
+        );
+        return { total: files.length, imported, skipped, failed };
+    }
+
     /** Permanently deletes at the storage provider, then drops the gallery row. Refuses while a question still points at it. */
     async deleteMediaAsset(id: string) {
         const asset = await this.prisma.mediaAsset.findUnique({ where: { id } });
@@ -658,6 +816,196 @@ export class ExamService {
             });
             return question;
         });
+    }
+
+    /**
+     * Imports a whole Olympiad question paper into one exam, building the
+     * section structure out of the questions themselves.
+     *
+     * The workbook groups questions by **Part Name** — the five pillars
+     * (Entrepreneurship Mindset, Problem Solving & Innovation, …) — and that
+     * grouping *is* the exam's section structure. So rather than making an
+     * admin create five sections by hand and then import five times, one upload
+     * creates or reuses a section per distinct part, in the order the parts
+     * first appear in the file, and attaches each question in file order.
+     *
+     * Images resolve in a fixed order, and a row that cannot resolve one is
+     * imported anyway and *reported*, never silently left blank:
+     *   1. `imageSourceUrl` → Drive file id → an already-mirrored gallery asset
+     *   2. `imageFilename`  → a gallery asset with that filename
+     *   3. unresolved       → listed in `imagesUnresolved`
+     */
+    async importExamQuestions(examId: string, dto: ImportQuestionsDto) {
+        const exam = await this.prisma.exam.findUnique({
+            where: { id: examId },
+            select: { id: true, title: true },
+        });
+        if (!exam) throw new NotFoundException('Exam not found');
+
+        const { questions, replaceExisting = false } = dto;
+
+        // ── Validate before writing anything ──
+        // A 50-row paper that fails on row 37 must not leave 36 questions
+        // behind, and the admin needs the row number, not a Prisma error.
+        const problems: string[] = [];
+        questions.forEach((q, i) => {
+            const row = i + 2; // +1 for zero-index, +1 for the header row
+            const correct = q.options.filter((o) => o.isCorrect).length;
+            if (correct !== 1) {
+                problems.push(`Row ${row}: ${correct} options marked correct, expected exactly 1.`);
+            }
+            if (q.options.some((o) => !o.text.trim())) {
+                problems.push(`Row ${row}: at least one option is blank.`);
+            }
+            if (!q.text.trim()) problems.push(`Row ${row}: question text is empty.`);
+        });
+        if (problems.length) {
+            throw new BadRequestException(
+                `Import refused — nothing was written.\n${problems.slice(0, 20).join('\n')}` +
+                    (problems.length > 20 ? `\n…and ${problems.length - 20} more.` : ''),
+            );
+        }
+
+        // ── Resolve images against the gallery ──
+        const gallery = await this.prisma.mediaAsset.findMany({
+            where: { kind: 'IMAGE' },
+            select: { url: true, filename: true },
+        });
+        const byFilename = new Map(
+            gallery
+                .filter((a): a is { url: string; filename: string } => Boolean(a.filename))
+                .map((a) => [a.filename.toLowerCase(), a.url]),
+        );
+
+        const imagesUnresolved: { externalId?: string; wanted: string }[] = [];
+        const resolveImage = (q: ImportQuestionDto): string | null => {
+            if (q.imageFilename) {
+                const hit = byFilename.get(q.imageFilename.toLowerCase());
+                if (hit) return hit;
+            }
+            // A Drive link resolves through the mirror, never by hot-linking:
+            // the sync names each mirrored asset after its Drive filename.
+            const wanted = q.imageFilename || q.imageSourceUrl;
+            if (wanted) imagesUnresolved.push({ externalId: q.externalId, wanted });
+            return null;
+        };
+
+        // ── Group into sections by Part Name, preserving first-appearance order ──
+        const sectionOrder: string[] = [];
+        const bySection = new Map<string, ImportQuestionDto[]>();
+        for (const q of questions) {
+            const title = (q.partName || q.partCode || 'General').trim();
+            if (!bySection.has(title)) {
+                bySection.set(title, []);
+                sectionOrder.push(title);
+            }
+            bySection.get(title)!.push(q);
+        }
+
+        const created = await this.prisma.$transaction(
+            async (tx) => {
+                if (replaceExisting) {
+                    // Sections cascade to SectionQuestion, which detaches the old
+                    // questions. The Question rows themselves stay in the bank.
+                    await tx.examSection.deleteMany({ where: { examId } });
+                }
+
+                const existingSections = await tx.examSection.findMany({
+                    where: { examId },
+                    select: { id: true, title: true, sortOrder: true },
+                });
+                const sectionByTitle = new Map(existingSections.map((s) => [s.title, s]));
+                let nextOrder = existingSections.length;
+
+                let questionCount = 0;
+                const sections: { title: string; questions: number }[] = [];
+
+                for (const title of sectionOrder) {
+                    let section = sectionByTitle.get(title);
+                    if (!section) {
+                        section = await tx.examSection.create({
+                            data: {
+                                examId,
+                                title,
+                                sortOrder: nextOrder++,
+                                // 0 = every question in the pool is assigned.
+                                questionsToAssign: 0,
+                            },
+                            select: { id: true, title: true, sortOrder: true },
+                        });
+                        sectionByTitle.set(title, section);
+                    }
+
+                    const startAt = await tx.sectionQuestion.count({
+                        where: { sectionId: section.id },
+                    });
+                    const rows = bySection.get(title)!;
+
+                    for (const [i, q] of rows.entries()) {
+                        const question = await tx.question.create({
+                            data: {
+                                type: 'MCQ',
+                                difficulty: q.difficulty ?? 'EASY',
+                                text: q.text.trim(),
+                                options: q.options.map((o, idx) => ({
+                                    id: String(idx),
+                                    text: o.text.trim(),
+                                    isCorrect: o.isCorrect,
+                                })),
+                                marks: q.marks ?? 1,
+                                negativeMarks: q.negativeMarks ?? 0,
+                                explanation: q.explanation ?? null,
+                                imageUrl: resolveImage(q),
+                                externalId: q.externalId ?? null,
+                                grade: q.grade ?? null,
+                                partCode: q.partCode ?? null,
+                                partName: q.partName ?? null,
+                                sectionCode: q.sectionCode ?? null,
+                                sectionName: q.sectionName ?? null,
+                                topic: q.topic ?? null,
+                                learningObjective: q.learningObjective ?? null,
+                                questionCategory: q.questionCategory ?? null,
+                                bloomLevel: q.bloomLevel ?? null,
+                                competency: q.competency ?? null,
+                                questionFormat: q.questionFormat ?? null,
+                                futureReadyInsight: q.futureReadyInsight ?? null,
+                                imageFilename: q.imageFilename ?? null,
+                                imageSourceUrl: q.imageSourceUrl ?? null,
+                                metadata: (q.metadata ?? undefined) as Prisma.InputJsonValue,
+                            },
+                            select: { id: true },
+                        });
+                        await tx.sectionQuestion.create({
+                            data: {
+                                sectionId: section.id,
+                                questionId: question.id,
+                                sortOrder: startAt + i,
+                            },
+                        });
+                        questionCount++;
+                    }
+                    sections.push({ title, questions: rows.length });
+                }
+
+                return { questionCount, sections };
+            },
+            // 50 questions × 2 inserts each, against Neon over the public
+            // internet. The 5s default is not enough.
+            { timeout: 120_000 },
+        );
+
+        this.logger.log(
+            `Imported ${created.questionCount} questions into "${exam.title}" across ${created.sections.length} sections.`,
+        );
+
+        return {
+            ...created,
+            imagesUnresolved,
+            note: imagesUnresolved.length
+                ? `${imagesUnresolved.length} question(s) expect an image that is not in the gallery yet. ` +
+                  'Run "Sync from Drive" on the Media Gallery, then re-import to attach them.'
+                : undefined,
+        };
     }
 
     async bulkCreateQuestions(sectionId: string, items: any[]) {
@@ -862,6 +1210,46 @@ export class ExamService {
     /** Un-publishes an exam, taking it straight back out of every student's list. */
     async unpublishExam(id: string) {
         return this.prisma.exam.update({ where: { id }, data: { isPublished: false } });
+    }
+
+    /**
+     * Archive or restore an exam.
+     *
+     * Archiving also unpublishes, because the two must not disagree: an exam
+     * that is `isPublished: true, isArchived: true` is invisible in the list but
+     * would still satisfy the publication check in the start gate.
+     */
+    async setExamArchived(id: string, archived: boolean) {
+        const exam = await this.prisma.exam.findUnique({ where: { id }, select: { id: true } });
+        if (!exam) throw new NotFoundException('Exam not found');
+        return this.prisma.exam.update({
+            where: { id },
+            data: archived ? { isArchived: true, isPublished: false } : { isArchived: false },
+        });
+    }
+
+    /**
+     * Retire every exam except those named, plus the practice and trial papers.
+     *
+     * Practice exams are exempt because students are told they stay free and
+     * available; the trial paper is exempt because every real exam depends on
+     * it. Nothing is deleted — see `setExamArchived`.
+     */
+    async archiveAllExcept(keepExamIds: string[]) {
+        const keep = new Set(keepExamIds);
+        const candidates = await this.prisma.exam.findMany({
+            where: { isArchived: false, isTrial: false },
+            select: { id: true, title: true },
+        });
+
+        const toArchive = candidates.filter((e) => !keep.has(e.id) && !isDemoExam(e.id));
+        if (toArchive.length === 0) return { archived: 0, exams: [] };
+
+        await this.prisma.exam.updateMany({
+            where: { id: { in: toArchive.map((e) => e.id) } },
+            data: { isArchived: true, isPublished: false },
+        });
+        return { archived: toArchive.length, exams: toArchive };
     }
 
     async releaseQuestionPaper(id: string) {

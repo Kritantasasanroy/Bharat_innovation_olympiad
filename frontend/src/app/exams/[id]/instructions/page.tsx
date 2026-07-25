@@ -8,18 +8,37 @@ import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
-// Shared between the Rules & Guidelines card and the Start Exam confirmation modal.
-const RULES = [
-    <>The exam must be taken in <strong>fullscreen mode</strong>.</>,
-    <>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</>,
-    <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
-    <>Exiting fullscreen or switching tabs will pause the exam.</>,
-    <>If paused for more than 20 seconds, the exam will auto-submit.</>,
-    <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</>,
-    <>Your answers are auto-saved continuously.</>,
-    <>Negative marking applies for incorrect MCQ answers.</>,
-    <>Use the Submit button when done — do not close the browser.</>,
-];
+/**
+ * Shared between the Rules & Guidelines card and the Start Exam confirmation
+ * modal.
+ *
+ * Takes the exam so the marking rule can tell the truth: the negative-marking
+ * line was hard-coded and stayed on screen even for papers that carry none,
+ * which is a rule students would reasonably change their strategy over.
+ */
+function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } | null) {
+    return [
+        <>The exam must be taken in <strong>fullscreen mode</strong>.</>,
+        <>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</>,
+        <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
+        <>Exiting fullscreen or switching tabs will pause the exam.</>,
+        <>If paused for more than 20 seconds, the exam will auto-submit.</>,
+        <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</>,
+        ...(exam?.sectionCount && exam.sectionCount > 1
+            ? [
+                  <>
+                      The paper is divided into <strong>{exam.sectionCount} sections</strong>. You will
+                      work through one section at a time, and you can move freely between questions.
+                  </>,
+              ]
+            : []),
+        <>Your answers are auto-saved continuously.</>,
+        exam?.negativeMarking
+            ? <>Negative marking applies for incorrect MCQ answers.</>
+            : <>There is <strong>no negative marking</strong> — an incorrect answer costs you nothing, so attempt every question.</>,
+        <>Use the Submit button when done — do not close the browser.</>,
+    ];
+}
 
 export default function ExamInstructionsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -29,6 +48,26 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const [webcamStarted, setWebcamStarted] = useState(false);
     const [webcamLoading, setWebcamLoading] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+    /**
+     * The rules acknowledgement. Previously a plain "I Understand, Start Exam"
+     * button, which is one click away from being dismissed unread; a checkbox
+     * makes the acknowledgement a deliberate, separate act from starting.
+     * Reset whenever the modal closes so it is never pre-ticked on reopen.
+     */
+    const [rulesAccepted, setRulesAccepted] = useState(false);
+
+    // The paper itself — needed for the marking rule, the section count, and
+    // whether this exam gates on the trial.
+    const [exam, setExam] = useState<any>(null);
+
+    /**
+     * Rehearsal gate. The server refuses to start a real exam until the trial
+     * paper has been sat (`TRIAL_REQUIRED`), so resolve that here and send the
+     * student to the trial first rather than letting them finish every device
+     * check and then be turned away by the player.
+     */
+    const [trialState, setTrialState] = useState<'checking' | 'required' | 'done' | 'not_needed'>('checking');
+    const [trialExamId, setTrialExamId] = useState<string | null>(null);
 
     // Face ID enrollment gate — must be enrolled before Start Exam is enabled.
     const [faceEnrollStatus, setFaceEnrollStatus] = useState<'checking' | 'enrolled' | 'not_enrolled'>('checking');
@@ -61,6 +100,55 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                 setPassStatus(!needsPass || r.data.isActive ? 'active' : 'locked');
             })
             .catch(() => setPassStatus('locked'));
+    }, [id]);
+
+    /**
+     * Resolve the exam and, if it gates on the rehearsal, whether this student
+     * has already sat it. `?trial=done` is a hint from the trial player that we
+     * have just come back from it — the authoritative answer is still the
+     * server's, so it only shortcuts the optimistic state.
+     */
+    useEffect(() => {
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const { data } = await api.get(`/exams/${id}`);
+                if (cancelled) return;
+                setExam(data);
+
+                if (data.isTrial || data.requiresTrial === false) {
+                    setTrialState('not_needed');
+                    return;
+                }
+
+                const instanceId = data.instances?.[0]?.id;
+                if (!instanceId) {
+                    setTrialState('not_needed');
+                    return;
+                }
+
+                const [{ data: trialExam }, { data: status }] = await Promise.all([
+                    api.get('/exams/trial').catch(() => ({ data: null })),
+                    api.get('/attempts/trial-status', { params: { examInstanceId: instanceId } })
+                        .catch(() => ({ data: { completed: false } })),
+                ]);
+                if (cancelled) return;
+
+                // No trial paper configured at all: do not strand every student
+                // behind a rehearsal that does not exist.
+                if (!trialExam?.id) {
+                    setTrialState('not_needed');
+                    return;
+                }
+                setTrialExamId(trialExam.id);
+                setTrialState(status.completed ? 'done' : 'required');
+            } catch {
+                if (!cancelled) setTrialState('not_needed');
+            }
+        })();
+
+        return () => { cancelled = true; };
     }, [id]);
 
     // Once camera permission is granted, also warm up face-api.js so Capture is instant.
@@ -108,13 +196,41 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         }
     }, [deviceChecks.webcam]);
 
+    /**
+     * Leaving the modal. The rehearsal comes first when it is still owed —
+     * the same trial paper gates every exam, so it is told which one it is
+     * unlocking via `?next=`, and it sends the student back here afterwards.
+     */
     const handleProceed = () => {
+        if (trialState === 'required' && trialExamId) {
+            router.push(`/exams/${trialExamId}/play?next=${id}`);
+            return;
+        }
         router.push(`/exams/${id}/play`);
     };
 
     const handleStartClick = () => {
+        setRulesAccepted(false);
         setShowConfirmModal(true);
     };
+
+    const closeConfirmModal = () => {
+        setShowConfirmModal(false);
+        setRulesAccepted(false);
+    };
+
+    const RULES = buildRules(
+        exam
+            ? {
+                  // Any question carrying negative marks makes the rule true for
+                  // the paper; a paper with none must not claim otherwise.
+                  negativeMarking: (exam.sections ?? []).some((s: any) =>
+                      (s.questions ?? []).some((q: any) => (q.negativeMarks ?? 0) > 0),
+                  ),
+                  sectionCount: (exam.sections ?? []).length,
+              }
+            : null,
+    );
 
     const checks = [
         {
@@ -154,6 +270,23 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     : 'Required — enroll below before starting',
             passed: faceEnrollStatus === 'checking' ? null : faceEnrollStatus === 'enrolled',
         },
+        // Listed as a check rather than hidden, so the rehearsal reads as one
+        // more thing to complete rather than an unexplained detour on the way
+        // to the exam.
+        ...(trialState === 'not_needed'
+            ? []
+            : [
+                  {
+                      label: 'Trial Test',
+                      description:
+                          trialState === 'checking'
+                              ? 'Checking…'
+                              : trialState === 'done'
+                                ? 'Trial test completed — you are ready'
+                                : 'Required — a short practice run starts when you click below',
+                      passed: trialState === 'checking' ? null : trialState === 'done',
+                  },
+              ]),
     ];
 
     return (
@@ -282,13 +415,22 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     <div className="instructions-actions">
                         <button
                             className="btn btn-primary btn-lg"
-                            disabled={!deviceChecks.viewport || !deviceChecks.fullscreen || !webcamStarted || faceEnrollStatus !== 'enrolled' || passStatus === 'locked'}
+                            disabled={
+                                !deviceChecks.viewport ||
+                                !deviceChecks.fullscreen ||
+                                !webcamStarted ||
+                                faceEnrollStatus !== 'enrolled' ||
+                                passStatus === 'locked' ||
+                                trialState === 'checking'
+                            }
                             onClick={handleStartClick}
                         >
-                            ✅ Start Exam
+                            {trialState === 'required' ? '✅ Start Trial Test' : '✅ Start Exam'}
                         </button>
                         <p className="start-note">
-                            By clicking Start, you agree to the exam rules and AI proctoring terms.
+                            {trialState === 'required'
+                                ? 'A short trial test runs first, in the same environment as the real exam.'
+                                : 'You will be asked to confirm the exam rules before the paper opens.'}
                         </p>
                     </div>
                 </div>
@@ -308,15 +450,39 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                     Please read all rules and guidelines carefully before starting.
                                 </p>
                             </div>
-                            <ul className="rules-list" style={{ marginBottom: '1.5rem' }}>
+                            <ul className="rules-list" style={{ marginBottom: '1.25rem' }}>
                                 {RULES.map((rule, i) => <li key={i}>{rule}</li>)}
                             </ul>
+
+                            {/* Acknowledgement as an explicit checkbox rather than
+                                a button label. A single "I Understand, Start Exam"
+                                click both agrees and starts, which makes it easy to
+                                dismiss unread — the tick has to be a separate act. */}
+                            <label className="rules-ack">
+                                <input
+                                    type="checkbox"
+                                    checked={rulesAccepted}
+                                    onChange={(e) => setRulesAccepted(e.target.checked)}
+                                />
+                                <span>
+                                    I have read and understood all the rules above, and I agree to the
+                                    AI proctoring terms.
+                                </span>
+                            </label>
+
+                            {trialState === 'required' && (
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
+                                    You will start with a short <strong>trial test</strong> in the same
+                                    exam environment. Once you finish it, your real exam begins.
+                                </p>
+                            )}
+
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
                                     type="button"
                                     className="btn btn-secondary"
                                     style={{ flex: 1, padding: '0.85rem' }}
-                                    onClick={() => setShowConfirmModal(false)}
+                                    onClick={closeConfirmModal}
                                 >
                                     Cancel
                                 </button>
@@ -324,9 +490,11 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                     type="button"
                                     className="btn btn-primary"
                                     style={{ flex: 1, padding: '0.85rem' }}
+                                    disabled={!rulesAccepted}
+                                    title={rulesAccepted ? undefined : 'Tick the box above to continue'}
                                     onClick={handleProceed}
                                 >
-                                    I Understand, Start Exam
+                                    {trialState === 'required' ? 'Start Trial Test' : 'Start Exam'}
                                 </button>
                             </div>
                         </div>

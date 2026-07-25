@@ -186,6 +186,26 @@ export class SlotService {
         });
     }
 
+    /**
+     * One booking by id, scoped to its owner.
+     *
+     * The ownership check is the point: a booking id in a URL must not let one
+     * student read another's slot, school and payment. A booking that is not
+     * theirs is reported as not found rather than forbidden — "no such booking"
+     * and "not yours" should be indistinguishable from outside.
+     */
+    async getBookingById(bookingId: string, userId: string) {
+        const booking = await this.prisma.booking.findFirst({
+            where: { id: bookingId, userId },
+            include: {
+                slot: { include: { examInstance: { include: { exam: true } } } },
+                payment: true,
+            },
+        });
+        if (!booking) throw new NotFoundException('Booking not found');
+        return booking;
+    }
+
     async adminListSlotBookings(slotId: string) {
         return this.prisma.booking.findMany({
             where: { slotId },

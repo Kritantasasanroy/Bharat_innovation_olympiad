@@ -66,6 +66,23 @@ export class SlotController {
         return this.slotService.getMyBooking(userId, examId);
     }
 
+    /**
+     * One booking, with its slot and exam.
+     *
+     * The payment and payment-success pages have always called this; it simply
+     * did not exist, so both silently 404'd and fell back to a generic "your
+     * slot has been booked" message that could not name the slot. Declared
+     * after `bookings/me` so that literal path is not swallowed by `:id`.
+     */
+    @Get('bookings/:id')
+    @UseGuards(JwtAuthGuard)
+    async getBooking(
+        @Param('id') bookingId: string,
+        @CurrentUser('id') userId: string,
+    ) {
+        return this.slotService.getBookingById(bookingId, userId);
+    }
+
     // ── Admin routes ──────────────────────────────────────────────────────────
 
     @Post('admin/slots')

@@ -69,15 +69,6 @@ export class PhoneLoginSyncDto {
     code: string;
 }
 
-/** Proves phone ownership during registration before the number is stored. */
-export class VerifyPhoneOtpDto {
-    @IsString()
-    phone: string;
-
-    @IsString()
-    code: string;
-}
-
 export class UpdateProfileDto {
     @IsString()
     @IsOptional()

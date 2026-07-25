@@ -337,6 +337,82 @@ export class ObjectStorageService {
         return `${this.publicBaseUrl}/${key}`;
     }
 
+    /**
+     * Uploads a buffer to whichever provider is live, and reports back what the
+     * gallery needs to record it as a {@link MediaAsset}.
+     *
+     * This is the one sanctioned exception to "bytes never touch the API". It
+     * exists for the Google Drive question-image mirror: those files are small
+     * (≤10 MB, enforced by the caller) and there is no browser in the loop to
+     * do the upload for us, because the source is a Drive folder rather than a
+     * file picker. Video deliberately stays browser-direct.
+     */
+    async uploadImageBuffer(
+        buffer: Buffer,
+        filename: string,
+        contentType: string,
+        folder = 'bio/questions/images',
+    ): Promise<{ url: string; publicId: string; provider: 'cloudinary' | 's3' }> {
+        if (!MEDIA_RULES.image.types.includes(contentType)) {
+            throw new BadRequestException(
+                `Images must be one of: ${MEDIA_RULES.image.types.join(', ')}. Got "${contentType}".`,
+            );
+        }
+        if (buffer.byteLength > MEDIA_RULES.image.maxBytes) {
+            throw new BadRequestException(
+                `That image is ${mb(buffer.byteLength)} MB. The limit is ${mb(MEDIA_RULES.image.maxBytes)} MB.`,
+            );
+        }
+        if (!this.isConfigured) {
+            throw new ServiceUnavailableException(
+                this.provider === 'cloudinary'
+                    ? 'Media storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.'
+                    : 'Media storage is not configured. Set STORAGE_BUCKET, STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY and STORAGE_PUBLIC_BASE_URL.',
+            );
+        }
+
+        if (this.provider === 's3') {
+            const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
+            const key = `questions/images/${randomUUID()}${ext}`;
+            const url = await this.uploadBuffer(key, buffer, contentType);
+            return { url, publicId: key, provider: 's3' };
+        }
+
+        // Cloudinary signed upload, same scheme as `cloudinaryTicket`: SHA-1 of
+        // the sorted signed params with the secret appended. `file` and
+        // `api_key` are not part of the signature, by Cloudinary's design.
+        const timestamp = Math.floor(Date.now() / 1000);
+        const signed: Record<string, string> = { folder, timestamp: String(timestamp) };
+        const toSign = Object.keys(signed)
+            .sort()
+            .map((k) => `${k}=${signed[k]}`)
+            .join('&');
+        const signature = createHash('sha1').update(`${toSign}${this.apiSecret}`).digest('hex');
+
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(buffer)], { type: contentType }), filename);
+        form.append('folder', folder);
+        form.append('timestamp', String(timestamp));
+        form.append('api_key', this.apiKey);
+        form.append('signature', signature);
+
+        const response = await fetch(
+            `https://api.cloudinary.com/v1_1/${this.cloudName}/image/upload`,
+            { method: 'POST', body: form },
+        );
+        const body = (await response.json().catch(() => ({}))) as {
+            secure_url?: string;
+            public_id?: string;
+            error?: { message?: string };
+        };
+        if (!response.ok || !body.secure_url || !body.public_id) {
+            const reason = body.error?.message ?? `HTTP ${response.status}`;
+            this.logger.error(`Cloudinary upload failed for ${filename}: ${reason}`);
+            throw new BadRequestException(`Cloudinary refused the upload: ${reason}`);
+        }
+        return { url: body.secure_url, publicId: body.public_id, provider: 'cloudinary' };
+    }
+
     async getPresignedGetUrl(key: string, expiresIn = 3600): Promise<string> {
         if (!this.s3) {
             throw new ServiceUnavailableException('Signed reads require the S3 provider.');

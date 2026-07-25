@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
+import { APP_NAME, COMPANY_NAME, TAGLINE } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
@@ -139,7 +139,7 @@ export default function LoginPage() {
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
                     <div className="auth-logo"><img src="/bio-logo.png" alt={APP_NAME} style={{ height: '72px', width: 'auto' }} /></div>
-                    <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
+                    <p className="brand-tagline"><span>{TAGLINE}</span></p>
                     <h1 className="auth-title">{APP_NAME}</h1>
                     <p className="auth-company">
                         <span>by</span>

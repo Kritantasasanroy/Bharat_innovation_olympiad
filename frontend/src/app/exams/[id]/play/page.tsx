@@ -7,12 +7,42 @@ import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
-import { use, useEffect, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+interface SectionBlock {
+    id: string;
+    title: string;
+    /** Indices into the flat `questions` array, in order. */
+    indices: number[];
+}
+
+/**
+ * Groups the flat question list into the sections the server sent it in.
+ *
+ * The server delivers questions already ordered section-by-section and stamps
+ * each one with `sectionId`/`sectionTitle`, so this only has to find the
+ * boundaries — it must never reorder anything. An exam whose questions carry no
+ * section (a legacy paper, or the practice exam) collapses to a single unnamed
+ * block and the section chrome hides itself.
+ */
+function groupBySection(questions: any[]): SectionBlock[] {
+    const blocks: SectionBlock[] = [];
+    questions.forEach((q, i) => {
+        const id = q.sectionId ?? '__all__';
+        const last = blocks[blocks.length - 1];
+        if (last && last.id === id) {
+            last.indices.push(i);
+        } else {
+            blocks.push({ id, title: q.sectionTitle ?? '', indices: [i] });
+        }
+    });
+    return blocks;
 }
 
 export default function ExamPlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +58,22 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    /**
+     * Trial mode. `?next=<real exam id>` marks this run as the rehearsal that
+     * gates that exam: the paper is not scored, and on submit we record the
+     * completion and hand the student straight on to the real thing.
+     *
+     * Read from the URL rather than from the exam, because the *same* trial
+     * exam gates every real exam — which one it is unlocking is a property of
+     * this run, not of the paper.
+     */
+    const [nextExamId, setNextExamId] = useState<string | null>(null);
+    useEffect(() => {
+        const next = new URLSearchParams(window.location.search).get('next');
+        setNextExamId(next && /^[0-9a-fA-F-]{36}$/.test(next) ? next : null);
+    }, []);
+    const isTrialRun = Boolean(exam?.isTrial) || Boolean(nextExamId);
+
     const attemptId = attempt?.id || '';
     const { remaining } = useTimer(attemptId);
 
@@ -35,6 +81,13 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // empty deps in the fullscreen hook) always calls the freshest version.
     const submitExamRef = useRef(submitExam);
     useEffect(() => { submitExamRef.current = submitExam; });
+
+    // Same reason, for the post-submit destination: it depends on `nextExamId`,
+    // which is only known after the mount effect reads the query string. A
+    // callback captured on first render would still think this is a normal run.
+    const destinationRef = useRef<(redirectUrl?: string) => Promise<string>>(
+        async (redirectUrl?: string) => redirectUrl ?? '/feedback/exam',
+    );
 
     // handleAutoSubmit needs stopProctoring (from useFaceProctor, declared
     // below) and useFullscreenMonitor needs handleAutoSubmit — a genuine
@@ -50,11 +103,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         try {
             const result = await submitExamRef.current();
             alert(`Exam auto-submitted: ${reason}`);
-            if (result?.redirectUrl) {
-                window.location.href = result.redirectUrl;
-            } else {
-                window.location.href = '/results';
-            }
+            window.location.href = await destinationRef.current(result?.redirectUrl);
         } catch (err) {
             console.error('Auto-submit error:', err);
         }
@@ -189,19 +238,49 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
     };
 
+    /**
+     * Where a finished attempt sends the student.
+     *
+     * A trial run goes back to the instructions page of the exam it unlocks,
+     * having first told the server the rehearsal is done. Everything else goes
+     * to the beta feedback prompt, which hands off to the results page — except
+     * when an admin has set an explicit `quitUrl` on the instance, which still
+     * wins because it is a deliberate override.
+     */
+    const finishTrialRun = async (): Promise<string> => {
+        if (!nextExamId) return '/dashboard';
+        try {
+            // The instance id is what the gate is keyed on, so resolve it from
+            // the exam the student is heading back to.
+            const { data } = await api.get(`/exams/${nextExamId}`);
+            const instanceId = data?.instances?.[0]?.id;
+            if (instanceId) {
+                await api.post('/attempts/trial-complete', { examInstanceId: instanceId });
+            }
+        } catch (err) {
+            // Non-fatal: the server-side gate will simply ask them to sit the
+            // trial again rather than letting anything through unchecked.
+            console.error('Could not record trial completion:', err);
+        }
+        return `/exams/${nextExamId}/instructions?trial=done`;
+    };
+
+    const destinationAfterSubmit = async (redirectUrl?: string): Promise<string> => {
+        if (isTrialRun) return finishTrialRun();
+        if (redirectUrl) return redirectUrl;
+        return '/feedback/exam';
+    };
+    useEffect(() => { destinationRef.current = destinationAfterSubmit; });
+
     const handleSubmit = async () => {
         setIsSubmitting(true);
         stopProctoring();
         clearViolationStorage();
         try {
             const result = await submitExam();
-            if (result?.redirectUrl) {
-                window.location.href = result.redirectUrl;
-            } else {
-                window.location.href = '/results';
-            }
+            window.location.href = await destinationAfterSubmit(result?.redirectUrl);
         } catch {
-            window.location.href = '/results';
+            window.location.href = isTrialRun ? '/dashboard' : '/feedback/exam';
         } finally {
             setIsSubmitting(false);
         }
@@ -214,6 +293,19 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const answeredCount = Object.keys(answers).length;
     const progressPercent = questions.length > 0
         ? Math.round((answeredCount / questions.length) * 100) : 0;
+
+    // Section structure. The paper is sat one section at a time — all of
+    // "Entrepreneurship Mindset", then all of "Problem Solving & Innovation" —
+    // and the student is told which one they are in and how far through it they
+    // are. Navigation still runs straight through the boundaries; sections are
+    // signposting, not gates.
+    const sectionBlocks = useMemo(() => groupBySection(questions), [questions]);
+    const hasSections = sectionBlocks.length > 0 && Boolean(sectionBlocks[0].title);
+    const currentSectionIdx = sectionBlocks.findIndex((b) => b.indices.includes(currentIndex));
+    const currentSection = currentSectionIdx >= 0 ? sectionBlocks[currentSectionIdx] : null;
+    const positionInSection = currentSection
+        ? currentSection.indices.indexOf(currentIndex) + 1
+        : currentIndex + 1;
 
     if (error === 'FACE_ENROLLMENT_REQUIRED') {
         return (
@@ -367,6 +459,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 <header className="exam-header">
                     <div className="flex items-center gap-4">
                         <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>{exam?.title || 'Exam'}</h2>
+                        {/* The rehearsal runs in exactly the same environment as the
+                            real paper — fullscreen, webcam, timer, the lot — so the
+                            only thing distinguishing it is saying so. */}
+                        {isTrialRun && (
+                            <span className="badge badge-warning" title="Practice run — this is not scored">
+                                Trial test — not scored
+                            </span>
+                        )}
                         <span className="badge badge-primary">
                             Q {currentIndex + 1} / {questions.length}
                         </span>
@@ -454,9 +554,30 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                 {/* ── Main Question Area ── */}
                 <main className="exam-main">
+                    {/* Which section this question belongs to, and how far through
+                        it the student is. Sits above the card so it reads as a
+                        heading for the block rather than part of the question. */}
+                    {hasSections && currentSection && (
+                        <div className="exam-section-banner">
+                            <div className="exam-section-banner-main">
+                                <span className="exam-section-eyebrow">
+                                    Section {currentSectionIdx + 1} of {sectionBlocks.length}
+                                </span>
+                                <h2 className="exam-section-title">{currentSection.title}</h2>
+                            </div>
+                            <span className="exam-section-progress">
+                                Question {positionInSection} of {currentSection.indices.length}
+                            </span>
+                        </div>
+                    )}
+
                     <div className="question-container animate-fade-in" key={currentQuestion.id}>
                         <div className="question-header">
-                            <div />
+                            {/* The finer topic grouping from the question bank —
+                                context for the question, not a section boundary. */}
+                            <div className="question-topic">
+                                {currentQuestion.sectionName || currentQuestion.topic || ''}
+                            </div>
                             <button
                                 className={`btn btn-sm ${flagged.has(currentQuestion.id) ? 'btn-danger' : 'btn-secondary'}`}
                                 onClick={() => !isGated && toggleFlag(currentQuestion.id)}
@@ -547,18 +668,44 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 {/* ── Sidebar ── */}
                 <aside className="exam-sidebar">
                     <h3 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>Questions</h3>
-                    <div className="question-index-grid">
-                        {questions.map((q, i) => (
-                            <button
-                                key={q.id}
-                                className={`question-index-item ${i === currentIndex ? 'current' : answers[q.id] ? 'answered' : flagged.has(q.id) ? 'flagged' : ''}`}
-                                onClick={() => !isGated && goToQuestion(i)}
-                                disabled={isGated}
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
-                    </div>
+
+                    {/* Grouped by section so the navigator matches the shape of the
+                        paper. A flat 1–50 grid gives no clue where one pillar ends
+                        and the next begins. Numbering stays global — "question 27"
+                        must mean the same thing here as in the header. */}
+                    {sectionBlocks.map((block, bi) => {
+                        const answeredHere = block.indices.filter((i) => answers[questions[i].id]).length;
+                        return (
+                            <div key={block.id} className="question-index-section">
+                                {hasSections && (
+                                    <div className="question-index-section-head">
+                                        <span className="question-index-section-title">
+                                            {bi + 1}. {block.title}
+                                        </span>
+                                        <span className="question-index-section-count">
+                                            {answeredHere}/{block.indices.length}
+                                        </span>
+                                    </div>
+                                )}
+                                <div className="question-index-grid">
+                                    {block.indices.map((i) => {
+                                        const q = questions[i];
+                                        return (
+                                            <button
+                                                key={q.id}
+                                                className={`question-index-item ${i === currentIndex ? 'current' : answers[q.id] ? 'answered' : flagged.has(q.id) ? 'flagged' : ''}`}
+                                                onClick={() => !isGated && goToQuestion(i)}
+                                                disabled={isGated}
+                                                title={block.title ? `${block.title} — question ${i + 1}` : undefined}
+                                            >
+                                                {i + 1}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
 
                     <div className="sidebar-legend">
                         <div><span className="legend-dot current" /> Current</div>

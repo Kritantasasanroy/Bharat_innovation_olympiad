@@ -51,6 +51,13 @@ interface Instance {
     mySlot: MySlot | null;
 }
 
+interface ExamSectionSummary {
+    id: string;
+    title: string;
+    sortOrder: number;
+    _count?: { sectionQuestions: number };
+}
+
 interface Exam {
     id: string;
     title: string;
@@ -62,7 +69,7 @@ interface Exam {
     isCompleted?: boolean;
     instances: Instance[];
     _count?: { sections: number };
-    sections?: unknown[];
+    sections?: ExamSectionSummary[];
 }
 
 const dt = (iso: string) =>
@@ -81,7 +88,7 @@ const timeOnly = (iso: string) =>
 const PHASE_UI: Record<Phase, { pill: string; tone: string; cta: string }> = {
     DRAFT: { pill: 'Unavailable', tone: 'muted', cta: 'Unavailable' },
     SCHEDULED: { pill: 'Scheduled', tone: 'info', cta: 'Not open yet' },
-    NEEDS_SLOT: { pill: 'Slot needed', tone: 'warn', cta: 'Book a slot' },
+    NEEDS_SLOT: { pill: 'Choose your slot', tone: 'warn', cta: 'Choose your exam slot' },
     SLOT_UPCOMING: { pill: 'Your slot is coming up', tone: 'info', cta: 'Waiting for your slot' },
     OPEN: { pill: 'Open now', tone: 'success', cta: 'Start Exam' },
     SLOT_MISSED: { pill: 'Slot missed', tone: 'danger', cta: 'Slot has passed' },
@@ -173,6 +180,30 @@ function ExamCard({
 
     const startable = !isCompleted && (instance?.canStart ?? false);
 
+    /**
+     * An exam waiting on a slot is not a dead end — the student picks one.
+     *
+     * The slot picker has existed all along but nothing ever linked to it, so
+     * `NEEDS_SLOT` rendered a "contact your coordinator" note and a disabled
+     * button. Now that students choose their own sitting after paying, this is
+     * the route they take.
+     */
+    const needsSlot = !isCompleted && phase === 'NEEDS_SLOT';
+
+    const sections = [...(exam.sections ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    const questionCount = sections.reduce(
+        (sum, s) => sum + (s._count?.sectionQuestions ?? 0),
+        0,
+    );
+
+    const handleCardAction = () => {
+        if (needsSlot) {
+            router.push(`/exams/${exam.id}/slots`);
+        } else if (startable) {
+            router.push(`/exams/${exam.id}/instructions`);
+        }
+    };
+
     return (
         <div
             className="glass-card exam-card"
@@ -193,16 +224,37 @@ function ExamCard({
                     <span className="meta-value">{exam.durationMinutes} min</span>
                 </div>
                 <div className="meta-item">
+                    <span className="meta-label">Questions</span>
+                    <span className="meta-value">{questionCount || '—'}</span>
+                </div>
+                <div className="meta-item">
                     <span className="meta-label">Total Marks</span>
                     <span className="meta-value">{exam.totalMarks}</span>
                 </div>
-                <div className="meta-item">
-                    <span className="meta-label">Sections</span>
-                    <span className="meta-value">
-                        {exam.sections?.length || exam._count?.sections || 0}
-                    </span>
-                </div>
             </div>
+
+            {/* What the paper actually covers. The Olympiad paper is built from
+                five named pillars and the student is going to sit them one at a
+                time, so showing the shape up front beats a bare section count. */}
+            {sections.length > 0 && (
+                <div className="exam-sections">
+                    <span className="meta-label">
+                        {sections.length} section{sections.length === 1 ? '' : 's'}
+                    </span>
+                    <ul className="exam-section-list">
+                        {sections.map((s) => (
+                            <li key={s.id}>
+                                <span className="exam-section-name">{s.title}</span>
+                                {typeof s._count?.sectionQuestions === 'number' && (
+                                    <span className="exam-section-qcount">
+                                        {s._count.sectionQuestions}
+                                    </span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {/* The exam's own window — what a "scheduled" exam is waiting for. */}
             {instance && (
@@ -231,27 +283,33 @@ function ExamCard({
                     )}
                 </div>
             ) : (
-                phase === 'NEEDS_SLOT' && (
+                needsSlot && (
                     <div className="slot-card">
                         <p className="slot-note slot-note-warn">
-                            You do not have a slot for this exam yet. Your school usually assigns one —
-                            contact your coordinator if none appears.
+                            You have not picked a sitting yet. Choose the date and time that suits you
+                            — places in each slot are limited.
                         </p>
                     </div>
                 )
             )}
 
-            {/* Why the button is off, in the student's words. */}
-            {!isCompleted && !startable && instance?.startBlockedReason && (
+            {/* Why the button is off, in the student's words. Suppressed while a
+                slot is still to be picked: there the button is an action, not a
+                refusal, and "you need a confirmed slot booking" alongside a
+                "Choose your exam slot" button just reads as a contradiction. */}
+            {!isCompleted && !startable && !needsSlot && instance?.startBlockedReason && (
                 <p className="slot-note slot-note-muted">{instance.startBlockedReason}</p>
             )}
 
             <div className="exam-footer">
                 <button
-                    className={`btn ${startable ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ width: '100%', cursor: startable ? 'pointer' : 'not-allowed' }}
-                    disabled={!startable}
-                    onClick={() => startable && router.push(`/exams/${exam.id}/instructions`)}
+                    className={`btn ${startable || needsSlot ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                        width: '100%',
+                        cursor: startable || needsSlot ? 'pointer' : 'not-allowed',
+                    }}
+                    disabled={!startable && !needsSlot}
+                    onClick={handleCardAction}
                 >
                     {isCompleted ? '✓ Completed' : ui.cta}
                 </button>

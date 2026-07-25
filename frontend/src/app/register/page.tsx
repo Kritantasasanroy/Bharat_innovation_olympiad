@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, CLASS_BANDS, COMPANY_NAME } from '@/lib/constants';
+import { APP_NAME, CLASS_BANDS, COMPANY_NAME, TAGLINE } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -41,7 +41,12 @@ export default function RegisterPage() {
     const [phoneBusy, setPhoneBusy] = useState(false);
     const [phoneMsg, setPhoneMsg] = useState('');
 
-    const handleSendPhoneOtp = async () => {
+    /**
+     * Registration used to be SMS-only, so a student whose network drops the
+     * SMS could not create an account at all — the voice fallback existed on
+     * the login page and nowhere else. Both channels are offered here now.
+     */
+    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = 'sms') => {
         setPhoneMsg('');
         if (!isValidPhone(phone)) {
             setPhoneMsg('Enter a valid mobile number.');
@@ -49,12 +54,17 @@ export default function RegisterPage() {
         }
         setPhoneBusy(true);
         try {
-            const { error: otpError } = await phoneOtp.sendOtp(phone);
+            const { error: otpError } = await phoneOtp.sendOtp(phone, channel);
             if (otpError) {
-                setPhoneMsg(otpError.message || 'Could not send the code.');
+                setPhoneMsg(
+                    otpError.message ||
+                        (channel === 'voice'
+                            ? 'Could not place the call.'
+                            : 'Could not send the code. Try “Get the code by call instead”.'),
+                );
             } else {
                 setPhoneOtpSent(true);
-                setPhoneMsg('Code sent by SMS.');
+                setPhoneMsg(channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.');
             }
         } catch {
             setPhoneMsg('Network error. Please try again.');
@@ -106,7 +116,10 @@ export default function RegisterPage() {
         stopProctoring();
         setFaceCapturing(false);
         if (ok) {
-            router.push('/dashboard');
+            // Face enrollment is the last step, so this is where registration
+            // actually completes — there is no /register/success page. The beta
+            // feedback prompt goes here, and hands off to the dashboard.
+            router.push('/feedback/registration');
         } else {
             setFaceMsg('Enrollment failed. Please try again.');
         }
@@ -225,7 +238,7 @@ export default function RegisterPage() {
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
                     <div className="auth-logo"><img src="/bio-logo.png" alt={APP_NAME} style={{ height: '72px', width: 'auto' }} /></div>
-                    <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
+                    <p className="brand-tagline"><span>{TAGLINE}</span></p>
                     <h1 className="auth-title">{APP_NAME}</h1>
                     <p className="auth-company">
                         <span>by</span>
@@ -327,7 +340,7 @@ export default function RegisterPage() {
                                 />
                                 <button
                                     type="button" className="btn"
-                                    onClick={handleSendPhoneOtp}
+                                    onClick={() => handleSendPhoneOtp('sms')}
                                     disabled={phoneBusy || !phone.trim()}
                                     style={{ whiteSpace: 'nowrap', background: 'var(--bg-tertiary, rgba(127,127,127,0.15))', color: 'var(--text-primary)' }}
                                 >
@@ -335,10 +348,26 @@ export default function RegisterPage() {
                                 </button>
                             </div>
 
+                            {/* The SMS route can be blocked by the carrier with no
+                                signal to us, so the call fallback is always offered
+                                rather than only appearing after a failure. */}
+                            <button
+                                type="button"
+                                onClick={() => handleSendPhoneOtp('voice')}
+                                disabled={phoneBusy || !phone.trim()}
+                                style={{
+                                    marginTop: '0.5rem', background: 'none', border: 'none', padding: 0,
+                                    color: 'var(--text-secondary)', fontSize: '0.85rem',
+                                    textDecoration: 'underline', cursor: phone.trim() ? 'pointer' : 'not-allowed',
+                                }}
+                            >
+                                📞 Get the code by call instead
+                            </button>
+
                             {phoneOtpSent && (
                                 <input
                                     type="text" inputMode="numeric" className="input-field"
-                                    placeholder="6-digit code from SMS" maxLength={6} value={phoneOtpCode}
+                                    placeholder="6-digit code" maxLength={6} value={phoneOtpCode}
                                     onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                     style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
                                 />

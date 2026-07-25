@@ -3,6 +3,24 @@
 export const APP_NAME = 'Bharat Innovation Olympiad';
 export const APP_SHORT = 'BIO';
 export const COMPANY_NAME = 'Lemon Ideas';
+export const TAGLINE = 'Become Future Ready';
+
+/**
+ * Beta feedback forms, shown as full-page interstitials right after the two
+ * moments worth asking about: finishing registration, and finishing an exam.
+ *
+ * Embedded rather than linked so the student stays inside BIO branding and a
+ * popup blocker cannot swallow the form. `embedded=true` is Google's own flag
+ * for rendering a form inside an iframe.
+ */
+export const FEEDBACK_FORMS = {
+    registration:
+        'https://docs.google.com/forms/d/e/1FAIpQLScwx9fvVK5cyTnRj2CS4YYm6sCTO5SBofjhcdWoneQyUhhCHA/viewform',
+    exam:
+        'https://docs.google.com/forms/d/e/1FAIpQLSc5WZvFyvC4gogV2HwCVsIDvXyl1WZPzNlIO4NeogNCOOilEQ/viewform',
+} as const;
+
+export const embeddedFormUrl = (url: string) => `${url}?embedded=true`;
 
 // Minimum viewport for "10-inch class" screens
 export const MIN_VIEWPORT_WIDTH = 800; // Adjusted for smaller 10-inch tablets (often 800x1280 or similar)

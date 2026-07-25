@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -31,6 +31,21 @@ export class AttemptController {
         return this.attemptService.getRecentResults(userId);
     }
 
+    /**
+     * Whether the caller has already sat the rehearsal for a given instance.
+     *
+     * Declared **above** `attempts/:id` deliberately: Nest matches in
+     * declaration order, so the wildcard would otherwise swallow this path and
+     * treat "trial-status" as an attempt id.
+     */
+    @Get('attempts/trial-status')
+    async getTrialStatus(
+        @CurrentUser('id') userId: string,
+        @Query('examInstanceId') examInstanceId?: string,
+    ) {
+        return this.attemptService.getTrialStatus(userId, examInstanceId);
+    }
+
     @Get('attempts/:id')
     async getAttempt(
         @Param('id') id: string,
@@ -54,6 +69,22 @@ export class AttemptController {
         @CurrentUser('id') userId: string,
     ) {
         return this.attemptService.submitAttempt(attemptId, userId);
+    }
+
+    /**
+     * Record that the caller has sat the rehearsal paper, unlocking the real
+     * exam instance named in the body.
+     *
+     * The instance id is client-supplied, so this endpoint proves the trial was
+     * actually taken before writing anything — otherwise a student could POST
+     * here directly and skip the rehearsal entirely.
+     */
+    @Post('attempts/trial-complete')
+    async completeTrial(
+        @CurrentUser('id') userId: string,
+        @Body() body: { examInstanceId: string },
+    ) {
+        return this.attemptService.recordTrialCompletion(userId, body?.examInstanceId);
     }
 
     @Get('admin/attempts/:id/report')

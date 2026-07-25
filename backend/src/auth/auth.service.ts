@@ -150,6 +150,11 @@ export class AuthService {
             select: {
                 id: true,
                 email: true,
+                // Must stay in step with `getUserByPhone` and `getMe`: whichever
+                // route signs a student in, the client caches this object as the
+                // whole user. Omitting `phone` here blanks it in the UI until the
+                // next profile load, and makes an unchanged number look new.
+                phone: true,
                 firstName: true,
                 lastName: true,
                 role: true,
@@ -195,12 +200,20 @@ export class AuthService {
         return user;
     }
 
+    /**
+     * The canonical "who am I" payload. It must select **exactly** what
+     * `updateProfile` returns — the client replaces its cached user with
+     * whichever of the two responded last, so a field present in one and absent
+     * from the other appears to save and then vanish on the next page load.
+     * That is precisely what happened to `phone`.
+     */
     async getMe(userId: string) {
         return this.prisma.user.findUnique({
             where: { id: userId },
             select: {
                 id: true,
                 email: true,
+                phone: true,
                 firstName: true,
                 lastName: true,
                 role: true,

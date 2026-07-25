@@ -4,7 +4,7 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import { MEDIA_LIMITS, type MediaKind, uploadMediaFile } from '@/lib/mediaUpload';
-import { Trash2, Upload } from 'lucide-react';
+import { CloudDownload, ExternalLink, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface GalleryAsset {
@@ -15,6 +15,21 @@ interface GalleryAsset {
     bytes: number | null;
     createdAt: string;
     inUse: boolean;
+}
+
+interface DriveStatus {
+    configured: boolean;
+    hasApiKey: boolean;
+    folderId: string | null;
+    folderUrl: string | null;
+    hint: string;
+}
+
+interface DriveSyncResult {
+    total: number;
+    imported: { filename: string; url: string }[];
+    skipped: string[];
+    failed: { filename: string; reason: string }[];
 }
 
 const FILTERS = [
@@ -35,6 +50,11 @@ function MediaPage() {
     const [progress, setProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+    // Google Drive question-image folder
+    const [drive, setDrive] = useState<DriveStatus | null>(null);
+    const [syncing, setSyncing] = useState(false);
+    const [syncResult, setSyncResult] = useState<DriveSyncResult | null>(null);
+
     const load = async () => {
         try {
             setLoading(true);
@@ -51,6 +71,32 @@ function MediaPage() {
     };
 
     useEffect(() => { load(); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        api.get<DriveStatus>('/admin/media/drive-status')
+            .then((r) => setDrive(r.data))
+            .catch(() => setDrive(null));
+    }, []);
+
+    /**
+     * Pulls the shared Drive folder into the gallery. Runs to completion even
+     * when individual files fail — a folder where three images are not shared
+     * should still import the rest, and name the three.
+     */
+    const syncFromDrive = async () => {
+        setSyncing(true);
+        setError('');
+        setSyncResult(null);
+        try {
+            const { data } = await api.post<DriveSyncResult>('/admin/media/sync-drive');
+            setSyncResult(data);
+            await load();
+        } catch (err: any) {
+            setError(err?.response?.data?.message || 'Could not sync from Google Drive.');
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     const uploadNew = async (file: File) => {
         setUploading(true);
@@ -122,6 +168,65 @@ function MediaPage() {
                         {uploading ? `Uploading… ${progress}%` : 'Upload to gallery'}
                     </button>
                 </div>
+            </div>
+
+            {/* Google Drive question-image folder */}
+            <div className="glass-card" style={{ padding: 'var(--space-5)', marginTop: 'var(--space-5)', display: 'grid', gap: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ marginRight: 'auto' }}>Google Drive question images</strong>
+                    {drive?.folderUrl && (
+                        <a
+                            className="btn btn-sm btn-secondary"
+                            href={drive.folderUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink size={14} style={{ marginRight: '0.4rem' }} /> Open folder
+                        </a>
+                    )}
+                    <button
+                        className="btn btn-sm btn-primary"
+                        disabled={syncing || !drive?.configured}
+                        onClick={syncFromDrive}
+                        title={drive?.configured ? 'Copy new Drive images into the gallery' : drive?.hint}
+                    >
+                        <CloudDownload size={14} style={{ marginRight: '0.4rem' }} />
+                        {syncing ? 'Syncing…' : 'Sync from Drive'}
+                    </button>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                    Images referenced by an <code>Image Link</code> or <code>Image Filename</code> in a question
+                    workbook are matched against this folder. Syncing copies them into permanent storage, so
+                    exams never depend on Drive being reachable while a student is sitting the paper.
+                    {drive && !drive.configured && (
+                        <>
+                            {' '}<strong style={{ color: 'var(--warning-400)' }}>{drive.hint}</strong>
+                        </>
+                    )}
+                </p>
+
+                {syncResult && (
+                    <div style={{ fontSize: '0.85rem', display: 'grid', gap: '0.35rem' }}>
+                        <div>
+                            <strong>{syncResult.imported.length}</strong> imported ·{' '}
+                            <strong>{syncResult.skipped.length}</strong> already in the gallery ·{' '}
+                            <strong style={{ color: syncResult.failed.length ? 'var(--danger-400)' : undefined }}>
+                                {syncResult.failed.length}
+                            </strong>{' '}
+                            failed (of {syncResult.total} in the folder)
+                        </div>
+                        {syncResult.failed.length > 0 && (
+                            <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--danger-400)' }}>
+                                {syncResult.failed.slice(0, 10).map((f) => (
+                                    <li key={f.filename}>{f.filename} — {f.reason}</li>
+                                ))}
+                                {syncResult.failed.length > 10 && (
+                                    <li>…and {syncResult.failed.length - 10} more</li>
+                                )}
+                            </ul>
+                        )}
+                    </div>
+                )}
             </div>
 
             {error && <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>{error}</div>}

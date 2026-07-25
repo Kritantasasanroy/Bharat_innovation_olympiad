@@ -14,6 +14,7 @@ import {
 import {
     ConsoleSmsProvider,
     Fast2SmsProvider,
+    SmsDiagnostics,
     SmsProvider,
     TwoFactorSmsProvider,
     toIndianLocal,
@@ -54,6 +55,9 @@ export class NotificationService implements OnModuleInit {
             ? new TwoFactorSmsProvider(
                   twoFactorKey,
                   process.env.TWOFACTOR_OTP_TEMPLATE?.trim() || 'AUTOGEN',
+                  // Delivery reports cost nothing and are the only way to see a
+                  // carrier drop. Opt out with TWOFACTOR_VERIFY_DELIVERY=false.
+                  process.env.TWOFACTOR_VERIFY_DELIVERY?.trim().toLowerCase() !== 'false',
               )
             : null;
         const fast2sms = fast2smsKey ? new Fast2SmsProvider(fast2smsKey) : null;
@@ -70,9 +74,22 @@ export class NotificationService implements OnModuleInit {
         // gateway sends SMS. Falls back to the SMS provider only if 2Factor is absent.
         this.voice = twoFactor ?? this.sms;
 
-        this.logger.log(
-            `SMS provider: ${this.sms.name} · voice provider: ${this.voice.name}`,
-        );
+        this.logger.log(`SMS provider: ${this.sms.name} · voice provider: ${this.voice.name}`);
+        if (twoFactor) {
+            if (twoFactor.activeTemplate) {
+                this.logger.log(`2Factor OTP template: "${twoFactor.activeTemplate}"`);
+            } else {
+                // The single most likely cause of "2Factor says Success but no
+                // SMS arrives": the account-default template is not DLT-approved,
+                // so the carrier drops every message while the API reports fine.
+                this.logger.warn(
+                    'TWOFACTOR_OTP_TEMPLATE is unset/AUTOGEN — sending under the 2Factor ' +
+                        'account-default template. If SMS OTPs are accepted but never arrive, ' +
+                        'set this to your DLT-approved template name. ' +
+                        'Check balances with GET /api/admin/notifications/sms-health.',
+                );
+            }
+        }
         if (this.sms.name === 'console') {
             this.logger.warn('No SMS gateway configured — OTPs will be logged, not delivered.');
         }
@@ -92,12 +109,53 @@ export class NotificationService implements OnModuleInit {
      * so the caller adopts and verifies the returned code.
      */
     async sendOtpSms(toE164: string): Promise<string> {
-        return this.sms.sendSmsOtp(toE164);
+        try {
+            return await this.sms.sendSmsOtp(toE164);
+        } catch (err) {
+            // Deliberately rethrown, not swallowed: the student is staring at a
+            // code box. The provider has already logged which of its send
+            // variants were tried and how each was rejected.
+            this.logger.error(`SMS OTP via ${this.sms.name} failed: ${(err as Error).message}`);
+            throw err;
+        }
     }
 
     /** Read a caller-supplied code out as an automated voice call. Failures propagate. */
     async sendOtpVoice(toE164: string, code: string): Promise<void> {
         await this.voice.sendOtpVoice(toE164, code);
+    }
+
+    /**
+     * Gateway health for the admin diagnostics screen.
+     *
+     * Exists because a 2Factor send that returns `Status: Success` is *not*
+     * proof of delivery — an unapproved DLT template or an exhausted SMS
+     * balance both look identical to a good send from inside this process. The
+     * balances are the fastest way to tell those apart.
+     */
+    async smsDiagnostics(): Promise<SmsDiagnostics & { voice: string }> {
+        const base = this.sms.diagnostics
+            ? await this.sms.diagnostics()
+            : { provider: this.sms.name };
+        return { ...base, voice: this.voice.name };
+    }
+
+    /** Send a real OTP and report the gateway's tracking handle. Admin-only. */
+    async smsProbe(toE164: string): Promise<{ provider: string; sessionId?: string }> {
+        const traced = this.sms.sendSmsOtpTraced
+            ? await this.sms.sendSmsOtpTraced(toE164)
+            : { code: await this.sms.sendSmsOtp(toE164), sessionId: undefined };
+        // The code itself is never returned — this endpoint proves delivery
+        // works, it does not hand an admin a way to sign in as someone else.
+        return { provider: this.sms.name, sessionId: traced.sessionId };
+    }
+
+    /** Carrier delivery status for a session id returned by `smsProbe`. */
+    async smsDeliveryReport(sessionId: string): Promise<string> {
+        if (!this.sms.deliveryReport) {
+            return `Provider "${this.sms.name}" does not expose delivery reports.`;
+        }
+        return this.sms.deliveryReport(sessionId);
     }
 
     private get appUrl(): string {

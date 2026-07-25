@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
+import { APP_NAME, COMPANY_NAME, TAGLINE } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useThemeStore } from '@/store/themeStore';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -108,7 +108,7 @@ export default function AdminLoginPage() {
                             style={{ height: '76px', width: 'auto', objectFit: 'contain', filter: 'drop-shadow(0 6px 18px rgba(125, 200, 50, 0.3))' }}
                         />
                     </div>
-                    <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
+                    <p className="brand-tagline"><span>{TAGLINE}</span></p>
                     <h1 style={{ fontSize: '1.5rem', marginBottom: 'var(--space-1)' }}>{APP_NAME}</h1>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: 'var(--space-3)' }}>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>by</span>

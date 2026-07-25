@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { MediaKind } from '../common/services/object-storage.service';
+import { ImportQuestionsDto } from './dto/import-questions.dto';
 import { ExamService } from './exam.service';
 
 @Controller()
@@ -27,6 +28,19 @@ export class ExamController {
         return this.examService.findAvailableExams(classBand, userId);
     }
 
+    /**
+     * The rehearsal paper students sit before any real exam.
+     *
+     * Declared **above** `exams/:id`: Nest matches routes in declaration order,
+     * so a literal path that shares a prefix with a wildcard has to come first
+     * or the wildcard swallows it and treats "trial" as an exam id.
+     */
+    @Get('exams/trial')
+    @UseGuards(JwtAuthGuard)
+    async getTrialExam() {
+        return (await this.examService.findActiveTrialExam()) ?? {};
+    }
+
     @Get('exams/:id')
     @UseGuards(JwtAuthGuard)
     async getExam(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
@@ -39,8 +53,8 @@ export class ExamController {
     @Get('admin/exams')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    async getAllExamsAdmin() {
-        return this.examService.findAllExamsForAdmin();
+    async getAllExamsAdmin(@Query('includeArchived') includeArchived?: string) {
+        return this.examService.findAllExamsForAdmin(includeArchived === 'true');
     }
 
     @Post('admin/exams')
@@ -56,6 +70,10 @@ export class ExamController {
         easyPct?: number;
         mediumPct?: number;
         hardPct?: number;
+        /** Marks this exam as the rehearsal paper (free, unscored, retakeable). */
+        isTrial?: boolean;
+        /** Whether students must sit the rehearsal before this exam starts. */
+        requiresTrial?: boolean;
     }) {
         return this.examService.createExam(body);
     }
@@ -83,6 +101,10 @@ export class ExamController {
         hardPct?: number;
         isPublished?: boolean;
         isResultReleased?: boolean;
+        isTrial?: boolean;
+        requiresTrial?: boolean;
+        // `isArchived` is deliberately absent: archiving must also unpublish,
+        // and that pairing lives in `setExamArchived` behind /archive.
     }) {
         return this.examService.updateExam(id, body);
     }
@@ -107,6 +129,37 @@ export class ExamController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async unpublishExam(@Param('id') id: string) {
         return this.examService.unpublishExam(id);
+    }
+
+    /**
+     * Retire an exam from the catalogue. Unpublishes it and hides it from both
+     * lists, but destroys nothing: attempts, bookings, payments and certificates
+     * all survive and stay auditable. Reversible via `/unarchive`.
+     */
+    @Post('admin/exams/:id/archive')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async archiveExam(@Param('id') id: string) {
+        return this.examService.setExamArchived(id, true);
+    }
+
+    @Post('admin/exams/:id/unarchive')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async unarchiveExam(@Param('id') id: string) {
+        return this.examService.setExamArchived(id, false);
+    }
+
+    /**
+     * Retire every exam except the ones named, the practice exams and the trial
+     * paper. This is the "scrap everything but the live paper" action; it is
+     * still only unpublish + hide, so nothing is lost.
+     */
+    @Post('admin/exams/archive-others')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async archiveOtherExams(@Body() body: { keepExamIds?: string[] }) {
+        return this.examService.archiveAllExcept(body?.keepExamIds ?? []);
     }
 
     @Post('admin/exams/:id/release-question-paper')
@@ -194,6 +247,48 @@ export class ExamController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async deleteMediaAsset(@Param('id') id: string) {
         return this.examService.deleteMediaAsset(id);
+    }
+
+    /**
+     * Where the shared Google Drive question-image folder lives, and whether
+     * this deployment can actually read it. The gallery page uses this to show
+     * the folder link and to explain a missing API key before the admin clicks
+     * Sync and gets a 503.
+     */
+    @Get('admin/media/drive-status')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async driveStatus() {
+        return this.examService.driveGalleryStatus();
+    }
+
+    /**
+     * Pulls every image in the Drive gallery folder into object storage and the
+     * media gallery. Idempotent — already-mirrored files are skipped by name.
+     */
+    @Post('admin/media/sync-drive')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async syncDriveGallery(@Body() body?: { folderId?: string }) {
+        return this.examService.syncDriveGallery(body?.folderId);
+    }
+
+    /**
+     * Imports a whole Olympiad question paper into one exam, creating a section
+     * per "Part Name" found in the workbook.
+     *
+     * Unlike the older bulk endpoints this one is validated (`ImportQuestionsDto`)
+     * — the payload now decides how a live exam is structured, so an unexpected
+     * shape has to be rejected up front rather than part-way through the write.
+     */
+    @Post('admin/exams/:id/questions/import')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async importExamQuestions(
+        @Param('id') examId: string,
+        @Body() body: ImportQuestionsDto,
+    ) {
+        return this.examService.importExamQuestions(examId, body);
     }
 
     @Put('admin/sections/:id')

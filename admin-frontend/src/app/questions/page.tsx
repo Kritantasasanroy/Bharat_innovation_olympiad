@@ -7,30 +7,37 @@ import api from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Pencil, Trash2, Upload, BookOpen } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import {
+    ParseResult,
+    WORKBOOK_ACCEPT,
+    parseQuestionWorkbook,
+    toBankPayload,
+} from '@/lib/questionWorkbook';
 
-// ── Excel column format (shared) ──
-// Question | Option A | Option B | Option C | Option D |
-// Right Answer (A-D) | Difficulty Level | Marks | Negative Marks
-const LETTER_TO_INDEX: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
-
-function parseExcelRows(rows: any[]): any[] {
-    return rows.map((row: any, i: number) => {
-        const letter = String(row['Right Answer'] || '').trim().toUpperCase();
-        const correctIdx = LETTER_TO_INDEX[letter];
-        if (correctIdx === undefined) throw new Error(`Row ${i + 1}: invalid "Right Answer" "${letter}" (expected A/B/C/D)`);
-        const text = String(row['Question'] || '').trim();
-        if (!text) throw new Error(`Row ${i + 1}: missing Question text`);
-        const diffRaw = String(row['Difficulty Level'] || 'MEDIUM').trim().toUpperCase();
-        const difficulty = ['EASY', 'MEDIUM', 'HARD'].includes(diffRaw) ? diffRaw : 'MEDIUM';
-        const marks = Number(row['Marks']) > 0 ? Number(row['Marks']) : (difficulty === 'HARD' ? 3 : difficulty === 'MEDIUM' ? 2 : 1);
-        const negativeMarks = Number(row['Negative Marks']) >= 0 ? Number(row['Negative Marks']) : 0;
-        const options = ['Option A', 'Option B', 'Option C', 'Option D'].map((col, idx) => ({
-            text: String(row[col] ?? '').trim(),
-            isCorrect: idx === correctIdx,
-        }));
-        return { type: 'MCQ', difficulty, text, options, marks, negativeMarks };
-    });
+/**
+ * Turns a parse result into the summary an admin sees before anything is
+ * written. Importing 50 questions is not undoable in one click, so the counts,
+ * the sections that will be created, and every warning go in front of them
+ * first.
+ */
+function describeImport(result: ParseResult): string {
+    const lines = [
+        `Sheet "${result.sheetName}" — ${result.format === 'olympiad' ? 'Olympiad format' : 'legacy format'}`,
+        `${result.questions.length} question${result.questions.length === 1 ? '' : 's'}`,
+    ];
+    if (result.parts.length) {
+        lines.push(
+            `${result.parts.length} section${result.parts.length === 1 ? '' : 's'}: ` +
+                result.parts.map((p) => `${p.name} (${p.count})`).join(', '),
+        );
+    }
+    if (result.imageCount) lines.push(`${result.imageCount} question(s) expect an image`);
+    if (result.warnings.length) {
+        lines.push('', 'Warnings:', ...result.warnings.slice(0, 12).map((w) => `• ${w}`));
+        if (result.warnings.length > 12) lines.push(`• …and ${result.warnings.length - 12} more`);
+    }
+    lines.push('', 'Import now?');
+    return lines.join('\n');
 }
 
 // ── Global Question Bank View (no examId) ──
@@ -96,15 +103,21 @@ function GlobalBankView() {
         try {
             setImporting(true);
             setError('');
-            const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: 'array' });
-            const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: null });
-            if (rows.length === 0) throw new Error('No rows found in the Excel sheet.');
-            const questionsPayload = parseExcelRows(rows);
-            const { data } = await api.post<{ count: number }>('/admin/questions/bulk', { questions: questionsPayload });
+            const result = parseQuestionWorkbook(await file.arrayBuffer());
+            if (!confirm(describeImport(result))) return;
+
+            const { data } = await api.post<{ count: number }>('/admin/questions/bulk', {
+                questions: result.questions.map(toBankPayload),
+            });
             setError('');
             await load(search, difficulty);
-            alert(`Imported ${data.count} question${data.count !== 1 ? 's' : ''} into the bank.`);
+            alert(
+                `Imported ${data.count} question${data.count !== 1 ? 's' : ''} into the bank.` +
+                    (result.imageCount
+                        ? `\n\n${result.imageCount} of them expect an image. Run "Sync from Drive" on the Media Gallery, ` +
+                          'then attach images from there.'
+                        : ''),
+            );
         } catch (err: any) {
             setError(err?.response?.data?.message || err?.message || 'Import failed.');
         } finally {
@@ -222,7 +235,7 @@ function GlobalBankView() {
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".xlsx,.xls"
+                        accept={WORKBOOK_ACCEPT}
                         style={{ display: 'none' }}
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) importFromExcel(f); }}
                     />
@@ -245,12 +258,28 @@ function GlobalBankView() {
                 </div>
             </div>
 
-            {/* Excel format hint */}
-            <div className="glass-card" style={{ padding: 'var(--space-4)', marginTop: 'var(--space-4)', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <BookOpen size={16} style={{ flexShrink: 0 }} />
-                <span>
-                    <strong>Excel format:</strong> Columns: <code>Question</code> · <code>Option A</code> · <code>Option B</code> · <code>Option C</code> · <code>Option D</code> · <code>Right Answer</code> (A/B/C/D) · <code>Difficulty Level</code> (Easy/Medium/Hard) · <code>Marks</code> · <code>Negative Marks</code>
-                </span>
+            {/* Excel format hint — both accepted layouts, detected automatically */}
+            <div className="glass-card" style={{ padding: 'var(--space-4)', marginTop: 'var(--space-4)', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'grid', gap: '0.6rem' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <BookOpen size={16} style={{ flexShrink: 0 }} />
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                        Excel formats (.xlsx, .xls, .xlsm, .csv) — detected automatically from the header row
+                    </strong>
+                </div>
+                <div>
+                    <strong>Olympiad format</strong> (preferred) — reads the <code>Question Bank</code> sheet:{' '}
+                    <code>Question ID</code> · <code>Grade</code> · <code>Part Code</code> · <code>Part Name</code> ·{' '}
+                    <code>Section Code</code> · <code>Section Name</code> · <code>Topic</code> ·{' '}
+                    <code>Difficulty</code> · <code>Bloom Level</code> · <code>Question</code> ·{' '}
+                    <code>Option A–D</code> · <code>Correct Option</code> (A/B/C/D) · <code>Explanation</code> ·{' '}
+                    <code>Future Ready Insight</code> · <code>Image Filename</code> · <code>Image Link</code>.
+                    {' '}<em>Part Name</em> becomes the exam section students see.
+                </div>
+                <div>
+                    <strong>Legacy format</strong> — <code>Question</code> · <code>Option A–D</code> ·{' '}
+                    <code>Right Answer</code> (A/B/C/D) · <code>Difficulty Level</code> · <code>Marks</code> ·{' '}
+                    <code>Negative Marks</code>.
+                </div>
             </div>
 
             {error && <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>{error}</div>}
@@ -524,6 +553,10 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
     const [reorderBusy, setReorderBusy] = useState<string | null>(null);
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+    // Whole-paper import: one workbook → a section per Part Name.
+    const [paperImporting, setPaperImporting] = useState(false);
+    const paperFileRef = useRef<HTMLInputElement | null>(null);
+
     const [bankModalSection, setBankModalSection] = useState<string | null>(null);
     const [bankLoading, setBankLoading] = useState(false);
     const [bankQuestions, setBankQuestions] = useState<any[]>([]);
@@ -682,12 +715,25 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
         try {
             setBulkBusySection(sectionId);
             setError('');
-            const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: 'array' });
-            const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: null });
-            if (rows.length === 0) throw new Error('No rows found in the Excel sheet.');
-            const questions = parseExcelRows(rows);
-            await api.post(`/admin/sections/${sectionId}/questions/bulk`, { questions });
+            const result = parseQuestionWorkbook(await file.arrayBuffer());
+            // This button imports into *one* section, so a multi-part workbook
+            // would be flattened into it. Say so — the whole-paper importer in
+            // the header is what that file actually wants.
+            if (result.parts.length > 1) {
+                const ok = confirm(
+                    `This workbook covers ${result.parts.length} parts ` +
+                        `(${result.parts.map((p) => p.name).join(', ')}).\n\n` +
+                        'Importing here puts all of them into this one section. To create a ' +
+                        'section per part instead, cancel and use "Import full paper" at the top.\n\n' +
+                        'Import everything into this section anyway?',
+                );
+                if (!ok) return;
+            } else if (!confirm(describeImport(result))) {
+                return;
+            }
+            await api.post(`/admin/sections/${sectionId}/questions/bulk`, {
+                questions: result.questions.map(toBankPayload),
+            });
             await fetchExamDetails();
         } catch (err: any) {
             setError(err?.message || 'Bulk import failed.');
@@ -719,6 +765,59 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
     const totalQuestions = sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0);
     const createdMarks = sections.reduce((sum, s) => sum + (s.questions?.reduce((qSum: number, q: any) => qSum + (q.marks || 0), 0) || 0), 0);
 
+    /**
+     * Imports an entire Olympiad workbook into this exam, creating one section
+     * per Part Name. This is the path the 50-question papers are meant to take:
+     * the per-section importer below would flatten all five pillars into one.
+     */
+    const importFullPaper = async (file: File) => {
+        try {
+            setPaperImporting(true);
+            setError('');
+            const result = parseQuestionWorkbook(await file.arrayBuffer());
+            if (result.format !== 'olympiad') {
+                setError(
+                    'That sheet is in the legacy 9-column format, which carries no "Part Name" and ' +
+                        'so cannot build sections. Use a section\'s own "Import Excel" button instead.',
+                );
+                return;
+            }
+
+            const replaceExisting =
+                totalQuestions > 0 &&
+                confirm(
+                    `This exam already has ${totalQuestions} question(s) in ${sections.length} section(s).\n\n` +
+                        'OK = replace them with this workbook.\n' +
+                        'Cancel = add this workbook on top of what is already there.',
+                );
+
+            if (!confirm(describeImport(result))) return;
+
+            const { data } = await api.post(`/admin/exams/${examId}/questions/import`, {
+                questions: result.questions,
+                replaceExisting,
+            });
+            await fetchExamDetails();
+
+            const unresolved: any[] = data.imagesUnresolved ?? [];
+            alert(
+                `Imported ${data.questionCount} questions into ${data.sections.length} sections:\n` +
+                    data.sections.map((s: any) => `• ${s.title} — ${s.questions}`).join('\n') +
+                    (unresolved.length
+                        ? `\n\n${unresolved.length} question(s) still need an image:\n` +
+                          unresolved.slice(0, 8).map((u: any) => `• ${u.externalId ?? '?'} → ${u.wanted}`).join('\n') +
+                          (unresolved.length > 8 ? `\n• …and ${unresolved.length - 8} more` : '') +
+                          '\n\nRun "Sync from Drive" on the Media Gallery, then re-import to attach them.'
+                        : ''),
+            );
+        } catch (err: any) {
+            setError(err?.response?.data?.message || err?.message || 'Paper import failed.');
+        } finally {
+            setPaperImporting(false);
+            if (paperFileRef.current) paperFileRef.current.value = '';
+        }
+    };
+
     return (
         <main className="container page-content animate-fade-in">
             <div className="page-header">
@@ -729,6 +828,22 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                    <input
+                        ref={paperFileRef}
+                        type="file"
+                        accept={WORKBOOK_ACCEPT}
+                        style={{ display: 'none' }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) importFullPaper(f); }}
+                    />
+                    <button
+                        className="btn btn-primary"
+                        disabled={paperImporting}
+                        onClick={() => paperFileRef.current?.click()}
+                        title="Import a full Olympiad workbook — one section per Part Name"
+                    >
+                        <Upload size={15} style={{ marginRight: '0.4rem' }} />
+                        {paperImporting ? 'Importing…' : 'Import full paper'}
+                    </button>
                     <a href="/questions" className="btn btn-secondary" title="Browse all questions in the bank">
                         <BookOpen size={15} style={{ marginRight: '0.4rem' }} /> Question Bank
                     </a>
@@ -852,7 +967,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                                     <input
                                         ref={(el) => { fileInputRefs.current[section.id] = el; }}
-                                        type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+                                        type="file" accept={WORKBOOK_ACCEPT} style={{ display: 'none' }}
                                         onChange={(e) => { const f = e.target.files?.[0]; if (f) bulkImportFromExcel(section.id, f); }}
                                     />
                                     <button

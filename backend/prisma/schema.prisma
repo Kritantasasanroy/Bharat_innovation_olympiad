@@ -8,45 +8,46 @@ datasource db {
 }
 
 model User {
-  id              String         @id @default(uuid())
-  email           String         @unique
-  passwordHash    String?
-  firstName       String
-  lastName        String
-  role            Role           @default(STUDENT)
-  classBand       Int?
-  schoolId        String?
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String?
+  firstName        String
+  lastName         String
+  role             Role              @default(STUDENT)
+  classBand        Int?
+  schoolId         String?
   /// Contact number in E.164 (`+91XXXXXXXXXX`). Editable by the account holder
   /// from their profile page (students) — schools and partners keep theirs on
   /// their request rows. Unique because it doubles as a login identifier for
   /// phone-OTP sign-in, which resolves an account by this column alone.
-  phone           String?        @unique
-  faceEmbedding   Bytes?
-  profileImageUrl String?
-  isActive        Boolean        @default(true)
+  phone            String?           @unique
+  faceEmbedding    Bytes?
+  profileImageUrl  String?
+  isActive         Boolean           @default(true)
   /// Partner campaign referral code the student arrived with (`?ref=CODE`).
   /// Captured at registration; replayed at payment time to credit the paid
   /// conversion to the referring partner's campaign (PRD-046 attribution).
-  referralCode    String?
+  referralCode     String?
   /// Set when a school coordinator adds this student to their roster. The
   /// student has no account yet — they claim it by registering with this email.
-  invitedAt       DateTime?
+  invitedAt        DateTime?
   /// Set the first time the student completes registration (`/auth/sync`).
   /// `invitedAt` without `activatedAt` is exactly the "invited, not yet signed
   /// up" state the school dashboard reports.
-  activatedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  attempts        Attempt[]
-  refreshTokens   RefreshToken[]
-  school          School?        @relation(fields: [schoolId], references: [id])
-  bookings        Booking[]
-  payments        Payment[]
-  accessPass      AccessPass?
-  certificates    Certificate[]
-  grievances      Grievance[]
-  refundRequests  RefundRequest[]
-  consents        Consent[]
+  activatedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  attempts         Attempt[]
+  refreshTokens    RefreshToken[]
+  school           School?           @relation(fields: [schoolId], references: [id])
+  bookings         Booking[]
+  payments         Payment[]
+  accessPass       AccessPass?
+  certificates     Certificate[]
+  grievances       Grievance[]
+  refundRequests   RefundRequest[]
+  consents         Consent[]
+  trialCompletions TrialCompletion[]
 
   @@index([email])
   @@index([schoolId])
@@ -77,25 +78,25 @@ model RefreshToken {
 /// `pincode` it is the duplicate key, so the same school cannot be added twice
 /// under punctuation or casing variants.
 model School {
-  id                    String                 @id @default(uuid())
-  name                  String
-  nameKey               String
-  code                  String                 @unique
-  city                  String
-  state                 String
-  pincode               String
-  board                 String?
-  udiseCode             String?
+  id              String                 @id @default(uuid())
+  name            String
+  nameKey         String
+  code            String                 @unique
+  city            String
+  state           String
+  pincode         String
+  board           String?
+  udiseCode       String?
   /// The admin-api `Partner.id` this school belongs to. Set when a partner
   /// onboards the school (or when staff reassign it). A school with no partner
   /// falls back to the house partner (`DEFAULT_PARTNER_ID`) at read time, so the
   /// school portal always has a partner to show — see `PartnerDirectoryService`.
-  partnerId             String?
-  onboardedAt           DateTime?
-  createdAt             DateTime               @default(now())
-  users                 User[]
-  slotAssignments       SchoolSlotAssignment[]
-  accessRequest         SchoolRequest?
+  partnerId       String?
+  onboardedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  users           User[]
+  slotAssignments SchoolSlotAssignment[]
+  accessRequest   SchoolRequest?
 
   @@unique([nameKey, pincode])
   @@index([code])
@@ -116,12 +117,25 @@ model Exam {
   easyPct          Int            @default(30)
   mediumPct        Int            @default(50)
   hardPct          Int            @default(20)
+  /// Retired from the catalogue without being destroyed. Hidden from the student
+  /// list and from the admin default view, but every attempt, booking, payment
+  /// and certificate that points at it stays intact and auditable. This is how
+  /// exams are "scrapped" — deleting them would cascade away real student results.
+  isArchived       Boolean        @default(false)
+  /// A rehearsal paper. Runs the full proctored exam environment but is never
+  /// scored, ranked or listed as a real exam; students may retake it freely.
+  isTrial          Boolean        @default(false)
+  /// When true, a student must complete the trial exam before this exam will
+  /// start. Enforced server-side in AttemptService.startAttempt.
+  requiresTrial    Boolean        @default(true)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   instances        ExamInstance[]
   sections         ExamSection[]
 
   @@index([isPublished])
+  @@index([isArchived])
+  @@index([isTrial])
 }
 
 model ExamSection {
@@ -137,17 +151,17 @@ model ExamSection {
 }
 
 model Question {
-  id            String            @id @default(uuid())
+  id            String       @id @default(uuid())
   type          QuestionType
   difficulty    Difficulty
   text          String
   options       Json?
   correctAnswer String?
-  marks         Int               @default(1)
-  negativeMarks Float             @default(0)
+  marks         Int          @default(1)
+  negativeMarks Float        @default(0)
   timeLimitSecs Int?
-  mediaUrl      String?           // legacy single-media slot (still rendered)
-  mediaType     MediaType?        // IMAGE | VIDEO | AUDIO | DIAGRAM
+  mediaUrl      String? // legacy single-media slot (still rendered)
+  mediaType     MediaType? // IMAGE | VIDEO | AUDIO | DIAGRAM
   /// A question can carry a picture **and** a video at once, so these are
   /// separate columns rather than another `mediaUrl`/`mediaType` pair. Both are
   /// public object-storage URLs (see `common/services/object-storage.service.ts`).
@@ -155,12 +169,55 @@ model Question {
   videoUrl      String?
   tags          String[]
   explanation   String?
-  createdAt     DateTime          @default(now())
-  attemptItems  AttemptItem[]
-  sectionLinks  SectionQuestion[]
+  createdAt     DateTime     @default(now())
+
+  // ── Innovation Olympiad question-database format (v1.0, 29 approved fields) ──
+  // The authoring workbooks carry far more per question than an MCQ needs: the
+  // five-pillar taxonomy the exam is *built* from, the competency being probed,
+  // and the provenance of any illustration. Held as real columns rather than
+  // inside `metadata` because admin filters and the section builder read them,
+  // and JSON path filters are awkward in Prisma. All nullable so the legacy
+  // 9-column importer and every existing row keep working untouched.
+  //
+  /// "Question ID" from the workbook, e.g. `EM-OS-08-001`. Indexed, deliberately
+  /// NOT unique: the supplied trial workbook genuinely reuses one id, and a
+  /// unique constraint would fail the whole import over authoring noise.
+  externalId         String?
+  grade              Int?
+  /// The pillar this question belongs to — `EM`/`PSI`/`ETDR`/`FRG`/`FRD`. This
+  /// is what becomes an ExamSection, and what the student sees as the section
+  /// heading while attempting the paper.
+  partCode           String?
+  partName           String?
+  /// The finer topic grouping within a pillar. Shown as a per-question sub-label.
+  sectionCode        String?
+  sectionName        String?
+  topic              String?
+  learningObjective  String?
+  questionCategory   String?
+  bloomLevel         String?
+  competency         String?
+  questionFormat     String?
+  /// Shown to the student in the post-exam review, alongside `explanation`.
+  futureReadyInsight String?
+  /// The workbook's `Image Filename`, used to match this question to an image in
+  /// the gallery when the row carries no direct link.
+  imageFilename      String?
+  /// The original Google Drive URL, kept for provenance after the image has been
+  /// mirrored into object storage. `imageUrl` is what actually gets rendered.
+  imageSourceUrl     String?
+  /// Authoring-only leftovers (Image Description, Canva Prompt, Reviewer
+  /// Comments, Version). Never sent to students.
+  metadata           Json?
+
+  attemptItems AttemptItem[]
+  sectionLinks SectionQuestion[]
 
   @@index([type])
   @@index([difficulty])
+  @@index([externalId])
+  @@index([partCode])
+  @@index([sectionCode])
 }
 
 /// The admin media gallery: every picture/video an admin has uploaded for
@@ -202,23 +259,23 @@ model SectionQuestion {
 }
 
 model ExamInstance {
-  id               String                 @id @default(uuid())
-  examId           String
-  startsAt         DateTime
-  endsAt           DateTime
-  requireSeb       Boolean                @default(false)
-  browserExamKey   String?
-  configKey        String?
-  quitUrl          String?
-  maxAttempts      Int                    @default(1)
+  id                          String                 @id @default(uuid())
+  examId                      String
+  startsAt                    DateTime
+  endsAt                      DateTime
+  requireSeb                  Boolean                @default(false)
+  browserExamKey              String?
+  configKey                   String?
+  quitUrl                     String?
+  maxAttempts                 Int                    @default(1)
   /// Result-release gating (ADMIN-20). Results cannot be released until a
   /// normalization run has completed; releasing is an audited human decision.
-  resultsNormalizedAt DateTime?
+  resultsNormalizedAt         DateTime?
   /// Set the first time results are released to *any* audience. Kept as the
   /// "has this instance been released at all" flag the certificate and legacy
   /// student gates already read.
-  resultsReleasedAt   DateTime?
-  resultsReleasedBy   String?
+  resultsReleasedAt           DateTime?
+  resultsReleasedBy           String?
   /// Per-audience release (ADMIN-19 extension). Admin releases to students,
   /// schools and partners **independently** — a school can be given results to
   /// review before students see them, and a partner may never see them at all.
@@ -226,15 +283,35 @@ model ExamInstance {
   resultsReleasedToStudentsAt DateTime?
   resultsReleasedToSchoolsAt  DateTime?
   resultsReleasedToPartnersAt DateTime?
-  createdAt        DateTime               @default(now())
-  attempts         Attempt[]
-  slots            ExamSlot[]
-  exam             Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
-  slotAssignments  SchoolSlotAssignment[]
-  certificates     Certificate[]
+  createdAt                   DateTime               @default(now())
+  attempts                    Attempt[]
+  slots                       ExamSlot[]
+  exam                        Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  slotAssignments             SchoolSlotAssignment[]
+  certificates                Certificate[]
+  trialCompletions            TrialCompletion[]
 
   @@index([examId])
   @@index([startsAt, endsAt])
+}
+
+/// Proof that a student sat the rehearsal paper before this exam instance.
+///
+/// Recorded when the trial exam is submitted, and checked in
+/// `AttemptService.startAttempt`. It lives in its own table rather than as a
+/// flag on Attempt because it has to exist *before* any Attempt for the real
+/// exam does — it is the precondition for creating one.
+model TrialCompletion {
+  id             String       @id @default(uuid())
+  userId         String
+  /// The *real* exam instance this trial run unlocks.
+  examInstanceId String
+  completedAt    DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, examInstanceId])
+  @@index([examInstanceId])
 }
 
 model Attempt {
@@ -490,22 +567,22 @@ model Grievance {
 /// automatically at request time (before the cutoff, and not once a slot
 /// booking is CONFIRMED) and re-checked on approval.
 model RefundRequest {
-  id             String       @id @default(uuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  paymentId      String       @unique
-  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  reason         String
-  status         RefundStatus @default(REQUESTED)
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId       String       @unique
+  payment         Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reason          String
+  status          RefundStatus @default(REQUESTED)
   /// Snapshot of the automatic eligibility check at request time.
-  eligible       Boolean
+  eligible        Boolean
   eligibilityNote String?
-  decisionReason String?
-  decidedBy      String?
-  decidedAt      DateTime?
-  refundedAt     DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  decisionReason  String?
+  decidedBy       String?
+  decidedAt       DateTime?
+  refundedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -514,15 +591,15 @@ model RefundRequest {
 /// Explicit, permanently stored consent (Student §6, DPDP). Versioned so a
 /// policy change can require re-consent without losing the historical record.
 model Consent {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  version         String
-  dataProcessing  Boolean
-  mediaCapture    Boolean
-  proctoring      Boolean
-  acceptedAt      DateTime @default(now())
-  ipAddress       String?
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version        String
+  dataProcessing Boolean
+  mediaCapture   Boolean
+  proctoring     Boolean
+  acceptedAt     DateTime @default(now())
+  ipAddress      String?
 
   @@unique([userId, version])
   @@index([userId])
@@ -681,8 +758,6 @@ enum MediaType {
   DIAGRAM
 }
 
-
-
 enum Difficulty {
   EASY
   MEDIUM
@@ -713,16 +788,16 @@ enum ProctorEventType {
 // ── Slot booking & payment models ────────────────────────────────────────────
 
 model ExamSlot {
-  id               String                 @id @default(uuid())
-  examInstanceId   String
-  examInstance     ExamInstance           @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
-  label            String?
-  startsAt         DateTime
-  endsAt           DateTime
-  capacity         Int
-  booked           Int                    @default(0)
-  createdAt        DateTime               @default(now())
-  bookings         Booking[]
+  id                String                 @id @default(uuid())
+  examInstanceId    String
+  examInstance      ExamInstance           @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  label             String?
+  startsAt          DateTime
+  endsAt            DateTime
+  capacity          Int
+  booked            Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  bookings          Booking[]
   schoolAssignments SchoolSlotAssignment[]
 
   @@index([examInstanceId])
@@ -768,22 +843,22 @@ model Booking {
 }
 
 model Payment {
-  id                  String        @id @default(uuid())
-  userId              String
-  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  razorpayOrderId     String        @unique
-  razorpayPaymentId   String?       @unique
-  razorpaySignature   String?
-  amount              Int
-  currency            String        @default("INR")
-  status              PaymentStatus @default(CREATED)
-  couponId            String?
-  coupon              Coupon?       @relation(fields: [couponId], references: [id])
-  booking             Booking?
-  accessPass          AccessPass?
-  refundRequest       RefundRequest?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  id                String         @id @default(uuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String         @unique
+  razorpayPaymentId String?        @unique
+  razorpaySignature String?
+  amount            Int
+  currency          String         @default("INR")
+  status            PaymentStatus  @default(CREATED)
+  couponId          String?
+  coupon            Coupon?        @relation(fields: [couponId], references: [id])
+  booking           Booking?
+  accessPass        AccessPass?
+  refundRequest     RefundRequest?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -820,17 +895,17 @@ model AccessPass {
 /// webhook payload carries no recipient phone number, so it cannot address a
 /// WhatsApp message. Email OTP still goes through Neon untouched.
 model PhoneOtp {
-  id        String    @id @default(uuid())
+  id         String    @id @default(uuid())
   /// E.164, normalised by `normalizePhone` so lookups match what was sent.
-  phone     String
+  phone      String
   /// SHA-256 of the code — a leaked DB row must not hand over a live code.
-  codeHash  String
-  expiresAt DateTime
+  codeHash   String
+  expiresAt  DateTime
   /// Set once redeemed; a code is single-use.
   consumedAt DateTime?
   /// Wrong guesses so far. Caps brute-forcing a 6-digit code.
-  attempts  Int       @default(0)
-  createdAt DateTime  @default(now())
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
 
   @@index([phone, expiresAt])
 }

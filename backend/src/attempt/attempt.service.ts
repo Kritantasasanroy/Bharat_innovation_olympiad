@@ -1,11 +1,17 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
 
-// Fields returned to students — correctAnswer intentionally excluded
+// Fields returned to students — correctAnswer intentionally excluded.
+//
+// The Olympiad-format columns are split deliberately. `sectionName`, `topic` and
+// `futureReadyInsight` are part of what the student is meant to see; the
+// authoring fields (learningObjective, competency, metadata → Canva prompt,
+// reviewer comments) are not, and stay out of the payload rather than being
+// filtered client-side. `correctAnswer` likewise never leaves the server.
 const QUESTION_SELECT = {
     id: true,
     type: true,
@@ -21,6 +27,15 @@ const QUESTION_SELECT = {
     videoUrl: true,
     tags: true,
     explanation: true,
+    externalId: true,
+    partCode: true,
+    partName: true,
+    sectionCode: true,
+    sectionName: true,
+    topic: true,
+    questionCategory: true,
+    bloomLevel: true,
+    futureReadyInsight: true,
 } as const;
 
 // ── Scoring strategies ──
@@ -88,6 +103,8 @@ function scoreQuestion(question: any, answer: any): ScoringResult {
 
 @Injectable()
 export class AttemptService {
+    private readonly logger = new Logger(AttemptService.name);
+
     constructor(
         private prisma: PrismaService,
         private accessPassService: AccessPassService,
@@ -124,8 +141,15 @@ export class AttemptService {
     // Selection is seeded with userId+examId+sectionId so:
     //   - Same student always gets the same subset (stable across refreshes)
     //   - Different students get different subsets from the same pool
-    //   - A final cross-section shuffle ensures unique ordering even when two
-    //     students receive identical question subsets.
+    //   - Shuffling happens *within* each section, so two students still see a
+    //     different order without the paper losing its structure.
+    //
+    // Section order is preserved and never shuffled. The paper is sat one
+    // section at a time — all of "Entrepreneurship Mindset", then all of
+    // "Problem Solving & Innovation", and so on — and the student is shown which
+    // section they are in. A cross-section shuffle used to run here, which made
+    // the section headings meaningless because consecutive questions came from
+    // different pillars.
     //
     // Difficulty-bucket selection:
     //   - Targets easyPct% / mediumPct% / hardPct% of questionsToAssign
@@ -133,6 +157,8 @@ export class AttemptService {
     private buildQuestionSet(
         sections: Array<{
             id: string;
+            title: string;
+            sortOrder: number;
             questionsToAssign: number;
             sectionQuestions: Array<{ sortOrder: number; question: any }>;
         }>,
@@ -144,7 +170,8 @@ export class AttemptService {
     ): any[] {
         const result: any[] = [];
 
-        for (const section of sections) {
+        const ordered = [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+        for (const [sectionIndex, section] of ordered.entries()) {
             const all = section.sectionQuestions
                 .sort((a, b) => a.sortOrder - b.sortOrder)
                 .map((sq) => sq.question)
@@ -182,12 +209,59 @@ export class AttemptService {
             const deficit = target - selected.length;
             if (deficit > 0) selected.push(...leftover.slice(0, deficit));
 
-            result.push(...selected);
+            // Shuffle inside the section so ordering still varies per student,
+            // then stamp each question with the section it belongs to. The
+            // stamp is what lets the player draw headings and group its
+            // navigator without a second round-trip.
+            const shuffled = this.seededShuffle(selected, `${seed}:order`);
+            result.push(
+                ...shuffled.map((q: any) => ({
+                    ...q,
+                    sectionId: section.id,
+                    sectionTitle: section.title,
+                    sectionIndex,
+                })),
+            );
         }
 
-        // Final cross-section shuffle: ensures no two students see questions
-        // in the same order even when they receive the same subset from each pool.
-        return this.seededShuffle(result, `${userId}:${examId}:order`);
+        return result;
+    }
+
+    /**
+     * Re-attaches section identity to questions loaded from stored AttemptItems.
+     *
+     * `AttemptItem` records only `questionId` and `sortOrder`, so a resumed
+     * attempt would otherwise come back with no section headings at all — the
+     * student would see a differently-shaped exam after a refresh than the one
+     * they started. The join table is the source of truth for membership.
+     */
+    private async decorateWithSections(examId: string, questions: any[]): Promise<any[]> {
+        if (questions.length === 0) return questions;
+
+        const links = await this.prisma.sectionQuestion.findMany({
+            where: {
+                questionId: { in: questions.map((q) => q.id) },
+                section: { examId },
+            },
+            select: {
+                questionId: true,
+                section: { select: { id: true, title: true, sortOrder: true } },
+            },
+        });
+
+        const bySortOrder = [...new Set(links.map((l) => l.section.sortOrder))].sort((a, b) => a - b);
+        const byQuestion = new Map(links.map((l) => [l.questionId, l.section]));
+
+        return questions.map((q) => {
+            const section = byQuestion.get(q.id);
+            if (!section) return q;
+            return {
+                ...q,
+                sectionId: section.id,
+                sectionTitle: section.title,
+                sectionIndex: bySortOrder.indexOf(section.sortOrder),
+            };
+        });
     }
 
     // Fetches exam sections, runs buildQuestionSet, then pre-creates AttemptItems
@@ -263,7 +337,11 @@ export class AttemptService {
         // an exam by calling this endpoint directly — publication, the exam window
         // and the student's own slot window are all checked here, server-side,
         // regardless of what the UI showed.
-        const demo = isDemoExam(instance.examId);
+        // The trial paper is exempt from exactly the same gates as a practice
+        // exam — it is free, needs no slot, and may be retaken as often as the
+        // student likes. It has to be, since it is the thing standing between
+        // them and the exam they *have* paid and booked for.
+        const demo = isDemoExam(instance.examId) || instance.exam.isTrial;
 
         // The paywall. Every route into the exam player funnels through
         // startAttempt, so checking here — rather than in the UI — is what
@@ -272,6 +350,37 @@ export class AttemptService {
         // Practice exams stay free by design.
         if (!demo && !(await this.accessPassService.hasActivePass(userId))) {
             throw new ForbiddenException('ACCESS_PASS_REQUIRED');
+        }
+
+        // The rehearsal gate. A student must sit the trial paper — same
+        // fullscreen, webcam and proctoring as the real thing — before a real
+        // exam will start. Enforced here rather than in the UI for the same
+        // reason as the paywall above: every route into the player, including a
+        // deep link straight to /play, funnels through this method.
+        //
+        // `requiresTrial` defaults to true, which means every pre-existing exam
+        // acquires this gate the moment the column is added. So the gate only
+        // engages when a trial paper actually exists to satisfy it — otherwise
+        // a deploy that lands before the trial is configured would make every
+        // exam on the platform permanently unstartable, with no way out from
+        // inside the product.
+        if (!demo && !instance.exam.isTrial && instance.exam.requiresTrial) {
+            const trialExam = await this.prisma.exam.findFirst({
+                where: { isTrial: true, isArchived: false },
+                select: { id: true },
+            });
+            if (trialExam) {
+                const sat = await this.prisma.trialCompletion.findUnique({
+                    where: { userId_examInstanceId: { userId, examInstanceId: instanceId } },
+                    select: { id: true },
+                });
+                if (!sat) throw new ForbiddenException('TRIAL_REQUIRED');
+            } else {
+                this.logger.warn(
+                    `Exam ${instance.examId} requires a trial but no trial paper is configured — ` +
+                        'gate skipped. Create and publish a trial exam, or set requiresTrial=false.',
+                );
+            }
         }
 
         const booking = demo
@@ -327,8 +436,13 @@ export class AttemptService {
         if (existing) {
             if (existing.status === AttemptStatus.IN_PROGRESS) {
                 if (existing.items.length > 0) {
-                    // Normal resume — derive questions from pre-stored items
-                    const questions = existing.items.map((i) => i.question).filter(Boolean);
+                    // Normal resume — derive questions from pre-stored items.
+                    // AttemptItem carries no section, so re-attach it or the
+                    // resumed paper loses every heading it started with.
+                    const questions = await this.decorateWithSections(
+                        instance.examId,
+                        existing.items.map((i) => i.question).filter(Boolean),
+                    );
                     const items = existing.items.map(({ question: _q, ...rest }) => rest);
                     return { attempt: { ...existing, items }, questions };
                 }
@@ -380,7 +494,10 @@ export class AttemptService {
                     },
                 });
                 if (concurrent) {
-                    const questions = concurrent.items.map((i) => i.question).filter(Boolean);
+                    const questions = await this.decorateWithSections(
+                        instance.examId,
+                        concurrent.items.map((i) => i.question).filter(Boolean),
+                    );
                     const items = concurrent.items.map(({ question: _q, ...rest }) => rest);
                     return { attempt: { ...concurrent, items }, questions };
                 }
@@ -419,7 +536,10 @@ export class AttemptService {
                 orderBy: { sortOrder: 'asc' },
                 include: { question: { select: QUESTION_SELECT } },
             });
-            const questions = items.map((i) => i.question).filter(Boolean);
+            const questions = await this.decorateWithSections(
+                instance.examId,
+                items.map((i) => i.question).filter(Boolean),
+            );
             const plainItems = items.map(({ question: _q, ...rest }) => rest);
 
             if (questions.length > 0) {
@@ -496,6 +616,75 @@ export class AttemptService {
                 answeredAt: new Date(),
             },
         });
+    }
+
+    /**
+     * Whether this student still owes a rehearsal for a given exam instance.
+     *
+     * Advisory only — the instructions page uses it to route them to the trial
+     * instead of letting them fail at the start gate. `startAttempt` re-checks.
+     */
+    async getTrialStatus(userId: string, examInstanceId?: string) {
+        if (!examInstanceId) return { required: false, completed: false };
+
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: examInstanceId },
+            select: { exam: { select: { isTrial: true, requiresTrial: true, id: true } } },
+        });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const required =
+            !instance.exam.isTrial &&
+            instance.exam.requiresTrial &&
+            !isDemoExam(instance.exam.id);
+        if (!required) return { required: false, completed: true };
+
+        const done = await this.prisma.trialCompletion.findUnique({
+            where: { userId_examInstanceId: { userId, examInstanceId } },
+            select: { completedAt: true },
+        });
+        return { required: true, completed: Boolean(done), completedAt: done?.completedAt ?? null };
+    }
+
+    /**
+     * Mark the rehearsal as done for one real exam instance.
+     *
+     * `examInstanceId` arrives from the client, so nothing is written until the
+     * caller is shown to have actually submitted the trial. Without that check
+     * this endpoint *is* the bypass it exists to prevent.
+     */
+    async recordTrialCompletion(userId: string, examInstanceId: string) {
+        if (!examInstanceId) throw new BadRequestException('examInstanceId is required.');
+
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: examInstanceId },
+            include: { exam: { select: { isTrial: true } } },
+        });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+        if (instance.exam.isTrial) {
+            throw new BadRequestException('The trial exam does not itself require a trial.');
+        }
+
+        const sat = await this.prisma.attempt.findFirst({
+            where: {
+                userId,
+                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                examInstance: { exam: { isTrial: true } },
+            },
+            select: { id: true },
+        });
+        if (!sat) {
+            throw new ForbiddenException(
+                'Complete the trial test before starting the exam.',
+            );
+        }
+
+        await this.prisma.trialCompletion.upsert({
+            where: { userId_examInstanceId: { userId, examInstanceId } },
+            create: { userId, examInstanceId },
+            update: {},
+        });
+        return { ok: true };
     }
 
     async submitAttempt(attemptId: string, userId: string) {
