@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { validateSlotWindow } from '../exam/exam-lifecycle';
 import { BookSlotDto, CreateSlotDto } from './dto/slot.dto';
 
 @Injectable()
@@ -18,6 +19,12 @@ export class SlotService {
             where: { id: dto.examInstanceId },
         });
         if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const check = validateSlotWindow(
+            { startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) },
+            instance,
+        );
+        if (!check.ok) throw new BadRequestException(check.reason);
 
         return this.prisma.examSlot.create({
             data: {
@@ -48,13 +55,32 @@ export class SlotService {
     }
 
     async updateSlot(slotId: string, data: Partial<CreateSlotDto>) {
-        const slot = await this.prisma.examSlot.findUnique({ where: { id: slotId } });
+        const slot = await this.prisma.examSlot.findUnique({
+            where: { id: slotId },
+            include: { examInstance: true },
+        });
         if (!slot) throw new NotFoundException('Slot not found');
+
+        const next = {
+            startsAt: data.startsAt ? new Date(data.startsAt) : slot.startsAt,
+            endsAt: data.endsAt ? new Date(data.endsAt) : slot.endsAt,
+        };
+        const check = validateSlotWindow(next, slot.examInstance);
+        if (!check.ok) throw new BadRequestException(check.reason);
+
+        // Shrinking capacity below what is already booked would leave the slot
+        // permanently "oversold" to every capacity guard that reads it.
+        if (data.capacity !== undefined && data.capacity < slot.booked) {
+            throw new BadRequestException(
+                `Capacity cannot be lower than the ${slot.booked} student(s) already booked into this slot.`,
+            );
+        }
+
         return this.prisma.examSlot.update({
             where: { id: slotId },
             data: {
-                ...(data.startsAt && { startsAt: new Date(data.startsAt) }),
-                ...(data.endsAt && { endsAt: new Date(data.endsAt) }),
+                ...(data.startsAt && { startsAt: next.startsAt }),
+                ...(data.endsAt && { endsAt: next.endsAt }),
                 ...(data.capacity !== undefined && { capacity: data.capacity }),
                 ...(data.label !== undefined && { label: data.label }),
             },
@@ -158,6 +184,26 @@ export class SlotService {
                 payment: true,
             },
         });
+    }
+
+    /**
+     * One booking by id, scoped to its owner.
+     *
+     * The ownership check is the point: a booking id in a URL must not let one
+     * student read another's slot, school and payment. A booking that is not
+     * theirs is reported as not found rather than forbidden — "no such booking"
+     * and "not yours" should be indistinguishable from outside.
+     */
+    async getBookingById(bookingId: string, userId: string) {
+        const booking = await this.prisma.booking.findFirst({
+            where: { id: bookingId, userId },
+            include: {
+                slot: { include: { examInstance: { include: { exam: true } } } },
+                payment: true,
+            },
+        });
+        if (!booking) throw new NotFoundException('Booking not found');
+        return booking;
     }
 
     async adminListSlotBookings(slotId: string) {

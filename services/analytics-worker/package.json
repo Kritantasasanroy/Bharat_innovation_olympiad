@@ -1,0 +1,23 @@
+{
+	"name": "@bio/analytics-worker",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"build": "bun build src/index.ts --outdir dist --target bun",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
+		"lint:boundaries": "eslint --no-eslintrc -c .eslintrc.json 'src/core/**/*.ts'"
+	},
+	"dependencies": {
+		"elysia": "^1.2.25",
+		"@bio/admin-contract-fixtures": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.9",
+		"@typescript-eslint/parser": "^7.18.0",
+		"eslint": "^8.57.1",
+		"typescript": "^5.9.3"
+	}
+}

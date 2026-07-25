@@ -1,0 +1,30 @@
+{
+	"name": "@bio/admin-contract-fixtures",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./src/contract-version.ts",
+	"types": "./src/contract-version.ts",
+	"exports": {
+		".": {
+			"types": "./src/contract-version.ts",
+			"default": "./src/contract-version.ts"
+		},
+		"./contract-version": {
+			"types": "./src/contract-version.ts",
+			"default": "./src/contract-version.ts"
+		},
+		"./events": {
+			"types": "./src/events/index.ts",
+			"default": "./src/events/index.ts"
+		}
+	},
+	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@bio/admin-shared-types": "workspace:*",
+		"@types/bun": "^1.2.9"
+	}
+}

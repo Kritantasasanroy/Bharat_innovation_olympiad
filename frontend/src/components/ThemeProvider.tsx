@@ -7,9 +7,9 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
     const setTheme = useThemeStore((s) => s.setTheme);
 
     useEffect(() => {
+        // Light is the platform default; a stored choice wins.
         const saved = localStorage.getItem('bio-theme') as 'dark' | 'light' | null;
-        const preferred = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        setTheme(preferred);
+        setTheme(saved ?? 'light');
     }, [setTheme]);
 
     return <>{children}</>;

@@ -1,0 +1,750 @@
+/* ══════════════════════════════════════════════════════════════
+   Bharat Innovation Olympiad — Partner Portal
+   Shares the BIO design system used by the student & admin portals:
+   premium dark theme with Lemon Ideas yellow & green accents.
+   The partner portal's own class names (.card, .button, .stat-tile,
+   .dashboard-nav, .badge…) are remapped onto the shared tokens so the
+   existing pages match student/admin without JSX changes.
+   ══════════════════════════════════════════════════════════════ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@500;600;700;800&family=Montserrat:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+/* ── Design tokens (shared with student/admin) ── */
+:root {
+	color-scheme: dark;
+
+	/* Brand palette — BIO logo: vivid lemon yellow + lime green */
+	--primary-50: #fffdeb;
+	--primary-100: #fff6c2;
+	--primary-200: #ffec8a;
+	--primary-300: #ffe04d;
+	--primary-400: #ffcb05;
+	--primary-500: #f0b800;
+	--primary-600: #cc9a00;
+	--primary-700: #a37a00;
+
+	--accent-300: #9bd862;
+	--accent-400: #7dc832;
+	--accent-500: #63b81b;
+	--accent-600: #4f9a12;
+
+	--success-400: #4ade80;
+	--success-500: #22c55e;
+	--warning-400: #fbbf24;
+	--warning-500: #f59e0b;
+	--danger-400: #f87171;
+	--danger-500: #ef4444;
+
+	/* Dark surfaces */
+	--bg-primary: #0a0a0a;
+	--bg-secondary: #141414;
+	--bg-card: #1c1c1c;
+	--bg-card-hover: #282828;
+	--bg-elevated: #2a2a2a;
+	--bg-input: #1e1e1e;
+
+	/* Text */
+	--text-primary: #f1f5f9;
+	--text-secondary: #a0a0a0;
+	--text-tertiary: #6b6b6b;
+	--text-muted: #666666;
+	--text-on-primary: #0a0a0a;
+
+	/* Borders */
+	--border-subtle: rgba(255, 255, 255, 0.06);
+	--border-default: rgba(255, 255, 255, 0.1);
+	--border-strong: rgba(255, 255, 255, 0.18);
+
+	/* Gradients */
+	--gradient-brand: linear-gradient(135deg, #ffd60a, #7dc832);
+	--gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.05), rgba(99, 184, 27, 0.05));
+	--gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.15), rgba(99, 184, 27, 0.15));
+
+	/* Glassmorphism */
+	--glass-bg: rgba(28, 28, 28, 0.75);
+	--glass-border: rgba(255, 255, 255, 0.08);
+	--glass-blur: 20px;
+
+	/* Shadows */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
+	--shadow-glow: 0 0 30px rgba(255, 203, 5, 0.1);
+
+	/* Spacing */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.25rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+	--space-10: 2.5rem;
+	--space-12: 3rem;
+
+	/* Radius */
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 14px;
+	--radius-xl: 20px;
+	--radius-full: 9999px;
+
+	/* Typography */
+	--font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+	/* Transitions */
+	--transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+	--transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+	--transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* Legacy partner-portal aliases (kept so old rules resolve) */
+	--color-bg: var(--bg-primary);
+	--color-surface: var(--bg-card);
+	--color-surface-raised: var(--bg-elevated);
+	--color-border: var(--border-default);
+	--color-text: var(--text-primary);
+	--color-text-muted: var(--text-secondary);
+	--color-accent: var(--primary-400);
+	--color-positive: var(--success-400);
+	--color-pending: var(--warning-400);
+	--color-negative: var(--danger-400);
+}
+
+/* ── Reset & base ── */
+*,
+*::before,
+*::after {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 16px;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	scroll-behavior: smooth;
+}
+
+body {
+	font-family: var(--font-sans);
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	line-height: 1.6;
+	min-height: 100vh;
+}
+
+/* Animated background mesh — Lemon Ideas palette */
+body::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	background:
+		radial-gradient(ellipse 80% 60% at 20% 10%, rgba(255, 203, 5, 0.06), transparent),
+		radial-gradient(ellipse 60% 50% at 80% 80%, rgba(99, 184, 27, 0.05), transparent),
+		radial-gradient(ellipse 50% 40% at 50% 50%, rgba(255, 203, 5, 0.03), transparent);
+	pointer-events: none;
+	z-index: 0;
+}
+
+a {
+	color: var(--primary-400);
+	text-decoration: none;
+	transition: color var(--transition-fast);
+}
+
+a:hover {
+	color: var(--primary-300);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+}
+
+h1 {
+	font-size: 2rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+}
+
+h3 {
+	font-size: 1.2rem;
+}
+
+/* ── Page container ── */
+.page {
+	position: relative;
+	z-index: 1;
+	max-width: 1080px;
+	margin: 0 auto;
+	padding: var(--space-8) var(--space-6) var(--space-12);
+	animation: fadeIn 0.4s ease-out;
+}
+
+.page-header {
+	margin-bottom: var(--space-8);
+}
+
+.page-header h1 {
+	margin-bottom: var(--space-2);
+}
+
+.page-header p {
+	color: var(--text-secondary);
+}
+
+/* ── Card = glass-card ── */
+.card {
+	position: relative;
+	z-index: 1;
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	-webkit-backdrop-filter: blur(var(--glass-blur));
+	border: 1px solid var(--glass-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-6);
+	margin-bottom: var(--space-6);
+	transition: all var(--transition-base);
+}
+
+.card:hover {
+	border-color: var(--border-strong);
+	box-shadow: var(--shadow-glow);
+}
+
+.card h2 {
+	margin-bottom: var(--space-4);
+}
+
+/* ── Stat tiles ── */
+.stat-row {
+	display: flex;
+	gap: var(--space-4);
+	flex-wrap: wrap;
+	margin-bottom: var(--space-6);
+}
+
+.stat-tile {
+	background: var(--gradient-card);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+	padding: var(--space-6);
+	min-width: 160px;
+	flex: 1;
+	transition: all var(--transition-base);
+}
+
+.stat-tile:hover {
+	border-color: var(--border-strong);
+	transform: translateY(-2px);
+}
+
+.stat-tile__label {
+	display: block;
+	font-size: 0.8rem;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-2);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.stat-tile__value {
+	font-size: 1.9rem;
+	font-weight: 800;
+	background: var(--gradient-brand);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+/* ── Tables ── */
+.table-wrap {
+	overflow-x: auto;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+th,
+td {
+	text-align: left;
+	padding: var(--space-4) var(--space-5);
+	border-bottom: 1px solid var(--border-subtle);
+	font-size: 0.9rem;
+	vertical-align: middle;
+}
+
+th {
+	color: var(--text-muted);
+	font-weight: 600;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+tbody tr {
+	transition: background-color var(--transition-fast);
+}
+
+tbody tr:hover {
+	background-color: var(--bg-card-hover);
+}
+
+tr:last-child td {
+	border-bottom: none;
+}
+
+/* ── Forms ── */
+.form-grid {
+	display: grid;
+	gap: var(--space-5);
+	max-width: 520px;
+}
+
+label {
+	display: block;
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-2);
+}
+
+input,
+select,
+textarea {
+	width: 100%;
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius-md);
+	border: 1px solid var(--border-default);
+	background: var(--bg-input);
+	color: var(--text-primary);
+	font-size: 0.95rem;
+	font-family: var(--font-sans);
+	transition: all var(--transition-fast);
+	outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+	color: var(--text-muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+	border-color: var(--primary-400);
+	box-shadow: 0 0 0 3px rgba(255, 203, 5, 0.15);
+}
+
+textarea {
+	resize: vertical;
+	min-height: 100px;
+}
+
+/* ── Buttons ── */
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	padding: var(--space-3) var(--space-6);
+	border-radius: var(--radius-md);
+	border: none;
+	background: var(--gradient-brand);
+	color: var(--text-on-primary);
+	font-weight: 600;
+	font-size: 0.9rem;
+	font-family: var(--font-sans);
+	cursor: pointer;
+	white-space: nowrap;
+	box-shadow: 0 2px 12px rgba(255, 203, 5, 0.25);
+	transition: all var(--transition-fast);
+}
+
+.button:hover:not(:disabled) {
+	box-shadow: 0 4px 20px rgba(255, 203, 5, 0.4);
+	filter: brightness(1.1);
+}
+
+.button:active:not(:disabled) {
+	transform: scale(0.97);
+}
+
+.button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	box-shadow: none;
+}
+
+.button--secondary {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+	border: 1px solid var(--border-default);
+	box-shadow: none;
+}
+
+.button--secondary:hover:not(:disabled) {
+	background: var(--bg-card-hover);
+	border-color: var(--border-strong);
+	filter: none;
+}
+
+.button--small {
+	padding: var(--space-2) var(--space-4);
+	font-size: 0.8rem;
+}
+
+/* ── Badges ── */
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-full);
+	font-size: 0.72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	background: rgba(255, 203, 5, 0.12);
+	color: var(--primary-400);
+	border: 1px solid transparent;
+}
+
+.badge--positive {
+	background: rgba(34, 197, 94, 0.15);
+	color: var(--success-400);
+}
+
+.badge--pending {
+	background: rgba(245, 158, 11, 0.15);
+	color: var(--warning-400);
+}
+
+.badge--negative {
+	background: rgba(239, 68, 68, 0.15);
+	color: var(--danger-400);
+}
+
+/* ── Notices ── */
+.notice {
+	border: 1px solid var(--border-default);
+	background: var(--bg-elevated);
+	border-radius: var(--radius-md);
+	padding: var(--space-4) var(--space-5);
+	margin-bottom: var(--space-5);
+}
+
+.notice--error {
+	border-color: rgba(239, 68, 68, 0.3);
+	background: rgba(239, 68, 68, 0.08);
+	color: var(--danger-400);
+}
+
+/* ── Copy field ── */
+.copy-field {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	background: var(--bg-input);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	padding: var(--space-3) var(--space-4);
+	margin-bottom: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.copy-field__label {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	min-width: 70px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.copy-field__value {
+	flex: 1;
+	font-family: var(--font-mono);
+	font-size: 0.85rem;
+	overflow-wrap: anywhere;
+}
+
+/* ── Dashboard shell ── */
+.app-shell {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	min-height: 100vh;
+}
+
+.dashboard-nav {
+	width: 250px;
+	flex-shrink: 0;
+	border-right: 1px solid var(--border-subtle);
+	padding: var(--space-6) var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	-webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.dashboard-nav__brand {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.15;
+	padding: 0 var(--space-3) var(--space-6);
+	margin-bottom: var(--space-3);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-nav__brand-text {
+	font-weight: 800;
+	font-size: 1.1rem;
+	background: var(--gradient-brand);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+.dashboard-nav__brand-sub {
+	font-size: 0.68rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	letter-spacing: 0.04em;
+	margin-top: 3px;
+	text-transform: uppercase;
+}
+
+.dashboard-nav__link {
+	display: block;
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius-md);
+	color: var(--text-secondary);
+	text-decoration: none;
+	font-size: 0.9rem;
+	font-weight: 500;
+	transition: all var(--transition-fast);
+}
+
+.dashboard-nav__link:hover {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+}
+
+.dashboard-nav__link--active {
+	background: rgba(255, 203, 5, 0.1);
+	color: var(--primary-400);
+	font-weight: 600;
+}
+
+.dashboard-content {
+	flex: 1;
+	min-width: 0;
+	padding: var(--space-8);
+	animation: fadeIn 0.4s ease-out;
+}
+
+.top-bar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: var(--space-8);
+	padding-bottom: var(--space-5);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.muted {
+	color: var(--text-secondary);
+}
+
+/* ── Spinner / loading ── */
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.spinner {
+	width: 40px;
+	height: 40px;
+	border: 3px solid var(--border-subtle);
+	border-top-color: var(--primary-500);
+	border-radius: 50%;
+	animation: spin 0.7s linear infinite;
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ── Accessibility ── */
+.button:focus-visible,
+.dashboard-nav__link:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline: 2px solid var(--primary-400);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+	.app-shell {
+		flex-direction: column;
+	}
+
+	.dashboard-nav {
+		width: 100%;
+		flex-direction: row;
+		flex-wrap: wrap;
+		border-right: none;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+
+	.dashboard-nav__brand {
+		width: 100%;
+		border-bottom: none;
+		padding-bottom: var(--space-3);
+	}
+
+	.dashboard-content {
+		padding: var(--space-5);
+	}
+
+	h1 {
+		font-size: 1.6rem;
+	}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Light theme — the default (dark is the toggle). Same token names
+   as :root, overridden values. Copied from the student/admin design
+   system so both portals match without touching any page markup.
+   ══════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+	color-scheme: light;
+
+	--bg-primary: #f8f8f8;
+	--bg-secondary: #ffffff;
+	--bg-card: #ffffff;
+	--bg-card-hover: #f3f3f3;
+	--bg-elevated: #ededed;
+	--bg-input: #ffffff;
+
+	--text-primary: #1a1a1a;
+	--text-secondary: #555555;
+	--text-tertiary: #888888;
+	--text-muted: #999999;
+	--text-on-primary: #0a0a0a;
+
+	--border-subtle: rgba(0, 0, 0, 0.06);
+	--border-default: rgba(0, 0, 0, 0.1);
+	--border-strong: rgba(0, 0, 0, 0.18);
+
+	--gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.04), rgba(99, 184, 27, 0.04));
+	--gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.08), rgba(99, 184, 27, 0.08));
+
+	--glass-bg: rgba(255, 255, 255, 0.85);
+	--glass-border: rgba(0, 0, 0, 0.08);
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+	--shadow-glow: 0 0 30px rgba(255, 203, 5, 0.08);
+
+	/* Darker brand shades for contrast on white */
+	--primary-400: #b88a00;
+	--primary-500: #9c7400;
+	--accent-400: #4f9a12;
+	--accent-500: #3f7d0e;
+	--success-400: #16a34a;
+	--danger-400: #dc2626;
+	--warning-400: #d97706;
+}
+
+/* The animated mesh reads as noise on white — hide it in light mode. */
+[data-theme="light"] body::before {
+	display: none;
+}
+
+body {
+	transition:
+		background-color var(--transition-base),
+		color var(--transition-base);
+}
+
+/* ── Theme toggle button (shared with student/admin) ── */
+.theme-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border-default);
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	transition: all var(--transition-fast);
+	color: var(--text-secondary);
+	flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+	background: var(--bg-card-hover);
+	border-color: var(--primary-400);
+	color: var(--primary-400);
+	transform: scale(1.05);
+}
+
+/* ── Premium display typography (student-portal-inspired) ─────────────────── */
+:root {
+	--font-display: "Poppins", var(--font-sans);
+	--font-stat: "Montserrat", var(--font-sans);
+}
+
+h1,
+h2,
+.page-header h1,
+.hero h1 {
+	font-family: var(--font-display);
+	letter-spacing: -0.02em;
+}
+
+.stat-tile__value {
+	font-family: var(--font-stat);
+	letter-spacing: -0.01em;
+}

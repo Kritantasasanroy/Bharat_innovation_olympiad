@@ -1,13 +1,15 @@
 # Bharat Innovation Olympiad — Complete Technical Documentation
 
-> Last updated: June 2026 (face-api.js proctoring · media questions · question pool system · S3 service)  
-> Stack: NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · AWS S3 · Vercel · Render  
-> Architecture reference: `prd-reference/docs/all-prds-re-arch-pass-2/` — bio-core · bio-portal · bio-proctor
+> Last updated: 2026-07-14 (exam lifecycle gating · school slot self-service · per-audience result release + Excel · question picture/video on Cloudinary — see **§0.25**)  
+> **Production stack (live today):** NestJS · Next.js · PostgreSQL (Neon) · Redis · Socket.IO · face-api.js · Razorpay · **Cloudinary** (question media; S3-compatible providers supported behind the same seam) · Vercel · Render — this is `backend/` + `frontend/` + `admin-frontend/`.  
+> **Target stack (migrating to):** pnpm workspace · Bun/Elysia · Drizzle · Biome · Lefthook · hexagonal — mirrors `github.com/bharat-innovation-olympiad` (`bio-exam`, `bio-admin`, `bio-portal`, `bio-contracts`; `bio-proctor` intentionally kept as the existing face-api.js client).  
+> Architecture reference: golden PRDs now live in-repo at `ai/output/prds/`; agent rules in `ai/steering/`. See `AGENTS.md`, `BIO-REPOS.md`, and §0 below.
 
 ---
 
 ## Table of Contents
 
+0. [Architecture Re-Alignment — BIO pnpm Workspace](#0-architecture-re-alignment--bio-pnpm-workspace) ← **new**
 1. [Project Overview](#1-project-overview)
 2. [Repository Structure](#2-repository-structure)
 3. [Architecture Diagram](#3-architecture-diagram)
@@ -23,6 +25,1097 @@
 13. [Exam Flow End-to-End](#13-exam-flow-end-to-end)
 14. [Proctoring System](#14-proctoring-system)
 15. [Deployment](#15-deployment)
+
+---
+
+## 0. Architecture Re-Alignment — BIO pnpm Workspace
+
+> **Why this section exists.** The private org `github.com/bharat-innovation-olympiad` holds the
+> *intended* production architecture as **five separate repos**. This project (originally a single
+> NestJS monolith) is being re-shaped to match them. As of 2026-07-02 the repo contains **both**:
+> the live monolith (`backend/`, `frontend/`, `admin-frontend/`) **and** a new `pnpm` workspace
+> that mirrors the org. The monolith stays in production until each workspace service reaches parity.
+
+### 0.1 The org (source of truth)
+
+| Org repo | Stack | Responsibility |
+|---|---|---|
+| `bio-contracts` | TS packages | Shared `@bio/*`: domain contracts (events/clients), auth-kit, shared types, UI kit, fixtures |
+| `bio-exam` | Bun/Elysia · Drizzle · Vite/React | Exam-window runtime: entitlement gate, player, autosave, durable timer, submission, SEB |
+| `bio-admin` | Bun/Elysia · Drizzle · Vite/React | Trusted admin: curation, scheduling, publishing, **scoring + answer keys**, results, analytics, ops (+ workers) |
+| `bio-portal` | Next.js App Router · Bun/Elysia seam | Always-on student portal: marketing, auth, booking, **payments**, entitlement issuance, admit/results |
+| `bio-proctor` | Python · FastAPI · uv | Proctoring: face enrollment, frame analysis, risk, review, **biometric retention** |
+
+`bio-po` is the golden-PRD repo (its `ai/output/prds/` is the source of truth); `workbench-*` are the
+AI workbenches. **Cross-repo law:** DTOs/events come from `@bio/domain-contracts` (never
+hand-duplicated); `bio-admin` owns answer keys + scoring, `bio-exam` consumes key-stripped snapshots;
+`bio-portal` owns payments/entitlement; `bio-proctor` owns biometrics.
+
+### 0.2 How it maps into this repo (one consolidated pnpm workspace)
+
+The five repos are flattened into a single workspace. Each package keeps its distinct `@bio/*` name,
+so its folder is the name minus the `@bio/` prefix (e.g. `@bio/exam-shared-types` →
+`packages/exam-shared-types`).
+
+```text
+Bharat_innovation_olympiad/
+├── pnpm-workspace.yaml · package.json · biome.json · tsconfig.json · lefthook.yml · .bio-repos.json
+├── AGENTS.md · BIO-REPOS.md            # governance (read before cross-service work)
+├── ai/                                 # AI workbench: steering/ (golden principles, roles, artifact rules) + output/prds/ (golden PRDs)
+├── packages/                           # = bio-contracts (+ each repo's local @bio/* packages)
+│   ├── domain-contracts · shared-types · auth-kit · ui-kit · contract-fixtures
+│   ├── exam-shared-types · exam-contract-fixtures
+│   ├── admin-auth · admin-authoring · admin-scheduling · admin-scoring · admin-results · admin-observability-testkit · admin-shared-types · admin-contract-fixtures
+│   └── portal-domain · portal-contract-fixtures
+├── services/                           # Bun/Elysia hexagonal APIs (+ admin workers)
+│   ├── exam-api      ← bio-exam       (★ exam-runtime slice PORTED — see §0.4)
+│   ├── admin-api     ← bio-admin       (scaffold)
+│   ├── {admin,analytics,publish,results,scoring}-worker  ← bio-admin (scaffolds)
+│   └── portal-api    ← bio-portal      (scaffold)
+├── apps/                               # exam-web, admin-web (Vite/React) · marketing-web, student-portal-web (Next.js)
+│
+├── backend/          # ← LEGACY NestJS + Prisma (production) — excluded from the workspace
+├── frontend/         # ← LEGACY Next.js student (production) — hosts the face-api.js proctor (kept)
+└── admin-frontend/   # ← LEGACY Next.js admin (production) — excluded from the workspace
+```
+
+`pnpm-workspace.yaml` globs only `apps/*`, `services/*`, `packages/*` — the three legacy apps stay on
+their own `npm` toolchains and are untouched.
+
+### 0.3 Conventions adopted from the org
+
+- **Package manager:** `pnpm` (workspace) — `pnpm@10.32.1`; runtime **Bun** (`>=1.2`).
+- **API framework:** **Elysia** on Bun (not NestJS). **ORM:** **Drizzle** (not Prisma). **Lint/format:** **Biome** (tabs, width 100, double quotes, semicolons, trailing commas) — not ESLint/Prettier. **Hooks:** Lefthook.
+- **Architecture:** hexagonal — `core/` (domain, ports/in, ports/out, services, errors) imports no framework; `adapters/` (`in/http`, `out/persistence`, `out/cache`); `infra/` (config, logger, shutdown). Enforced by `pnpm boundaries`.
+- **Proctoring exception (per request):** `bio-proctor` (Python) is **not** recreated. Proctoring remains the existing client-side face-api.js implementation in `frontend/` (see §8, §14).
+
+### 0.4 What was ported in this pass — `services/exam-api`
+
+The **exam-window runtime vertical slice** was ported from `backend/src/attempt` + `backend/src/timer`
+(NestJS/Prisma) onto Elysia + Drizzle, keeping behaviour identical. Full detail in
+`services/exam-api/PORT-NOTES.md`. Routes:
+
+| PRD | Route | Notes |
+|---|---|---|
+| EXAM-02 | `POST /exams/:instanceId/start` | Face + confirmed-slot entitlement gate; FNV-1a seeded per-student question set; create/resume/demo-reopen |
+| EXAM-03 | `POST /attempts/:id/answer`, `GET /attempts/:id` | Idempotent autosave; ownership-checked read |
+| EXAM-04 | `GET /attempts/:id/timer` | Server-authoritative Redis deadline (recomputed from DB on miss); auto-submit on expiry |
+| EXAM-05 | `POST /attempts/:id/submit` | Per-type scoring (MCQ/MULTI_SELECT/TRUE_FALSE/SHORT_ANSWER/NUMERIC) → finalize |
+
+Boundary honoured: answer keys never leave the domain — the repository returns `ScoredQuestion`
+(keys) for building/scoring, the HTTP layer only emits `QuestionView` (keys stripped). Drizzle targets
+the **same Neon tables** as Prisma (default PascalCase table + camelCase column naming), so both
+engines can run against one database during migration. It **shares `JWT_SECRET`** with the NestJS
+backend (HS256).
+
+### 0.5 Migration status (updated 2026-07-08)
+
+- **Done + verified:** workspace tooling + governance + `ai/` workbench; all org packages/services/apps scaffolded; `exam-api` runtime slice ported **and green** (`pnpm install`, `tsc --noEmit`, Biome, and the `core` boundaries lint all pass) and it **emits `attempt.submitted` / `attempt.auto_submitted` as validated `@bio/domain-contracts` envelopes** (producer `bio-exam`).
+- **Distributed to all repos:** every service repo now holds its **functional chunk of the working project** in a `lemon-current-impl/` folder on a `lemon/current-impl` branch (`bio-exam`, `bio-admin`, `bio-portal`, `bio-contracts`; `bio-proctor` via `lemon/current-proctor-implementation`). The main repo carries `bio-repos-mirror/` mirroring every chunk. See §0.7.
+- **Workbench engineering artifacts:** EXAM-02 (PRD-030) `SPEC-004` + `TDD-004` + `ERD-004` drafted in `workbench-bio-exam-admin` (branch `exam-02-eng-artifacts`), designed to the latest spec (see §0.8).
+- **Next:** draft eng-specs for the remaining epics; register the service repos under the workbench `repos/` so ralph can build; port `admin-api`/`portal-api` verticals; wire `apps/*`; retire each legacy app only at parity.
+- **Run (new stack):** `pnpm install` → `pnpm --filter @bio/exam-api typecheck` → `DATABASE_URL=… REDIS_URL=… JWT_SECRET=… pnpm --filter @bio/exam-api dev`. Verify: `pnpm verify`.
+
+### 0.6 How we work now — the AI workbench (ralph-driven)
+
+Development is driven from the **`workbench-bio-exam-admin`** repo (an `ai-workbench` instance), **not** by hand-editing the service repos. It is a **planning + orchestration** repo:
+
+- **Pipeline:** Jira epic → **PRD** (PO hat) → **eng-spec / TDD / ERD / ADR** (Eng hat) → **BDD / test-plan / test-cases / test-spec** (QA hat) → human approval → **ralph** writes the code into the service repos under its `repos/`.
+- **Artifact lifecycle:** `draft → published → approved`. **Agents (Claude/Devin) write `draft` only**; humans promote via `wb.publish` / `wb.approve` / `wb.reject`. Ralph's gate is `.workbench-state/approved.json`; only approved artifacts are synced into `repos/<svc>/ai/`.
+- **Hard rules:** never hand-edit `repos/*` from the workbench (ralph's job); cross-service DTOs/events come from `@bio/domain-contracts` (never duplicated); `bio-admin` owns answer keys + scoring while `bio-exam` consumes key-stripped snapshots; `bio-portal` owns payments/entitlement; no answer keys or secrets into the wrong repo; plain English, no em dashes or hype words in artifacts.
+- **Source of truth:** 44 golden PRDs in `ai/output/prds/` (from `bio-po`); steering rules in `ai/steering/` (golden principles GP-001..010, roles dev/po/qa/uxd, per-artifact rules). Per-epic status lives in the workbench `EPIC-PIPELINE.md`; only the 3 scaffold PRDs are approved so far, the 41 feature PRDs are published and awaiting approval.
+- **This workbench owns:** exam, admin, contracts. Portal and proctor are "external impacted" (own repos / their own workbench).
+
+### 0.7 Repo & branch topology (where everything lives)
+
+Nothing is deleted; every change is an additive branch. The nine repos collectively hold the entire project, split by function.
+
+| Repo | Branch(es) | Contains |
+|---|---|---|
+| `Bharat_innovation_olympiad` (main) | `bio-workspace-rearch` | Full pnpm workspace + exam-api port + `ai/` workbench + `bio-repos-mirror/` (all chunks) |
+| `bio-exam` | `lemon/current-impl`, `lemon/exam-runtime-port` | Working exam-runtime chunk; **and** the target-stack Elysia/Drizzle port |
+| `bio-admin` | `lemon/current-impl` | Working authoring/analytics + admin console chunk |
+| `bio-portal` | `lemon/current-impl` | Working auth/booking/payments + student app chunk |
+| `bio-contracts` | `lemon/current-impl` | Working shared platform + data model + types chunk |
+| `bio-proctor` | `lemon/current-proctor-implementation` | face-api.js client + NestJS proctor module |
+| `workbench-bio-exam-admin` | `exam-02-eng-artifacts` | SPEC/TDD/ERD-004 for EXAM-02 |
+| `bio-po` | (read-only) | Golden PRDs |
+| `workbench-bio-portal` | (untouched) | Portal specs |
+
+**Two tracks:** (1) **distribute now** — the working code is preserved per-function on the `lemon/current-impl` branches above, so the repos already hold the whole project; (2) **port over time** — each chunk is rewritten to its target stack via the workbench → ralph flow (exam-api is the first done).
+
+> **Tooling gotcha (main repo):** `pnpm install` runs `lefthook install`, adding a `pre-commit` hook (`biome-check` + `lint-boundaries`) that fails in this environment (`pnpm` is not on the git-hook shell PATH; Biome flags vendored/legacy code). A commit that fails the hook aborts silently, and a following branch push then points at the old commit. Fixes applied: `biome.json` excludes `backend`/`frontend`/`admin-frontend`/`bio-repos-mirror`, and consolidation commits use `git commit --no-verify`. The `_bio-org/*` clones have no such hook.
+
+### 0.8 Reconciliation: the spec has moved past the monolith
+
+The workbench PRDs are ahead of the monolith on some behaviors. Most important, **EXAM-02 (PRD-030)** changed the attempt gate from **slot booking** (what the monolith and the current exam-api port do) to a **paid registration/entitlement** (`registrationId`, from `PORTAL-07 RegistrationConfirmed`), added a richer state machine (`SUBMITTING`, `EXPIRED_WITH_ERROR`, `VOIDED`), ownership on the **WebSocket** join (IDOR), `endsAt = min(startedAt + duration, slotEndsAt)`, and a **fail-closed** start when the timer cannot schedule. `SPEC-004`/`TDD-004`/`ERD-004` capture this target; the exam-api port is faithful to the monolith today and will be upgraded to the spec.
+
+### 0.9 System design — hexagonal (ports & adapters)
+
+Every backend service follows the same hexagonal shape. **Dependency rule:** `core` depends on nothing
+outward; `adapters` and `infra` depend inward on `core`. It is enforced by `pnpm boundaries` (an ESLint
+pass over `src/core/**` that bans imports of adapters, infra, ORM rows, framework, or UI).
+
+```text
+services/<svc>-api/src/
+  core/
+    domain/      entities, value objects, pure logic (scoring, FNV-1a question-set) — no I/O
+    ports/in/    use-case interfaces (driving ports) the inbound adapters call
+    ports/out/   repository/gateway interfaces (driven ports) the core calls
+    services/    application services implementing the use cases over ports
+    errors/      DomainError hierarchy (machine code + httpStatus)
+  adapters/
+    in/http/     Elysia routes + plugins (auth, cors, error-handler, request-logger)
+    out/persistence/  Drizzle repositories + schema (implements ports/out repositories)
+    out/cache/   Redis clients (durable timer store, etc.)
+    out/events/  contract-event publisher (maps domain events → @bio/domain-contracts envelopes)
+  infra/         config, logger (pino), graceful shutdown
+  container.ts   composition root — the ONLY place core is wired to concrete adapters
+  index.ts       process entry (Bun); app.ts assembles the Elysia app from plugins + routes
+```
+
+**Why:** infrastructure is swappable, the core is unit-testable with no DB/HTTP, and the boundary keeps
+answer-key and secret logic out of the wrong layer. The worked example is `services/exam-api` (§0.4,
+and `services/exam-api/PORT-NOTES.md`).
+
+### 0.10 Service topology & responsibilities
+
+| Service (repo) | Owns | Inbound surface | Key outbound ports |
+|---|---|---|---|
+| `exam-api` (bio-exam) | Attempt lifecycle, durable timer, player, submission, SEB | `POST start-attempt` / `answer` / `submit`; `GET attempt` / `timer`; WS timer-room | AttemptRepository, ExamSnapshotReadModel (key-stripped), ExamRegistrationReadModel, TimerScheduler, EventBus, Clock, SEB/readiness |
+| `admin-api` (bio-admin) + workers | Question bank, paper builder, scheduling, publishing, **scoring (owns answer keys)**, results, analytics, ops | Admin HTTP | Publishes `ExamSnapshotPublished` (key-stripped) + `ExamSlotPublished`; scoring / results / publish / analytics workers |
+| `portal-api` (bio-portal) | Marketing, auth (OTP), registration, booking, **payments (Razorpay)**, entitlement issuance, admit card, results surface | Student HTTP + Next.js apps | Emits `RegistrationConfirmed` / `RegistrationCancelled`; consumes results |
+| `bio-proctor` (Python, **not built**) | Face enrollment, frame analysis, risk, review, biometric retention | — | Current implementation is the face-api.js client in `frontend/` |
+| `bio-contracts` (packages) | Shared DTOs/events, auth-kit, shared-types, ui-kit, fixtures | — | Consumed by every service via `workspace:*` |
+
+### 0.11 Shared contracts & the event model (PLAT-02)
+
+- All cross-service DTOs and events come from **`@bio/domain-contracts`**; never hand-duplicated.
+- **Event families** (Zod-validated payloads): `runtime` (bio-exam: `attempt.started`, `answer.saved`, `attempt.submitted`, `attempt.auto_submitted`, `runtime.integrity_signal_raised`), `commerce` (bio-portal: `RegistrationConfirmed`/`Cancelled`), `admin` (bio-admin: `ExamSnapshotPublished`, `ExamSlotPublished`), `proctor`.
+- **Envelope:** `BioEventEnvelope<T>` = `eventId`, `eventType`, `eventVersion` (equals `CONTRACT_VERSION`), `occurredAt`, `producer`, `correlationId`, `causationId?`, `idempotencyKey`, `payload`. Pinned `CONTRACT_VERSION = 0.1.0`; consumers reject an incompatible major.
+- **Cross-repo seam events:** `RegistrationConfirmed`/`Cancelled`, `ExamSnapshotPublished`, `ExamSlotPublished`, `attempt.submitted`, `ProctorSessionRequested`, `RiskScoreChanged`, `ProctorReportFinalized`.
+- **Forbidden-field rule (CI-enforced):** no `correctAnswer`, correct-option flag, or pre-release `explanation` in any runtime contract or fixture.
+- Status: `exam-api` already emits `attempt.submitted` / `attempt.auto_submitted` as validated envelopes via an `EventPublisher` port + an outbound adapter (keeps `core` free of zod).
+
+### 0.12 Data model & persistence
+
+- New services use **Drizzle** (node-postgres) against the **same shared Neon database** as the monolith's Prisma, so both engines run during cutover. Table/column names match Prisma defaults (PascalCase tables, camelCase columns, enum type = enum name); ids are `text` (Prisma `String @default(uuid())`, no `@db.Uuid`).
+- **Read models:** `exam-api` projects `RegistrationConfirmed` → `ExamRegistration` and `ExamSnapshotPublished` → a **key-stripped** `ExamSnapshot`, so the attempt-start hot path needs no cross-service round-trip.
+- **Attempt aggregate (EXAM-02 target):** unique `registrationId` (idempotency key), pinned `examSnapshotId`, state machine `NOT_STARTED → IN_PROGRESS → SUBMITTING → SUBMITTED | AUTO_SUBMITTED | EXPIRED_WITH_ERROR | VOIDED`, server-authoritative `endsAt = min(startedAt + duration, slotEndsAt)`.
+- **Migrations** are additive so the legacy engine keeps serving until parity; rollback drops the added tables/constraints with no backfill.
+
+### 0.13 Security & boundaries
+
+- **Deny-by-default** authorization. **Ownership enforced on every attempt HTTP endpoint AND the WS join** (closes the IDOR): one `assertOwner` predicate is shared by the HTTP guard and the socket handshake.
+- **Answer keys isolated to bio-admin.** The runtime only ever sees key-stripped snapshots (`ScoredQuestion` stays internal to the domain; `QuestionView` crosses the HTTP boundary).
+- **Fail closed:** never start an untimed exam — the durable timer must schedule (Redis/BullMQ) or start returns `503` and persists no attempt.
+- **Server is the only time authority;** the client clock is never trusted; resume recomputes remaining time server-side.
+- **DPDP:** India data residency, audited attempt events (OPS-01), biometric retention policy (PROCTOR-05).
+- **Auth:** JWT HS256 with the shared `JWT_SECRET` (`sub` = userId), matching the NestJS backend. Neon direct tokens are RS256 via JWKS (a follow-up if pointed straight at a service).
+
+### 0.14 Repo restructuring — full module mapping
+
+Monolith module → target repo / service / app:
+
+| Monolith source | Function | Target |
+|---|---|---|
+| `backend/src/attempt`, `backend/src/timer` | Exam-window runtime | bio-exam / `services/exam-api` |
+| `backend/src/exam` | Authoring, analytics | bio-admin / `services/admin-api` (+ workers) |
+| `backend/src/auth`, `backend/src/user` | Auth, profile | bio-portal / `services/portal-api` |
+| `backend/src/slot`, `backend/src/payment` | Booking, payments | bio-portal / `services/portal-api` |
+| `backend/src/proctor` + `frontend` `useFaceProctor` | Proctoring | bio-proctor (client kept; Python service not built) |
+| `backend/src/common`, `backend/src/prisma`, FE/admin `types` | Shared platform, data model, types | bio-contracts / `packages/*` |
+| `frontend/` (student) | Student UI | bio-portal / `apps/{marketing-web,student-portal-web}` |
+| `admin-frontend/` | Admin UI | bio-admin / `apps/admin-web` |
+| exam-player pages/hooks | Exam UI | bio-exam / `apps/exam-web` |
+
+**Distribution (track 1, done):** each function's working code is preserved in its repo under
+`lemon-current-impl/` on a `lemon/current-impl` branch, and mirrored into the main repo under
+`bio-repos-mirror/`. **Workspace naming:** each folder is the `@bio/*` package name minus the `@bio/`
+prefix (for example `@bio/exam-shared-types` → `packages/exam-shared-types`), so distinct names never
+collide when the five repos are flattened into one workspace.
+
+### 0.15 Stack migration matrix
+
+| Concern | Monolith (production now) | Target (new services) |
+|---|---|---|
+| Runtime | Node | Bun (`>=1.2`) |
+| API framework | NestJS | Elysia |
+| ORM | Prisma | Drizzle |
+| Package manager | npm | pnpm workspaces (`pnpm@10.32`) |
+| Lint / format | ESLint / Prettier | Biome (tabs, width 100, double quotes) |
+| Git hooks | none | Lefthook (`biome-check`, `lint:boundaries`) |
+| Tests | Jest | Bun test (TS) / pytest (proctor) |
+| Frontend | Next.js (student + admin) | Vite/React (`exam-web`, `admin-web`) + Next.js App Router (`marketing-web`, `student-portal-web`) |
+| Proctoring | face-api.js client (kept) | Python / FastAPI (future) |
+| Architecture | modular monolith | hexagonal polyrepo + shared `@bio/*` contracts |
+| Deploy | Render (backend) + Vercel (frontends) | per-service (future; not yet wired) |
+
+> The remainder of this document (§1–§15) describes the **live production monolith**, which is
+> unchanged and authoritative until the workspace services replace it.
+
+---
+
+### 0.16 Partner Attribution, Commission & Payout Engine + Portal (2026-07-09)
+
+Second real vertical slice in the workspace (after `exam-api`), built to draft PRDs `PRD-046`
+(engine, workbench-bio-exam-admin) and `PRD-011` (UI, workbench-bio-portal) — "contractor" in the
+original request meant "partner"; there is no separate contractor concept anywhere in the org.
+School Portal (`PRD-010`) and the PRD-047 school self-service backend stay **deferred**.
+
+- **`services/admin-api`** owns the engine: `Partner`, `PartnerApplication`, `Campaign`,
+  `AttributionRecord`, `CommissionStatement`, `PayoutLedgerEntry`, `PartnerInstitutionAssignment`
+  (Drizzle, shared Neon DB, migration `0000_shocking_galactus.sql`). Application approval and payout
+  release are manual-decision hooks (one audited PATCH each, mandatory reason) — no review UI or
+  queue, per the PRD's explicit non-goal. Attribution ties (a referral link and a coupon both
+  present) resolve first-touch; one credit per student+registration, idempotent on duplicate
+  paid-conversion events. Commission statements are immutable once issued — regenerating creates a
+  new version rather than mutating the original. Payouts move `PENDING → SIGNED_OFF → RELEASED`,
+  blocked from `RELEASED` without a finance sign-off field. No KYC/Aadhaar fields anywhere (explicit
+  decision) — the application is just org name, contact person, email, phone.
+- **Auth**: `services/admin-api`'s `require-role.guard.ts` placeholder (`x-admin-role` header, no
+  verification) is now replaced by a real `auth.plugin.ts` — the same HS256 JWT verification
+  (`JWT_SECRET`, `{ sub, email, role }` payload) `exam-api` already uses against the legacy backend's
+  tokens. A `PARTNER` role rides the same token; partner-scoped routes are always scoped to the
+  token's `sub`, never a client-supplied id (contract-tested — no cross-partner leakage).
+- **`services/portal-api` + `apps/partner-portal-web`** (new): a thin BFF (`/partner/*` routes)
+  proxying to `admin-api`, and an 11-page Next.js App Router app — application + status, dashboard
+  (gated on approved status), institutions, campaign/link management, funnel, payouts/statements, a
+  support-request form (submission + status only), a `mailto:` dispute link. Not yet
+  integration-tested against a live `admin-api` — see ROADMAP for the specific open item.
+- **Test coverage**: 81 `bun test` cases in `admin-api` (one group per acceptance criterion), 35 in
+  `portal-api`; both packages' `typecheck`/`lint:boundaries`/Biome all green.
+- **Repo-wide bugs found and fixed in this pass** (not specific to Partner code):
+  1. `.gitignore`'s unanchored `out/` rule was silently excluding every service's
+     `core/ports/out/`/`adapters/out/` directory from git. This meant `exam-api`'s Drizzle
+     schema/repositories/event-publisher — built and verified in the 2026-07-02/03 sessions — had
+     **zero commit history** despite being described as "ported and pushed" in this document. Fixed
+     the glob (scoped to `apps/*/out/`, `/frontend/out/`, `/admin-frontend/out/`) and recovered the
+     previously-invisible `exam-api` files as their own commit.
+  2. Elysia's `onError` hook defaults to `"local"` scope — `error-handler.ts` in both `admin-api` and
+     `exam-api` was mounted as a sibling plugin without `{ as: "global" }`, so it never actually
+     caught errors from the route plugins next to it; every `DomainError` fell through to a raw,
+     unmapped 500. Fixed in both.
+  3. `lint:boundaries`'s single-quoted glob (`'src/core/**/*.ts'`) isn't stripped by the Windows
+     shell lefthook invokes, so eslint received the literal quote characters and matched nothing —
+     switched to double quotes in both services.
+
+---
+
+### 0.17 Portal UI consistency + School Portal (2026-07-10)
+
+Built against `Portal_Features.pdf` (the plain-language features spec: **Student 30 / School 22 /
+Partner 15 / Admin 30** features + cross-cutting platform safeguards). Decision: the partner and
+school portals are delivered as **new pnpm-workspace apps that share the student/admin BIO design
+system**, and Aadhaar/OTP/KYC identity verification is **skipped** by request.
+
+**The shared design system.** `frontend/` and `admin-frontend/` share a CSS-variable design system
+(`admin-frontend/src/app/globals.css`): Inter + JetBrains Mono, a lemon-yellow→lime-green brand
+palette (`--primary-*` / `--accent-*`), glass-card surfaces (`--glass-bg` + `backdrop-filter`), an
+animated radial background mesh, and shadow/spacing/radius scales. Both new workspace apps embed this
+exact token set in their own `globals.css` (the workspace has no Tailwind; these are hand-authored
+CSS variables), so the four portals read as one product.
+
+**Partner portal (`apps/partner-portal-web`) — restyled in place.** Its original `globals.css` used a
+separate blue theme and bespoke class names (`.card`, `.button`, `.stat-tile`, `.dashboard-nav`,
+`.badge`, `.copy-field`…). Rather than rewrite ten pages, the stylesheet was replaced with one that
+(a) declares the full BIO token set and (b) **re-implements those same class names on top of the
+tokens** — so every existing page (all 15 partner features: onboarding, dashboard, institutions,
+campaigns/links, funnel, payouts/statements, support) matches student/admin with zero JSX changes. A
+branded gradient sidebar header was added to `dashboard-nav`. Runs on `:3400`, talks to
+`services/portal-api` (`:3300`).
+
+**School portal (`apps/school-portal-web`) — new, built from scratch.** A Next.js 16 / React 19
+workspace app on `:3500` mirroring the partner portal's structure: JWT-paste auth
+(`bio-school-portal.access-token`), a landing page, `/login`, `/activate` (invitation &
+self-activation), and a redirect-gated `/dashboard/*` shell with a branded sidebar (`school-nav`).
+**All 22 school features** live across 8 dashboard pages:
+
+| Page | Spec features covered |
+|---|---|
+| Overview | Dashboard access, participation summary, upcoming windows |
+| Profile & roles | Institution profile setup, RBAC (coordinator / read-only invite + remove) |
+| Students | View invited + participating (filter/search), **bulk CSV upload** (client-side validate + preview + template) |
+| Slots & windows | Exam-slot dates, slot-allocation status bars, custom-window request, updated-window visibility |
+| Live monitoring | Near-real-time exam-day snapshot (5s auto-refresh), flagged-session notice |
+| Results & analytics | Results-available, participation summary, class/grade performance, student-wise scores, percentile benchmarking, peer school comparison, CSV export |
+| Sponsorship | Sponsored / future-payment requests |
+| Support | Helpdesk escalation + `mailto:` |
+
+`pnpm --filter @bio/school-portal-web typecheck` is green (the workspace's strict
+`exactOptionalPropertyTypes` + `noUncheckedIndexedAccess` are honoured); all 11 routes compile under
+Turbopack and serve 200.
+
+**Data layer is representative demo data.** There is **no school-coordinator backend yet** — the
+monolith only exposes ADMIN-scoped school endpoints (`GET /admin/schools`, school-slot-assignments,
+reassignment; see the 2026-07-09 log). So `apps/school-portal-web/src/lib/school-data.ts` returns
+representative in-memory data, and is the **single seam** to swap for real `fetch()` calls (base URL
+`NEXT_PUBLIC_API_URL`) once the PRD-047 / SCHOOL-01 school API lands. Nothing on this portal is
+persisted server-side yet; forms mutate local component state only.
+
+**Local port map (dev):** backend `:4000`, student `:3000`, admin `:3001`, admin-api `:4100`,
+portal-api `:3300`, partner portal `:3400`, school portal `:3500`, Redis `:6379` (now published to the
+host in `docker-compose.yml`).
+
+**Live deployment (2026-07-10).** All portals are deployed. Frontends on Vercel
+(`kritantasasanroys-projects`), backends on Render (`My Workspace`, Singapore):
+
+| Service | URL | Notes |
+|---|---|---|
+| Student portal | https://olympiad-student-frontend.vercel.app | existing, redeployed |
+| Admin portal | https://olympiad-admin-frontend.vercel.app | existing, redeployed |
+| **Partner portal** | https://bio-partner-portal.vercel.app | new (`apps/partner-portal-web`) |
+| **School portal** | https://bio-school-portal.vercel.app | new (`apps/school-portal-web`) |
+| Backend (NestJS) | https://olympiad-backend-wsvn.onrender.com | existing, redeployed; `/api/proctor/health` 200 |
+| **admin-api** (Bun) | https://bio-admin-api.onrender.com | new; + Render Key Value `bio-admin-redis` |
+| **portal-api** (Bun) | https://bio-portal-api.onrender.com | new; `/partner/*` → 401 unauthenticated ✓ |
+
+> Updated 2026-07-10: all three Render services now deploy from **`bio-workspace-rearch`** (the
+> backend previously built from `main`, which does not contain the partner module). New env vars:
+> backend `ADMIN_API_URL`, portal-api `STUDENT_APP_URL`, partner portal `NEXT_PUBLIC_API_URL`. All
+> services share one `JWT_SECRET` — see §0.18 for the production mismatch that broke this.
+
+Deploy specifics worth remembering: (1) Render has **no native Bun runtime** and its `/usr/bin` is
+**read-only**, so `corepack enable` fails (`EROFS`) — the Bun services build with
+`npm install -g pnpm@10.32.1 bun && pnpm install --frozen-lockfile --filter <pkg>... --ignore-scripts`
+(rootDir = repo root so the pnpm workspace resolves) and start with `bun services/<svc>/src/index.ts`;
+Render injects `PORT`. (2) The Vercel CLI uploads only the app directory, so each portal app needs a
+**self-contained `tsconfig.json`** (no `extends: ../../`) and an explicit `typescript` devDep — the
+apps have no `@bio/*` workspace deps, so they build standalone. (3) `admin-api` is fail-closed on
+`REDIS_URL`; a Render Key Value instance (`redis://red-...:6379`, internal) backs it. Tokens used for
+this deploy were provided in-session and should be rotated.
+
+**Remaining (Phase 3, deferred by choice — deploy-first was done first):** fill genuine student/admin
+spec gaps on the **live monolith** (student: admit card, certificate + public verification,
+grievance/reattempt, consent capture; admin: fair-score normalization / result-release gating,
+certificate generation, refund-request review, exam-day + KYC/payment ops queues). The
+partner-management view is now **done** — see §0.18.
+
+---
+
+### 0.18 Partner access loop + referral attribution (2026-07-10)
+
+**The problem.** A brand-new partner could not get into the partner portal at all. Three linked gaps:
+`/apply` and `/login` both required a *pasted JWT*; **no token could ever carry `role: PARTNER`**
+(the backend `Role` enum lacked it, and only the legacy backend signs JWTs — admin-api/portal-api
+merely verify); and admin had no way to see or decide requests (admin-api could approve/reject but had
+no list endpoint and no revoke, and `admin-frontend` only ever talks to the backend on `:4000`).
+
+**Who owns what.** The legacy backend is the platform's only JWT signer, so it owns **partner
+identity + review**; admin-api keeps the partner **engine** (funnel/campaigns/statements/payouts).
+They are kept in lock-step by the backend, which drives the engine over server-to-server calls.
+
+```
+partner-web ──apply/login──► backend :4000 ──s2s (short-lived SUPER_ADMIN JWT)──► admin-api :4100
+            └──dashboard───► portal-api :3300 ──proxy──────────────────────────►┘
+admin-web ──review queue──► backend :4000 (orchestrates the engine; no new admin client needed)
+student-web ──?ref=CODE──► backend /auth/sync ──► admin-api /campaigns/{by-code,:id/signup}
+```
+
+**The reconciliation key.** `admin-api Partner.id` (minted by the public application) is stored on the
+backend's `PartnerRequest.partnerId` **and used as the partner JWT `sub`** — so `sub === partnerId`
+everywhere, which is exactly what portal-api's scoping already assumed.
+
+**The access gate.** `portal-api`'s `requireApprovedPartner` reads **`Partner.status`** via
+`GET /partners/:id` (previously it passed a `partnerId` to `GET /partner-applications/:id`, which
+expects an *application* id). Staff drive that status through the new staff-only, audited
+`PATCH /partners/:id/access` (`APPROVED | REJECTED | REVOKED`). Because the guard runs on **every**
+dashboard request, **a revoke removes access immediately — even while the partner still holds a valid
+24h token.** Re-granting restores it on the same token.
+
+| Surface | Route |
+|---|---|
+| Partner requests access (**public, no token**) | `POST /api/partner/apply` |
+| Partner signs in (email + password, bcrypt) | `POST /api/partner/login` → `role:PARTNER` JWT |
+| Admin review queue | `GET /api/admin/partner-requests` |
+| Admin grant / reject / revoke / re-grant | `PATCH /api/admin/partner-requests/:id` (reason mandatory, audited) |
+| Engine access switch (staff, s2s) | `PATCH /partners/:id/access` |
+| Dashboard identity (403 once revoked) | `GET /partner/me` |
+
+**Referral attribution.** A partner shares `…/?ref=CODE`. The student app captures it on first touch
+(landing + register, `frontend/src/lib/referral.ts` — first touch wins, matching the engine's
+`LINK_FIRST_TOUCH` rule), replays it into `POST /auth/sync`, where the backend resolves
+`GET /campaigns/by-code/:code` and captures the signup; the code is persisted on `User.referralCode`
+and replayed at payment to credit the paid conversion. Attribution is **best-effort** (it never breaks
+a registration or a payment) and **idempotent** — admin-api enforces one credit per
+`student+registration`, so firing from both the Razorpay webhook and the client-verify path is safe.
+
+**Two production bugs found and fixed while verifying:**
+1. **`prisma db push` was wiping the partner engine on every backend deploy.** The admin-api partner
+   tables were Drizzle-only and absent from `schema.prisma`; the production start command is
+   `npx prisma db push --accept-data-loss && node dist/src/main.js`, and `db push` drops any table it
+   does not know about. The 7 tables + 7 enums are now mirrored into `schema.prisma` (they are still
+   *written* only by admin-api via Drizzle — Prisma just needs to know they exist). Keep the two in
+   sync. Verified they survive a push.
+2. **Mismatched `JWT_SECRET` in production.** `olympiad-backend` on Render had a different secret than
+   `bio-admin-api` / `bio-portal-api` (which were seeded from a local `.env`), so every
+   backend-issued token — partner *and* staff — was rejected in production. The two new services were
+   realigned to the backend's authoritative secret (changing the backend's would have invalidated
+   every live student/admin session).
+
+**Contract reconciliation (the partner dashboard had never actually been wired).** portal-api's port
+assumed a funnel shape admin-api does not return, so `/partner/funnel` leaked the raw engine payload
+and `/partner/institutions` returned `{}`. The BFF adapter now merges `GET /funnel` + `GET /campaigns`
+into one DTO (adding `code`, `shareUrl`, `status`), institutions come from the real assignment route,
+and campaign pause/resume maps to admin-api's `deactivate` boolean (**resume was previously a silent
+no-op**). The portal adopted the engine's vocabulary (`signups` / `registrations` / `paid`) instead of
+the invented `leads` / `paidConversions`, and the fabricated per-institution funnel was dropped — the
+engine does not key attribution by institution.
+
+**New env vars:** backend `ADMIN_API_URL`; portal-api `STUDENT_APP_URL` (builds the `?ref=` share
+link); partner portal `NEXT_PUBLIC_API_URL` (the backend, for apply/login). All three Render services
+now deploy from the `bio-workspace-rearch` branch.
+
+**Verified in production** (not just locally): apply with no token → `403` pre-approval login → admin
+queue → grant → partner login → dashboard `200` → **revoke → same token `403`** → re-grant → `200`;
+campaign create → funnel shows code + real `shareUrl` → referred student registers → `signups=1`;
+paid conversion → `paid=1`, still `1` on replay. `admin-api` 81 tests, `portal-api` 42 tests.
+
+---
+
+### 0.19 Phase 3 — results integrity, decision loops, consent (2026-07-10)
+
+Everything here lives in the **legacy backend** (`backend/`) plus the student and admin frontends.
+New modules: `results/`, `certificate/`, `grievance/`, `refund/`, `consent/`.
+
+#### The results integrity chain
+
+Three steps, and each one is **impossible until its predecessor has run** — enforced server-side, and
+mirrored in the admin UI (`/results`) by disabling the next button:
+
+```
+   normalize  ──►  release  ──►  issue certificates
+   (automatic)     (human,        (only for a released
+                    audited,       instance)
+                    reason req.)
+```
+
+- **Normalization** (`results/normalization.ts`) is a pure, unit-tested function. Students sit
+  *different question sets*, so raw marks are not comparable. It rescales in **percentage space**
+  (so attempts with different `maxScore` compare correctly) via a z-score:
+  `pct' = clamp(0.5 + 0.15·z, 0, 1)`, then `score' = pct' · maxScore`.
+  - **A zero-variance cohort is left untouched.** If everyone scored the same, forcing them onto the
+    target mean would silently rewrite a perfect 100% into a 50%.
+  - Percentile is the textbook percentile *rank* `(L + 0.5E)/N · 100` (a lone candidate sits at 50);
+    rank is competition ranking (ties share a rank and consume the following slots).
+  - Ranking is done on the normalized **percentage**, not `normalizedScore`, because two attempts with
+    different `maxScore` can order differently in raw-score space.
+- **Release** requires a completed normalization run and a written reason; both go to `AuditLog`. It
+  also flips the legacy `Exam.isResultReleased` so the existing student-facing gate stays in step.
+- **Certificates** can only be issued for a released instance.
+
+#### Certificates and public verification
+
+`certificateNumber` is the public identifier, so it is **unguessable**: `BIO-<year>-<10 chars>` over a
+Crockford-style alphabet (no `I`, `L`, `O`, `U`), ~50 bits of entropy, plus a unique constraint with
+retry. A sequential counter would let anyone enumerate every certificate ever issued.
+
+`GET /api/certificates/verify/:number` is **PUBLIC** (no guard). It:
+- reports a revoked certificate as `{valid:false, reason:'REVOKED'}` rather than 404 — a revoked
+  certificate must not silently vanish; and
+- returns the *same* `NOT_FOUND` for an unknown number and a malformed one, so it cannot be used as an
+  oracle. Revocation is soft.
+
+Certificates and admit cards are **print-friendly pages**, not server-generated PDFs: Puppeteer's
+bundled Chromium does not fit the current hosting tier, and print-to-PDF yields the same artefact.
+
+#### Decision loops
+
+- **Grievance / re-attempt** (`/support` → `/grievances`). Approving a `REATTEMPT` genuinely grants
+  one: the attempt is reset to `NOT_STARTED` and its answers deleted (an `Attempt` is unique per
+  student+instance, so there is no second row to create). That is destructive, so the original
+  submission — score, timestamps, answer count — is **snapshotted into the audit log before it is
+  cleared**. Decisions are one-shot.
+- **Refunds** (`refund/refund-eligibility.ts`, pure). The rule is the spec's: *before the cutoff
+  (48 h), and not once a slot booking is `CONFIRMED`*. It is evaluated at request time **and again on
+  approval** — a request that was eligible last week must not be paid out after the cutoff has since
+  passed. Approval issues immediately through the existing `PaymentService.adminRefund`; if Razorpay
+  fails the request stays `APPROVED` (retryable) rather than being marked `ISSUED`.
+- **Consent** is versioned (`CURRENT_CONSENT_VERSION`) and permanent; all three permissions are
+  mandatory, so a partial consent is rejected rather than stored.
+
+#### Surfaces
+
+| Actor | Routes / pages |
+|---|---|
+| Public | `GET /api/certificates/verify/:number`; student app `/verify/[number]` |
+| Student | `/consent`, `/certificates` (+ printable `[id]`), `/support` (grievance + refund), `/admit-card/[bookingId]` |
+| Admin | `/results` (normalize → release → certificates), `/grievances`, `/refunds` |
+
+#### Testing
+
+**77 backend tests pass** (`cd backend && npm test`) — 65 new across 5 suites. The pure modules
+(normalization, certificate numbering, refund eligibility) are exhaustively unit-tested; the grievance
+and results services are tested against hand-rolled in-memory Prisma fakes whose rows really mutate,
+so the re-attempt reset and the release gate are genuinely exercised rather than stubbed.
+
+Runtime E2E against the live backend confirmed: release-before-normalize → `409`; normalize → release
+→ certificates; **public verify with no auth** → `valid:true`; revoke → verify reports `REVOKED`;
+partial consent → `400`; grievance decided twice → `409`. (A real cohort of two 0/20 attempts
+exercised the zero-variance path exactly as unit-tested.) All E2E artefacts were removed from the
+shared database afterwards.
+
+**Not built, deliberately:** notifications (SMS/Email/WhatsApp — needs SES/DLT/Meta infrastructure),
+Aadhaar/KYC/OTP (skipped by request), and school↔admin custom-window approval (the school portal is
+still demo data — `apps/school-portal-web/src/lib/school-data.ts` is the seam).
+
+---
+
+### 0.20 School access loop, issued access tokens, unified admin queue (2026-07-10)
+
+Three defects made "request access" unusable end-to-end, and the credential the spec asks for did
+not exist. All four are addressed here.
+
+#### Why partner apply failed with "the partner engine is starting up"
+
+`PartnerService.apply()` called admin-api to mint the `partnerId` before writing anything locally.
+admin-api sleeps on Render's free tier; a **measured cold start is 32.7s** (warm: 0.44s), while the
+retry budget was `[1s, 3s, 6s, 10s]` — 20s of sleeping. The client gave up mid-boot and surfaced its
+cold-start message to a real applicant. A stranger's very first interaction with the platform
+depended on a sleeping background service waking up in time.
+
+Applying is now a **local write only**. The engine `Partner` is provisioned lazily on the first
+approval — the only moment `partnerId` is actually needed, and a path where a staff member can
+afford to wait. This is strictly better than a longer timeout: the engine can be down entirely and
+schools and partners can still apply.
+
+The budget did also grow, to `[1, 2, 4, 8, 12, 15, 20]s` (~62s), but only under a **`patient`**
+policy used by staff-initiated calls. Referral attribution moved to a **`fast`** policy (no retries)
+and is **no longer awaited** (`void this.partnerAdminApi.tryCaptureSignup(...)`) — otherwise the wider
+budget would have stalled a student's signup or a payment callback for a minute behind a cold engine.
+Losing an attribution during a cold start is the accepted trade; blocking a student is not.
+
+#### Why school requests never reached the admin queue
+
+They were never sent. `apps/school-portal-web/src/app/activate/page.tsx` had
+`handleSubmit = () => setDone(true)`, and the app made **zero network calls** — "Your school is
+activated" was a cosmetic screen. There is now a real `backend/src/school/` module (PRD-047, the
+access half):
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/school/apply` | public | queue a request; no credential involved |
+| `POST /api/school/login` | public | exchange an access token for a `role: SCHOOL` session JWT |
+| `GET /api/admin/school-requests` | staff | the review queue |
+| `PATCH /api/admin/school-requests/:id` | staff | grant / reject / revoke / re-grant |
+| `GET /api/admin/school-requests/:id/card` | staff | the handover card, token in the clear |
+| `POST /api/admin/school-requests/:id/rotate-token` | staff | replace the token |
+
+Approving provisions the `School` row and a coordinator `User` (`Role.SCHOOL`, new). Revoking sets
+that user `isActive: false`, so `JwtStrategy` rejects a **still-valid JWT on its next request** —
+the same immediacy the partner gate has.
+
+Applying **refuses a coordinator email that already has a BIO account** rather than silently
+converting someone's student account into a school coordinator at approval time.
+
+#### Access tokens
+
+Approval issues exactly one token per organisation, e.g. `BIO-SCH-4K2M9-...` (100 bits over a
+Crockford-style alphabet with no `I`/`L`/`O`/`U`, so it survives being read aloud or retyped from a
+printed card — lookup normalises case and folds the omitted glyphs).
+
+Storage is split, because the two jobs conflict:
+
+- **`accessTokenHash`** — SHA-256, under a **unique index**. This is what authenticates. A presented
+  token resolves to at most one row, so *a token issued to one school can never sign another one in*.
+- **`accessTokenSealed`** — the same token under AES-256-GCM, opened only for an authenticated admin
+  re-rendering the handover card. A leaked database dump alone therefore yields no usable tokens.
+
+The sealing key comes from **`ACCESS_TOKEN_KEY`** (falling back to `JWT_SECRET`). It is deliberately
+a separate variable: rotating `JWT_SECRET` must not make every existing handover card unreadable.
+If the key does change, tokens still *authenticate* (the digest is independent) — only the card
+needs a rotation to be re-issued.
+
+A token survives a revoke → re-grant cycle, so a card already sitting in a coordinator's inbox stays
+valid. `rotate-token` invalidates the old one immediately.
+
+Partners get the same credential: `POST /api/partner/login` now accepts **either** `{email, password}`
+or `{accessToken}`. The password path compares against a real bcrypt hash even when no partner
+matches, so "unknown email" and "wrong password" take the same time.
+
+#### One queue
+
+`admin-frontend/src/app/access/page.tsx` replaces `/partners` (which now redirects) with a single
+queue over both request types, filterable by type and status, with the handover card as a modal
+(reveal / copy token / copy full card / rotate). Approving opens the card immediately — that is
+exactly when staff need the token.
+
+**Tests:** 39 new (20 token primitive, 19 school service), 116 backend total, all green. The school
+suite proves the invariants that matter rather than that a mock was called: two approved schools get
+distinct tokens that each resolve only to their own school; a partner token and a JWT are both
+rejected; revoke deactivates the coordinator *and* refuses login; rotation locks out the old token.
+
+**Still deferred:** the school **dashboard** remains demo data (`school-data.ts`) — this change wires
+the access loop, not the read/write half of PRD-047. Notifications are still absent, so the handover
+card is copied out of the admin UI by hand rather than emailed.
+
+---
+
+### 0.21 Real school directory, functional school portal, partner onboarding (2026-07-10)
+
+The school side of the platform was cosmetic in two places and outright broken in a third. All three
+are now real.
+
+#### The student "Invalid school code" bug
+
+The register page (`frontend/src/app/register/page.tsx`) shipped a hard-coded `schools.json` of 25
+schools whose codes were `SCH001`, `SCH002`… The database issues codes like `SCH-1T8GMH`. So the
+moment a student picked a school and submitted, `auth/sync` looked the code up, found nothing, and
+threw `Invalid school code` — the exact error in the report. The static file could never match live
+data, and no onboarded school ever appeared in it.
+
+The fix is a **live directory** — the `School` table, exposed at `GET /api/schools`:
+
+- `GET /api/schools?q=` — search by name, city or pincode, case-insensitive. Empty query lists
+  onboarded schools first.
+- `GET /api/schools/by-code/:code` — resolve a school's issued code, tolerant of case, spacing and a
+  missing hyphen (`normalizeSchoolCode`).
+- `POST /api/schools/add` — "my school isn't listed": add it by **name + pincode only**. City and
+  state come from the pincode (never the student), so two people adding the same school agree on
+  where it is.
+
+The new `SchoolPicker` component gives the student all three: search, code entry, or add. An onboarded
+school shows up the instant staff approve it, because the directory *is* the table — there is no
+separate list to sync.
+
+#### No duplicate schools
+
+`School` gains `nameKey` (a normalised name — lowercased, apostrophes dropped, non-alphanumerics
+collapsed) and `pincode`, with **`@@unique([nameKey, pincode])`**. `addToDirectory` checks that key
+first and returns the existing row; if a concurrent insert still wins, the `P2002` is caught and the
+existing row returned. A `P2002` on any *other* column (e.g. `code`) is rethrown — swallowing it, or
+retrying forever, would hide a real bug.
+
+Pincode → city/state is `PincodeService`, backed by India Post's public directory, **proxied through
+the backend** (`GET /api/geo/pincode/:pin`) so one process-lifetime cache serves every visitor and the
+upstream stays off our CORS surface. A hit is cached (pincodes never change); a failure is not (an
+outage must not poison the cache).
+
+#### The school portal is no longer demo data
+
+`school-data.ts` is deleted. Every dashboard page reads live, **JWT-scoped** data from
+`/api/school/portal/*` — the `schoolId` comes off the token, so a coordinator can never address
+another school. `SchoolPortalService` is **read-only except one method**: `registerStudents`, the
+single write a school is trusted with. It adds students to *its own* roster as invited `User` rows
+(`invitedAt`, no account until the student registers with that email), and:
+
+- **never overwrites an existing account** — an email already on the platform is reported, not seized;
+- **never moves another school's student** — "already registered elsewhere" is distinct from "already
+  on your roster";
+- de-dupes within a single CSV upload.
+
+Everything else — profile, slots, monitoring, results — is a view. Results only ever include attempts
+whose exam has been *released*, so a school cannot see scores before its students do; and an
+auto-submitted attempt counts as completed (counting only `SUBMITTED` under-reports every school).
+
+#### Partners onboard schools
+
+`PartnerJwtGuard` authenticates a `role: PARTNER` token (which `JwtAuthGuard` cannot, since its `sub`
+is a `Partner.id`, not a user) and re-checks the partner is still APPROVED every request.
+`POST /api/partner/schools` submits a school on its behalf into the **same** admin queue a
+self-applying school lands in, tagged `submittedByPartnerId`. The partner sees status and the eventual
+school code — but **never the access token**, which goes to the school's own coordinator.
+
+#### Approval adopts, rather than duplicates
+
+Because a student may add a school before it is onboarded, approval matches on `(nameKey, pincode)`
+and **adopts that row** — updating it in place, keeping the code students already hold, setting
+`onboardedAt` — instead of creating a second one (which the unique index would reject anyway).
+
+#### Migration safety
+
+The schema change is additive, but there was live data (one real school the user created). Rather than
+`db push --force-reset` (which drops the database), a hand-written migration added the columns
+nullable, backfilled `nameKey`/`pincode`/`onboardedAt`/`activatedAt` from existing rows, then applied
+`NOT NULL`. Verified `prisma migrate diff` emitted no `DROP`, and confirmed all 7 mirrored engine
+tables plus the live school survived.
+
+**45 new tests, 161 total.** Still deferred: the handover card is still copied by hand (no email), and
+custom exam-window requests aren't built (schools view their allocated windows, they don't request new
+ones — consistent with read-only).
+
+---
+
+### 0.22 Campaign school-onboarding, admin power, exam slot wizard, light theme (2026-07-11)
+
+Four capabilities in one pass. Everything runs on **Neon Postgres** — the whole platform shares one
+Neon instance (backend via Prisma, `admin-api` via Drizzle), standard SQL, portable by a
+connection-string change plus `pg_dump`/restore.
+
+#### 1. Campaign links onboard schools, not just students
+
+A partner campaign already produced a student link (`…/?ref=CODE`). It now also produces a
+**school-onboarding link** (`…/activate?ref=CODE`). The `portal-api` funnel adapter builds both from
+the campaign's referral code (`#shareUrl` + new `#schoolShareUrl`, keyed off a new `SCHOOL_APP_URL`
+env). The school portal captures `?ref=` with the same first-touch pattern copied from the student app
+(`referral.ts` + `ReferralCapture`), and replays it on `POST /school/apply`.
+
+`SchoolService.apply` resolves that code to the owning partner
+(`PartnerAdminApiClient.resolvePartnerIdByReferralCode` → `GET /campaigns/by-code/:code`, ACTIVE-only)
+and stamps `SchoolRequest.submittedByPartnerId` + the new `submittedViaReferralCode`. So a school that
+arrives on a partner's link shows in the admin Access queue attributed to that partner — exactly like
+a student signup. A bad or inactive code is ignored, never an error (attribution must not block an
+application). The `PartnerModule ↔ SchoolModule` cycle this created is broken with `forwardRef`.
+
+#### 2. Admin power — view, edit, permanently delete (with a Neon archive)
+
+New `backend/src/admin-management` module, staff-guarded, every mutation audited:
+`GET/PATCH /admin/manage/users`, `DELETE /admin/manage/{users,schools,school-requests,partners}/:id`,
+`GET /admin/manage/archive`.
+
+A delete is a **real Neon delete** of the operational rows — but never silent. Each first copies the
+entity's identifying details **and a full JSON snapshot** into a new **`ArchivedEntity`** table (a
+tombstone nothing references, which only grows), inside the same transaction as the removal. So a
+deletion is accountable and the contact recoverable on paper, while the operational data is genuinely
+gone (the user's answer to "permanently delete … but keep a separate table of their details").
+
+Two cascade correctness points the plan flagged and the code handles:
+- **Deleting a user** cascades their attempts/bookings/payments, but Prisma's cascade does **not**
+  decrement `ExamSlot.booked`. The service notes the affected slots and recomputes
+  `booked = count(active bookings)` for each, in the transaction.
+- **Deleting a school** *detaches* its students (`schoolId → null` — they keep their accounts,
+  attempts, results, bookings), removes its coordinator and slot assignments (`SchoolSlotAssignment`
+  is `Restrict` on the slot, so assignments go first), and archives everything.
+
+Admin UI: a new `/students` page (search/filter, edit modal, **typed-name-confirmation** delete), a
+read-only `/archive`, delete actions on `/access`, and a People nav group.
+
+#### 3. Exam-creation wizard with automatic slot assignment
+
+`POST /admin/exams/full` creates the exam, one instance, and N slots in a transaction (with **explicit**
+publish flags — the old `createExam` force-published, which this path no longer does).
+
+`SchoolSlotService.autoDistributeInstance(instanceId)` then assigns every **eligible** student — class
+band must be one the exam accepts (`Exam.classBands`); `runAllocationForSchool` is now filtered the
+same way, closing a gap where slot sweeps ignored eligibility. The distribution rule the admin asked
+for:
+- **Same school, same slot** — a school's students stay together, pinned via a `SchoolSlotAssignment`
+  so later registrations land there too.
+- **Balance** — schools are placed into the emptiest slot that fits them (largest first), so no slot
+  is crowded while others sit empty.
+- **Overflow** — a school too big for one slot fills its primary slot, then spills into the
+  next-emptiest.
+- **Never oversells** — every booking goes through the atomic `UPDATE … WHERE booked < capacity`
+  guard; an in-memory capacity mirror only decides *preference*, not permission.
+
+Admin UI: a 4-step `/exams/new` wizard (details → schedule → slots → review) that calls `createFull`,
+then offers "Auto-assign eligible students now" and reports allocated / overflowed / no-capacity.
+
+**Admin slot changes (feature 5) already existed** — individual `POST /admin/bookings/:id/reassign`
+and bulk `POST /admin/schools/:id/instances/:id/reassign-all`, with UI in `slots/page.tsx`. Verified,
+not rebuilt.
+
+#### 4. Light mode everywhere
+
+All portals now default to light with a dark toggle. The partner and school portals are token-driven
+(no hardcoded colours), so a `[data-theme="light"]` palette + a zero-dependency toggle (sharing the
+`bio-theme` localStorage key and `data-theme` attribute) reskins them with no page rewrites; student
+and admin flip their default to light. Poppins/Montserrat added for display type.
+
+**Schema is additive** (`ArchivedEntity` + `SchoolRequest.submittedViaReferralCode` — both new/nullable),
+verified no DROP, live data preserved. **179 backend tests (23 new):** campaign attribution,
+admin delete/archive + slot-counter recompute + school-detach, and 8 slot-distribution cases.
+
+---
+
+### 0.23 Portal fixes — support to admin, campaign school counts, auto-refresh (2026-07-11)
+
+Seven reported gaps in the partner and school portals, all resolved and verified live.
+
+#### Support tickets from partners and schools now reach admin
+
+The partner "Support" form used to `POST` to an **in-memory** repository in `portal-api` — it vanished
+on restart and no admin ever saw it. The school "Support" page was a `mailto:` composer only. Neither
+reached the platform.
+
+A new backend **`SupportTicket`** model + `backend/src/support/` module fixes this. Partners raise
+tickets at `POST /partner/support` (behind `PartnerJwtGuard`, since a partner is not a `User`), school
+coordinators at `POST /school/support` (`SCHOOL` role). Both persist and appear on a **new admin
+Support page** (`/support`, `GET /admin/support-tickets`), where an admin can respond and mark a ticket
+`IN_REVIEW`/`RESOLVED`; the response flows back to the raiser's own list. Kept separate from the
+student `Grievance` table, which is bound to an exam attempt and can't represent a partner.
+
+#### Campaigns and the funnel now count schools, not just students
+
+A school that activates via a campaign's onboarding link was already attributed
+(`SchoolRequest.submittedViaReferralCode`), but nothing surfaced it. That field is now returned on the
+partner's school list, so the **Campaigns** page shows "Schools onboarded: N (X approved)" per campaign,
+and the **Funnel** shows a "Schools onboarded" total plus a per-campaign Schools column beside the
+student signup/registration/paid numbers. This is computed client-side by merging the funnel (from the
+admin-api engine, student-keyed) with the backend's partner-schools list — no engine change.
+
+#### The "onboard a school" false error
+
+A cold-started backend could create the `SchoolRequest` server-side while the browser saw a network
+error; a retry then hit the `coordinatorEmail` unique constraint (`409`) and read as "already exists".
+The submit flow now **reloads the list after every attempt** (so a server-side success is always
+shown) and treats a `409` as "already submitted" — information, not failure.
+
+#### Auto-refresh everywhere
+
+Data changed elsewhere (an admin approving a school, resolving a ticket) used to require a manual
+reload. Now: a small `usePoll` hook drives the partner pages; the school portal's `useResource` polls
+in the background (a `background` refresh updates data in place without flipping the spinner); and the
+admin access, grievances, students, and support pages poll every 12s. All polling pauses while the tab
+is hidden.
+
+#### Institutions page removed
+
+The partner **Institutions** page listed opaque `institutionId` strings from the engine's
+`PartnerInstitutionAssignment` table, with no admin way to populate it and no names — a vestige of
+PRD-011 superseded by the Schools onboarding flow. The page, its detail route, and its nav entry are
+removed; the partner **overview** now lists the partner's schools instead.
+
+**Schema additive** (`SupportTicket` + `SupportTicketSource`/`SupportTicketStatus` enums), verified no
+DROP. **184 backend tests (5 new).** Live E2E (14/14, artefacts cleaned): partner ticket → admin sees
+it → resolves → partner sees the response; school ticket → admin sees it filtered by source;
+campaign-attributed school appears in the partner's list with its code and status.
+
+---
+
+### 0.24 UI fixes — student forms, grievances vs support, results page (2026-07-11)
+
+Three presentational fixes, no schema/backend change.
+
+**Student portal forms rendered unstyled.** Seven pages (`support`, `profile`, `certificates`,
+`consent`, `admit-card`, `verify`, `exams`) used admin-design-system class names — `.form-control`,
+`.form-group`, `.exam-form`, `.data-table`, `.page-header`, `.form-error`, `.text-muted`,
+`.table-responsive`, `.class-pill`, `.modal-content` — that **were never defined in the student
+portal's `globals.css`**. The result was tiny native inputs with labels jammed against them. Added the
+classes, mirroring the student portal's own tokens, which fixes all seven pages together (the student
+portal separately uses `.input-field`/`.input-group` on its auth pages; both vocabularies now exist).
+
+**Grievances vs Support tickets.** They look similar but are not redundant. `Grievance` is a student's
+exam dispute — it carries a `userId` and an `attemptId`, and approving a `REATTEMPT` resets the
+attempt so the student can re-sit. `SupportTicket` is a free-form help request from a partner or
+school, with neither. The admin nav now reads **"Student grievances"**, each page names its audience,
+and the two cross-link.
+
+**Admin results page.** Added a collapsible **"What do these mean?"** panel explaining the
+normalize → release → issue-certificates chain (normalization = fair-score processing: comparable
+scores + percentile + rank, changing nothing students see until release). The table **auto-refreshes**
+(10s), Normalized/Released show a ✓ and a timestamp tooltip, and the Certificates column shows
+**"✓ N issued" / "None yet" / "—"** instead of a bare number. The Normalize button becomes
+"Re-normalize" once done, signalling that re-running is optional.
+
+---
+
+### 0.25 Exam lifecycle, slot self-service, per-audience results, question media (2026-07-14)
+
+Twenty-one reported defects and gaps, most of them tracing back to **four missing rules** and **two
+missing relationships**. This section is organised by the underlying cause rather than by the bug
+list, because fixing them one at a time is exactly how they got this way.
+
+#### The root cause: exam lifecycle rules lived nowhere
+
+An exam's state was implied by scattered date comparisons, and each caller made its own. So:
+unpublished exams were listed to students; an exam scheduled for next month rendered a live "Start"
+button; an exam with **no questions at all** could be published; results were released for exams that
+had not been sat; and slots could be scheduled *before* the exam window opened, which made them
+unsittable — the start gate refuses every attempt before `instance.startsAt`, so those students would
+have watched their slot expire against a button that never enabled.
+
+All of it now derives from one pure module, **`backend/src/exam/exam-lifecycle.ts`**, which is
+exhaustively unit-tested (29 cases) with no database:
+
+```
+examPhase(exam, instance, mySlot, now) →
+  DRAFT → SCHEDULED → NEEDS_SLOT → SLOT_UPCOMING → OPEN → SLOT_MISSED → ENDED
+                                                     ↑
+                                        the ONLY startable phase
+```
+
+The ordering is the substance: **publication beats scheduling, and scheduling beats slots.** An
+unpublished exam is `DRAFT` however its dates read; a closed exam window is `ENDED` even if a
+misconfigured slot still looks open, so a slot can never authorise an attempt outside its exam.
+
+| Gate | Rule | Where enforced |
+|---|---|---|
+| `canPublish` | Needs ≥1 question **attached to a section**, and ≥1 scheduled instance | `publishExam` **and** `updateExam` |
+| `canReleaseResults` | The exam must be **over** (`now > endsAt`), and normalized | `ResultsService.release` **and** `updateExam` |
+| `validateSlotWindow` | A slot must sit **inside** its exam window | `createSlot`, `updateSlot`, `createFull`, `updateInstance` |
+| `examPhase` | Only `OPEN` may start an attempt | `AttemptService.startAttempt` **and** the exam list |
+
+**The "and" in that table is the point.** The gates were initially added only to the dedicated
+`/publish` and `/release-results` routes — and the admin UI does not use those routes. It flips both
+flags through `PUT /admin/exams/:id`, which was an unguarded side door straight to
+`prisma.exam.update`. A rule that lives on one of two write paths is not a rule. Turning a flag **on**
+is now gated wherever it is written; turning it **off** never is, so taking a bad exam down or pulling
+back a wrong result is always possible.
+
+`ExamService.createExam` also stopped force-setting `isPublished: true, isResultReleased: true` on
+every new exam — which is *why* an exam with no paper and no schedule was instantly visible to
+students with its results already "released".
+
+#### Students see what is coming, and start only when their slot opens
+
+Items 5 and 11 read as opposites and are not. `GET /exams` now returns each exam stamped with its
+phase **for that student**, plus `mySlot` — so a scheduled exam is visible (the student can see the
+date and which slot they hold) but is not startable, and the Start button enables the moment their
+own slot opens, not merely when the exam window does. The page re-polls every 30s so it enables on
+its own. `startAttempt` re-derives the same phase server-side, so calling the API directly gets a
+student nothing.
+
+#### The two missing relationships
+
+**1. `School.partnerId`** (new, nullable). This is what scopes a partner's view and what a school
+reads to know who its partner is. It is set when a partner onboards a school (from
+`SchoolRequest.submittedByPartnerId`, at approval) and is editable by staff.
+
+A school with **no** partner falls back to the **house partner** — Lemon Ideas, operating the olympiad
+directly (`PartnerDirectoryService`, `DEFAULT_PARTNER_ID`, default
+`e95c5ab7-9edc-438e-a846-9f770ebbce11`). That fallback is what makes "if no partner, default to
+*Bharat Innovation Olympiad — Partner access*" true **without backfilling a partnerId onto every
+existing school row**. The school portal therefore always has a partner card to render. The partner's
+**access token is never exposed to schools** — it is that partner's sign-in credential; schools get
+contact details and the portal URL, nothing more.
+
+**2. Students were never linked on the path that mattered.** `AuthService.syncUser` had two branches.
+The new-user branch resolved a school and ran auto-allocation. The branch that **claims an invited
+roster entry** — the common case for a school-run exam — did neither: it never re-linked a school, and
+it never ran allocation. So a school's own invited students registered, and were never booked into
+their school's slot. That is the real content of "slot assign shows 0 students allocated" and "school
+can't see its students".
+
+#### Slot assignment: the reassign bug, and why "0" looked broken
+
+`reassignSchool` moved the bookings but left `SchoolSlotAssignment` pointing at the **old** slot. So
+the next student from that school to register was auto-allocated straight back into the slot the admin
+had just emptied, and the school ended up split across two slots — precisely what "same school, same
+slot" exists to prevent. It now re-points the assignment.
+
+Separately, `setSchoolSlotAssignment` returned a bare count. "0 student(s) auto-allocated" is true in
+half a dozen unrelated situations — no students on the roster, all in the wrong class for this exam,
+all already booked, slot full, slot ended — and reporting a bare zero for all of them is what made a
+*working* screen look broken. It now returns a breakdown with human-readable `notes`.
+
+#### Schools pick their own slots (item 15)
+
+The school portal's slots page showed only the one slot staff had already assigned — so a coordinator
+with no assignment saw an empty page and no way to ask for one. It now shows the **whole board** for
+every published exam: every slot, how full each is, how many of the school's students are eligible,
+and which slot the school holds. A coordinator can claim an open slot themselves
+(`POST /school/portal/slots`), which runs the **same** auto-allocation staff use — so a school-picked
+slot and a staff-assigned one behave identically, and the atomic
+`UPDATE … WHERE booked < capacity` guard means two schools racing for the last seats cannot oversell.
+
+#### Results: per-audience release, and Excel
+
+Release is no longer one boolean. `ExamInstance` gained
+`resultsReleasedToStudentsAt` / `…ToSchoolsAt` / `…ToPartnersAt`, and each audience is granted and
+revoked **independently** (`POST /admin/exam-instances/:id/release` and `…/revoke`, both audited, both
+requiring a written reason). A school can be given results to sanity-check a day before students see
+them; a partner may never be given them at all. The legacy `Exam.isResultReleased` tracks the
+**STUDENTS** audience only, so releasing to a school does not hand students their scores as a side
+effect. Revoking from students closes their scorecards immediately.
+
+`ResultsExportService` builds a real `.xlsx` (exceljs — typed number cells, frozen header, column
+widths), and the **same builder serves all three audiences**; only the scope differs, and the scope is
+always derived from the caller's identity, never from a parameter they send. Every non-admin read
+passes through `assertReleased`, so the download is not a side door around the release gate:
+
+| Caller | Sees | Gate |
+|---|---|---|
+| Admin | Every student | none (staff decide *whether* to release, so they need the sheet first) |
+| School | Its own students | `resultsReleasedToSchoolsAt` |
+| Partner | Students of the schools assigned to it | `resultsReleasedToPartnersAt` |
+
+#### Question media — pictures and video, on Cloudinary (no AWS)
+
+A question can now carry a **picture and a video at the same time** (`Question.imageUrl`,
+`Question.videoUrl` — two independent columns, not another `mediaUrl`/`mediaType` pair), rendered to
+the student in the exam player.
+
+**The bytes never touch the API.** Render's instance has 512 MB of RAM and an ephemeral disk:
+streaming a 100 MB question video through the Node process would blow the memory budget, and anything
+written to its disk vanishes on the next deploy. So the admin browser asks for a short-lived **upload
+ticket** and sends the file **straight to the storage provider**; the API only ever handles the
+signature.
+
+**Provider: Cloudinary** (see §4 for setup). Picked for the testing phase because it needs **no bucket,
+no CORS rule and no IAM policy** — three env vars and it works. 25 GB free, and it transcodes video and
+makes poster frames for free, which a question video played inline mid-exam actually needs.
+
+Uploads are **signed, not unsigned-preset**. An unsigned preset needs no server at all, but the preset
+name necessarily reaches the browser, and anyone who reads it can upload to the account forever.
+Signing costs one SHA-1 and **no new npm dependency**, and means only a request that has already passed
+the admin JWT guard can obtain the right to upload. The signature is timestamped and Cloudinary rejects
+one over an hour old, so a leaked ticket is not a standing permit.
+
+`ObjectStorageService` keeps a **second provider behind the same seam** (`STORAGE_PROVIDER=s3` → any
+S3-compatible endpoint: Cloudflare R2, B2, Supabase, MinIO, AWS) for when 25 GB runs out. Nothing
+upstream knows which is live — both return an `UploadTicket`, and the ticket says which shape to use,
+because the two genuinely differ: Cloudinary reveals the public URL only *on* upload (`secure_url`),
+while S3 knows it up front.
+
+Limits, enforced server-side before anything is signed: **10 MB per image, 100 MB per video** — both
+Cloudinary's free-plan ceilings, so a bigger file would fail at their end regardless. Unconfigured, the
+service **warns and boots**; upload returns a 503. Media is not worth taking the platform down for.
+
+#### A privilege-escalation bug found on the way
+
+`PUT /users/profile` took an **inline-typed body** (`@Body() data: { firstName?: string }`) and passed
+it straight to `prisma.user.update`. An inline TypeScript type erases to `Object` at runtime, and
+Nest's `ValidationPipe` **skips any body whose metatype is a native type** — so `whitelist` and
+`forbidNonWhitelisted` never engaged, and the *entire request body* reached Prisma. A student could
+have sent `{"role": "SUPER_ADMIN"}` or `{"schoolId": "…"}` and escalated themselves. It now takes a
+decorated DTO class (`UpdateUserProfileDto`), which is what makes the pipe strip unknown fields. The
+distinction between a decorated DTO and an inline type is load-bearing, not stylistic.
+
+#### Profile editing (item 14) and admin power (item 20)
+
+Students, schools and partners each edit their own contact details — and each is bounded by what they
+must **not** change:
+
+- **Student** (`PUT /auth/me`): name, phone. Not role, school, or email.
+- **School** (`PATCH /school/portal/me`): board, UDISE, city, state, coordinator name + phone. **Not**
+  the school name, pincode or code — `(nameKey, pincode)` is the directory's uniqueness key and the
+  code is what students type at registration, so a coordinator rewriting either would collide with
+  another school or break every student already pointing at this one. Not the coordinator email — it
+  is the identity the access token was issued against.
+- **Partner** (`PATCH /partner/portal/profile`): org name, contact person, phone. Not the email (its
+  sign-in identity), status, or commission.
+
+Admin gets what each of those withholds, plus the relationships: `GET/PATCH /admin/manage/schools`
+(including **assigning a school to a partner**), `GET/PATCH /admin/manage/partners`, and
+`POST /admin/manage/students/move` for bulk student shuffling in one transaction and one audit entry.
+
+#### New / changed surfaces
+
+| Actor | Route |
+|---|---|
+| Admin | `POST /admin/exams/:id/unpublish` · `GET /admin/manage/{schools,partners}` · `PATCH /admin/manage/{schools,partners}/:id` · `POST /admin/manage/students/move` · `POST /admin/exam-instances/:id/{release,revoke}` (audiences) · `GET /admin/exam-instances/:id/results.xlsx` · `GET /admin/questions/media-upload-url?kind=image|video` |
+| School | `PATCH /school/portal/me` · `GET /school/portal/partner` · `POST /school/portal/slots` · `GET /school/portal/results/instances` · `GET /school/portal/results/:id/export.xlsx` |
+| Partner | `GET /partner/portal/{overview,schools,students,results,profile}` · `PATCH /partner/portal/profile` · `GET /partner/portal/results/:id/export.xlsx` |
+| Student | `GET /exams` now returns `phase`, `canStart`, `startBlockedReason`, `mySlot` per instance |
+
+New admin pages: **`/schools`** (edit + assign partner) and **`/exams/[id]/schedule`** (edit the exam
+window, and add / edit / delete slots — both were previously write-once, so a rescheduled exam meant
+deleting it and losing its questions). New partner pages: **`/dashboard/students`**,
+**`/dashboard/results`**, **`/dashboard/profile`**.
+
+#### Schema (additive — verified no DROP)
+
+`School.partnerId` · `User.phone` · `Question.imageUrl` · `Question.videoUrl` ·
+`ExamInstance.resultsReleasedTo{Students,Schools,Partners}At`. `prisma migrate diff` emitted only
+`ADD COLUMN` / `CREATE INDEX` before the push, so the live Drizzle-owned partner-engine tables were
+never at risk (see §0.18's `db push` hazard).
+
+#### Testing
+
+**235 backend tests pass (56 new).** The two new suites test the invariants that actually broke:
+
+- `exam-lifecycle.spec.ts` (29) — pure, fixed-clock. Unpublished-is-invisible; scheduled-is-visible-
+  but-not-startable; the slot window, not the exam window, enables Start; a closed exam beats an open
+  slot; `OPEN` is the **only** startable phase (asserted by filtering all seven); publish needs a
+  paper; release needs the exam to be **over**; and a property test that any slot passing
+  `validateSlotWindow` is `OPEN` at every instant inside it — which is exactly what an out-of-window
+  slot violates.
+- `school-slot.assignment.spec.ts` (14) — against an in-memory Prisma fake with **real** capacity
+  semantics (the same atomic compare-and-increment). It pins the reassign regression directly: after a
+  bulk move, a student registering *afterwards* must land with their school, not back in the old slot.
+
+All four frontends typecheck and build.
 
 ---
 
@@ -313,10 +1406,73 @@ Student Browser
 | `RAZORPAY_KEY_ID` | Razorpay API key ID (test: `rzp_test_...`) | from Razorpay dashboard |
 | `RAZORPAY_KEY_SECRET` | Razorpay API key secret | from Razorpay dashboard |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | from Razorpay dashboard |
-| `AWS_REGION` | AWS region for S3 and other services | `ap-south-1` |
-| `AWS_ACCESS_KEY_ID` | IAM access key ID | from AWS console |
-| `AWS_SECRET_ACCESS_KEY` | IAM secret access key | from AWS console |
-| `AWS_S3_BUCKET` | S3 bucket name | `bio-olympiad-prod` |
+| `DEFAULT_PARTNER_ID` | The **house partner** every school with no partner of its own falls back to (§0.25). Overridable so staging is not pointed at the live partner. | `e95c5ab7-9edc-438e-a846-9f770ebbce11` |
+| `PARTNER_APP_URL` | Partner portal origin, shown on a school's partner card | `https://bio-partner-portal.vercel.app` |
+| `AWS_REGION` | Legacy alias for `STORAGE_REGION` | `ap-south-1` |
+| `AWS_ACCESS_KEY_ID` | Legacy alias for `STORAGE_ACCESS_KEY_ID` | from provider console |
+| `AWS_SECRET_ACCESS_KEY` | Legacy alias for `STORAGE_SECRET_ACCESS_KEY` | from provider console |
+| `AWS_S3_BUCKET` | Legacy alias for `STORAGE_BUCKET` | `bio-olympiad-prod` |
+
+#### Question media storage — Cloudinary (§0.25)
+
+**No AWS.** Question media lives on **Cloudinary**, chosen for the testing phase because it needs no
+bucket, no CORS rule and no IAM policy: sign up, copy three values, done. Its free tier (25 GB storage
++ 25 GB bandwidth) is the most generous of the options, and — the reason it actually matters here — it
+**transcodes video and generates poster frames for free**, which a question video played inline
+mid-exam needs.
+
+**Setup (about two minutes):**
+1. Sign up at `cloudinary.com`.
+2. Dashboard → **Product Environment Credentials** → copy *Cloud name*, *API Key*, *API Secret*.
+3. Put them on the backend (Render). Nothing else — no bucket, no upload preset, no CORS.
+
+| Variable | Description |
+|---|---|
+| `CLOUDINARY_CLOUD_NAME` | From the Cloudinary dashboard |
+| `CLOUDINARY_API_KEY` | From the Cloudinary dashboard |
+| `CLOUDINARY_API_SECRET` | From the Cloudinary dashboard — **backend only**, never shipped to a browser |
+
+**Signed uploads, not an unsigned preset.** Cloudinary's "unsigned upload preset" needs no server at
+all, but the preset name necessarily travels to the browser, and anyone who reads it can then upload
+to the account for free, forever. Instead the backend signs each upload (a SHA-1 of the sorted signed
+params plus the API secret — **no extra npm dependency**), so only a request that has already passed
+the admin JWT guard can obtain the right to upload. The signature is timestamped, and Cloudinary
+rejects one over an hour old, so a leaked ticket is not a standing upload permit.
+
+**Bytes never touch the API.** The browser asks `GET /admin/questions/media-upload-url` for an
+*upload ticket*, then POSTs the file **straight to Cloudinary** and reads `secure_url` off the
+response — which is what gets stored on `Question.imageUrl` / `videoUrl`. Render's 512 MB instance
+cannot stream a 100 MB video, and its disk is ephemeral, so this is not an optimisation but a
+requirement.
+
+Limits enforced server-side before anything is signed: **10 MB per image, 100 MB per video** (both are
+Cloudinary's free-plan ceilings, so a larger file would fail at their end anyway).
+
+#### Switching to S3 later (`STORAGE_PROVIDER=s3`)
+
+`ObjectStorageService` keeps a second provider behind the same seam, for when 25 GB runs out. It
+speaks the S3 API against a **configurable endpoint**, so it runs unchanged on Cloudflare R2 (10 GB
+free, **zero egress**), Backblaze B2, Supabase Storage, MinIO or AWS S3 — only env vars change, and
+nothing upstream (`ExamService`, the admin uploader) knows which provider is live.
+
+| Variable | Description | Example (Cloudflare R2) |
+|---|---|---|
+| `STORAGE_PROVIDER` | `cloudinary` (default) or `s3` | `s3` |
+| `STORAGE_ENDPOINT` | S3-compatible endpoint. Omit for AWS S3. | `https://<account-id>.r2.cloudflarestorage.com` |
+| `STORAGE_REGION` | Region. R2 wants the literal `auto`. | `auto` |
+| `STORAGE_BUCKET` | Bucket name | `bio-media` |
+| `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY` | Access keys | from the provider console |
+| `STORAGE_PUBLIC_BASE_URL` | Public-read base for the bucket | `https://pub-<hash>.r2.dev` |
+
+On this path the bucket needs public read on `questions/` **and** a CORS rule allowing `PUT` from the
+admin origin — the browser uploads directly, so without CORS it is blocked before it starts. (Avoiding
+exactly this setup is why Cloudinary is the default for now.) The provider is also **inferred**: with
+only Cloudinary keys set it picks Cloudinary; with a bucket and access key set it picks S3; an explicit
+`STORAGE_PROVIDER` overrides both.
+
+If storage is unset entirely the API **logs a warning and boots normally** — media upload returns a
+503 with a clear message rather than taking the whole platform down. (Deliberately unlike
+`PaymentService`, which still crashes at boot without dummy `RAZORPAY_*` values; see §15.)
 
 ### Student Frontend (`frontend/.env`)
 
@@ -484,7 +1640,23 @@ A time window within an ExamInstance that students can book.
 | `capacity` | Int | Max students allowed in this slot |
 | `booked` | Int | Current booking count (default 0, incremented atomically) |
 
-**Relations:** `bookings[]` (Booking)
+**Relations:** `bookings[]` (Booking), `schoolAssignments[]` (SchoolSlotAssignment)
+
+---
+
+#### `SchoolSlotAssignment` (2026-07-09)
+Same school, same slot: which `ExamSlot` a school's students land in for a given `ExamInstance`, admin-editable. Read by `SchoolSlotService.autoAllocateStudent()` at registration time and by the admin reassignment endpoints.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | — |
+| `schoolId` | FK → School | — |
+| `examInstanceId` | FK → ExamInstance | — |
+| `slotId` | FK → ExamSlot | Must belong to `examInstanceId` (validated on write) |
+| `assignedBy` | String? | Admin user id who set it |
+| `createdAt` / `updatedAt` | DateTime | — |
+
+**Unique constraint:** `(schoolId, examInstanceId)` — one assignment per school per instance.
 
 ---
 
@@ -975,6 +2147,11 @@ Student slot endpoints require `JWT`. Admin slot endpoints require `JWT + ADMIN`
 | DELETE | `/admin/slots/:id` | JWT + ADMIN | Delete slot |
 | GET | `/admin/slots` | JWT + ADMIN | List all slots (`?examInstanceId=`) |
 | GET | `/admin/slots/:id/bookings` | JWT + ADMIN | List all bookings for a slot |
+| GET | `/admin/schools` | JWT + ADMIN | Minimal school directory (`id, name, code`) — powers the assignment UI; not the full School module in ROADMAP Step 2.3 |
+| PUT | `/admin/exams/instances/:instanceId/schools/:schoolId/slot` | JWT + ADMIN | ★ Assign/edit which slot a school's students use for an instance; upserts `SchoolSlotAssignment` then sweeps currently-unbooked eligible students into it |
+| GET | `/admin/exams/instances/:instanceId/school-slot-assignments` | JWT + ADMIN | ★ List current school→slot assignments for an instance |
+| POST | `/admin/bookings/:id/reassign` | JWT + ADMIN | ★ Move one student's booking to a different slot (capacity-checked) |
+| POST | `/admin/schools/:schoolId/instances/:instanceId/reassign-all` | JWT + ADMIN | ★ Bulk-move every active booking of a school's students to a different slot; returns `{ total, succeeded, failed }` — a capacity shortfall never rolls back students who already moved |
 
 **`POST /slots/:id/book` response:**
 ```json
@@ -996,6 +2173,17 @@ Free exams return `"status": "CONFIRMED"` and `"requiresPayment": false`.
   "label": "Morning Batch"
 }
 ```
+
+#### School → Slot auto-allocation (`backend/src/slot/school-slot.service.ts`, 2026-07-09)
+
+**Same school, same slot, admin-editable.** A `SchoolSlotAssignment` row (`schoolId` + `examInstanceId` -> `slotId`, `@@unique([schoolId, examInstanceId])`) is the mapping an admin sets via `PUT /admin/exams/instances/:instanceId/schools/:schoolId/slot`. Once set:
+
+- **Registration trigger**: `AuthService.syncUser()` calls `SchoolSlotService.autoAllocateForNewStudent(userId, schoolId)` right after a new student's `schoolId` resolves — it sweeps every exam instance that school already has an assignment for and books the student in, with no student action required. No-ops when the school has no assignment for any instance, so registration for every other exam is unaffected.
+- **Manual booking always wins**: if a student already holds a `PENDING`/`CONFIRMED` booking for the exam (self-service `POST /slots/:id/book`), auto-allocation skips them (`MANUALLY_BOOKED`) rather than double-booking or overriding.
+- **Free vs. paid**: mirrors `SlotService.bookSlot()` exactly — free exams (`feeAmount` null/0) get a `CONFIRMED` booking immediately; paid exams get a `PENDING` booking, and the *existing* Razorpay `create-order`/`verify`/webhook flow (unchanged) confirms it on payment, since those only need a `bookingId` to exist, not how it was created.
+- **Capacity safety**: uses an atomic `updateMany({ where: { id, booked: { lt: capacity } } })` compare-and-increment — a single SQL statement, not a separate read-then-write — so concurrent allocations can never oversell a slot. (The older `SlotService.bookSlot()` read-then-write pattern this was modeled on does not have this guarantee; it was left unchanged since it was out of scope for this pass.)
+- **Admin controls**: `setSchoolSlotAssignment()` (assign/edit + sweep unbooked students), `reassignBooking()` (move one student, capacity-checked on the destination), `reassignSchool()` (bulk-move every active booking of a school's students, reporting per-booking success/failure — a capacity shortfall never rolls back students who already moved).
+- **Tests**: `backend/src/slot/school-slot.service.spec.ts` (10 cases against a hand-rolled in-memory Prisma fake with real capacity/uniqueness semantics) — including a concurrency test that genuinely fails against a naive find-then-increment implementation (both callers get allocated, oversetting a capacity-1 slot) and passes against the atomic `updateMany` implementation actually shipped.
 
 ---
 

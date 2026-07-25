@@ -1,0 +1,44 @@
+{
+	"workspace": "Bharat Innovation Olympiad",
+	"layout": "consolidated-pnpm-workspace",
+	"note": "The five org repos are flattened into one pnpm workspace. Package folders are named after the @bio/* package name minus the @bio/ prefix. Proctoring is intentionally kept as the existing client-side face-api.js implementation (frontend/) and is NOT recreated as the Python bio-proctor service.",
+	"originOrg": "https://github.com/bharat-innovation-olympiad",
+	"repos": [
+		{
+			"name": "bio-contracts",
+			"url": "https://github.com/bharat-innovation-olympiad/bio-contracts",
+			"workspacePaths": ["packages/domain-contracts", "packages/shared-types", "packages/auth-kit", "packages/ui-kit", "packages/contract-fixtures"],
+			"role": "BIO shared contracts/packages: domain contracts, auth-kit, shared types, UI kit, fixtures.",
+			"primaryPrds": ["PLAT-02 Shared Contracts, Events & Cross-Repo Interfaces", "PLAT-05 Security Baseline policy interfaces"]
+		},
+		{
+			"name": "bio-exam",
+			"url": "https://github.com/bharat-innovation-olympiad/bio-exam",
+			"workspacePaths": ["services/exam-api", "apps/exam-web", "packages/exam-shared-types", "packages/exam-contract-fixtures"],
+			"role": "BIO exam-window runtime: entitlement gate, player, autosave, durable timer, submission, SEB.",
+			"primaryPrds": ["EXAM-00 Runtime Dashboard Handoff", "EXAM-01 Device & Identity Check", "EXAM-02 Attempt Entitlement Gate", "EXAM-03 Player & Autosave", "EXAM-04 Durable Timer", "EXAM-05 Submission & Post-Exam", "EXAM-06 SEB Lockdown"]
+		},
+		{
+			"name": "bio-admin",
+			"url": "https://github.com/bharat-innovation-olympiad/bio-admin",
+			"workspacePaths": ["services/admin-api", "services/admin-worker", "services/analytics-worker", "services/publish-worker", "services/results-worker", "services/scoring-worker", "apps/admin-web", "packages/admin-auth", "packages/admin-authoring", "packages/admin-scheduling", "packages/admin-scoring", "packages/admin-results", "packages/admin-observability-testkit", "packages/admin-shared-types", "packages/admin-contract-fixtures"],
+			"role": "BIO trusted admin service: curation, scheduling, publishing, scoring, results, analytics, ops.",
+			"primaryPrds": ["AUTH-04 Admin Auth & RBAC", "ADMIN-01 Question Bank", "ADMIN-02 Paper Builder", "ADMIN-03 Scheduling, Slots & Pricing Source", "ADMIN-04 Publishing Snapshots", "ADMIN-05 User & School Management", "ADMIN-06 Dashboard Analytics", "SCORE-01 Async Scoring", "SCORE-02 Results, Ranking & Certificates", "OPS-01 Exam-Day Ops & Incident Response"]
+		},
+		{
+			"name": "bio-portal",
+			"url": "https://github.com/bharat-innovation-olympiad/bio-portal",
+			"workspacePaths": ["services/portal-api", "apps/marketing-web", "apps/student-portal-web", "packages/portal-domain", "packages/portal-contract-fixtures"],
+			"role": "BIO always-on student portal: marketing, auth, booking, payments, entitlement, admit/results surfaces.",
+			"primaryPrds": ["AUTH-01 Mobile OTP Login", "AUTH-02 Registration Profile", "AUTH-03 DPDP Consent & Retention", "AUTH-05 Session & Token Management", "PORTAL-01 Marketing Discovery", "PORTAL-02 Slot Catalog", "PORTAL-03 Booking & Seat Holds", "PORTAL-04 Razorpay Payments", "PORTAL-05 Confirmation, Admit Card & Notifications", "PORTAL-06 Refunds & Cancellations", "PORTAL-07 Registration Entitlement Sync", "PORTAL-08 Pricing & Coupons"]
+		},
+		{
+			"name": "bio-proctor",
+			"url": "https://github.com/bharat-innovation-olympiad/bio-proctor",
+			"workspacePaths": [],
+			"status": "NOT-PORTED (kept as existing client-side face-api.js implementation in frontend/)",
+			"role": "BIO proctoring service: face enrollment, frame analysis, risk, review, biometric retention.",
+			"primaryPrds": ["PROCTOR-01 Face Enrollment", "PROCTOR-02 Frame Analysis & Match", "PROCTOR-03 Events, Risk & Integrity", "PROCTOR-04 Review Console", "PROCTOR-05 Biometric Retention"]
+		}
+	]
+}

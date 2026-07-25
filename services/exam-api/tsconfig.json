@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@core/*": ["src/core/*"],
+			"@adapters/*": ["src/adapters/*"],
+			"@infra/*": ["src/infra/*"]
+		},
+		"types": ["bun"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts", "drizzle.config.ts"],
+	"exclude": ["node_modules", "dist"]
+}

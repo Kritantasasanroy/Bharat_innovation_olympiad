@@ -1,0 +1,11 @@
+{
+	"name": "@bio/exam-contract-fixtures",
+	"type": "module",
+	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.9"
+	}
+}

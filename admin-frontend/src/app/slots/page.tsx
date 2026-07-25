@@ -39,8 +39,27 @@ interface SlotBooking {
     id: string;
     status: string;
     createdAt: string;
+    slotId: string;
     user: { id: string; email: string; firstName: string; lastName: string };
     payment: { status: string; amount: number } | null;
+}
+
+interface SchoolOption {
+    id: string;
+    name: string;
+    code: string;
+}
+
+interface SchoolSlotAssignment {
+    id: string;
+    schoolId: string;
+    slotId: string;
+    school: { id: string; name: string; code: string };
+    slot: { id: string; label: string | null; startsAt: string; endsAt: string; capacity: number; booked: number };
+}
+
+interface AllocationOutcome {
+    status: string;
 }
 
 type ModalMode = 'create' | 'edit' | null;
@@ -74,9 +93,25 @@ export default function AdminSlotsPage() {
     const [editingSlot, setEditingSlot] = useState<ExamSlot | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [bookingsModal, setBookingsModal] = useState<{ slotId: string; label: string } | null>(null);
+    const [bookingsModal, setBookingsModal] = useState<{ slotId: string; label: string; examInstanceId: string } | null>(null);
     const [bookings, setBookings] = useState<SlotBooking[]>([]);
     const [bookingsLoading, setBookingsLoading] = useState(false);
+    const [movingBookingId, setMovingBookingId] = useState<string | null>(null);
+    const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
+
+    // ── School → Slot assignment panel ──────────────────────────────────────
+    const [schools, setSchools] = useState<SchoolOption[]>([]);
+    const [assignExamId, setAssignExamId] = useState('');
+    const [assignInstanceId, setAssignInstanceId] = useState('');
+    const [assignInstances, setAssignInstances] = useState<ExamInstance[]>([]);
+    const [assignments, setAssignments] = useState<SchoolSlotAssignment[]>([]);
+    const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+    const [assignForm, setAssignForm] = useState({ schoolId: '', slotId: '' });
+    const [assigning, setAssigning] = useState(false);
+    const [assignError, setAssignError] = useState('');
+    const [assignResult, setAssignResult] = useState('');
+    const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
+    const [reassigningSchoolId, setReassigningSchoolId] = useState<string | null>(null);
 
     const [form, setForm] = useState({
         examId: '',
@@ -108,10 +143,20 @@ export default function AdminSlotsPage() {
         }
     }, []);
 
+    const fetchSchools = useCallback(async () => {
+        try {
+            const { data } = await api.get<SchoolOption[]>('/admin/schools');
+            setSchools(data);
+        } catch {
+            // silent
+        }
+    }, []);
+
     useEffect(() => {
         fetchSlots();
         fetchExams();
-    }, [fetchSlots, fetchExams]);
+        fetchSchools();
+    }, [fetchSlots, fetchExams, fetchSchools]);
 
     // Load instances when exam selected in modal
     useEffect(() => {
@@ -120,6 +165,91 @@ export default function AdminSlotsPage() {
             .then(({ data }) => setInstances(data))
             .catch(() => setInstances([]));
     }, [form.examId]);
+
+    // Load instances for the school-assignment panel's own exam picker
+    useEffect(() => {
+        if (!assignExamId) { setAssignInstances([]); setAssignInstanceId(''); return; }
+        api.get<ExamInstance[]>(`/admin/exams/${assignExamId}/instances`)
+            .then(({ data }) => setAssignInstances(data))
+            .catch(() => setAssignInstances([]));
+    }, [assignExamId]);
+
+    const fetchAssignments = useCallback(async (instanceId: string) => {
+        try {
+            setAssignmentsLoading(true);
+            const { data } = await api.get<SchoolSlotAssignment[]>(
+                `/admin/exams/instances/${instanceId}/school-slot-assignments`,
+            );
+            setAssignments(data);
+        } catch {
+            setAssignments([]);
+        } finally {
+            setAssignmentsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!assignInstanceId) { setAssignments([]); return; }
+        fetchAssignments(assignInstanceId);
+    }, [assignInstanceId, fetchAssignments]);
+
+    const instanceSlots = slots.filter(s => s.examInstance.id === assignInstanceId);
+
+    const handleAssign = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!assignForm.schoolId || !assignForm.slotId) {
+            setAssignError('Pick a school and a slot.');
+            return;
+        }
+        setAssigning(true);
+        setAssignError('');
+        setAssignResult('');
+        try {
+            const { data } = await api.put<{ allocation: Record<string, AllocationOutcome> }>(
+                `/admin/exams/instances/${assignInstanceId}/schools/${assignForm.schoolId}/slot`,
+                { slotId: assignForm.slotId },
+            );
+            const outcomes = Object.values(data.allocation).map(o => o.status);
+            const allocated = outcomes.filter(s => s === 'ALLOCATED').length;
+            const manual = outcomes.filter(s => s === 'MANUALLY_BOOKED').length;
+            const noCapacity = outcomes.filter(s => s === 'UNALLOCATED_NO_CAPACITY').length;
+            setAssignResult(
+                `Saved. ${allocated} student(s) auto-allocated` +
+                (manual ? `, ${manual} already had a manual booking` : '') +
+                (noCapacity ? `, ${noCapacity} could not be allocated (slot full)` : '') + '.',
+            );
+            setAssignForm({ schoolId: '', slotId: '' });
+            fetchAssignments(assignInstanceId);
+            fetchSlots();
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+            setAssignError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save assignment.'));
+        } finally {
+            setAssigning(false);
+        }
+    };
+
+    const handleReassignAll = async (schoolId: string) => {
+        const targetSlotId = reassignTargets[schoolId];
+        if (!targetSlotId) return;
+        if (!confirm('Move every currently-booked student of this school to the selected slot?')) return;
+        setReassigningSchoolId(schoolId);
+        try {
+            const { data } = await api.post<{ total: number; succeeded: string[]; failed: { bookingId: string; reason: string }[] }>(
+                `/admin/schools/${schoolId}/instances/${assignInstanceId}/reassign-all`,
+                { slotId: targetSlotId },
+            );
+            alert(`Reassigned ${data.succeeded.length} of ${data.total} booking(s).` +
+                (data.failed.length ? ` ${data.failed.length} failed (likely destination slot full).` : ''));
+            fetchAssignments(assignInstanceId);
+            fetchSlots();
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            alert(msg ?? 'Failed to reassign school.');
+        } finally {
+            setReassigningSchoolId(null);
+        }
+    };
 
     const openCreate = () => {
         setEditingSlot(null);
@@ -186,7 +316,7 @@ export default function AdminSlotsPage() {
     };
 
     const openBookings = async (slot: ExamSlot) => {
-        setBookingsModal({ slotId: slot.id, label: slot.label || fmtDate(slot.startsAt) });
+        setBookingsModal({ slotId: slot.id, label: slot.label || fmtDate(slot.startsAt), examInstanceId: slot.examInstance.id });
         setBookingsLoading(true);
         try {
             const { data } = await api.get<SlotBooking[]>(`/admin/slots/${slot.id}/bookings`);
@@ -195,6 +325,23 @@ export default function AdminSlotsPage() {
             setBookings([]);
         } finally {
             setBookingsLoading(false);
+        }
+    };
+
+    const handleMoveBooking = async (booking: SlotBooking) => {
+        const targetSlotId = moveTargets[booking.id];
+        if (!targetSlotId || !bookingsModal) return;
+        setMovingBookingId(booking.id);
+        try {
+            await api.post(`/admin/bookings/${booking.id}/reassign`, { slotId: targetSlotId });
+            const { data } = await api.get<SlotBooking[]>(`/admin/slots/${bookingsModal.slotId}/bookings`);
+            setBookings(data);
+            fetchSlots();
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            alert(msg ?? 'Failed to move booking.');
+        } finally {
+            setMovingBookingId(null);
         }
     };
 
@@ -336,6 +483,120 @@ export default function AdminSlotsPage() {
                     ))
                 )}
 
+                {/* School → Slot Assignments — same school, same slot; admin-editable per school */}
+                <div className="glass-card" style={{ padding: 'var(--space-6)', marginTop: 'var(--space-4)', marginBottom: 'var(--space-8)' }}>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: 'var(--space-1)' }}>School → Slot Assignments</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: 'var(--space-5)' }}>
+                        Every student from a school lands in the same slot for an exam instance. Registering students are
+                        auto-allocated the moment their school has an assignment; existing bookings can be moved in bulk here.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center', marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+                        <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
+                            <label className="form-label">Exam</label>
+                            <select className="form-input" value={assignExamId} onChange={e => setAssignExamId(e.target.value)}>
+                                <option value="">Select exam…</option>
+                                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, minWidth: 260 }}>
+                            <label className="form-label">Exam Instance</label>
+                            <select
+                                className="form-input"
+                                value={assignInstanceId}
+                                onChange={e => setAssignInstanceId(e.target.value)}
+                                disabled={!assignExamId || assignInstances.length === 0}
+                            >
+                                <option value="">
+                                    {!assignExamId ? 'Select exam first' : assignInstances.length === 0 ? 'No instances found' : 'Select instance…'}
+                                </option>
+                                {assignInstances.map(inst => (
+                                    <option key={inst.id} value={inst.id}>{fmtDate(inst.startsAt)} – {fmtDate(inst.endsAt)}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {assignInstanceId && (
+                        <>
+                            {/* Add / edit a school's assignment */}
+                            <form onSubmit={handleAssign} style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 'var(--space-5)', padding: 'var(--space-4)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
+                                <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
+                                    <label className="form-label">School</label>
+                                    <select className="form-input" value={assignForm.schoolId} onChange={e => setAssignForm(f => ({ ...f, schoolId: e.target.value }))} required>
+                                        <option value="">Select school…</option>
+                                        {schools.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
+                                    <label className="form-label">Slot</label>
+                                    <select className="form-input" value={assignForm.slotId} onChange={e => setAssignForm(f => ({ ...f, slotId: e.target.value }))} required disabled={instanceSlots.length === 0}>
+                                        <option value="">{instanceSlots.length === 0 ? 'No slots on this instance' : 'Select slot…'}</option>
+                                        {instanceSlots.map(s => (
+                                            <option key={s.id} value={s.id}>{s.label || fmtDate(s.startsAt)} ({s.booked}/{s.capacity})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <button type="submit" className="btn btn-primary btn-sm" disabled={assigning}>
+                                    {assigning ? 'Saving…' : 'Assign / Update'}
+                                </button>
+                            </form>
+                            {assignError && <p style={{ color: 'var(--danger-400)', fontSize: '0.875rem', marginBottom: 'var(--space-4)' }}>{assignError}</p>}
+                            {assignResult && <p style={{ color: 'var(--success-400)', fontSize: '0.875rem', marginBottom: 'var(--space-4)' }}>{assignResult}</p>}
+
+                            {/* Existing assignments for this instance */}
+                            {assignmentsLoading ? (
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading assignments…</p>
+                            ) : assignments.length === 0 ? (
+                                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No schools assigned to a slot for this instance yet.</p>
+                            ) : (
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
+                                                {['School', 'Assigned Slot', 'Booked / Capacity', 'Reassign all bookings to…', ''].map(h => (
+                                                    <th key={h} style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {assignments.map(a => (
+                                                <tr key={a.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)', fontWeight: 500 }}>{a.school.name} <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>({a.school.code})</span></td>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.875rem' }}>{a.slot.label || fmtDate(a.slot.startsAt)}</td>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.875rem' }}>{a.slot.booked} / {a.slot.capacity}</td>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                                                        <select
+                                                            className="form-input"
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', minWidth: 160 }}
+                                                            value={reassignTargets[a.schoolId] ?? ''}
+                                                            onChange={e => setReassignTargets(m => ({ ...m, [a.schoolId]: e.target.value }))}
+                                                        >
+                                                            <option value="">Select destination…</option>
+                                                            {instanceSlots.filter(s => s.id !== a.slotId).map(s => (
+                                                                <option key={s.id} value={s.id}>{s.label || fmtDate(s.startsAt)} ({s.booked}/{s.capacity})</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            disabled={!reassignTargets[a.schoolId] || reassigningSchoolId === a.schoolId}
+                                                            onClick={() => handleReassignAll(a.schoolId)}
+                                                        >
+                                                            {reassigningSchoolId === a.schoolId ? 'Reassigning…' : 'Reassign all'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
                 {/* Create / Edit Slot Modal */}
                 {modalMode && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 'var(--space-4)' }}>
@@ -417,7 +678,7 @@ export default function AdminSlotsPage() {
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>
                                             <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                                {['Student', 'Email', 'Status', 'Payment', 'Booked At'].map(h => (
+                                                {['Student', 'Email', 'Status', 'Payment', 'Booked At', 'Move To'].map(h => (
                                                     <th key={h} style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{h}</th>
                                                 ))}
                                             </tr>
@@ -443,6 +704,33 @@ export default function AdminSlotsPage() {
                                                     </td>
                                                     <td style={{ padding: 'var(--space-2) var(--space-3)', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
                                                         {new Date(b.createdAt).toLocaleDateString('en-IN')}
+                                                    </td>
+                                                    <td style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                                                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                                            <select
+                                                                className="form-input"
+                                                                style={{ fontSize: '0.75rem', padding: '4px 8px', minWidth: 120 }}
+                                                                value={moveTargets[b.id] ?? ''}
+                                                                onChange={e => setMoveTargets(m => ({ ...m, [b.id]: e.target.value }))}
+                                                                disabled={b.status === 'CANCELLED'}
+                                                            >
+                                                                <option value="">Move to…</option>
+                                                                {slots
+                                                                    .filter(s => s.examInstance.id === bookingsModal?.examInstanceId && s.id !== b.slotId)
+                                                                    .map(s => (
+                                                                        <option key={s.id} value={s.id}>
+                                                                            {s.label || fmtDate(s.startsAt)} ({s.booked}/{s.capacity})
+                                                                        </option>
+                                                                    ))}
+                                                            </select>
+                                                            <button
+                                                                className="btn btn-sm btn-secondary"
+                                                                disabled={!moveTargets[b.id] || movingBookingId === b.id || b.status === 'CANCELLED'}
+                                                                onClick={() => handleMoveBooking(b)}
+                                                            >
+                                                                {movingBookingId === b.id ? '…' : 'Move'}
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}

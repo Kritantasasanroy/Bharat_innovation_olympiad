@@ -8,7 +8,16 @@ node_modules/
 dist/
 build/
 .next/
-out/
+# Scoped to each app's own build-output dir (Next.js static export), not a
+# bare `out/` — an unanchored `out/` here previously matched every service's
+# `core/ports/out/` and `adapters/out/` hexagonal-architecture directories
+# too (out-bound ports/adapters), silently keeping them out of git across
+# services/exam-api, services/admin-api, and services/portal-api. Verified
+# via `git log --all -- services/exam-api/src/adapters/out` (and admin-api's
+# equivalent) returning no history at all on this branch.
+apps/*/out/
+/frontend/out/
+/admin-frontend/out/
 *.tsbuildinfo
 
 # ── Environment ───────────────────────────────────────────────

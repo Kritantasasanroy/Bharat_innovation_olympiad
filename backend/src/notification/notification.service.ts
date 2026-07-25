@@ -1,0 +1,280 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+    ConsoleEmailProvider,
+    EmailProvider,
+    ResendEmailProvider,
+} from './email.provider';
+import {
+    RenderedEmail,
+    accessPassActivatedEmail,
+    adminBroadcastEmail,
+    examSubmittedEmail,
+    welcomeEmail,
+} from './templates';
+import {
+    ConsoleSmsProvider,
+    Fast2SmsProvider,
+    SmsDiagnostics,
+    SmsProvider,
+    TwoFactorSmsProvider,
+    toIndianLocal,
+} from './sms.provider';
+
+@Injectable()
+export class NotificationService implements OnModuleInit {
+    private readonly logger = new Logger(NotificationService.name);
+    private email: EmailProvider = new ConsoleEmailProvider();
+    // SMS OTP and voice OTP are tracked separately: only 2Factor does voice, so a
+    // switch of the SMS gateway (e.g. to Fast2SMS) must not take voice down with it.
+    private sms: SmsProvider = new ConsoleSmsProvider();
+    private voice: SmsProvider = new ConsoleSmsProvider();
+
+    onModuleInit() {
+        const apiKey = process.env.RESEND_API_KEY?.trim();
+        // Resend requires the sender domain to be verified; the shared
+        // onboarding address works untouched for first-run testing.
+        const from = process.env.EMAIL_FROM?.trim() || 'onboarding@resend.dev';
+
+        if (apiKey) {
+            this.email = new ResendEmailProvider(apiKey, from);
+            this.logger.log(`Email provider: resend (from ${from})`);
+        } else {
+            this.logger.warn(
+                'RESEND_API_KEY not set — emails will be logged, not delivered.',
+            );
+        }
+
+        // Both gateways send under their own DLT-registered header, so OTP
+        // delivery to Indian numbers works without the 2–4 week TRAI/DLT
+        // registration a self-registered sender ID would require.
+        const twoFactorKey = process.env.TWOFACTOR_API_KEY?.trim();
+        const fast2smsKey = process.env.FAST2SMS_API_KEY?.trim();
+        const preferred = process.env.SMS_PROVIDER?.trim().toLowerCase();
+
+        const twoFactor = twoFactorKey
+            ? new TwoFactorSmsProvider(
+                  twoFactorKey,
+                  process.env.TWOFACTOR_OTP_TEMPLATE?.trim() || 'AUTOGEN',
+                  // Delivery reports cost nothing and are the only way to see a
+                  // carrier drop. Opt out with TWOFACTOR_VERIFY_DELIVERY=false.
+                  process.env.TWOFACTOR_VERIFY_DELIVERY?.trim().toLowerCase() !== 'false',
+              )
+            : null;
+        const fast2sms = fast2smsKey ? new Fast2SmsProvider(fast2smsKey) : null;
+
+        // SMS OTP gateway: honour an explicit SMS_PROVIDER override, else prefer
+        // 2Factor, else Fast2SMS. Set SMS_PROVIDER=fast2sms to move SMS off a
+        // 2Factor account whose sends report "delivered" but never arrive.
+        if (preferred === 'fast2sms' && fast2sms) this.sms = fast2sms;
+        else if (preferred === '2factor' && twoFactor) this.sms = twoFactor;
+        else if (twoFactor) this.sms = twoFactor;
+        else if (fast2sms) this.sms = fast2sms;
+
+        // Voice OTP: only 2Factor offers it, so keep it on 2Factor no matter which
+        // gateway sends SMS. Falls back to the SMS provider only if 2Factor is absent.
+        this.voice = twoFactor ?? this.sms;
+
+        this.logger.log(`SMS provider: ${this.sms.name} · voice provider: ${this.voice.name}`);
+        if (twoFactor) {
+            if (twoFactor.activeTemplate) {
+                this.logger.log(`2Factor OTP template: "${twoFactor.activeTemplate}"`);
+            } else {
+                // The single most likely cause of "2Factor says Success but no
+                // SMS arrives": the account-default template is not DLT-approved,
+                // so the carrier drops every message while the API reports fine.
+                this.logger.warn(
+                    'TWOFACTOR_OTP_TEMPLATE is unset/AUTOGEN — sending under the 2Factor ' +
+                        'account-default template. If SMS OTPs are accepted but never arrive, ' +
+                        'set this to your DLT-approved template name. ' +
+                        'Check balances with GET /api/admin/notifications/sms-health.',
+                );
+            }
+        }
+        if (this.sms.name === 'console') {
+            this.logger.warn('No SMS gateway configured — OTPs will be logged, not delivered.');
+        }
+    }
+
+    /**
+     * Deliver a login OTP by SMS.
+     *
+     * Unlike the transactional mails above, failures here DO propagate: the
+     * student is waiting on this code, and silently swallowing the error would
+     * leave them staring at a code-entry box that can never be satisfied.
+     */
+    /**
+     * Send an OTP SMS and return the code that was delivered.
+     *
+     * 2Factor mints the code (custom-value SMS no-ops on a DLT-sender account),
+     * so the caller adopts and verifies the returned code.
+     */
+    async sendOtpSms(toE164: string): Promise<string> {
+        try {
+            return await this.sms.sendSmsOtp(toE164);
+        } catch (err) {
+            // Deliberately rethrown, not swallowed: the student is staring at a
+            // code box. The provider has already logged which of its send
+            // variants were tried and how each was rejected.
+            this.logger.error(`SMS OTP via ${this.sms.name} failed: ${(err as Error).message}`);
+            throw err;
+        }
+    }
+
+    /** Read a caller-supplied code out as an automated voice call. Failures propagate. */
+    async sendOtpVoice(toE164: string, code: string): Promise<void> {
+        await this.voice.sendOtpVoice(toE164, code);
+    }
+
+    /**
+     * Gateway health for the admin diagnostics screen.
+     *
+     * Exists because a 2Factor send that returns `Status: Success` is *not*
+     * proof of delivery — an unapproved DLT template or an exhausted SMS
+     * balance both look identical to a good send from inside this process. The
+     * balances are the fastest way to tell those apart.
+     */
+    async smsDiagnostics(): Promise<SmsDiagnostics & { voice: string }> {
+        const base = this.sms.diagnostics
+            ? await this.sms.diagnostics()
+            : { provider: this.sms.name };
+        return { ...base, voice: this.voice.name };
+    }
+
+    /** Send a real OTP and report the gateway's tracking handle. Admin-only. */
+    async smsProbe(toE164: string): Promise<{ provider: string; sessionId?: string }> {
+        const traced = this.sms.sendSmsOtpTraced
+            ? await this.sms.sendSmsOtpTraced(toE164)
+            : { code: await this.sms.sendSmsOtp(toE164), sessionId: undefined };
+        // The code itself is never returned — this endpoint proves delivery
+        // works, it does not hand an admin a way to sign in as someone else.
+        return { provider: this.sms.name, sessionId: traced.sessionId };
+    }
+
+    /** Carrier delivery status for a session id returned by `smsProbe`. */
+    async smsDeliveryReport(sessionId: string): Promise<string> {
+        if (!this.sms.deliveryReport) {
+            return `Provider "${this.sms.name}" does not expose delivery reports.`;
+        }
+        return this.sms.deliveryReport(sessionId);
+    }
+
+    private get appUrl(): string {
+        return process.env.FRONTEND_URL?.replace(/\/$/, '') || 'http://localhost:3000';
+    }
+
+    /**
+     * Send and swallow failures.
+     *
+     * Every caller is a business action that already succeeded — the account
+     * exists, the money is taken. Rethrowing here would fail the request and
+     * roll the user's experience back over a mail problem, so failures are
+     * logged for follow-up instead.
+     */
+    private async deliver(to: string | null | undefined, mail: RenderedEmail): Promise<void> {
+        if (!to) return;
+        try {
+            await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
+            this.logger.log(`Sent "${mail.subject}" to ${to}`);
+        } catch (err) {
+            this.logger.error(
+                `Failed to send "${mail.subject}" to ${to}: ${(err as Error).message}`,
+            );
+        }
+    }
+
+    async sendWelcome(to: string, firstName: string): Promise<void> {
+        await this.deliver(to, welcomeEmail({ firstName, appUrl: this.appUrl }));
+    }
+
+    async sendAccessPassActivated(to: string, firstName: string, amountPaise: number): Promise<void> {
+        await this.deliver(
+            to,
+            accessPassActivatedEmail({ firstName, amountPaise, appUrl: this.appUrl }),
+        );
+    }
+
+    async sendExamSubmitted(to: string, firstName: string, examTitle: string): Promise<void> {
+        await this.deliver(to, examSubmittedEmail({ firstName, examTitle, appUrl: this.appUrl }));
+    }
+
+    /**
+     * Deliver an admin-composed message to one recipient.
+     *
+     * Unlike the transactional mails above, the caller (an admin broadcast) needs
+     * a per-recipient success/failure count, so this returns a boolean instead of
+     * swallowing to void.
+     */
+    async sendAdminBroadcast(to: string, subject: string, message: string): Promise<boolean> {
+        const mail = adminBroadcastEmail({ subject, message, appUrl: this.appUrl });
+        try {
+            await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
+            return true;
+        } catch (err) {
+            this.logger.error(`Admin mail to ${to} failed: ${(err as Error).message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Whether admin free-text SMS can be sent at all.
+     *
+     * Free-text (non-OTP) SMS to Indian numbers is a DLT-regulated route: it needs
+     * the account's own registered sender id AND an approved template. The OTP
+     * template can't carry arbitrary text. If either env var is missing there is
+     * nothing to send through, so callers should skip the blast and tell the admin
+     * exactly what to configure instead of firing doomed requests.
+     */
+    isAdminSmsConfigured(): boolean {
+        return Boolean(
+            process.env.TWOFACTOR_API_KEY?.trim() &&
+                process.env.TWOFACTOR_SENDER_ID?.trim() &&
+                process.env.TWOFACTOR_SMS_TEMPLATE?.trim(),
+        );
+    }
+
+    /**
+     * Send an admin-composed SMS to one number via 2Factor's transactional route.
+     *
+     * The admin's typed message is dropped verbatim into the template's single
+     * variable, so a catch-all `{#var#}` template sends whatever was written. On
+     * failure it returns the reason (not just `false`) so the caller can show the
+     * admin *why* a send failed rather than a bare count.
+     */
+    async sendAdminSms(
+        toE164: string,
+        message: string,
+    ): Promise<{ ok: boolean; error?: string }> {
+        const apiKey = process.env.TWOFACTOR_API_KEY?.trim();
+        const sender = process.env.TWOFACTOR_SENDER_ID?.trim();
+        const template = process.env.TWOFACTOR_SMS_TEMPLATE?.trim();
+
+        if (!apiKey || !sender || !template) {
+            const reason =
+                'SMS sender ID / template not configured (TWOFACTOR_SENDER_ID, TWOFACTOR_SMS_TEMPLATE).';
+            this.logger.warn(`SMS to ${toE164} not sent — ${reason}`);
+            return { ok: false, error: reason };
+        }
+
+        const number = toIndianLocal(toE164);
+        const url =
+            `https://2factor.in/API/R1/?module=TRANS_SMS&apikey=${encodeURIComponent(apiKey)}` +
+            `&to=${encodeURIComponent(number)}&from=${encodeURIComponent(sender)}` +
+            `&templatename=${encodeURIComponent(template)}&var1=${encodeURIComponent(message)}`;
+
+        try {
+            const res = await fetch(url, { method: 'GET' });
+            const body = await res.text().catch(() => '');
+            // A 200 can still carry Status:"Error" (bad template, DLT mismatch…).
+            if (!res.ok || /"Status"\s*:\s*"Error"/i.test(body)) {
+                const reason = `2Factor ${res.status}: ${body.slice(0, 200)}`;
+                this.logger.error(`Admin SMS to ${toE164} failed: ${reason}`);
+                return { ok: false, error: reason };
+            }
+            return { ok: true };
+        } catch (err) {
+            const reason = (err as Error).message;
+            this.logger.error(`Admin SMS to ${toE164} failed: ${reason}`);
+            return { ok: false, error: reason };
+        }
+    }
+}

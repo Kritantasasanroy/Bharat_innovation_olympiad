@@ -62,6 +62,48 @@ services:
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
 
+      # ── SMS / OTP ────────────────────────────────────────────────────────
+      # These were previously set by hand in the dashboard and therefore
+      # invisible to the repo, which made an SMS outage impossible to diagnose
+      # from the code. Declared here so the required set is at least discoverable.
+      #
+      # TWOFACTOR_OTP_TEMPLATE=AUTOGEN means "no template appended, use the
+      # 2Factor account default". If sends report Success but never arrive, set
+      # this to the DLT-approved template name. Verify with
+      # GET /api/admin/notifications/sms-health.
+      - key: TWOFACTOR_API_KEY
+        sync: false
+      - key: TWOFACTOR_OTP_TEMPLATE
+        sync: false
+      # Logs the carrier delivery report ~15s after each send, so an
+      # accepted-but-dropped SMS is visible in the Render logs. Default on.
+      - key: TWOFACTOR_VERIFY_DELIVERY
+        sync: false
+      - key: TWOFACTOR_SENDER_ID
+        sync: false
+      - key: TWOFACTOR_SMS_TEMPLATE
+        sync: false
+
+      # ── Media storage ────────────────────────────────────────────────────
+      # Cloudinary is what the code defaults to (see object-storage.service.ts).
+      # A stale AWS_S3_BUCKET without these will 503 every media upload.
+      - key: STORAGE_PROVIDER
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # ── Google Drive question-image gallery ──────────────────────────────
+      # The folder must be shared "Anyone with the link — Viewer" for a plain
+      # API key to list it. Used by POST /admin/media/sync-drive.
+      - key: GOOGLE_DRIVE_API_KEY
+        sync: false
+      - key: GOOGLE_DRIVE_GALLERY_FOLDER_ID
+        sync: false
+
       # ── Redis (optional) ─────────────────────────────────────────────────
       # Required only if TimerService uses Redis for distributed state.
       # Add a Render Redis instance and paste its Internal Redis URL here.

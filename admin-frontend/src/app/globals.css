@@ -400,6 +400,94 @@ h4 {
   color: var(--danger-400);
 }
 
+/* A finished / inactive state — present but no longer actionable. */
+.badge-muted {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+/* ── Inline explanations ───────────────────────────────────────────────────
+   A disabled button has to say why. These carry the server's own reason
+   ("this exam has no questions", "results can only be released after the exam
+   window closes") right under the control it blocks. */
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.hint-warn {
+  color: var(--warning-400);
+}
+
+.hint-muted {
+  color: var(--text-muted);
+}
+
+/* ── Question media slots (picture + video per question) ──────────────────── */
+.media-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.media-slot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.media-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.media-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.media-drop:hover {
+  border-color: var(--primary-400);
+  color: var(--text-secondary);
+}
+
+/* ── Exam schedule strip (the window students are gated by) ───────────────── */
+.schedule-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+}
+
 .badge-primary {
   background: rgba(255, 203, 5, 0.12);
   color: var(--primary-400);
@@ -1040,13 +1128,14 @@ h4 {
           align-items: center;
           justify-content: space-between;
           padding: var(--space-3) var(--space-6);
-          gap: var(--space-6);
+          gap: var(--space-4);
         }
         .navbar-brand {
           display: flex;
           align-items: center;
           gap: var(--space-3);
           cursor: pointer;
+          flex-shrink: 0;
         }
         .brand-logo {
           height: 42px;
@@ -1086,13 +1175,28 @@ h4 {
         }
         .navbar-links {
           display: flex;
+          align-items: center;
           gap: var(--space-1);
+          min-width: 0;
+          flex: 1 1 auto;
+          justify-content: center;
         }
         .nav-link {
-          padding: var(--space-2) var(--space-4);
+          /* Nav items are <button>s for keyboard/screen-reader correctness, so
+             the browser's button chrome has to be reset back to a plain link. */
+          appearance: none;
+          background: transparent;
+          border: none;
+          font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: var(--space-2) var(--space-3);
           border-radius: var(--radius-md);
-          font-size: 0.9rem;
+          font-size: 0.875rem;
           font-weight: 500;
+          line-height: 1.2;
+          white-space: nowrap;
           color: var(--text-secondary);
           cursor: pointer;
           transition: all var(--transition-fast);
@@ -1105,10 +1209,91 @@ h4 {
           color: var(--primary-400);
           background: rgba(255, 203, 5, 0.1);
         }
+        .nav-link:focus-visible {
+          outline: 2px solid var(--primary-400);
+          outline-offset: 2px;
+        }
+
+        /* ── Grouped nav dropdowns ── */
+        .nav-group {
+          position: relative;
+        }
+        .nav-caret {
+          transition: transform var(--transition-fast);
+          opacity: 0.7;
+        }
+        .nav-caret--open {
+          transform: rotate(180deg);
+        }
+        .nav-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          min-width: 210px;
+          padding: var(--space-2);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-xl);
+          z-index: 60;
+          animation: fadeIn 0.14s ease-out;
+        }
+        .nav-menu__item {
+          appearance: none;
+          background: transparent;
+          border: none;
+          font-family: inherit;
+          text-align: left;
+          width: 100%;
+          padding: var(--space-3) var(--space-3);
+          border-radius: var(--radius-sm);
+          font-size: 0.875rem;
+          font-weight: 500;
+          white-space: nowrap;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .nav-menu__item:hover {
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+        }
+        .nav-menu__item.active {
+          color: var(--primary-400);
+          background: rgba(255, 203, 5, 0.1);
+        }
+        .nav-menu__item:focus-visible {
+          outline: 2px solid var(--primary-400);
+          outline-offset: -2px;
+        }
+
         .navbar-user {
           display: flex;
           align-items: center;
           gap: var(--space-3);
+          flex-shrink: 0;
+        }
+
+        /* Below ~1100px the brand text and the user's name are the first things
+           to go, so the nav row itself never has to wrap or scroll. */
+        @media (max-width: 1100px) {
+          .brand-text-group {
+            display: none;
+          }
+        }
+        @media (max-width: 900px) {
+          .navbar-user .user-info {
+            display: none;
+          }
+          .navbar-links {
+            gap: 0;
+          }
+          .nav-link {
+            padding: var(--space-2);
+          }
         }
         .user-avatar {
           width: 36px;
@@ -1202,3 +1387,151 @@ h4 {
   }
 }
       
+/* ── Access Requests: type tags, handover card, token box ──────────────────── */
+
+.row-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.kind-tag {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border-default);
+}
+
+.kind-tag--partner {
+  color: var(--primary-400);
+  background: rgba(255, 203, 5, 0.1);
+  border-color: rgba(255, 203, 5, 0.28);
+}
+
+.kind-tag--school {
+  color: var(--success-400);
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.28);
+}
+
+.access-card {
+  max-width: 640px;
+}
+
+.access-card__head h2 {
+  margin: var(--space-2) 0 0.25rem;
+}
+
+.access-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.access-card__field dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.15rem;
+}
+
+.access-card__field dd {
+  margin: 0;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.access-card__field dd.mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.token-box {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+}
+
+.token-box__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.token-box__value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  word-break: break-all;
+  padding: var(--space-2) 0;
+}
+
+.token-box__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.token-box__note {
+  font-size: 0.78rem;
+  margin: var(--space-2) 0 0;
+}
+
+@media (max-width: 560px) {
+  .access-card__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Results page: info chip + help grid ─────────────────────────────────── */
+.info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--primary-400);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.info-chip:hover {
+  border-color: var(--primary-400);
+  background: rgba(255, 203, 5, 0.1);
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  margin: 0;
+}
+
+.help-grid dt {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.help-grid dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

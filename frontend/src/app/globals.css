@@ -289,6 +289,111 @@ h4 {
 .meta-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .meta-value { font-size: 1rem; font-weight: 500; margin-top: 2px; }
 .exam-footer { margin-top: auto; }
+
+/* What the paper covers. The Olympiad paper is sat one named pillar at a time,
+   so the card lists them rather than just counting them. */
+.exam-sections { margin-bottom: var(--space-4); }
+.exam-section-list {
+    list-style: none;
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.exam-section-list li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+.exam-section-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.exam-section-qcount {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* ── Exam phase + slot (what gates the Start button) ───────────────────────
+   A student must be able to tell at a glance whether an exam is merely
+   scheduled, waiting on their slot, or genuinely open right now. */
+.exam-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.phase-pill {
+    flex-shrink: 0;
+    padding: 2px var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.phase-success { background: rgba(34, 197, 94, 0.16); color: var(--success-400); }
+.phase-info    { background: rgba(59, 130, 246, 0.16); color: #60a5fa; }
+.phase-warn    { background: rgba(245, 158, 11, 0.16); color: var(--warning-400); }
+.phase-danger  { background: rgba(239, 68, 68, 0.16);  color: var(--danger-400); }
+.phase-muted   { background: var(--bg-input); color: var(--text-muted); }
+
+.exam-schedule {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+}
+
+.slot-card {
+    padding: var(--space-3);
+    margin-bottom: var(--space-4);
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+
+/* The student's slot is open — this is the one state that enables Start. */
+.slot-card-live {
+    border-color: var(--success-400);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.slot-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: 2px;
+}
+
+.slot-card-time {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.slot-note {
+    margin: var(--space-2) 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.slot-note-warn  { color: var(--warning-400); }
+.slot-note-muted { color: var(--text-muted); }
+
 .empty-state {
     padding: var(--space-12) var(--space-6);
     text-align: center; margin-top: var(--space-8);
@@ -647,6 +752,39 @@ h4 {
   gap: var(--space-2);
 }
 
+/* The navigator is grouped by section so it mirrors the shape of the paper.
+   Numbering stays global (1–50) — "question 27" has to mean the same thing
+   here as it does in the header. */
+.question-index-section + .question-index-section {
+  margin-top: var(--space-4);
+}
+
+.question-index-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.question-index-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.question-index-section-count {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .question-index-item {
   width: 40px;
   height: 40px;
@@ -947,6 +1085,44 @@ h4 {
             color: var(--primary-400);
             font-weight: bold;
           }
+          /* The rules acknowledgement in the start-exam modal. The whole row is
+             the label so the hit target is the full width, not a 16px box. */
+          .rules-ack {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            margin-bottom: var(--space-4);
+            padding: var(--space-4);
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: 0.9rem;
+            line-height: 1.55;
+            color: var(--text-primary);
+            transition: border-color 0.15s ease, background 0.15s ease;
+          }
+          .rules-ack:hover {
+            border-color: var(--primary-500);
+          }
+          .rules-ack:focus-within {
+            border-color: var(--primary-500);
+            outline: 2px solid var(--primary-500);
+            outline-offset: 2px;
+          }
+          .rules-ack input[type='checkbox'] {
+            width: 20px;
+            height: 20px;
+            margin: 1px 0 0;
+            flex-shrink: 0;
+            accent-color: var(--primary-500);
+            cursor: pointer;
+          }
+          .rules-ack:has(input:checked) {
+            border-color: var(--primary-500);
+            background: color-mix(in srgb, var(--primary-500) 8%, var(--bg-card));
+          }
+
           .seb-notice {
             border-color: rgba(245, 158, 11, 0.3);
             background: rgba(245, 158, 11, 0.05);
@@ -989,8 +1165,55 @@ h4 {
             color: var(--danger-400);
           }
           .question-container { max-width: 800px; }
+
+          /* ── Section signposting ──
+             The paper is sat one section at a time, so the student is always
+             told which pillar they are in and how far through it they are. The
+             banner sits above the question card, not inside it, so it reads as
+             a heading for the whole block rather than part of the question. */
+          .exam-section-banner {
+            max-width: 800px;
+            display: flex; align-items: flex-end; justify-content: space-between;
+            gap: var(--space-4); flex-wrap: wrap;
+            margin-bottom: var(--space-4);
+            padding: var(--space-4) var(--space-5);
+            background: linear-gradient(
+              135deg,
+              color-mix(in srgb, var(--primary-500) 14%, transparent),
+              transparent 70%
+            );
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--primary-500);
+            border-radius: var(--radius-md);
+          }
+          .exam-section-banner-main { min-width: 0; }
+          .exam-section-eyebrow {
+            display: block;
+            font-size: 0.72rem; font-weight: 700;
+            letter-spacing: 0.09em; text-transform: uppercase;
+            color: var(--primary-400, var(--text-secondary));
+          }
+          .exam-section-title {
+            margin: 2px 0 0;
+            font-size: 1.15rem; line-height: 1.3; font-weight: 700;
+            color: var(--text-primary);
+          }
+          .exam-section-progress {
+            font-size: 0.82rem; font-weight: 600;
+            color: var(--text-secondary); white-space: nowrap;
+          }
+          /* The finer topic label inside the question header. Muted — it is
+             context, and must not compete with the section title above. */
+          .question-topic {
+            font-size: 0.8rem; font-weight: 600;
+            color: var(--text-muted);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            min-width: 0; padding-right: var(--space-3);
+          }
+
           .question-header {
             display: flex; justify-content: space-between; align-items: center;
+            gap: var(--space-3);
             margin-bottom: var(--space-6);
           }
           .question-text {
@@ -1000,6 +1223,18 @@ h4 {
             background: var(--bg-card);
             border-radius: var(--radius-md);
             border: 1px solid var(--border-subtle);
+          }
+          /* A question's picture / video. Capped so a tall image cannot push the
+             options below the fold on a laptop mid-exam. */
+          .question-media {
+            display: block;
+            width: 100%;
+            max-width: 640px;
+            max-height: 400px;
+            object-fit: contain;
+            margin-top: var(--space-4);
+            border-radius: var(--radius-md);
+            background: rgba(0, 0, 0, 0.2);
           }
           .options-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); }
           .option-item.disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1647,6 +1882,69 @@ h4 {
   border-color: rgba(125,200,50,0.25) !important;
 }
 
+/* — The five dimensions the paper assesses.
+     Auto-fit rather than a fixed column count: five cards do not divide evenly
+     into any grid, so let them reflow instead of leaving a lone orphan. */
+.lp-dimensions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.lp-dimension-card {
+  position: relative;
+  padding: 30px 26px 26px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  overflow: hidden;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.28s ease,
+              border-color 0.22s ease;
+}
+.lp-dimension-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #7dc832, #ffcb05);
+}
+.lp-dimension-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.4);
+  border-color: rgba(125, 200, 50, 0.3);
+}
+
+.lp-dimension-num {
+  display: block;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #7dc832;
+  margin-bottom: 10px;
+}
+.lp-dimension-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+  margin: 0 0 10px;
+  color: var(--text-primary);
+}
+.lp-dimension-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-dimension-card { transition: none; }
+  .lp-dimension-card:hover { transform: none; }
+}
+
 /* — Button: pop + glow */
 .lp-btn-primary {
   transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1),
@@ -1767,3 +2065,305 @@ h4 {
   animation: lpIconBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
 }
       
+/* ── SchoolPicker (student registration) ───────────────────────────────────── */
+
+.school-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.school-tab {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.school-tab.active {
+  background: rgba(255, 203, 5, 0.12);
+  border-color: var(--primary-400);
+  color: var(--primary-400);
+}
+
+.school-code-row,
+.school-add__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.school-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.school-add__hint {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin: 0;
+  min-height: 1.1em;
+}
+
+.school-add__actions {
+  justify-content: flex-end;
+}
+
+.school-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  z-index: 20;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.school-dropdown__empty {
+  padding: 0.75rem 1rem;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.school-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.school-option:hover {
+  background: var(--bg-elevated);
+}
+
+.school-option__name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.school-option__badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
+.school-option__meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.school-option--add {
+  color: var(--primary-400);
+  font-weight: 500;
+  border-bottom: none;
+}
+
+.school-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--primary-400);
+  border-radius: var(--radius-md);
+  background: rgba(255, 203, 5, 0.06);
+}
+
+.school-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.school-chip__text span {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.school-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #f87171;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Shared form / table / layout classes used by support, profile, certificates,
+   consent, admit-card, verify and exams pages. These mirror the admin design
+   system's class names so those pages render with the same polish as the rest
+   of the student portal (they previously fell back to unstyled native controls).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.page-header {
+  margin-bottom: var(--space-6);
+}
+
+.page-header h1 {
+  margin: 0 0 var(--space-2);
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+/* Forms */
+.exam-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form-group > label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-control {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  transition: all var(--transition-fast);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.form-control:focus {
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px rgba(255, 203, 5, 0.15);
+}
+
+textarea.form-control {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.form-error {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger-400);
+  font-size: 0.9rem;
+}
+
+/* Utility text */
+.text-muted {
+  color: var(--text-muted);
+}
+
+.join-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Tables */
+.table-responsive {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.9rem;
+}
+
+.data-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.72rem;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-card-hover, rgba(127, 127, 127, 0.06));
+}
+
+/* Filter pills (certificates / exams) */
+.class-pill {
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.class-pill.active {
+  background: rgba(255, 203, 5, 0.12);
+  border-color: var(--primary-400);
+  color: var(--primary-400);
+}
+
+/* Modal body (overlay + actions already exist in this file) */
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg, 14px);
+  padding: var(--space-6);
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}

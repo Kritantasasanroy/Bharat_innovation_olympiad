@@ -1,0 +1,34 @@
+{
+	"name": "@bio/olympiad-root",
+	"version": "0.0.0",
+	"private": true,
+	"packageManager": "pnpm@10.32.1",
+	"engines": {
+		"bun": ">=1.2.0 <1.3.0",
+		"node": ">=18.0.0"
+	},
+	"scripts": {
+		"dev": "pnpm -r --parallel run dev",
+		"build": "pnpm -r run build",
+		"lint": "biome check .",
+		"format:check": "biome format .",
+		"test": "pnpm -r run test",
+		"typecheck": "pnpm -r run typecheck",
+		"prepare": "lefthook install",
+		"test:contract": "bun test packages/contract-fixtures/src/contract-version.test.ts",
+		"security:audit": "pnpm audit --audit-level high",
+		"boundaries": "pnpm --filter @bio/exam-api lint:boundaries",
+		"verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:contract && pnpm boundaries"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild",
+			"lefthook"
+		]
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.8",
+		"lefthook": "^2.1.4",
+		"typescript": "^5.9.3"
+	}
+}

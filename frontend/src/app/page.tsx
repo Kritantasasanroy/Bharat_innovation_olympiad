@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
 import {
   Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
@@ -11,6 +12,8 @@ import {
 export default function LandingPage() {
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', minHeight: '100vh' }}>
+      {/* Captures a partner's `?ref=CODE` on first touch (PRD-046 attribution). */}
+      <ReferralCapture />
 
       {/* ── NAV ── */}
       <nav className="lp-nav" style={{
@@ -22,7 +25,7 @@ export default function LandingPage() {
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '12px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={38} width={160} style={{ height: 38, width: 'auto', display: 'block' }} />
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad — Become Future Ready" height={38} width={126} style={{ height: 38, width: 'auto', display: 'block' }} />
             <span className="lp-brand-name">Bharat Innovation Olympiad</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -84,25 +87,23 @@ export default function LandingPage() {
               padding: '7px 14px', borderRadius: 999, marginBottom: 22,
             }}>
               <Sparkles size={12} />
-              India&apos;s National Innovation &amp; Future Skills Movement · Class 6–12
+              India&apos;s National Innovation &amp; Future Skills Movement · Grades 6–12
             </div>
 
             <h1 className="lp-fade-up-1" style={{
               fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 46, lineHeight: 1.08,
               letterSpacing: -1.5, margin: '0 0 18px',
             }}>
-              India&apos;s Most Complete{' '}
+              Bharat{' '}
               <span style={{ background: 'linear-gradient(135deg,#7dc832,#ffcb05)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 Innovation
               </span>
-              {' '}&amp; Future Skills Ecosystem
+              {' '}Olympiad — Become Future Ready
             </h1>
 
-            <p className="lp-fade-up-2" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 600, fontSize: 18, color: '#7dc832', margin: '0 0 12px' }}>
-              One Registration. Four Powerful Benefits.
-            </p>
-            <p className="lp-fade-up-2" style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--text-secondary)', margin: '0 0 30px', maxWidth: 480 }}>
-              National Recognition · Innovation Challenges · Entrepreneurship Opportunities · Future Skills Development
+            <p className="lp-fade-up-2" style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--text-secondary)', margin: '0 0 30px', maxWidth: 520 }}>
+              Discover your potential beyond academics by developing the mindset, skills and awareness
+              to innovate, solve real-world problems and confidently shape the future of India and the world.
             </p>
 
             <div className="lp-fade-up-3" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -334,6 +335,99 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── WHAT IT IS ──
+          The "Description" section from the BIO brief: why the Olympiad exists
+          and where it sits, in the organisation's own words. */}
+      <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto' }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 20px', letterSpacing: -0.6, textAlign: 'center' }}>
+            Building a Future-Ready India
+          </h2>
+          <div className="lp-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20, fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
+            <p style={{ margin: 0 }}>
+              <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no question paper.</b>{' '}
+              The Bharat Innovation Olympiad reflects this belief by moving beyond conventional
+              examinations that reward memorisation. Instead, it assesses curiosity, creativity,
+              adaptability and real-world thinking — preparing students not just for the next exam,
+              but for the next decade.
+            </p>
+            <p style={{ margin: 0 }}>
+              Conceived by <b style={{ color: 'var(--text-primary)' }}>Lemon Ideas</b>, an entrepreneurship
+              ecosystem with over 12 years of experience nurturing innovators, entrepreneurs and
+              changemakers across India, the Olympiad bridges the gap between classroom learning and
+              the capabilities needed to thrive in an uncertain, technology-driven and rapidly
+              evolving world.
+            </p>
+            <p style={{ margin: 0 }}>
+              Built on the foundation of <b style={{ color: 'var(--text-primary)' }}>Innopreneurs</b>,
+              Lemon Ideas&apos; flagship innovation and entrepreneurship movement, it is far more than
+              another Olympiad — it is the beginning of a lifelong innovation ecosystem. Students from
+              Grades 6 to 12 assess themselves across five future-focused dimensions through a balanced
+              mix of knowledge-based, situational and future-oriented questions.
+            </p>
+            <p style={{ margin: 0 }}>
+              What truly distinguishes it is its purpose: creating{' '}
+              <b style={{ color: 'var(--text-primary)' }}>future-ready citizens, not just high scorers</b>.
+              Closely aligned with the vision of Viksit Bharat 2047, it inspires young minds to become
+              innovators, creators and responsible leaders who can shape India&apos;s future with
+              courage, compassion and creativity.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FIVE DIMENSIONS ──
+          What the paper actually assesses. These are the same five pillars the
+          exam is built from, so a student sees the structure here before they
+          meet it as section headings mid-exam. */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6, textAlign: 'center' }}>
+            The Five Dimensions
+          </h2>
+          <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 560, textAlign: 'center' }}>
+            Every student is assessed across five future-focused dimensions — the same five sections
+            that make up the paper.
+          </p>
+
+          <div className="lp-dimensions">
+            {[
+              {
+                n: '01',
+                title: 'Entrepreneurship Mindset',
+                body: 'Entrepreneurship is not just about starting a business — it is a way of thinking. This dimension develops the ability to identify opportunities, take initiative, solve problems creatively and make responsible decisions, through customer empathy, teamwork, planning, resource management and ethics.',
+              },
+              {
+                n: '02',
+                title: 'Problem Solving & Innovation',
+                body: 'Innovation begins with understanding problems that matter. Students observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation — drawing on design thinking, adaptability and evidence-based reasoning.',
+              },
+              {
+                n: '03',
+                title: 'Emerging Technologies & Digital Readiness, STEM',
+                body: 'Beginning with strong STEM foundations, this dimension introduces computational thinking, coding logic, robotics, artificial intelligence, machine learning and cybersecurity — then expands to frontier technologies such as space technology, biotechnology and quantum computing.',
+              },
+              {
+                n: '04',
+                title: 'Future Readiness & Global Awareness',
+                body: 'Preparing for the future demands adaptability, lifelong learning and global awareness. This dimension develops an understanding of future careers, sustainability, climate action and well-being, and inspires students to contribute towards Viksit Bharat 2047.',
+              },
+              {
+                n: '05',
+                title: 'Financial Readiness',
+                body: 'Financial literacy is an essential life skill. Students learn money management, saving, investing, budgeting and responsible financial decision-making, alongside digital banking, UPI, financial safety, cyber awareness and the global economy.',
+              },
+            ].map((d) => (
+              <div key={d.n} className="lp-dimension-card lp-fade-up">
+                <span className="lp-dimension-num">{d.n}</span>
+                <h3 className="lp-dimension-title">{d.title}</h3>
+                <p className="lp-dimension-body">{d.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── FOUR BENEFITS ── */}
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
@@ -479,7 +573,7 @@ export default function LandingPage() {
       <footer style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', padding: '36px 32px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={34} width={144} style={{ height: 34, width: 'auto', display: 'block' }} />
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad — Become Future Ready" height={34} width={112} style={{ height: 34, width: 'auto', display: 'block' }} />
             <span className="lp-brand-name" style={{ fontSize: '0.95rem' }}>Bharat Innovation Olympiad</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>

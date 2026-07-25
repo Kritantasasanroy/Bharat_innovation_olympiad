@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
-import { APP_NAME } from '@/lib/constants';
+import { APP_NAME, TAGLINE } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -21,7 +21,7 @@ export default function Navbar() {
           <img src="/bio-logo.png" alt={APP_NAME} className="brand-logo" />
           <div className="brand-text-group">
             <span className="brand-text">{APP_NAME}</span>
-            <span className="brand-tagline-nav">Where Young Minds Build the Future</span>
+            <span className="brand-tagline-nav">{TAGLINE}</span>
           </div>
         </div>
 
@@ -45,6 +45,18 @@ export default function Navbar() {
                 onClick={() => router.push('/results')}
               >
                 Results
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/certificates') ? 'active' : ''}`}
+                onClick={() => router.push('/certificates')}
+              >
+                Certificates
+              </a>
+              <a
+                className={`nav-link ${pathname?.startsWith('/support') ? 'active' : ''}`}
+                onClick={() => router.push('/support')}
+              >
+                Support
               </a>
             </>
           )}

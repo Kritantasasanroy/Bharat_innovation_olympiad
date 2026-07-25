@@ -6,6 +6,12 @@ import api from '@/lib/api';
 import { CLASS_BANDS } from '@/lib/constants';
 import { FormEvent, useEffect, useState } from 'react';
 
+interface ExamInstance {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+}
+
 interface Exam {
     id: string;
     title: string;
@@ -15,8 +21,46 @@ interface Exam {
     durationMinutes: number;
     isPublished: boolean;
     isResultReleased: boolean;
+    /** Retired from the catalogue. Hidden by default; never deleted. */
+    isArchived: boolean;
+    /** The rehearsal paper students sit before a real exam. */
+    isTrial: boolean;
+    /** Whether students must complete the trial before this exam will start. */
+    requiresTrial: boolean;
     createdAt: string;
+    instances: ExamInstance[];
+    /** Questions actually attached to this exam's sections. */
+    questionCount: number;
+    /** The server's decision, mirrored here so the button can explain itself. */
+    canPublish: boolean;
+    publishBlockedReason: string | null;
+    canReleaseResults: boolean;
+    releaseBlockedReason: string | null;
+    hasEnded: boolean;
     _count: { sections: number; instances: number };
+}
+
+const fmt = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+const formatWindow = (startsAt: string, endsAt: string) => `${fmt(startsAt)} → ${fmt(endsAt)}`;
+
+/** Where an exam window sits relative to now — the same three states students see. */
+function scheduleBadge(instance: ExamInstance): { label: string; cls: string } {
+    const now = Date.now();
+    if (now < new Date(instance.startsAt).getTime()) {
+        return { label: 'Upcoming', cls: 'badge-warning' };
+    }
+    if (now > new Date(instance.endsAt).getTime()) {
+        return { label: 'Ended', cls: 'badge-muted' };
+    }
+    return { label: 'Live', cls: 'badge-success' };
 }
 
 export default function AdminExamsPage() {
@@ -28,6 +72,8 @@ export default function AdminExamsPage() {
     const [error, setError] = useState('');
     const [actionError, setActionError] = useState('');
     const [activeExamAction, setActiveExamAction] = useState('');
+    /** Archived exams are hidden by default — retired, not deleted. */
+    const [showArchived, setShowArchived] = useState(false);
 
     const blankFormData = {
         title: '',
@@ -49,10 +95,12 @@ export default function AdminExamsPage() {
         return message || fallback;
     };
 
-    const fetchExams = async () => {
+    const fetchExams = async (withArchived = showArchived) => {
         try {
             setLoading(true);
-            const { data } = await api.get<Exam[]>('/admin/exams');
+            const { data } = await api.get<Exam[]>('/admin/exams', {
+                params: withArchived ? { includeArchived: 'true' } : undefined,
+            });
             setExams(data);
         } catch (err) {
             console.error('Failed to fetch exams', err);
@@ -61,7 +109,34 @@ export default function AdminExamsPage() {
         }
     };
 
-    useEffect(() => { fetchExams(); }, []);
+    useEffect(() => { fetchExams(showArchived); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    /**
+     * Retire an exam without destroying it.
+     *
+     * Deleting would cascade away every attempt, booking, payment and
+     * certificate attached to it, so "scrapping" an exam unpublishes and hides
+     * it instead. Fully reversible from the same button.
+     */
+    const toggleArchive = async (exam: Exam) => {
+        const archiving = !exam.isArchived;
+        if (archiving && !confirm(
+            `Archive "${exam.title}"?\n\n` +
+            'It disappears from every student\'s list and from this page by default. ' +
+            'Nothing is deleted — results, payments and certificates are untouched, and ' +
+            'you can restore it at any time.',
+        )) return;
+
+        setActiveExamAction(exam.id);
+        try {
+            await api.post(`/admin/exams/${exam.id}/${archiving ? 'archive' : 'unarchive'}`);
+            await fetchExams(showArchived);
+        } catch (err) {
+            setActionError(getApiErrorMessage(err, `Failed to ${archiving ? 'archive' : 'restore'} the exam.`));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
 
     const handleClassBandToggle = (band: number) => {
         setFormData((prev) => ({
@@ -172,10 +247,33 @@ export default function AdminExamsPage() {
                             Create and manage exams, set their duration, and target specific classes.
                         </p>
                     </div>
-                    <button className="btn btn-primary" onClick={openCreateModal}>
-                        + Create Exam
-                    </button>
+                    <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                        <button className="btn btn-secondary" onClick={openCreateModal}>
+                            + Quick exam
+                        </button>
+                        <a href="/exams/new" className="btn btn-primary">
+                            + New exam with slots
+                        </a>
+                    </div>
                 </div>
+
+                {/* Archived exams are retired, not deleted, so they need a way
+                    back into view — this is the only route to un-archiving one. */}
+                <label
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                        marginTop: 'var(--space-4)', fontSize: '0.875rem',
+                        color: 'var(--text-secondary)', cursor: 'pointer',
+                    }}
+                >
+                    <input
+                        type="checkbox"
+                        checked={showArchived}
+                        onChange={(e) => setShowArchived(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    Show archived exams
+                </label>
 
                 {actionError && (
                     <div className="form-error" style={{ marginTop: 'var(--space-4)' }}>{actionError}</div>
@@ -188,7 +286,15 @@ export default function AdminExamsPage() {
                 ) : exams.length > 0 ? (
                     <div className="grid-3" style={{ marginTop: 'var(--space-8)' }}>
                         {exams.map((exam) => (
-                            <div key={exam.id} className="glass-card exam-card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                            <div
+                                key={exam.id}
+                                className="glass-card exam-card"
+                                style={{
+                                    display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
+                                    // Archived exams stay legible but visibly out of play.
+                                    ...(exam.isArchived ? { opacity: 0.62, borderStyle: 'dashed' } : {}),
+                                }}
+                            >
                                 {/* Title + description */}
                                 <div>
                                     <h3 style={{ marginBottom: 'var(--space-1)' }}>{exam.title}</h3>
@@ -221,10 +327,39 @@ export default function AdminExamsPage() {
                                     <span className={`badge ${exam.isResultReleased ? 'badge-success' : 'badge-warning'}`}>
                                         {exam.isResultReleased ? 'Results Released' : 'Results Hidden'}
                                     </span>
+                                    {exam.isArchived && <span className="badge badge-muted">Archived</span>}
+                                    {exam.isTrial && (
+                                        <span className="badge badge-primary" title="The rehearsal paper students sit before a real exam">
+                                            Trial paper
+                                        </span>
+                                    )}
+                                    {!exam.isTrial && exam.requiresTrial && (
+                                        <span className="badge badge-muted" title="Students must complete the trial test before this exam will start">
+                                            Trial required
+                                        </span>
+                                    )}
                                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        {exam._count.sections} sections · {exam._count.instances} instances
+                                        {exam.questionCount} questions · {exam._count.instances} instances
                                     </span>
                                 </div>
+
+                                {/* Schedule — the exam window(s) students are gated by. */}
+                                {exam.instances.length > 0 ? (
+                                    <div className="schedule-strip">
+                                        {exam.instances.map((instance) => (
+                                            <div key={instance.id} className="schedule-row">
+                                                <span>{formatWindow(instance.startsAt, instance.endsAt)}</span>
+                                                <span className={`badge ${scheduleBadge(instance).cls}`}>
+                                                    {scheduleBadge(instance).label}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="hint hint-warn">
+                                        No schedule yet — add a date window before publishing.
+                                    </p>
+                                )}
 
                                 {/* Action row 1: edit + publish */}
                                 <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
@@ -234,21 +369,65 @@ export default function AdminExamsPage() {
                                     <button
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => togglePublish(exam)}
-                                        disabled={activeExamAction === `publish-${exam.id}`}
+                                        // A draft exam with no paper or no schedule cannot be published —
+                                        // the server refuses it, so the button says so rather than failing.
+                                        disabled={
+                                            activeExamAction === `publish-${exam.id}` ||
+                                            (!exam.isPublished && !exam.canPublish)
+                                        }
+                                        title={
+                                            !exam.isPublished && exam.publishBlockedReason
+                                                ? exam.publishBlockedReason
+                                                : undefined
+                                        }
                                     >
-                                        {activeExamAction === `publish-${exam.id}` ? '...' : (exam.isPublished ? 'Unpublish' : 'Publish')}
+                                        {activeExamAction === `publish-${exam.id}`
+                                            ? '...'
+                                            : exam.isPublished
+                                              ? 'Unpublish'
+                                              : 'Publish'}
                                     </button>
                                 </div>
+
+                                {!exam.isPublished && exam.publishBlockedReason && (
+                                    <p className="hint hint-warn">⚠ {exam.publishBlockedReason}</p>
+                                )}
 
                                 {/* Action row 2: results toggle */}
                                 <button
                                     className="btn btn-secondary btn-sm"
                                     style={{ width: '100%' }}
                                     onClick={() => toggleResults(exam)}
-                                    disabled={activeExamAction === `result-${exam.id}`}
+                                    // Results cannot be released for an exam that has not finished.
+                                    disabled={
+                                        activeExamAction === `result-${exam.id}` ||
+                                        (!exam.isResultReleased && !exam.canReleaseResults)
+                                    }
+                                    title={
+                                        !exam.isResultReleased && exam.releaseBlockedReason
+                                            ? exam.releaseBlockedReason
+                                            : undefined
+                                    }
                                 >
-                                    {activeExamAction === `result-${exam.id}` ? '...' : (exam.isResultReleased ? 'Hide Results' : 'Release Results')}
+                                    {activeExamAction === `result-${exam.id}`
+                                        ? '...'
+                                        : exam.isResultReleased
+                                          ? 'Hide Results'
+                                          : 'Release Results'}
                                 </button>
+
+                                {!exam.isResultReleased && exam.releaseBlockedReason && (
+                                    <p className="hint hint-muted">🔒 {exam.releaseBlockedReason}</p>
+                                )}
+
+                                {/* Timings + slots (item 6) */}
+                                <a
+                                    href={`/exams/${exam.id}/schedule`}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}
+                                >
+                                    🗓 Edit Schedule &amp; Slots
+                                </a>
 
                                 {/* Manage Questions — primary CTA */}
                                 <a
@@ -259,12 +438,35 @@ export default function AdminExamsPage() {
                                     📚 Manage Questions &amp; Sections
                                 </a>
 
+                                {/* Retiring an exam. This — not Delete — is how an
+                                    exam is taken out of circulation: it keeps every
+                                    attempt, payment and certificate intact and is
+                                    reversible from the same button. */}
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ width: '100%' }}
+                                    onClick={() => toggleArchive(exam)}
+                                    disabled={activeExamAction === exam.id}
+                                    title={
+                                        exam.isArchived
+                                            ? 'Bring this exam back into the catalogue (as a draft)'
+                                            : 'Hide from students and from this list, without deleting anything'
+                                    }
+                                >
+                                    {activeExamAction === exam.id
+                                        ? '...'
+                                        : exam.isArchived
+                                          ? '♻ Restore Exam'
+                                          : '📦 Archive Exam'}
+                                </button>
+
                                 {/* Danger zone */}
                                 <button
                                     className="btn btn-danger btn-sm"
                                     style={{ width: '100%' }}
                                     onClick={() => deleteExam(exam.id)}
                                     disabled={activeExamAction === `delete-${exam.id}`}
+                                    title="Permanently removes the exam and everything attached to it. Prefer Archive."
                                 >
                                     {activeExamAction === `delete-${exam.id}` ? 'Deleting...' : '🗑 Delete Exam'}
                                 </button>

@@ -1,3 +1,4 @@
 # Covered by root .gitignore — kept for Next.js tooling compatibility
 .vercel
 next-env.d.ts
+.env*

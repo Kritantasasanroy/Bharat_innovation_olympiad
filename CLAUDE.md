@@ -43,3 +43,15 @@ You can run these commands directly inside your Claude Code session:
 * **`/project:beautify <path-to-file>`**: Upgrades a component or page to a high-end, premium aesthetic.
 * **`/project:design-audit <path-to-file-or-dir>`**: Audits the specified frontend files against Vercel's Web Interface Guidelines.
 
+## BIO pnpm Workspace (re-architecture to match the org repos)
+This repo now also contains a **pnpm workspace** that mirrors the five-repo BIO system at
+`github.com/bharat-innovation-olympiad` (`bio-contracts`, `bio-exam`, `bio-admin`, `bio-portal`, `bio-proctor`).
+
+* **Read first:** `AGENTS.md`, then `BIO-REPOS.md` before any cross-service work. PRD source of truth is `ai/output/prds/`; agent working rules are in `ai/steering/`.
+* **Layout:** `packages/*` (shared `@bio/*` contracts), `services/*` (Bun/Elysia + Drizzle, hexagonal `core`/`adapters`/`infra`), `apps/*` (Vite/React + Next.js). Folder = package name minus `@bio/`.
+* **Stack (new services):** Bun, Elysia, Drizzle ORM, Redis (ioredis), pino, zod, Biome (tabs, width 100, double quotes), Lefthook, `tsc`/`bun test`. **Not** NestJS/Prisma/ESLint.
+* **Boundaries:** `services/*/src/core` must not import framework/adapter code — enforced by `pnpm boundaries`.
+* **Legacy vs new:** `backend/` (NestJS+Prisma), `frontend/`, `admin-frontend/` are the **current production** apps and stay on npm — excluded from the workspace. New `services/*`/`apps/*` replace them PRD-by-PRD; retire a legacy app only once its replacement is at parity.
+* **Proctoring exception:** stays as the current client-side face-api.js implementation in `frontend/`. Do **not** build the Python `bio-proctor`.
+* **Verify workspace:** `pnpm install && pnpm verify` (typecheck + lint + test + contract + boundaries).
+

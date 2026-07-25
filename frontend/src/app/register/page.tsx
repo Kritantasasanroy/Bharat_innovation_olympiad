@@ -1,21 +1,16 @@
 'use client';
 
-import { APP_NAME, CLASS_BANDS, COMPANY_NAME } from '@/lib/constants';
+import { APP_NAME, CLASS_BANDS, COMPANY_NAME, TAGLINE } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { emailOtp } from '@/lib/auth-client';
-import { FormEvent, useState, useRef, useEffect } from 'react';
-import schoolsData from '@/data/schools.json';
-
-const SCHOOLS = (schoolsData as any[]).map((s: any) => ({
-    code: `SCH${String(s['Sr.']).padStart(3, '0')}`,
-    name: s['School Name'],
-    address: s['Address'],
-    pincode: s['Pincode'] ? String(s['Pincode']).trim() : ''
-}));
+import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
+import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
+import SchoolPicker from '@/components/SchoolPicker';
+import type { DirectorySchool } from '@/lib/schools';
+import { FormEvent, useState, useEffect } from 'react';
 
 type Step = 'details' | 'verify' | 'face';
 
@@ -27,20 +22,60 @@ export default function RegisterPage() {
         email: '',
         role: 'STUDENT' as const,
         classBand: 6,
-        schoolCode: '',
     });
+    const [school, setSchool] = useState<DirectorySchool | null>(null);
     const [otp, setOtp] = useState('');
-    const [schoolSearch, setSchoolSearch] = useState('');
-    const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
     const register = useAuthStore((s) => s.register);
     const router = useRouter();
-    const filteredSchools = SCHOOLS.filter(s =>
-        s.name.toLowerCase().includes(schoolSearch.toLowerCase())
-    );
+
+    // Optional mobile number, proven by an SMS code submitted with the form.
+    // number is submitted — an unverified one would let a student claim someone
+    // else's number and lock the real owner out of registering it.
+    const [phone, setPhone] = useState('');
+    const [phoneOtpCode, setPhoneOtpCode] = useState('');
+    const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+    const [phoneVerified, setPhoneVerified] = useState(false);
+    const [phoneBusy, setPhoneBusy] = useState(false);
+    const [phoneMsg, setPhoneMsg] = useState('');
+
+    /**
+     * Registration used to be SMS-only, so a student whose network drops the
+     * SMS could not create an account at all — the voice fallback existed on
+     * the login page and nowhere else. Both channels are offered here now.
+     */
+    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = 'sms') => {
+        setPhoneMsg('');
+        if (!isValidPhone(phone)) {
+            setPhoneMsg('Enter a valid mobile number.');
+            return;
+        }
+        setPhoneBusy(true);
+        try {
+            const { error: otpError } = await phoneOtp.sendOtp(phone, channel);
+            if (otpError) {
+                setPhoneMsg(
+                    otpError.message ||
+                        (channel === 'voice'
+                            ? 'Could not place the call.'
+                            : 'Could not send the code. Try “Get the code by call instead”.'),
+                );
+            } else {
+                setPhoneOtpSent(true);
+                setPhoneMsg(channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.');
+            }
+        } catch {
+            setPhoneMsg('Network error. Please try again.');
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
+
+    // No inline verify step: the code is submitted with the form and checked
+    // server-side at /auth/sync. Verifying here would consume the single-use
+    // code before registration could use it.
 
     // Mandatory face enrollment (step 3, after account creation)
     const [faceCameraOn, setFaceCameraOn] = useState(false);
@@ -81,20 +116,18 @@ export default function RegisterPage() {
         stopProctoring();
         setFaceCapturing(false);
         if (ok) {
-            router.push('/dashboard');
+            // Face enrollment is the last step, so this is where registration
+            // actually completes — there is no /register/success page. The beta
+            // feedback prompt goes here, and hands off to the dashboard.
+            router.push('/feedback/registration');
         } else {
             setFaceMsg('Enrollment failed. Please try again.');
         }
     };
 
+    // A partner may link straight here (`/register?ref=CODE`).
     useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setShowSchoolDropdown(false);
-            }
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        captureReferralFromUrl();
     }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -153,8 +186,19 @@ export default function RegisterPage() {
 
             // OTP verified ✓ — now create the user in our backend.
             // /auth/sync is a public endpoint that takes email in the body.
-            const { schoolCode, ...profileData } = formData;
-            await register({ ...profileData, ...(schoolCode ? { schoolCode } : {}) });
+            // A partner referral code (`?ref=`) rides along so the backend can
+            // credit the signup — and later the paid conversion — to that partner.
+            const referralCode = getReferralCode();
+            await register({
+                ...formData,
+                ...(school ? { schoolCode: school.code } : {}),
+                ...(referralCode ? { referralCode } : {}),
+                // Both, or neither — the backend rejects a phone without a code.
+                ...(phone.trim() && phoneOtpCode.length === 6
+                    ? { phone, phoneCode: phoneOtpCode }
+                    : {}),
+            });
+            clearReferralCode();
 
             // Account created — face enrollment is mandatory for new students
             // before they can reach the dashboard.
@@ -194,7 +238,7 @@ export default function RegisterPage() {
             <div className="auth-container animate-fade-in">
                 <div className="auth-header">
                     <div className="auth-logo"><img src="/bio-logo.png" alt={APP_NAME} style={{ height: '72px', width: 'auto' }} /></div>
-                    <p className="brand-tagline"><span>Where Young Minds Build the Future</span></p>
+                    <p className="brand-tagline"><span>{TAGLINE}</span></p>
                     <h1 className="auth-title">{APP_NAME}</h1>
                     <p className="auth-company">
                         <span>by</span>
@@ -282,66 +326,73 @@ export default function RegisterPage() {
                             />
                         </div>
 
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="classBand">Class</label>
-                                <select
-                                    id="classBand" name="classBand" className="input-field"
-                                    value={formData.classBand} onChange={handleChange}
-                                >
-                                    {CLASS_BANDS.map((c) => (
-                                        <option key={c} value={c}>Class {c}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="input-group" ref={dropdownRef} style={{ position: 'relative' }}>
-                                <label className="input-label" htmlFor="schoolSearch">School <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="phone">
+                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional — lets you sign in by OTP)</span>
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <input
-                                    id="schoolSearch" type="text" className="input-field"
-                                    placeholder="Search school or leave blank"
-                                    value={schoolSearch}
-                                    onChange={(e) => {
-                                        setSchoolSearch(e.target.value);
-                                        setShowSchoolDropdown(true);
-                                        if (formData.schoolCode) setFormData(prev => ({ ...prev, schoolCode: '' }));
-                                    }}
-                                    onFocus={() => setShowSchoolDropdown(true)}
+                                    id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
+                                    className="input-field" placeholder="+91 98765 43210"
+                                    value={phone}
+                                    onChange={(e) => { setPhone(e.target.value); setPhoneOtpSent(false); setPhoneMsg(''); }}
+                                    suppressHydrationWarning
                                 />
-                                {showSchoolDropdown && (
-                                    <div style={{
-                                        position: 'absolute', top: '100%', left: 0, right: 0,
-                                        background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
-                                        borderRadius: '8px', zIndex: 10, maxHeight: '200px', overflowY: 'auto',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '4px'
-                                    }}>
-                                        {filteredSchools.length > 0 ? filteredSchools.map(school => (
-                                            <div
-                                                key={school.code}
-                                                style={{ padding: '0.75rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '2px' }}
-                                                onClick={() => {
-                                                    setSchoolSearch(school.name);
-                                                    setFormData(prev => ({ ...prev, schoolCode: school.code }));
-                                                    setShowSchoolDropdown(false);
-                                                }}
-                                                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                                            >
-                                                <span style={{ fontWeight: 500 }}>{school.name}</span>
-                                                {(school.address || school.pincode) && (
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                                                        {school.address}{school.address && school.pincode ? ', ' : ''}{school.pincode}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )) : (
-                                            <div style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
-                                                No schools found. Leave blank for Independent.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                <button
+                                    type="button" className="btn"
+                                    onClick={() => handleSendPhoneOtp('sms')}
+                                    disabled={phoneBusy || !phone.trim()}
+                                    style={{ whiteSpace: 'nowrap', background: 'var(--bg-tertiary, rgba(127,127,127,0.15))', color: 'var(--text-primary)' }}
+                                >
+                                    {phoneOtpSent ? 'Resend' : 'Send code'}
+                                </button>
                             </div>
+
+                            {/* The SMS route can be blocked by the carrier with no
+                                signal to us, so the call fallback is always offered
+                                rather than only appearing after a failure. */}
+                            <button
+                                type="button"
+                                onClick={() => handleSendPhoneOtp('voice')}
+                                disabled={phoneBusy || !phone.trim()}
+                                style={{
+                                    marginTop: '0.5rem', background: 'none', border: 'none', padding: 0,
+                                    color: 'var(--text-secondary)', fontSize: '0.85rem',
+                                    textDecoration: 'underline', cursor: phone.trim() ? 'pointer' : 'not-allowed',
+                                }}
+                            >
+                                📞 Get the code by call instead
+                            </button>
+
+                            {phoneOtpSent && (
+                                <input
+                                    type="text" inputMode="numeric" className="input-field"
+                                    placeholder="6-digit code" maxLength={6} value={phoneOtpCode}
+                                    onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
+                                />
+                            )}
+
+                            {phoneMsg && (
+                                <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {phoneMsg}
+                                </p>
+                            )}
                         </div>
+
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="classBand">Class</label>
+                            <select
+                                id="classBand" name="classBand" className="input-field"
+                                value={formData.classBand} onChange={handleChange}
+                            >
+                                {CLASS_BANDS.map((c) => (
+                                    <option key={c} value={c}>Class {c}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <SchoolPicker value={school} onChange={setSchool} />
 
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
                             {isLoading ? 'Sending Code...' : 'Send Verification Code →'}

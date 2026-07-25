@@ -1,6 +1,8 @@
 // Application constants
 
 export const APP_NAME = 'Bharat Innovation Olympiad';
+/** The brand motto, as it appears in the logo lockup. Keep in step with the student app. */
+export const TAGLINE = 'Become Future Ready';
 export const APP_SHORT = 'BIO';
 export const COMPANY_NAME = 'Lemon Ideas';
 

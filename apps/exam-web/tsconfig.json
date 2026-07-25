@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"jsx": "react-jsx",
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"paths": {
+			"@features/*": ["src/features/*"],
+			"@shared/*": ["src/shared/*"]
+		}
+	},
+	"include": ["src/**/*.ts", "src/**/*.tsx", "vite-env.d.ts"]
+}

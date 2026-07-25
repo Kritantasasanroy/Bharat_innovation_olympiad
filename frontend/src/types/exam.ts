@@ -16,6 +16,12 @@ export interface Exam {
     easyPct: number;
     mediumPct: number;
     hardPct: number;
+    /** Retired from the catalogue. Never returned to students. */
+    isArchived?: boolean;
+    /** The rehearsal paper — full proctored environment, never scored. */
+    isTrial?: boolean;
+    /** Whether a student must sit the trial before this exam will start. */
+    requiresTrial?: boolean;
     sections: ExamSection[];
     instances?: ExamInstance[];
     createdAt: string;
@@ -44,10 +50,41 @@ export interface Question {
     marks: number;
     negativeMarks: number;
     timeLimitSecs?: number;
+    /** Legacy single-media slot, kept for questions authored before the split. */
     mediaUrl?: string;
     mediaType?: MediaType;
+    /**
+     * A question can carry a picture **and** a video at the same time, so these
+     * are two independent fields rather than another `mediaUrl`/`mediaType` pair.
+     * Both are public object-storage URLs.
+     */
+    imageUrl?: string | null;
+    videoUrl?: string | null;
     tags: string[];
     explanation?: string;
+
+    /**
+     * Which exam section this question was delivered in. Stamped on by the
+     * server at attempt-start (it is a property of the question's *placement*,
+     * not of the question itself, so it does not exist on the bank row). The
+     * player groups by these to sit the paper one section at a time.
+     */
+    sectionId?: string;
+    sectionTitle?: string;
+    sectionIndex?: number;
+
+    /** Olympiad question-database fields the student is shown. */
+    externalId?: string | null;
+    partCode?: string | null;
+    partName?: string | null;
+    sectionCode?: string | null;
+    /** The finer topic grouping within a pillar, e.g. "Opportunity Spotting". */
+    sectionName?: string | null;
+    topic?: string | null;
+    questionCategory?: string | null;
+    bloomLevel?: string | null;
+    /** Shown in the post-exam review alongside `explanation`. */
+    futureReadyInsight?: string | null;
 }
 
 export interface ExamInstance {

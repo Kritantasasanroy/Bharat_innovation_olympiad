@@ -7,17 +7,52 @@ import {
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import Razorpay from 'razorpay';
+import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessPassService } from './access-pass.service';
 
 @Injectable()
 export class PaymentService {
     private razorpay: Razorpay;
 
-    constructor(private prisma: PrismaService) {
+    constructor(
+        private prisma: PrismaService,
+        private partnerAdminApi: PartnerAdminApiClient,
+        private accessPassService: AccessPassService,
+    ) {
         this.razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID!,
             key_secret: process.env.RAZORPAY_KEY_SECRET!,
         });
+    }
+
+    /**
+     * Credit a paid conversion to the referring partner's campaign, if the
+     * student arrived via a referral link (PRD-046 attribution).
+     *
+     * Best-effort and idempotent: admin-api enforces one credit per
+     * student+registration, so firing from both the webhook and the client-side
+     * verify path is safe, and any failure is swallowed rather than failing the
+     * payment.
+     */
+    private async creditReferral(paymentId: string) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { user: true, booking: true },
+        });
+        if (!payment?.user?.referralCode) return;
+
+        // The booking is the "registration" being paid for; fall back to the
+        // payment id so a booking-less (direct) payment still credits exactly once.
+        const registrationId = payment.booking?.id ?? payment.id;
+        // Not awaited: commission credit must never hold up a payment callback.
+        // `tryCapturePaidConversion` never rejects.
+        void this.partnerAdminApi.tryCapturePaidConversion(
+            payment.user.referralCode,
+            payment.userId,
+            registrationId,
+            payment.amount,
+        );
     }
 
     async createOrder(userId: string, bookingId: string, couponCode?: string) {
@@ -125,12 +160,20 @@ export class PaymentService {
     }
 
     verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
-        const secret = process.env.RAZORPAY_WEBHOOK_SECRET!;
+        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        if (!secret || !rawBody) return false;
+
         const expected = crypto
             .createHmac('sha256', secret)
             .update(rawBody)
             .digest('hex');
-        return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+
+        const a = Buffer.from(expected);
+        const b = Buffer.from(signature ?? '');
+        // timingSafeEqual throws when the lengths differ, which turns a
+        // malformed or absent signature into a 500 instead of a clean reject.
+        if (a.length !== b.length) return false;
+        return crypto.timingSafeEqual(a, b);
     }
 
     async handleWebhookEvent(event: any) {
@@ -156,11 +199,20 @@ export class PaymentService {
     }
 
     private async onPaymentCaptured(entity: any) {
-        const payment = await this.prisma.payment.findUnique({
-            where: { razorpayOrderId: entity.order_id },
-            include: { booking: true },
-        });
-        if (!payment) return;
+        const payment = entity.order_id
+            ? await this.prisma.payment.findUnique({
+                  where: { razorpayOrderId: entity.order_id },
+                  include: { booking: true, accessPass: true },
+              })
+            : null;
+
+        // Not an order this backend created — it's a payment made straight on
+        // the shared Razorpay payment page (the ₹1 access link). Match the buyer
+        // by the email/phone they entered and unlock their pass.
+        if (!payment) {
+            await this.accessPassService.grantFromSharedLink(entity);
+            return;
+        }
 
         await this.prisma.payment.update({
             where: { id: payment.id },
@@ -177,6 +229,15 @@ export class PaymentService {
                 data: { status: BookingStatus.CONFIRMED },
             });
         }
+
+        // An access-pass order confirms the same way a booking does. This is
+        // the authoritative path — it lands even if the student closes the tab
+        // before the browser callback fires, and is idempotent with it.
+        if (payment.accessPass) {
+            await this.accessPassService.activate(payment.id, entity.id);
+        }
+
+        await this.creditReferral(payment.id);
     }
 
     private async onPaymentFailed(entity: any) {
@@ -191,6 +252,16 @@ export class PaymentService {
             where: { razorpayPaymentId: entity.payment_id },
             data: { status: PaymentStatus.REFUNDED },
         });
+
+        // A refunded access pass must stop unlocking exams, otherwise a student
+        // could pay, sit everything, refund, and keep the access.
+        const refunded = await this.prisma.payment.findFirst({
+            where: { razorpayPaymentId: entity.payment_id },
+            select: { id: true },
+        });
+        if (refunded) {
+            await this.accessPassService.revokeByPaymentId(refunded.id);
+        }
     }
 
     // Called from frontend after checkout.js success to double-verify before showing success screen
@@ -227,6 +298,8 @@ export class PaymentService {
                 data: { status: BookingStatus.CONFIRMED },
             });
         }
+
+        if (payment) await this.creditReferral(payment.id);
 
         return { success: true, payment };
     }
