@@ -11,14 +11,16 @@ codebase; 4–7 are the actual deploy.
 
 ## 1. Share the Google Drive gallery folder
 
-Folder: <https://drive.google.com/drive/folders/1FmUnZoyg_mLpCaVwdeIzcPVB7HNvlSGr>
+Folder: <https://drive.google.com/drive/folders/1ahzAaW0dOaVpa5FwPO9rPldUexriXV2P>
 
 Set it to **Anyone with the link → Viewer**.
 
 This is a hard prerequisite. 19 of the 50 Grade 8 questions carry an image, and
 only 5 of those name a Drive link — the other 14 resolve by filename, which
-means the folder has to be *listable*. As of writing, neither the folder nor any
-file in it is readable, so the importer would leave those 19 questions blank.
+means the folder has to be *listable*. **As of the last check this folder is
+still private**: an unauthenticated request to it redirects to a Google sign-in
+page rather than rendering, which is exactly what the API key will hit. Until
+that changes the importer will leave those 19 questions blank.
 
 Verify from the admin portal: **Media Gallery → Sync from Drive** reports a file
 count rather than an error.
@@ -67,7 +69,7 @@ Add to Render (backend service). All are declared in `render.yaml` and
 | Key | Value |
 |---|---|
 | `GOOGLE_DRIVE_API_KEY` | from step 2 |
-| `GOOGLE_DRIVE_GALLERY_FOLDER_ID` | `1FmUnZoyg_mLpCaVwdeIzcPVB7HNvlSGr` |
+| `GOOGLE_DRIVE_GALLERY_FOLDER_ID` | `1ahzAaW0dOaVpa5FwPO9rPldUexriXV2P` |
 | `TWOFACTOR_OTP_TEMPLATE` | approved DLT template name, or `AUTOGEN` |
 | `TWOFACTOR_VERIFY_DELIVERY` | `true` |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | existing values — these were never in the repo, only the dashboard |
