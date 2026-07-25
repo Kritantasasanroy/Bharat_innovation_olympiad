@@ -48,7 +48,6 @@ export class PhoneOtpService {
             );
         }
 
-        const code = this.generateCode();
         const expiresAt = new Date(Date.now() + CODE_TTL_MS);
 
         // Supersede any outstanding code so only the newest one works.
@@ -57,17 +56,26 @@ export class PhoneOtpService {
             data: { consumedAt: new Date() },
         });
 
-        await this.prisma.phoneOtp.create({
-            data: { phone, codeHash: this.hash(code), expiresAt },
-        });
-
+        // SMS: 2Factor generates and sends the code (a custom code no-ops on an
+        // account with its own DLT sender), and we adopt what it returns. Voice:
+        // we generate the code and have it read out. Either way only the hash is
+        // stored and we verify it ourselves.
+        //
         // Deliberately not caught: the student is waiting on this code, so a
         // delivery failure must surface rather than leave them at a dead
         // code-entry box.
+        let code: string;
         if (channel === 'voice') {
+            code = this.generateCode();
+            await this.prisma.phoneOtp.create({
+                data: { phone, codeHash: this.hash(code), expiresAt },
+            });
             await this.notifications.sendOtpVoice(phone, code);
         } else {
-            await this.notifications.sendOtpSms(phone, code);
+            code = await this.notifications.sendOtpSms(phone);
+            await this.prisma.phoneOtp.create({
+                data: { phone, codeHash: this.hash(code), expiresAt },
+            });
         }
 
         return { sent: true, channel, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };

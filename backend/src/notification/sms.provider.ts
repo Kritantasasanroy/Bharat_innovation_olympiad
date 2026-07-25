@@ -1,18 +1,26 @@
 import { Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 
 export interface SmsProvider {
     readonly name: string;
     /**
-     * Deliver a one-time code.
+     * Send an OTP by SMS and return the code that was delivered.
      *
-     * `code` is passed separately from any message body because Indian OTP
-     * routes take it as a template variable, not as free-form text — the
-     * wording itself belongs to the provider's DLT-registered template.
+     * The code is *returned* rather than passed in because 2Factor only actually
+     * sends when it generates the code itself (AUTOGEN). A custom code silently
+     * no-ops on accounts that use their own DLT sender — it returns "Success" but
+     * is never queued, charged, or logged. The caller hashes and verifies the
+     * returned code, so all OTP verification stays server-side.
      */
-    sendOtp(toE164: string, code: string): Promise<void>;
+    sendSmsOtp(toE164: string): Promise<string>;
 
-    /** Deliver the same one-time code by an automated voice call instead of SMS. */
+    /** Read a caller-supplied code out over an automated voice call. */
     sendOtpVoice(toE164: string, code: string): Promise<void>;
+}
+
+/** A 6-digit code, for providers that let us supply our own (console, Fast2SMS). */
+function genOtp(): string {
+    return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
 /** Indian OTP routes address the subscriber number without the country code. */
@@ -26,8 +34,10 @@ export class ConsoleSmsProvider implements SmsProvider {
     readonly name = 'console';
     private readonly logger = new Logger('SmsProvider:console');
 
-    async sendOtp(toE164: string, code: string): Promise<void> {
-        this.logger.log(`[not sent — no provider configured] otp for ${toE164}: ${code}`);
+    async sendSmsOtp(toE164: string): Promise<string> {
+        const code = genOtp();
+        this.logger.log(`[not sent — no provider configured] sms otp for ${toE164}: ${code}`);
+        return code;
     }
 
     async sendOtpVoice(toE164: string, code: string): Promise<void> {
@@ -38,12 +48,13 @@ export class ConsoleSmsProvider implements SmsProvider {
 /**
  * 2Factor (https://2factor.in) — OTP-specialised Indian gateway.
  *
- * Sends under 2Factor's own DLT-registered header, so it works without the
- * 2–4 week TRAI/DLT entity+template registration a self-registered sender ID
- * would need. Billed per *delivered* message.
- *
- * Endpoint: /API/V1/{apiKey}/SMS/{number}/{otp}/{template}
- * A 200 can still carry Status: "Error", so the body is checked too.
+ * SMS OTP is sent via **AUTOGEN2**: 2Factor generates the code, delivers it under
+ * the account's DLT template, and returns it in the response. This is deliberate.
+ * Once an account registers its own DLT sender, *custom*-value OTP sends stop
+ * working — they return "Success" but are never queued or charged — whereas
+ * AUTOGEN sends deliver normally. We adopt 2Factor's code and verify it
+ * ourselves, so nothing else about the OTP flow changes. Voice OTP still takes a
+ * caller-supplied code (custom-value voice works fine).
  */
 export class TwoFactorSmsProvider implements SmsProvider {
     readonly name = '2factor';
@@ -54,37 +65,36 @@ export class TwoFactorSmsProvider implements SmsProvider {
         private readonly templateName: string,
     ) {}
 
-    async sendOtp(toE164: string, code: string): Promise<void> {
+    async sendSmsOtp(toE164: string): Promise<string> {
         const number = toIndianLocal(toE164);
-        // A fresh 2Factor account has no custom template yet, and passing a
-        // template name that doesn't exist is rejected. "AUTOGEN"/blank means
-        // "use 2Factor's own pre-approved default OTP template" — the
-        // segment-less form `/SMS/{number}/{otp}`. A real named template is
-        // only appended once the account actually has one.
+        // Use the approved named template when configured; else 2Factor's default.
+        const useDefaultTemplate = !this.templateName || /^autogen$/i.test(this.templateName);
         const base =
             `https://2factor.in/API/V1/${encodeURIComponent(this.apiKey)}/SMS/` +
-            `${encodeURIComponent(number)}/${encodeURIComponent(code)}`;
-        const useDefaultTemplate =
-            !this.templateName || /^autogen$/i.test(this.templateName);
-        const url = useDefaultTemplate
-            ? base
-            : `${base}/${encodeURIComponent(this.templateName)}`;
+            `${encodeURIComponent(number)}/AUTOGEN2`;
+        const url = useDefaultTemplate ? base : `${base}/${encodeURIComponent(this.templateName)}`;
 
         const res = await fetch(url, { method: 'GET' });
         const body = await res.text().catch(() => '');
-
         if (!res.ok) {
             throw new Error(`2Factor responded ${res.status}: ${body.slice(0, 300)}`);
         }
-        // Success looks like {"Status":"Success","Details":"<session id>"}.
-        if (!/"Status"\s*:\s*"Success"/i.test(body)) {
+
+        let parsed: { Status?: string; OTP?: string } = {};
+        try {
+            parsed = JSON.parse(body);
+        } catch {
+            /* fall through to the validation below */
+        }
+        if (!/^success$/i.test(String(parsed.Status ?? '')) || !parsed.OTP) {
             throw new Error(`2Factor rejected the send: ${body.slice(0, 300)}`);
         }
-        this.logger.log(`OTP sent to ${toE164}`);
+        this.logger.log(`OTP SMS sent to ${toE164}`);
+        return String(parsed.OTP);
     }
 
     /**
-     * Deliver the code as an automated phone call.
+     * Deliver a caller-supplied code as an automated phone call.
      * Endpoint: /API/V1/{apiKey}/VOICE/{number}/{otp} — reads the digits aloud.
      * Billed against the separate Voice-OTP balance, not the SMS one.
      */
@@ -96,7 +106,6 @@ export class TwoFactorSmsProvider implements SmsProvider {
 
         const res = await fetch(url, { method: 'GET' });
         const body = await res.text().catch(() => '');
-
         if (!res.ok) {
             throw new Error(`2Factor (voice) responded ${res.status}: ${body.slice(0, 300)}`);
         }
@@ -108,11 +117,8 @@ export class TwoFactorSmsProvider implements SmsProvider {
 }
 
 /**
- * Fast2SMS (https://fast2sms.com) — alternative Indian gateway.
- *
- * Its `otp` route also sends under Fast2SMS's own registered header, so no
- * own-DLT registration is required. Kept as a swap-in second option so a
- * delivery problem with one gateway is a config change, not a code change.
+ * Fast2SMS (https://fast2sms.com) — alternative Indian gateway. Its `otp` route
+ * accepts a caller-supplied code, so we generate it, send it, and return it.
  */
 export class Fast2SmsProvider implements SmsProvider {
     readonly name = 'fast2sms';
@@ -120,7 +126,8 @@ export class Fast2SmsProvider implements SmsProvider {
 
     constructor(private readonly apiKey: string) {}
 
-    async sendOtp(toE164: string, code: string): Promise<void> {
+    async sendSmsOtp(toE164: string): Promise<string> {
+        const code = genOtp();
         const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
             method: 'POST',
             headers: {
@@ -134,14 +141,14 @@ export class Fast2SmsProvider implements SmsProvider {
             }),
         });
         const body = await res.text().catch(() => '');
-
         if (!res.ok) {
             throw new Error(`Fast2SMS responded ${res.status}: ${body.slice(0, 300)}`);
         }
         if (!/"return"\s*:\s*true/i.test(body)) {
             throw new Error(`Fast2SMS rejected the send: ${body.slice(0, 300)}`);
         }
-        this.logger.log(`OTP sent to ${toE164}`);
+        this.logger.log(`OTP SMS sent to ${toE164}`);
+        return code;
     }
 
     async sendOtpVoice(_toE164: string, _code: string): Promise<void> {

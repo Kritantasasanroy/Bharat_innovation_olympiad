@@ -69,11 +69,17 @@ export class NotificationService implements OnModuleInit {
      * student is waiting on this code, and silently swallowing the error would
      * leave them staring at a code-entry box that can never be satisfied.
      */
-    async sendOtpSms(toE164: string, code: string): Promise<void> {
-        await this.sms.sendOtp(toE164, code);
+    /**
+     * Send an OTP SMS and return the code that was delivered.
+     *
+     * 2Factor mints the code (custom-value SMS no-ops on a DLT-sender account),
+     * so the caller adopts and verifies the returned code.
+     */
+    async sendOtpSms(toE164: string): Promise<string> {
+        return this.sms.sendSmsOtp(toE164);
     }
 
-    /** Same code, delivered as an automated voice call. Failures propagate. */
+    /** Read a caller-supplied code out as an automated voice call. Failures propagate. */
     async sendOtpVoice(toE164: string, code: string): Promise<void> {
         await this.sms.sendOtpVoice(toE164, code);
     }
