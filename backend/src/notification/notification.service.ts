@@ -142,24 +142,43 @@ export class NotificationService implements OnModuleInit {
     }
 
     /**
+     * Whether admin free-text SMS can be sent at all.
+     *
+     * Free-text (non-OTP) SMS to Indian numbers is a DLT-regulated route: it needs
+     * the account's own registered sender id AND an approved template. The OTP
+     * template can't carry arbitrary text. If either env var is missing there is
+     * nothing to send through, so callers should skip the blast and tell the admin
+     * exactly what to configure instead of firing doomed requests.
+     */
+    isAdminSmsConfigured(): boolean {
+        return Boolean(
+            process.env.TWOFACTOR_API_KEY?.trim() &&
+                process.env.TWOFACTOR_SENDER_ID?.trim() &&
+                process.env.TWOFACTOR_SMS_TEMPLATE?.trim(),
+        );
+    }
+
+    /**
      * Send an admin-composed SMS to one number via 2Factor's transactional route.
      *
-     * Unlike OTP (which rides 2Factor's own DLT-registered template), free-text
-     * transactional SMS in India needs the account's **own** DLT sender id +
-     * approved template. So this needs `TWOFACTOR_SENDER_ID` and
-     * `TWOFACTOR_SMS_TEMPLATE` (a template whose single variable is the message).
-     * Without them, it logs and reports failure rather than silently dropping.
+     * The admin's typed message is dropped verbatim into the template's single
+     * variable, so a catch-all `{#var#}` template sends whatever was written. On
+     * failure it returns the reason (not just `false`) so the caller can show the
+     * admin *why* a send failed rather than a bare count.
      */
-    async sendAdminSms(toE164: string, message: string): Promise<boolean> {
+    async sendAdminSms(
+        toE164: string,
+        message: string,
+    ): Promise<{ ok: boolean; error?: string }> {
         const apiKey = process.env.TWOFACTOR_API_KEY?.trim();
         const sender = process.env.TWOFACTOR_SENDER_ID?.trim();
         const template = process.env.TWOFACTOR_SMS_TEMPLATE?.trim();
 
         if (!apiKey || !sender || !template) {
-            this.logger.warn(
-                `SMS to ${toE164} not sent — TWOFACTOR_SENDER_ID / TWOFACTOR_SMS_TEMPLATE not configured.`,
-            );
-            return false;
+            const reason =
+                'SMS sender ID / template not configured (TWOFACTOR_SENDER_ID, TWOFACTOR_SMS_TEMPLATE).';
+            this.logger.warn(`SMS to ${toE164} not sent — ${reason}`);
+            return { ok: false, error: reason };
         }
 
         const number = toIndianLocal(toE164);
@@ -173,12 +192,15 @@ export class NotificationService implements OnModuleInit {
             const body = await res.text().catch(() => '');
             // A 200 can still carry Status:"Error" (bad template, DLT mismatch…).
             if (!res.ok || /"Status"\s*:\s*"Error"/i.test(body)) {
-                throw new Error(`2Factor ${res.status}: ${body.slice(0, 200)}`);
+                const reason = `2Factor ${res.status}: ${body.slice(0, 200)}`;
+                this.logger.error(`Admin SMS to ${toE164} failed: ${reason}`);
+                return { ok: false, error: reason };
             }
-            return true;
+            return { ok: true };
         } catch (err) {
-            this.logger.error(`Admin SMS to ${toE164} failed: ${(err as Error).message}`);
-            return false;
+            const reason = (err as Error).message;
+            this.logger.error(`Admin SMS to ${toE164} failed: ${reason}`);
+            return { ok: false, error: reason };
         }
     }
 }

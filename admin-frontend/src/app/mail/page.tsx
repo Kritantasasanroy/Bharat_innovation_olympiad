@@ -16,6 +16,7 @@ interface ChannelResult {
     total: number;
     sent: number;
     failed: number;
+    note?: string;
 }
 interface SendResult {
     email?: ChannelResult;
@@ -266,6 +267,16 @@ export default function AdminMailPage() {
                                 {result.email && `Email: ${result.email.sent}/${result.email.total} delivered${result.email.failed ? `, ${result.email.failed} failed` : ''}. `}
                                 {result.sms && `SMS: ${result.sms.sent}/${result.sms.total} delivered${result.sms.failed ? `, ${result.sms.failed} failed` : ''}.`}
                             </span>
+                            {(result.sms?.note || result.email?.note) && (
+                                <div style={{ marginTop: 'var(--space-2)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                                    {result.sms?.note && (
+                                        <div style={{ color: 'var(--color-warning, #b45309)' }}>⚠️ SMS: {result.sms.note}</div>
+                                    )}
+                                    {result.email?.note && (
+                                        <div style={{ color: 'var(--color-warning, #b45309)' }}>⚠️ Email: {result.email.note}</div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 

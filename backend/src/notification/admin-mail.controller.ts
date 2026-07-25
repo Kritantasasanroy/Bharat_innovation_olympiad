@@ -20,6 +20,8 @@ interface ChannelResult {
     total: number;
     sent: number;
     failed: number;
+    /** First failure reason, surfaced to the admin so "failed" isn't a dead end. */
+    note?: string;
 }
 
 /**
@@ -80,16 +82,20 @@ export class AdminMailController {
     /** Send to a list in small concurrent batches, counting outcomes. */
     private async blast(
         recipients: string[],
-        send: (to: string) => Promise<boolean>,
+        send: (to: string) => Promise<{ ok: boolean; error?: string }>,
     ): Promise<ChannelResult> {
         const result: ChannelResult = { total: recipients.length, sent: 0, failed: 0 };
         const CHUNK = 5;
         for (let i = 0; i < recipients.length; i += CHUNK) {
             const batch = recipients.slice(i, i + CHUNK);
             const outcomes = await Promise.all(batch.map(send));
-            for (const ok of outcomes) {
-                if (ok) result.sent += 1;
-                else result.failed += 1;
+            for (const o of outcomes) {
+                if (o.ok) {
+                    result.sent += 1;
+                } else {
+                    result.failed += 1;
+                    if (!result.note && o.error) result.note = o.error;
+                }
             }
         }
         return result;
@@ -125,14 +131,33 @@ export class AdminMailController {
             const subject = dto.subject?.trim();
             if (!subject) throw new BadRequestException('A subject is required to send email.');
             const emails = await this.resolveEmails(dto);
-            out.email = await this.blast(emails, (to) =>
-                this.notifications.sendAdminBroadcast(to, subject, dto.message),
-            );
+            out.email = await this.blast(emails, async (to) => ({
+                ok: await this.notifications.sendAdminBroadcast(to, subject, dto.message),
+                error: 'Email provider rejected the message.',
+            }));
         }
 
         if (wantSms) {
             const phones = await this.resolvePhones(dto);
-            out.sms = await this.blast(phones, (to) => this.notifications.sendAdminSms(to, dto.message));
+            // Free-text SMS in India needs a DLT sender id + template. If those
+            // aren't set there's nothing to send through, so skip the doomed
+            // requests and tell the admin exactly what to configure.
+            if (!this.notifications.isAdminSmsConfigured()) {
+                out.sms = {
+                    total: phones.length,
+                    sent: 0,
+                    failed: phones.length,
+                    note:
+                        'SMS is not set up yet. Free-text SMS to Indian numbers needs a DLT sender ID ' +
+                        'and a single-variable transactional template on the server — the OTP template ' +
+                        'cannot carry announcements. Register a catch-all "{#var#}" template and set ' +
+                        'TWOFACTOR_SENDER_ID + TWOFACTOR_SMS_TEMPLATE.',
+                };
+            } else {
+                out.sms = await this.blast(phones, (to) =>
+                    this.notifications.sendAdminSms(to, dto.message),
+                );
+            }
         }
 
         return out;
