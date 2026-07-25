@@ -23,7 +23,10 @@ import {
 export class NotificationService implements OnModuleInit {
     private readonly logger = new Logger(NotificationService.name);
     private email: EmailProvider = new ConsoleEmailProvider();
+    // SMS OTP and voice OTP are tracked separately: only 2Factor does voice, so a
+    // switch of the SMS gateway (e.g. to Fast2SMS) must not take voice down with it.
     private sms: SmsProvider = new ConsoleSmsProvider();
+    private voice: SmsProvider = new ConsoleSmsProvider();
 
     onModuleInit() {
         const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -45,20 +48,33 @@ export class NotificationService implements OnModuleInit {
         // registration a self-registered sender ID would require.
         const twoFactorKey = process.env.TWOFACTOR_API_KEY?.trim();
         const fast2smsKey = process.env.FAST2SMS_API_KEY?.trim();
+        const preferred = process.env.SMS_PROVIDER?.trim().toLowerCase();
 
-        if (twoFactorKey) {
-            this.sms = new TwoFactorSmsProvider(
-                twoFactorKey,
-                process.env.TWOFACTOR_OTP_TEMPLATE?.trim() || 'AUTOGEN',
-            );
-            this.logger.log('SMS provider: 2factor');
-        } else if (fast2smsKey) {
-            this.sms = new Fast2SmsProvider(fast2smsKey);
-            this.logger.log('SMS provider: fast2sms');
-        } else {
-            this.logger.warn(
-                'TWOFACTOR_API_KEY / FAST2SMS_API_KEY not set — OTPs will be logged, not delivered.',
-            );
+        const twoFactor = twoFactorKey
+            ? new TwoFactorSmsProvider(
+                  twoFactorKey,
+                  process.env.TWOFACTOR_OTP_TEMPLATE?.trim() || 'AUTOGEN',
+              )
+            : null;
+        const fast2sms = fast2smsKey ? new Fast2SmsProvider(fast2smsKey) : null;
+
+        // SMS OTP gateway: honour an explicit SMS_PROVIDER override, else prefer
+        // 2Factor, else Fast2SMS. Set SMS_PROVIDER=fast2sms to move SMS off a
+        // 2Factor account whose sends report "delivered" but never arrive.
+        if (preferred === 'fast2sms' && fast2sms) this.sms = fast2sms;
+        else if (preferred === '2factor' && twoFactor) this.sms = twoFactor;
+        else if (twoFactor) this.sms = twoFactor;
+        else if (fast2sms) this.sms = fast2sms;
+
+        // Voice OTP: only 2Factor offers it, so keep it on 2Factor no matter which
+        // gateway sends SMS. Falls back to the SMS provider only if 2Factor is absent.
+        this.voice = twoFactor ?? this.sms;
+
+        this.logger.log(
+            `SMS provider: ${this.sms.name} · voice provider: ${this.voice.name}`,
+        );
+        if (this.sms.name === 'console') {
+            this.logger.warn('No SMS gateway configured — OTPs will be logged, not delivered.');
         }
     }
 
@@ -81,7 +97,7 @@ export class NotificationService implements OnModuleInit {
 
     /** Read a caller-supplied code out as an automated voice call. Failures propagate. */
     async sendOtpVoice(toE164: string, code: string): Promise<void> {
-        await this.sms.sendOtpVoice(toE164, code);
+        await this.voice.sendOtpVoice(toE164, code);
     }
 
     private get appUrl(): string {
