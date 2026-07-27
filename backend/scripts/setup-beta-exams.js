@@ -19,7 +19,28 @@
  */
 
 const path = require('path');
-const XLSX = require(path.resolve(__dirname, '..', '..', 'node_modules', 'xlsx'));
+
+/**
+ * `xlsx` is a dependency of admin-frontend, not backend, so it is not resolvable
+ * from here by name. Try the places it actually lives rather than hard-coding
+ * one — the old seed script pointed at a repo-root `node_modules/xlsx` that does
+ * not exist, and died before printing anything useful.
+ */
+const XLSX = (() => {
+    const candidates = [
+        path.resolve(__dirname, '..', '..', 'admin-frontend', 'node_modules', 'xlsx'),
+        path.resolve(__dirname, '..', '..', 'node_modules', 'xlsx'),
+        path.resolve(__dirname, '..', 'node_modules', 'xlsx'),
+        'xlsx',
+    ];
+    for (const c of candidates) {
+        try { return require(c); } catch { /* try the next one */ }
+    }
+    throw new Error(
+        'Could not load the "xlsx" package. Run `npm install` in admin-frontend/, ' +
+        'or `npm install xlsx` in backend/.',
+    );
+})();
 
 const API_URL = (process.env.API_URL || 'http://localhost:4000/api').replace(/\/+$/, '');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@bharatolympiad.in';
@@ -32,26 +53,49 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 // ── What we are building ────────────────────────────────────────────────────
 
+/**
+ * The live paper.
+ *
+ * `titleMatches` exists because the exam already exists in production under a
+ * hand-typed name. Matching on it means this script *adopts* that exam and
+ * re-slots it, rather than creating a near-duplicate alongside it — which is
+ * exactly what a title-only match would have done.
+ */
 const MAIN_EXAM = {
-    title: 'Bharat Innovation Olympiad — Grade 8',
+    title: process.env.MAIN_EXAM_TITLE || 'Bharat Innovation Olympiad — Class 8',
+    titleMatches: [
+        'Bharat Innovation Olympiad — Class 8',
+        'Bharat Innovation Olympiad — Grade 8',
+        'Bharat Innovation Olympiad - Class 8',
+    ],
     description:
-        'The Grade 8 Innovation Olympiad paper. 50 questions across five future-ready ' +
+        'The Class 8 Innovation Olympiad paper. 50 questions across five future-ready ' +
         'dimensions, sat one section at a time. One mark per question, no negative marking.',
     workbook: 'Grade_8_Easy_Question_Paper_50.xlsm',
     classBands: [8],
     durationMinutes: 60,
     totalMarks: 50,
+    /** Set IMPORT_QUESTIONS=true to re-import the paper; off by default so a
+     *  re-slot never silently rewrites 50 live questions. */
+    importQuestions: process.env.IMPORT_QUESTIONS === 'true',
 };
 
 const TRIAL_EXAM = {
     title: 'Trial Test — Get Exam Ready',
+    titleMatches: ['Trial Test — Get Exam Ready', 'Trial Test - Get Exam Ready'],
     description:
         'A short practice run in exactly the same environment as the real exam: fullscreen, ' +
         'webcam proctoring and the live timer. Not scored, and you can retake it as often as you like.',
     workbook: 'Trial_Test_5_Questions.xlsm',
     // Every grade sees the same rehearsal, so it must cover the full range.
+    // The gate itself is grade-blind — `findActiveTrialExam` filters on
+    // `isTrial` only — but the bands keep the exam coherent for admins.
     classBands: [6, 7, 8, 9, 10, 11, 12],
     durationMinutes: 10,
+    // One mark per trial question. Never actually scored, but `POST /admin/exams`
+    // requires a number and a 0 here would read as a misconfigured paper.
+    totalMarks: 6,
+    importQuestions: true,
 };
 
 /**
@@ -215,11 +259,28 @@ function parseWorkbook(file) {
     return { sheetName, questions, warnings };
 }
 
+/**
+ * Find the exam this spec refers to.
+ *
+ * Matches on `isTrial` first (a trial is identified by its flag, not its name,
+ * so renaming it in the admin UI does not orphan it), then on any of the
+ * accepted titles. Falls back to `title` alone.
+ */
+function findExam(allExams, spec, wantTrial = false) {
+    if (wantTrial) {
+        const flagged = allExams.find((e) => e.isTrial);
+        if (flagged) return flagged;
+    }
+    const titles = spec.titleMatches || [spec.title];
+    const norm = (t) => (t || '').replace(/[—–-]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+    return allExams.find((e) => titles.some((t) => norm(t) === norm(e.title)));
+}
+
 /** Create the exam if it does not exist, else return the existing row. */
-async function upsertExam(token, allExams, spec, extra) {
-    const existing = allExams.find((e) => e.title === spec.title);
+async function upsertExam(token, allExams, spec, extra, wantTrial = false) {
+    const existing = findExam(allExams, spec, wantTrial);
     if (existing) {
-        console.log(`  exam "${spec.title}" exists (${existing.id}) — updating`);
+        console.log(`  adopting existing exam "${existing.title}" (${existing.id})`);
         if (!DRY_RUN) {
             await api('PUT', `/admin/exams/${existing.id}`, token, {
                 description: spec.description,
@@ -280,7 +341,7 @@ async function upsertExam(token, allExams, spec, extra) {
         isTrial: true,
         requiresTrial: false,
         feeAmount: 0,
-    });
+    }, true);
 
     if (!DRY_RUN) {
         await api('POST', `/admin/exams/${trialExam.id}/questions/import`, token, {
@@ -297,27 +358,40 @@ async function upsertExam(token, allExams, spec, extra) {
         console.log('  imported, scheduled and published\n');
     }
 
-    // ── 2. Grade 8 paper ──
-    console.log('2. Grade 8 paper');
+    // ── 2. The live paper ──
+    console.log('2. Main paper');
     const mainExam = await upsertExam(token, allExams, MAIN_EXAM, {
         isTrial: false,
         requiresTrial: true,
     });
+    if (!findExam(allExams, MAIN_EXAM)) {
+        console.log(`  (no existing exam matched — created "${MAIN_EXAM.title}")`);
+    }
 
     let instance = null;
     if (!DRY_RUN) {
-        const result = await api('POST', `/admin/exams/${mainExam.id}/questions/import`, token, {
-            questions: main.questions,
-            replaceExisting: true,
-        });
-        console.log(
-            `  imported ${result.questionCount} questions into ${result.sections.length} sections:`,
-        );
-        result.sections.forEach((s) => console.log(`    • ${s.title} — ${s.questions}`));
-        if (result.imagesUnresolved?.length) {
-            console.warn(
-                `  ! ${result.imagesUnresolved.length} question(s) still need an image. ` +
-                'Run "Sync from Drive" on the Media Gallery, then re-run this script.',
+        // Questions are NOT re-imported by default. The exam already carries a
+        // reviewed 50-question paper; silently replacing it on a run whose
+        // purpose is to fix the slots would be a destructive surprise.
+        if (MAIN_EXAM.importQuestions) {
+            const result = await api('POST', `/admin/exams/${mainExam.id}/questions/import`, token, {
+                questions: main.questions,
+                replaceExisting: true,
+            });
+            console.log(
+                `  imported ${result.questionCount} questions into ${result.sections.length} sections:`,
+            );
+            result.sections.forEach((s) => console.log(`    • ${s.title} — ${s.questions}`));
+            if (result.imagesUnresolved?.length) {
+                console.warn(
+                    `  ! ${result.imagesUnresolved.length} question(s) still need an image. ` +
+                    'Run "Sync from Drive" on the Media Gallery, then re-run with IMPORT_QUESTIONS=true.',
+                );
+            }
+        } else {
+            console.log(
+                `  questions left untouched (${mainExam.questionCount ?? '?'} already attached). ` +
+                'Set IMPORT_QUESTIONS=true to replace the paper from the workbook.',
             );
         }
 
@@ -332,43 +406,80 @@ async function upsertExam(token, allExams, spec, extra) {
     // ── 3. Slots: two a day across the window ──
     console.log('\n3. Exam slots');
     if (!DRY_RUN && instance) {
-        const existingSlots = await api('GET', `/admin/slots?examInstanceId=${instance.id}`, token)
-            .catch(() => []);
-        const haveStarts = new Set(
-            (Array.isArray(existingSlots) ? existingSlots : [])
-                .filter((s) => s.examInstanceId === instance.id)
-                .map((s) => new Date(s.startsAt).toISOString()),
+        // The schedule is authoritative: any slot on this exam that is not in it
+        // gets removed. The exam carried five stale sittings from 14–15 July
+        // with four-hour windows, and merely *adding* the correct ones would
+        // have left students able to book the wrong thing.
+        //
+        // A slot with bookings is never deleted — a student holding it would
+        // lose their sitting silently. Those are reported for a human to move.
+        const allSlots = await api('GET', '/admin/slots', token).catch(() => []);
+        const mine = (Array.isArray(allSlots) ? allSlots : []).filter(
+            (s) => s.examInstanceId === instance.id,
         );
 
-        let created = 0;
+        const wanted = [];
         for (const [month, day] of SCHEDULE.days) {
             for (const time of SCHEDULE.times) {
                 const startsAt = ist(SCHEDULE.year, month, day, time.hour);
-                const endsAt = new Date(startsAt.getTime() + MAIN_EXAM.durationMinutes * 60_000);
-                if (haveStarts.has(startsAt.toISOString())) continue;
-
-                const date = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
-                await api('POST', '/admin/slots', token, {
-                    examInstanceId: instance.id,
-                    label: `${date} · ${time.label}`,
-                    startsAt: startsAt.toISOString(),
-                    endsAt: endsAt.toISOString(),
-                    capacity: SCHEDULE.capacityPerSlot,
+                wanted.push({
+                    startsAt,
+                    endsAt: new Date(startsAt.getTime() + MAIN_EXAM.durationMinutes * 60_000),
+                    label: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')} · ${time.label}`,
                 });
-                created++;
             }
         }
+        const wantedStarts = new Set(wanted.map((w) => w.startsAt.toISOString()));
+
+        let removed = 0;
+        const keptWithBookings = [];
+        for (const slot of mine) {
+            if (wantedStarts.has(new Date(slot.startsAt).toISOString())) continue;
+            if ((slot.booked ?? 0) > 0) {
+                keptWithBookings.push(slot);
+                continue;
+            }
+            await api('DELETE', `/admin/slots/${slot.id}`, token).catch((e) =>
+                console.warn(`  ! could not delete slot ${slot.id}: ${e.message}`),
+            );
+            removed++;
+        }
+
+        const haveStarts = new Set(mine.map((s) => new Date(s.startsAt).toISOString()));
+        let created = 0;
+        for (const w of wanted) {
+            if (haveStarts.has(w.startsAt.toISOString())) continue;
+            await api('POST', '/admin/slots', token, {
+                examInstanceId: instance.id,
+                label: w.label,
+                startsAt: w.startsAt.toISOString(),
+                endsAt: w.endsAt.toISOString(),
+                capacity: SCHEDULE.capacityPerSlot,
+            });
+            created++;
+        }
+
         console.log(
-            `  ${created} slot(s) created, ${haveStarts.size} already existed ` +
-            `(capacity ${SCHEDULE.capacityPerSlot} each)`,
+            `  ${removed} stale slot(s) removed, ${created} created, ` +
+            `${wanted.length} in the schedule (capacity ${SCHEDULE.capacityPerSlot} each)`,
         );
+        console.log(`  ${SCHEDULE.days.length} days × ${SCHEDULE.times.length}/day — 1:00 PM and 7:00 PM IST`);
+        if (keptWithBookings.length) {
+            console.warn(
+                `  ! ${keptWithBookings.length} off-schedule slot(s) kept because students are booked into them:`,
+            );
+            keptWithBookings.forEach((s) =>
+                console.warn(`      ${s.id}  ${s.startsAt}  booked=${s.booked}  "${s.label ?? ''}"`),
+            );
+            console.warn('      Reassign those bookings from /slots, then re-run.');
+        }
         console.log('  NOTE: auto-distribution is deliberately NOT run — students pick their own slot.');
 
         await api('POST', `/admin/exams/${mainExam.id}/publish`, token);
         console.log('  exam published');
     } else {
         const total = SCHEDULE.days.length * SCHEDULE.times.length;
-        console.log(`  would create ${total} slots (${SCHEDULE.days.length} days × ${SCHEDULE.times.length})`);
+        console.log(`  would replace all slots with ${total} (${SCHEDULE.days.length} days × ${SCHEDULE.times.length})`);
     }
 
     // ── 4. Retire everything else ──

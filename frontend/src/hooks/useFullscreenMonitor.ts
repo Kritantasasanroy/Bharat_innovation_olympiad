@@ -85,6 +85,8 @@ export function useFullscreenMonitor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isGated, setIsGated] = useState(true);
   const [lastError, setLastError] = useState<string | null>(null);
+  /** Epoch ms at which the pause auto-submit fires, or null when not paused. */
+  const [pauseDeadline, setPauseDeadline] = useState<number | null>(null);
 
   const onViolationRef = useRef(onViolation);
   const onAutoSubmitRef = useRef(onAutoSubmit);
@@ -123,7 +125,13 @@ export function useFullscreenMonitor({
 
   const startTimer = () => {
     clearTimer();
+    // Published so the overlay can run a live countdown. The warning text used
+    // to promise an auto-submit "within 20 seconds" with nothing on screen
+    // counting down, which is indistinguishable from the timer not running —
+    // and was the main reason the pause warning looked broken.
+    setPauseDeadline(Date.now() + pauseTimeoutSec * 1000);
     timerRef.current = setTimeout(() => {
+      setPauseDeadline(null);
       onAutoSubmitRef.current?.(`Exam paused for more than ${pauseTimeoutSec} seconds`);
     }, pauseTimeoutSec * 1000);
   };
@@ -146,13 +154,23 @@ export function useFullscreenMonitor({
     writeStoredViolations(count);
     onViolationRef.current?.(type, count);
 
+    // Gate FIRST, in every case. On the final violation this used to return
+    // early without gating, which left the exam fully interactive while the
+    // auto-submit ran in the background — so a submit that failed looked
+    // exactly like nothing having happened, and the student carried on
+    // answering a paper that was supposed to be over.
+    setIsGated(true);
+    isGatedRef.current = true;
+
     if (count >= maxViolations) {
+      // No pause timer here: this is terminal, not recoverable. The caller
+      // owns the submit and renders its own progress/failure state.
+      clearTimer();
+      setPauseDeadline(null);
       onAutoSubmitRef.current?.(`Maximum violations reached (${maxViolations})`);
       return;
     }
 
-    setIsGated(true);
-    isGatedRef.current = true;
     startTimer();
   };
 
@@ -189,6 +207,7 @@ export function useFullscreenMonitor({
       isGatedRef.current = false;
       releaseViolationLock(); // student is back — allow next exit to count
       clearTimer();
+      setPauseDeadline(null);
       return;
     }
 
@@ -216,6 +235,12 @@ export function useFullscreenMonitor({
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
+
+    // The violation lock lives at module scope so duplicate browser events for
+    // one keypress collapse into a single violation. That also means it can
+    // survive a route change, so a second exam in the same session would start
+    // holding a stale lock and drop its first violation. Clear it on mount.
+    releaseViolationLock();
 
     violationCountRef.current = readStoredViolations();
 
@@ -248,6 +273,7 @@ export function useFullscreenMonitor({
         releaseViolationLock();
         setLastError(null);
         clearTimer();
+        setPauseDeadline(null);
         suppressBlurBriefly();
       } else {
         registerViolation('exit_fullscreen');
@@ -288,6 +314,7 @@ export function useFullscreenMonitor({
     isGated,
     lastError,
     maxViolations,
+    pauseDeadline,
     requestFullscreen,
     reportExternalViolation,
   };

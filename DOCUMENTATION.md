@@ -9,7 +9,8 @@
 
 ## Table of Contents
 
-0. [Architecture Re-Alignment — BIO pnpm Workspace](#0-architecture-re-alignment--bio-pnpm-workspace) ← **new**
+0. [Architecture Re-Alignment — BIO pnpm Workspace](#0-architecture-re-alignment--bio-pnpm-workspace)
+   - [0.26 Beta launch — Class 8 paper, trial test, section delivery, proctoring repair](#026-beta-launch--class-8-paper-trial-test-section-delivery-proctoring-repair-2026-07-26) ← **latest**
 1. [Project Overview](#1-project-overview)
 2. [Repository Structure](#2-repository-structure)
 3. [Architecture Diagram](#3-architecture-diagram)
@@ -897,6 +898,208 @@ scores + percentile + rank, changing nothing students see until release). The ta
 (10s), Normalized/Released show a ✓ and a timestamp tooltip, and the Certificates column shows
 **"✓ N issued" / "None yet" / "—"** instead of a bare number. The Normalize button becomes
 "Re-normalize" once done, signalling that re-running is optional.
+
+---
+
+### 0.26 Beta launch — Class 8 paper, trial test, section delivery, proctoring repair (2026-07-26)
+
+The public-beta pass. Fourteen requested items, plus a deploy-topology problem and three proctoring
+defects found while verifying them.
+
+#### The Olympiad question format is now first-class
+
+The content team authors in an approved **29/30-field question-database standard**, not the nine
+columns the importer understood. The gap mattered because one of those columns — **`Part Name`** — *is*
+the exam's section structure.
+
+`Question` gained the format as real columns (all nullable, so every existing row and the legacy
+importer keep working): `externalId`, `grade`, `partCode`/`partName`, `sectionCode`/`sectionName`,
+`topic`, `learningObjective`, `questionCategory`, `bloomLevel`, `competency`, `questionFormat`,
+`futureReadyInsight`, `imageFilename`, `imageSourceUrl`, and a `metadata` JSON column for the
+authoring trail (Canva prompt, reviewer comments, version). They are columns rather than JSON because
+admin filters and the section builder read them, and Prisma JSON-path filtering is awkward.
+
+`admin-frontend/src/lib/questionWorkbook.ts` is the single parser both the admin portal and
+`backend/scripts/setup-beta-exams.js` use — if those two disagreed, a paper set up by script would
+differ from one an admin uploaded. It detects the format **from the header row**, not the file
+extension or sheet position, and keeps the legacy nine-column parser as a fallback.
+
+Three things it gets right that the old one did not:
+
+| Trap | What happens |
+|---|---|
+| `Grade_8_Easy_Question_Paper_50.xlsm` has four sheets, one of which duplicates five questions **with no header row** | Reads the sheet named `Question Bank`; falls back to the first sheet whose header contains `Question`. Blindly taking `SheetNames[0]` happens to work for this file and would import garbage from the next. |
+| Both supplied workbooks are `.xlsm` | `.xlsm` added to the accept filter — they were rejected outright before. |
+| The workbook states the answer twice (a letter and prose) and they sometimes disagree | The letter wins (it is what the option list is built from) and the mismatch is reported as a warning, against a row number. |
+
+`POST /admin/exams/:id/questions/import` creates or reuses one `ExamSection` per distinct Part Name,
+in first-appearance order, and attaches questions in file order. It is the first bulk endpoint with a
+**validated DTO** (`ImportQuestionsDto`) — the two older ones take `any[]` and hand it straight to
+`prisma.question.create`, which turns a stray column into a Prisma error halfway through a 50-row
+transaction. Validation runs before anything is written and reports problems by row.
+
+#### The paper is sat one section at a time
+
+`buildQuestionSet` ended with a **cross-section shuffle**. With sections now meaningful, that made the
+heading above each question change on almost every question, and "finish this section, then the next"
+meaningless. Shuffling now happens **within** each section (the per-section seed already existed), the
+section order is never shuffled, and each question is stamped with `sectionId`/`sectionTitle`/
+`sectionIndex` so the player can draw headings without a second round-trip.
+
+`AttemptItem` stores only `questionId` and `sortOrder`, so a **resumed** attempt would come back with
+no headings at all — a differently-shaped exam after a refresh. `decorateWithSections()` re-joins
+through `SectionQuestion` on all three resume paths (normal, legacy, concurrent-P2002).
+
+`ExamService.findExamById` used to collapse everything into one synthetic "All Questions" section
+whenever a `userId` was passed; it now returns real sections, shuffled per section.
+
+#### The trial test, and why the gate has a safety valve
+
+The rehearsal is a **real `Exam` row flagged `isTrial`**, so it reuses the entire proctored player —
+fullscreen monitor, face proctoring, timer, autosave — rather than reimplementing any of it. It is
+exempt from the same gates as a practice exam (free, no slot, unlimited retakes), because it is the
+thing standing between a student and the exam they *have* paid and booked for.
+
+Enforcement is in `AttemptService.startAttempt`, next to the paywall, **not** in the UI: every route
+into the player funnels through that method, so a deep link straight to `/play` cannot bypass it.
+`TrialCompletion` is its own table rather than a flag on `Attempt` because it has to exist *before*
+any Attempt for the real exam does — it is the precondition for creating one.
+
+The gate is **grade-blind**: `findActiveTrialExam` filters on `isTrial` only, so one trial paper gates
+every exam at every class band. Verified live against all nine exams in production.
+
+> **The safety valve.** `Exam.requiresTrial` defaults to `true`, so every pre-existing exam acquired
+> this gate the moment the column was added. Without a valve, a deploy landing before the trial paper
+> was configured would have made **every exam on the platform permanently unstartable, with no way out
+> from inside the product**. So the gate only engages when a trial paper actually exists; otherwise it
+> logs a warning and passes. This was caught by reading the `migrate diff` output before pushing, not
+> by a test.
+
+`POST /attempts/trial-complete` takes the target instance id from the client, so it **proves the trial
+was actually sat** (a submitted attempt on the trial exam) before writing anything. Without that check
+the endpoint would itself be the bypass it exists to prevent.
+
+#### Proctoring: three real defects
+
+Verifying the exam flow surfaced three problems in the violation path. The hooks themselves
+(`useFaceProctor`, `useFullscreenMonitor`) were byte-identical to their last-known-good versions, so
+these are longer-standing bugs rather than regressions from this pass.
+
+**1. The final violation left the exam interactive.** `registerViolation` returned early at
+`count >= maxViolations` *before* setting `isGated`. So on the third violation the overlay never
+appeared, the paper stayed fully answerable, and the auto-submit ran invisibly in the background — a
+submit that failed was indistinguishable from nothing having happened. It now gates in every case,
+then fires the submit.
+
+**2. A failed auto-submit stranded the student forever.** `handleAutoSubmit` swallowed every failure
+into `console.error` and left `isSubmitting` at `true`. Because the function early-returns while
+submitting, that single failure **permanently disabled every later auto-submit attempt**: the student
+sat in front of a paper that would not end, with no error on screen. Now: one automatic retry (the
+common cause is a transient school-network blip), then a real overlay with a manual **Submit now** and
+a way out to `/results`. `isSubmitting` is released so the retry can actually run.
+
+**3. The 20-second pause warning had no countdown.** The overlay promised an auto-submit "within 20
+seconds" with nothing ticking, which reads exactly like a timer that is not running — and is the most
+likely origin of "the fullscreen warning doesn't work". `useFullscreenMonitor` now publishes
+`pauseDeadline` and the overlay counts down live, turning red under five seconds.
+
+Also: `alert()` was removed from the auto-submit path. It is a blocking dialog, browsers throttle or
+suppress repeats, and it can drop fullscreen — which fires *another* violation. And the module-global
+violation lock is released on mount, so a second exam in the same SPA session cannot inherit a stale
+lock and silently drop its first violation.
+
+#### Google Drive question images — mirrored, never hot-linked
+
+Nineteen of the fifty Class 8 questions carry an image, but only five name a Drive link; the rest
+carry a bare filename, which means the folder has to be **listable**. `files.list` works against a
+folder shared "Anyone with the link" with nothing but an API key — no OAuth, no token to refresh.
+
+Images are **copied into object storage once**, not rendered from Drive at exam time. Drive is not a
+CDN: it rate-limits, serves an interstitial for larger files, and a folder someone un-shares in six
+months would take the paper down with it. `ObjectStorageService.uploadImageBuffer` is the one
+sanctioned exception to "bytes never touch the API" — these are 10 MB stills at most with no browser
+in the loop, because the source is a folder rather than a file picker.
+
+**SSRF is the real risk here**, since the URLs come out of an admin-uploaded spreadsheet and the
+*server* fetches them. `GoogleDriveService.fetchImage` takes a **Drive file id, never a URL**; the
+request URLs are built from a fixed template against a hard-coded two-host allowlist; `extractFileId`
+is the only thing that reads caller-supplied text, and it returns an id or nothing. Nine tests cover
+the rejection cases — cloud metadata endpoints, localhost, `file://`, and `drive.google.com.evil.example`
+lookalikes.
+
+#### Deploy topology — two branches, one repo, no common ancestor
+
+`main` and `bio-workspace-rearch` had **unrelated histories**: the project was re-initialised at some
+point and both lines were pushed to the same remote. `git merge` refused outright.
+
+The trees were not divergent, though. `bio-workspace-rearch` *contained* main's work — 171 files
+differed, exactly one file existed on main and not on rearch (`s3.service.ts`, superseded by
+`object-storage.service.ts`), and main's four newest features were all already present. Decisively,
+**main's schema had 16 models against rearch's 36 — a strict subset.**
+
+That last point was not cosmetic. Render's start command is
+`npx prisma db push --accept-data-loss && node dist/src/main.js`, and `prisma migrate diff` from the
+live Neon DB to main's schema produced **109 DDL statements including 20 `DROP TABLE`** (AccessPass,
+PhoneOtp, Certificate, Grievance, Partner, Consent, MediaAsset, SchoolRequest, RefundRequest,
+SupportTicket and ten more). A successful deploy of pre-merge `main` would have destroyed them. It
+never deployed successfully, and that failure is what protected the data.
+
+Resolved as commit `73dfd6b`: a real two-parent merge whose tree is byte-identical to
+`bio-workspace-rearch`. Both branches now carry the same tree, and the hazard is gone.
+
+> **Render deploys `bio-workspace-rearch`**, auto-deploy on, for all three services. GitHub's
+> `deployments` records for this repo are stale (frozen at 14 July, labelled `main`) and misled this
+> investigation for a while — check deploy state via the Render API, not GitHub. The live backend is
+> **`olympiad-backend-iqzn.onrender.com`**; the `-wsvn` host in older docs is dead and 503s instantly.
+>
+> **Both Vercel projects have no git link at all** (`link: null`, no deploy hooks). They have only ever
+> been deployed from the CLI, so a push will never update them:
+>
+> ```bash
+> set -a && . ./.env && set +a
+> cd frontend && npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+> cd ../admin-frontend && npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+> ```
+
+#### Everything else in this pass
+
+- **SMS OTP.** 2Factor returns `Status: Success` on *accept*, so a carrier drop was invisible from
+  inside the process. Each send now records the session id and, 15s later, logs the carrier's delivery
+  verdict at ERROR level if undelivered. Admin-only `GET /admin/notifications/sms-health` reports SMS
+  **and** voice balances — they bill separately, which is exactly why a working voice OTP proved
+  nothing about SMS. The API key is redacted from every gateway body that crosses a log or HTTP
+  boundary.
+- **Phone number vanishing on refresh** — `AuthService.getMe` never selected `phone` while
+  `updateProfile` did, so a save looked fine and the field came back empty. One line, plus the same
+  omission in `getUserByEmail`. It also fixes the spurious "verify this number" prompt for a number
+  that had not changed.
+- **Students pick their own slot.** `frontend/src/app/exams/[id]/slots/page.tsx` was fully built but
+  **nothing linked to it**; `NEEDS_SLOT` rendered a dead-end "your school usually assigns one" note.
+  Auto-distribution is deliberately *not* run for the beta paper.
+- **`GET /bookings/:id`** was called by two payment pages and did not exist on the server. Added, with
+  ownership scoping — a booking that is not yours reports *not found*, not *forbidden*.
+- **Archive, not delete.** Retiring an exam is `isPublished: false` + `isArchived: true`; deleting
+  cascades away attempts, bookings, payments and certificates. Archiving also unpublishes, because an
+  exam left `isPublished: true, isArchived: true` would be invisible in the list yet still satisfy the
+  publication check in the start gate.
+- **Beta feedback interstitials** after registration and after exam submit. Embedded rather than
+  linked, so a popup blocker cannot swallow the form; **Continue is never disabled**, because a
+  cross-origin iframe gives the host page no submit signal and gating on a check we cannot perform
+  would just trap the student.
+- **Rules acknowledgement is a checkbox**, not a button label — "I Understand, Start Exam" both agreed
+  and started in one click. The negative-marking rule is now derived from the paper instead of
+  hard-coded, and the section count is stated up front.
+- **Rebrand** — new logo keyed to transparency for dark mode (it ships on white), the bulb mark cropped
+  for a favicon (`layout.tsx` referenced a `/favicon.ico` that did not exist and 404'd), tagline
+  **"Become Future Ready"** promoted to one shared constant from four literals, and the landing page's
+  copy, description and five-dimensions section taken from the brief.
+
+**Tests:** 288 backend (29 new) — section-grouped delivery (order preserved, shuffling within sections
+only, resume keeps headings), the Drive SSRF allowlist, and the import DTO against a pipe configured
+exactly like the global one. All three apps build.
+
+**Still outstanding:** the Drive folder is not shared publicly yet, so the 19 image questions import
+without images; the Vercel projects have no git link; and Razorpay is on dummy keys pending KYC.
 
 ---
 

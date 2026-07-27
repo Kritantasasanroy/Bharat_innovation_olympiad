@@ -95,23 +95,69 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // the callback body now, referencing stopProctoring via a ref that gets
     // populated once useFaceProctor is called further down.
     const stopProctoringRef = useRef<(() => void) | null>(null);
-    const handleAutoSubmit = async (reason: string) => {
-        if (isSubmitting) return;
+    const clearViolationStorageRef = useRef<() => void>(() => {});
+
+    /**
+     * Ends the exam without the student's involvement — the pause timeout or
+     * the third violation.
+     *
+     * Three things this has to get right, all of which it previously got wrong:
+     *
+     *  1. **Never leave the student stranded.** A failed submit used to be
+     *     swallowed into `console.error` with `isSubmitting` stuck at `true`.
+     *     Because `handleAutoSubmit` early-returns while submitting, that one
+     *     failure permanently disabled every later auto-submit: the student sat
+     *     in front of a paper that would not end and showed no error. Failures
+     *     now retry once, then surface a manual "Submit now" control.
+     *
+     *  2. **Say something on screen.** `alert()` is a blocking dialog, and
+     *     browsers throttle or suppress it (Chrome hides repeats, and it can
+     *     drop fullscreen, which fires yet another violation). The state below
+     *     drives a real overlay instead.
+     *
+     *  3. **Still navigate on a hard failure.** If the server has already
+     *     recorded the submission, the client's error is cosmetic — leaving the
+     *     student on the paper is worse than moving them on.
+     */
+    const [autoSubmit, setAutoSubmit] = useState<
+        { reason: string; status: 'submitting' | 'failed'; error?: string } | null
+    >(null);
+
+    const runAutoSubmit = async (reason: string, isRetry = false) => {
+        if (isSubmitting && !isRetry) return;
         setIsSubmitting(true);
+        setAutoSubmit({ reason, status: 'submitting' });
         stopProctoringRef.current?.();
-        try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
+        clearViolationStorageRef.current();
+
         try {
             const result = await submitExamRef.current();
-            alert(`Exam auto-submitted: ${reason}`);
             window.location.href = await destinationRef.current(result?.redirectUrl);
         } catch (err) {
-            console.error('Auto-submit error:', err);
+            console.error('Auto-submit failed:', err);
+            // One automatic retry — the common cause is a transient network
+            // blip on a school connection, not a rejected submission.
+            try {
+                const result = await submitExamRef.current();
+                window.location.href = await destinationRef.current(result?.redirectUrl);
+                return;
+            } catch (retryErr) {
+                console.error('Auto-submit retry failed:', retryErr);
+                setIsSubmitting(false); // let the student trigger it themselves
+                setAutoSubmit({
+                    reason,
+                    status: 'failed',
+                    error: (retryErr as Error)?.message || 'Could not reach the server.',
+                });
+            }
         }
     };
 
+    const handleAutoSubmit = (reason: string) => { void runAutoSubmit(reason); };
+
     const {
-        isFullscreen, violationCount, isGated, lastError, maxViolations, requestFullscreen,
-        reportExternalViolation,
+        isFullscreen, violationCount, isGated, lastError, maxViolations, pauseDeadline,
+        requestFullscreen, reportExternalViolation,
     } = useFullscreenMonitor({
         onViolation: async (type, count) => {
             if (!attemptId) return;
@@ -163,6 +209,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         const t = setInterval(() => setNowTick(Date.now()), 500);
         return () => clearInterval(t);
     }, []);
+    // Shares the same 0.5s tick as the face popups.
+    const pauseSecondsLeft = pauseDeadline !== null
+        ? Math.max(0, Math.ceil((pauseDeadline - nowTick) / 1000))
+        : null;
     const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((NO_FACE_SUSTAIN_MS - (nowTick - noFaceSince)) / 1000)) : null;
     const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((LOOKING_AWAY_SUSTAIN_MS - (nowTick - awaySince)) / 1000)) : null;
     const mismatchSecondsLeft = mismatchSince ? Math.max(0, Math.ceil((FACE_MISMATCH_SUSTAIN_MS - (nowTick - mismatchSince)) / 1000)) : null;
@@ -237,6 +287,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const clearViolationStorage = () => {
         try { sessionStorage.removeItem(`violations_${window.location.pathname}`); } catch { /* ignore */ }
     };
+    // `runAutoSubmit` is defined above this point but needs it, so it reaches
+    // it through a ref rather than the two being reordered.
+    useEffect(() => { clearViolationStorageRef.current = clearViolationStorage; });
 
     /**
      * Where a finished attempt sends the student.
@@ -403,6 +456,68 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
+                {/* ── Auto-submit Overlay ──
+                    Sits above the fullscreen gate (higher z-index) because it is
+                    terminal: once the exam is ending, the "re-enter fullscreen"
+                    affordance underneath is no longer the right thing to offer.
+                    A failure here used to be invisible — logged to the console and
+                    nowhere else — which is what made "3 violations doesn't submit"
+                    look like the counter was broken. */}
+                {autoSubmit && (
+                    <div style={{
+                        position: 'fixed', inset: 0, zIndex: 10000,
+                        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+                    }}>
+                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '460px', width: '100%' }}>
+                            {autoSubmit.status === 'submitting' ? (
+                                <>
+                                    <div className="spinner" style={{ margin: '0 auto 1.25rem' }} />
+                                    <h2 style={{ marginBottom: '0.75rem' }}>Submitting your exam…</h2>
+                                    <p style={{ color: 'var(--text-secondary)' }}>{autoSubmit.reason}.</p>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '1rem' }}>
+                                        Please do not close this window. Your answers were saved as you went.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>⚠️</div>
+                                    <h2 style={{ marginBottom: '0.75rem' }}>Could not submit automatically</h2>
+                                    <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                                        {autoSubmit.reason}, but the submission did not go through.
+                                    </p>
+                                    <p style={{
+                                        color: 'var(--danger-400)', fontSize: '0.8rem',
+                                        padding: '0.5rem', background: 'rgba(239,68,68,0.08)', borderRadius: '6px',
+                                    }}>
+                                        {autoSubmit.error}
+                                    </p>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0' }}>
+                                        Every answer you gave is already saved on the server. Check your
+                                        connection and submit again.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        style={{ width: '100%', padding: '0.85rem', fontSize: '1rem' }}
+                                        onClick={() => void runAutoSubmit(autoSubmit.reason, true)}
+                                    >
+                                        ↻ Submit now
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        style={{ width: '100%', padding: '0.7rem', marginTop: '0.5rem' }}
+                                        onClick={() => { window.location.href = '/results'; }}
+                                    >
+                                        Leave and check my results
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Fullscreen Gate Overlay ──
                     Shown on initial load (page refresh) and after every fullscreen violation.
                     The user MUST click the button to enter fullscreen — this is the only
@@ -425,9 +540,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                         ? `Violation ${violationCount} of ${maxViolations} recorded. Click below to resume your exam.`
                                         : `Violation ${violationCount} of ${maxViolations} — re-enter fullscreen to continue your exam.`}
                             </p>
-                            {violationCount > 0 && (
+                            {/* A live countdown, not a static sentence. The old copy
+                                promised an auto-submit "within 20 seconds" with nothing
+                                ticking, which reads exactly like a timer that is not
+                                running — and gave the student no idea how long they had. */}
+                            {violationCount > 0 && pauseSecondsLeft !== null && (
+                                <p style={{
+                                    color: pauseSecondsLeft <= 5 ? 'var(--danger-400)' : 'var(--warning-400)',
+                                    fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem',
+                                }}>
+                                    Auto-submitting in {pauseSecondsLeft}s
+                                </p>
+                            )}
+                            {violationCount > 0 && pauseSecondsLeft === null && (
                                 <p style={{ color: 'var(--danger-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                                    Exam will auto-submit if fullscreen is not restored within 20 seconds.
+                                    Exam will auto-submit if fullscreen is not restored in time.
                                 </p>
                             )}
                             {violationCount >= maxViolations - 1 && violationCount < maxViolations && (
