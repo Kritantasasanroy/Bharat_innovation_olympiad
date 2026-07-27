@@ -10,7 +10,8 @@
 ## Table of Contents
 
 0. [Architecture Re-Alignment — BIO pnpm Workspace](#0-architecture-re-alignment--bio-pnpm-workspace)
-   - [0.26 Beta launch — Class 8 paper, trial test, section delivery, proctoring repair](#026-beta-launch--class-8-paper-trial-test-section-delivery-proctoring-repair-2026-07-26) ← **latest**
+   - [0.27 Universal rehearsal gate + the slot lifecycle: pay → pick → locked](#027-universal-rehearsal-gate--the-slot-lifecycle-pay--pick--locked-2026-07-27) ← **latest**
+   - [0.26 Beta launch — Class 8 paper, trial test, section delivery, proctoring repair](#026-beta-launch--class-8-paper-trial-test-section-delivery-proctoring-repair-2026-07-26)
 1. [Project Overview](#1-project-overview)
 2. [Repository Structure](#2-repository-structure)
 3. [Architecture Diagram](#3-architecture-diagram)
@@ -899,6 +900,188 @@ scores + percentile + rank, changing nothing students see until release). The ta
 **"✓ N issued" / "None yet" / "—"** instead of a bare number. The Normalize button becomes
 "Re-normalize" once done, signalling that re-running is optional.
 
+---
+
+### 0.27 Universal rehearsal gate + the slot lifecycle: pay → pick → locked (2026-07-27)
+
+Two requests, and the second one turned out to have a trap in it that the first
+version of the fix would have sprung.
+
+---
+
+#### The rehearsal gate was exempting the papers that needed it most
+
+§0.26 built the trial as a real `Exam` flagged `isTrial` and enforced it in
+`AttemptService.startAttempt`, next to the access-pass check. Sitting next to the
+paywall is how it picked up the paywall's exemption:
+
+```ts
+const demo = isDemoExam(instance.examId) || instance.exam.isTrial;
+…
+if (!demo && !instance.exam.isTrial && instance.exam.requiresTrial) { … }
+```
+
+`demo` exists to waive things that make no sense for a free practice paper — the
+₹1 pass, the slot window, the publication check. The rehearsal is not one of
+those. A practice paper is where a student meets fullscreen enforcement, a webcam
+watching their face and a violation counter for the first time, and it is the one
+they are most likely to open before anything else. Exempting it inverts the
+intent: the student rehearses for the paper they have already paid for and walks
+into the free one cold.
+
+The `demo` term is now gone from the gate. `isTrial` stays — a trial paper must
+never gate on itself, or it becomes unstartable and takes every exam with it.
+
+**Both checks had to change, and the reason is not symmetry.** The gate above is
+authoritative. `getTrialStatus` is advisory: the instructions page calls it so it
+can route a student to the trial *before* they complete every device check,
+rather than letting them press Start and be refused. It carried the same
+`isDemoExam` exemption:
+
+```ts
+const required =
+    !instance.exam.isTrial &&
+    instance.exam.requiresTrial &&
+    !isDemoExam(instance.exam.id);   // removed
+```
+
+Fixing only the authoritative gate would have produced the worst available
+outcome — worse than leaving the bug alone. The device-check list would show
+"Trial test — you are ready", the button would read "Start Exam", and the server
+would answer `TRIAL_REQUIRED` with nothing on screen explaining what to do about
+it. A student in that state has no route forward from inside the product. When an
+advisory read and its gate disagree, the advisory read is what strands people.
+
+What is deliberately unchanged:
+
+- **`requiresTrial` per exam.** An admin can still exempt one paper on purpose.
+  That is a decision; the demo exemption was an accident of where the code sat.
+- **The no-trial-configured safety valve.** `requiresTrial` defaults to `true`,
+  so every exam acquires the gate the moment the column exists. The gate only
+  engages when a trial paper actually exists to satisfy it. Without that, a
+  deploy landing before the trial is created makes every exam on the platform
+  permanently unstartable — and nothing inside the product can undo it.
+
+**Verified against production before changing anything**, because the gate keys
+on `examInstanceId` while the instructions page resolves the instance itself via
+`data.instances?.[0]?.id` — a list filtered to `endsAt >= now`. If the practice
+exam's instance had expired, the page would resolve *no* instance, fall through to
+`not_needed`, and the server would still refuse. It runs to 2099-12-31, so the
+two agree. This is the kind of thing that cannot be caught by a unit test,
+because the test supplies the instance the code is asking about.
+
+---
+
+#### A confirmed slot is now the student's, and it is final
+
+`cancelBooking` refuses on `CONFIRMED`. A `PENDING` booking stays cancellable —
+payment has not completed, nothing is committed — and still decrements
+`ExamSlot.booked` so the seat returns to the pool.
+
+Moving a student is an admin action, and it already existed:
+`POST /admin/bookings/:id/reassign`, surfaced in `/slots` → a slot's bookings
+modal → **Move**. It claims the destination seat with a conditional
+`updateMany({ where: { booked: { lt: capacity } } })`, so two admins moving
+students into the last seat cannot both succeed.
+
+Ownership is checked before status, so the error message cannot be used to learn
+whether someone else's booking is confirmed.
+
+---
+
+#### The lock created a trap that had not existed before it
+
+This is the part worth remembering. The olympiad papers carry `feeAmount = 0` —
+the paywall is the **account-level `AccessPass`**, not a per-slot fee — and
+`bookSlot` reads that fee to decide what to do:
+
+```ts
+if (feeAmount === 0) {
+    // Free exam → confirm immediately
+    const booking = await tx.booking.create({
+        data: { userId, slotId, status: BookingStatus.CONFIRMED },
+        …
+```
+
+So *anybody* could book, and it confirmed instantly. Before the lock that was
+merely untidy — they could cancel and re-book. Adding the lock without also
+gating the booking would have turned it into a one-way door: an unpaid student
+books, it confirms, it is now unchangeable, and when they eventually pay they are
+holding a sitting they chose before they had any reason to care which one it was.
+The lock and the paywall on booking are a single change; shipping either alone is
+worse than shipping neither.
+
+```ts
+if (!isDemoExam(slot.examInstance.examId)) {
+    const pass = await this.prisma.accessPass.findUnique({
+        where: { userId },
+        select: { status: true },
+    });
+    if (pass?.status !== AccessPassStatus.ACTIVE) {
+        throw new ForbiddenException('ACCESS_PASS_REQUIRED');
+    }
+}
+```
+
+`REVOKED` and `PENDING` are both refused by the `!== ACTIVE` comparison rather
+than by listing bad states — a refund has to stop unlocking slots, and a pass
+awaiting payment is not a pass.
+
+**Why this reads Prisma instead of injecting `AccessPassService`:** `SlotModule`
+is reachable from `PaymentModule` through `PartnerModule` →
+`forwardRef(SchoolModule)` → `SlotModule`. Importing `PaymentModule` into
+`SlotModule` closes that cycle, and Nest would need a `forwardRef` in the middle
+of a live deploy to resolve it. `AccessPassService.hasActivePass` remains the
+canonical rule; what is duplicated is one status comparison, noted at both sites
+so they stay in step.
+
+---
+
+#### Student-side: the ordering is visible, not discovered by failing
+
+| State | Before | Now |
+|---|---|---|
+| `NEEDS_SLOT`, no pass | "Choose your exam slot" → picker → every click rejected | "🔒 Unlock to pick your slot" → `/unlock` |
+| `NEEDS_SLOT`, has pass | picker | picker, with the finality stated up front and a confirm before booking |
+| Booked, `CONFIRMED` | slot shown, no indication it is fixed | "This sitting is confirmed and cannot be changed" |
+| Direct link to `/exams/[id]/slots`, no pass | picker, every click rejected | unlock banner, Book buttons disabled |
+
+The picker repeats the pass check rather than trusting the exam list, because a
+direct link skips the list entirely. And it confirms before booking now that the
+choice cannot be undone — asking after the fact is not asking.
+
+A disabled button with no explanation reads as a bug, and the student's next move
+is to email support either way, so both the exam card and the picker say what
+happened and what to do about it.
+
+---
+
+#### Tests
+
+`attempt.trial-gate.spec.ts` (6) — the gate applies to a practice exam; it is
+satisfied once sat; the trial never gates on itself; a per-exam `requiresTrial:
+false` is honoured; and with no trial paper configured, `startAttempt` lets a
+practice exam through *and never queries `trialCompletion` at all*, which is what
+distinguishes "the valve opened" from "it happened not to fail".
+
+`slot.booking-lock.spec.ts` (10) — a confirmed cancel throws and `$transaction`
+is never called (no partial write); a pending cancel decrements the seat;
+ownership is checked before status; and booking refuses a missing, `REVOKED` or
+`PENDING` pass while the free practice paper skips the lookup entirely.
+
+**304 backend tests**, all three apps build, **no schema change**.
+
+---
+
+#### Unchanged and still outstanding
+
+- Six junk 0-question exams are published and visible to students
+  (`BIOTest 1`, `hluibhkb`, `igu`, `jhvhb`, `test class 7`, `egwethhth`).
+- The Drive folder is still private, so 19 image questions have no pictures.
+- Razorpay is on dummy keys pending KYC —
+  `dashboard.razorpay.com/app/website-app-settings/activation`.
+- No frontend test harness exists, so the picker and proctoring changes are
+  covered by typecheck and build only.
 ---
 
 ### 0.26 Beta launch — Class 8 paper, trial test, section delivery, proctoring repair (2026-07-26)

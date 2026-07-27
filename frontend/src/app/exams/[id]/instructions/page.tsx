@@ -104,9 +104,9 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
 
     /**
      * Resolve the exam and, if it gates on the rehearsal, whether this student
-     * has already sat it. `?trial=done` is a hint from the trial player that we
-     * have just come back from it — the authoritative answer is still the
-     * server's, so it only shortcuts the optimistic state.
+     * has already sat it. The trial player returns here with `?trial=done`, but
+     * that is only a breadcrumb — the answer always comes from the server, so a
+     * hand-typed query string cannot skip the rehearsal.
      */
     useEffect(() => {
         let cancelled = false;

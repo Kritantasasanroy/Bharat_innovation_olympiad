@@ -52,15 +52,21 @@ function SlotCard({
     onBook,
     loading,
     existingBooking,
+    locked,
 }: {
     slot: ExamSlot;
     onBook: (slotId: string) => void;
     loading: string | null;
     existingBooking: Booking | null;
+    locked: boolean;
 }) {
     const seatsLeft = slot.capacity - slot.booked;
     const isFull = seatsLeft <= 0;
     const isBooked = existingBooking?.slotId === slot.id;
+    // Once a slot is CONFIRMED, the choice is locked for the student — only
+    // an admin can move them. A PENDING booking (payment not finished) does
+    // not lock anything, so other slots stay pickable until it's paid.
+    const isLockedElsewhere = existingBooking?.status === 'CONFIRMED' && !isBooked;
     const feeAmount = slot.examInstance.exam.feeAmount ?? 0;
     const isFree = feeAmount === 0;
 
@@ -82,7 +88,7 @@ function SlotCard({
                 borderRadius: '16px',
                 padding: '1.5rem',
                 transition: 'all 0.2s',
-                opacity: isFull && !isBooked ? 0.55 : 1,
+                opacity: (isFull || isLockedElsewhere) && !isBooked ? 0.55 : 1,
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
@@ -138,12 +144,21 @@ function SlotCard({
                     }}>
                         ✓ Booked
                     </div>
+                ) : isLockedElsewhere ? (
+                    <div style={{
+                        fontSize: '0.8rem',
+                        color: 'var(--text-tertiary)',
+                        fontStyle: 'italic',
+                    }}>
+                        Slot locked — contact support to change
+                    </div>
                 ) : (
                     <button
                         className="btn btn-primary"
-                        disabled={isFull || loading !== null}
+                        disabled={isFull || locked || loading !== null}
                         onClick={() => onBook(slot.id)}
                         style={{ padding: '0.4rem 1.2rem', fontSize: '0.88rem' }}
+                        title={locked ? 'Complete your payment to book a slot' : undefined}
                     >
                         {loading === slot.id ? 'Booking...' : isFull ? 'Full' : 'Book Slot'}
                     </button>
@@ -162,16 +177,22 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
     const [loading, setLoading] = useState<string | null>(null);
     const [pageLoading, setPageLoading] = useState(true);
     const [error, setError] = useState('');
+    // The server refuses to book without an active pass. Reaching this page by
+    // direct link skips the exam list's check, so it is repeated here.
+    const [locked, setLocked] = useState(false);
 
     useEffect(() => {
         const load = async () => {
             try {
-                const [slotsRes, bookingRes] = await Promise.all([
+                const [slotsRes, bookingRes, passRes] = await Promise.all([
                     api.get(`/slots?examId=${examId}`),
                     api.get(`/bookings/me?examId=${examId}`).catch(() => ({ data: null })),
+                    api.get('/access-pass/me', { params: { examId } }).catch(() => ({ data: null })),
                 ]);
                 setSlots(slotsRes.data);
                 setExistingBooking(bookingRes.data);
+                const pass = passRes.data;
+                if (pass) setLocked(pass.requiredForExam !== false && !pass.isActive);
             } catch (e: any) {
                 setError(e.response?.data?.message || 'Failed to load slots');
             } finally {
@@ -182,6 +203,14 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
     }, [examId]);
 
     const handleBook = async (slotId: string) => {
+        // The booking is final once confirmed — only an admin can move it — so
+        // ask before committing rather than after.
+        const slot = slots.find((s) => s.id === slotId);
+        if (slot && !confirm(
+            `Book ${formatDateTime(slot.startsAt)}?\n\n` +
+            'This becomes your exam sitting and you will not be able to change it yourself.',
+        )) return;
+
         setLoading(slotId);
         setError('');
         try {
@@ -243,6 +272,10 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                         Choose Your Exam Slot
                     </h1>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{examTitle}</p>
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
+                        Pick the sitting that suits you. Once confirmed it becomes your assigned slot
+                        and cannot be changed — contact support if you need it moved.
+                    </p>
                 </div>
 
                 {/* Existing booking banner */}
@@ -270,9 +303,45 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                                 {formatDateTime(existingBooking.slot.startsAt)}
                             </div>
+                            {existingBooking.status === 'CONFIRMED' && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: '0.3rem' }}>
+                                    This slot is locked — contact support if you need it changed.
+                                </div>
+                            )}
                         </div>
                         <button className="btn btn-primary" style={{ padding: '0.45rem 1.1rem', fontSize: '0.88rem' }} onClick={handleContinue}>
                             {existingBooking.status === 'CONFIRMED' ? 'Go to Instructions →' : 'Complete Payment →'}
+                        </button>
+                    </div>
+                )}
+
+                {locked && !existingBooking && (
+                    <div style={{
+                        background: 'rgba(255,203,5,0.1)',
+                        border: '1px solid rgba(255,203,5,0.3)',
+                        borderRadius: '12px',
+                        padding: '1rem 1.25rem',
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                        flexWrap: 'wrap',
+                    }}>
+                        <div>
+                            <div style={{ fontWeight: 600, color: 'var(--primary-400)', marginBottom: '0.2rem' }}>
+                                🔒 Unlock your exams first
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                Slots can be booked once your one-time payment is complete.
+                            </div>
+                        </div>
+                        <button
+                            className="btn btn-primary"
+                            style={{ padding: '0.45rem 1.1rem', fontSize: '0.88rem' }}
+                            onClick={() => router.push('/unlock')}
+                        >
+                            Unlock now →
                         </button>
                     </div>
                 )}
@@ -313,6 +382,7 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                                 onBook={handleBook}
                                 loading={loading}
                                 existingBooking={existingBooking}
+                                locked={locked}
                             />
                         ))}
                     </div>

@@ -100,6 +100,16 @@ export default function StudentExamsPage() {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
+    // Slot picking is gated on the pass, so the card CTA needs to know.
+    const [hasPass, setHasPass] = useState<boolean | null>(null);
+    useEffect(() => {
+        api.get('/access-pass/me')
+            .then((r) => setHasPass(Boolean(r.data.isActive)))
+            // Leave it null rather than guessing: the picker and the booking
+            // endpoint both still enforce it.
+            .catch(() => {});
+    }, []);
+
     useEffect(() => {
         const fetchExams = async () => {
             try {
@@ -144,7 +154,7 @@ export default function StudentExamsPage() {
                 ) : exams.length > 0 ? (
                     <div className="grid-3">
                         {exams.map((exam) => (
-                            <ExamCard key={exam.id} exam={exam} router={router} />
+                            <ExamCard key={exam.id} exam={exam} router={router} hasPass={hasPass} />
                         ))}
                     </div>
                 ) : (
@@ -165,9 +175,12 @@ export default function StudentExamsPage() {
 function ExamCard({
     exam,
     router,
+    hasPass,
 }: {
     exam: Exam;
     router: ReturnType<typeof useRouter>;
+    /** null while the pass is still being read — don't guess either way. */
+    hasPass: boolean | null;
 }) {
     const isCompleted = exam.isCompleted ?? false;
 
@@ -190,6 +203,14 @@ function ExamCard({
      */
     const needsSlot = !isCompleted && phase === 'NEEDS_SLOT';
 
+    /**
+     * Slot picking comes after paying, in both directions: the server refuses
+     * to book without an active pass, and a confirmed booking can no longer be
+     * changed by the student. So an unpaid student is sent to `/unlock` rather
+     * than to a picker that would reject them.
+     */
+    const mustPayFirst = needsSlot && hasPass === false;
+
     const sections = [...(exam.sections ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const questionCount = sections.reduce(
         (sum, s) => sum + (s._count?.sectionQuestions ?? 0),
@@ -197,7 +218,9 @@ function ExamCard({
     );
 
     const handleCardAction = () => {
-        if (needsSlot) {
+        if (mustPayFirst) {
+            router.push('/unlock');
+        } else if (needsSlot) {
             router.push(`/exams/${exam.id}/slots`);
         } else if (startable) {
             router.push(`/exams/${exam.id}/instructions`);
@@ -276,9 +299,14 @@ function ExamCard({
                     <div className="slot-card-time">
                         {dt(slot.startsAt)} — {timeOnly(slot.endsAt)}
                     </div>
-                    {slot.bookingStatus === 'PENDING' && (
+                    {slot.bookingStatus === 'PENDING' ? (
                         <p className="slot-note slot-note-warn">
                             Your booking is not confirmed yet. Complete payment to secure this slot.
+                        </p>
+                    ) : (
+                        <p className="slot-note slot-note-muted">
+                            This sitting is confirmed and cannot be changed. Contact support if you
+                            need it moved.
                         </p>
                     )}
                 </div>
@@ -286,8 +314,9 @@ function ExamCard({
                 needsSlot && (
                     <div className="slot-card">
                         <p className="slot-note slot-note-warn">
-                            You have not picked a sitting yet. Choose the date and time that suits you
-                            — places in each slot are limited.
+                            {mustPayFirst
+                                ? 'Unlock your exams first, then choose the date and time that suits you.'
+                                : 'You have not picked a sitting yet. Choose the date and time that suits you — places in each slot are limited. Once confirmed, your slot cannot be changed.'}
                         </p>
                     </div>
                 )
@@ -311,7 +340,11 @@ function ExamCard({
                     disabled={!startable && !needsSlot}
                     onClick={handleCardAction}
                 >
-                    {isCompleted ? '✓ Completed' : ui.cta}
+                    {isCompleted
+                        ? '✓ Completed'
+                        : mustPayFirst
+                          ? '🔒 Unlock to pick your slot'
+                          : ui.cta}
                 </button>
             </div>
         </div>

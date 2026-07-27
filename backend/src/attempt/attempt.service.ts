@@ -364,7 +364,10 @@ export class AttemptService {
         // a deploy that lands before the trial is configured would make every
         // exam on the platform permanently unstartable, with no way out from
         // inside the product.
-        if (!demo && !instance.exam.isTrial && instance.exam.requiresTrial) {
+        // Unlike the paywall and slot gates, the rehearsal is NOT waived for
+        // practice/demo exams — the whole point is "come here first, no matter
+        // what you're about to sit", so `demo` is deliberately excluded here.
+        if (!instance.exam.isTrial && instance.exam.requiresTrial) {
             const trialExam = await this.prisma.exam.findFirst({
                 where: { isTrial: true, isArchived: false },
                 select: { id: true },
@@ -633,10 +636,9 @@ export class AttemptService {
         });
         if (!instance) throw new NotFoundException('Exam instance not found');
 
-        const required =
-            !instance.exam.isTrial &&
-            instance.exam.requiresTrial &&
-            !isDemoExam(instance.exam.id);
+        // Practice/demo exams are deliberately NOT exempt here — the rehearsal
+        // applies "before any test", not just paid ones.
+        const required = !instance.exam.isTrial && instance.exam.requiresTrial;
         if (!required) return { required: false, completed: true };
 
         const done = await this.prisma.trialCompletion.findUnique({

@@ -7,7 +7,10 @@
 > - The schema is applied; `prisma migrate diff` against the live Neon DB reports
 >   **0 DDL statements**.
 > - **Trial Test — Get Exam Ready** exists, is published, and gates all nine
->   production exams at every class band (verified: `required=true` on each).
+>   production exams at every class band (verified: `required=true` on each) —
+>   **including the free Practice Exam** since 2026-07-27.
+> - **Slots are pay → pick → locked.** Booking needs an active access pass; a
+>   confirmed booking can only be moved by an admin.
 > - **Bharat Innovation Olympiad — Class 8** is published with **16 slots**:
 >   26 Jul → 2 Aug, 1:00 PM and 7:00 PM IST, capacity 500. Five stale
 >   14–15 July slots were removed.
@@ -172,12 +175,20 @@ Student, end to end:
 1. Register → SMS OTP arrives → registration feedback form → dashboard.
 2. Profile: save a phone → **hard refresh** → the number is still there and no
    OTP is demanded again. *(This was the reported bug.)*
-3. Pay → `/exams` shows **Choose your exam slot** → picker lists 16 slots → book.
-4. In your slot: Start Exam → device checks → rules modal, **checkbox gates the
+3. **Before paying**, `/exams` shows **🔒 Unlock to pick your slot** → `/unlock`.
+   Booking is refused server-side without an active pass, so also try posting to
+   `/slots/:id/book` directly and confirm `ACCESS_PASS_REQUIRED`.
+4. Pay → `/exams` shows **Choose your exam slot** → picker lists 16 slots →
+   confirm dialog → book. The slot now reads **confirmed and cannot be changed**,
+   the other 15 show *Slot locked*, and `DELETE /bookings/:id` is refused. Move
+   the student from **Admin → Slots → (a slot) → Bookings → Move**.
+5. In your slot: Start Exam → device checks → rules modal, **checkbox gates the
    button** → trial test in full proctored fullscreen → finish → real exam.
-5. Exam shows **Section 1 of 5 · Entrepreneurship Mindset**, 13 questions, then
+   Repeat on the **free Practice Exam** — it is gated too, so it must also send
+   you through the trial first rather than straight into the paper.
+6. Exam shows **Section 1 of 5 · Entrepreneurship Mindset**, 13 questions, then
    section 2. Images render. Sidebar navigator grouped by section.
-6. Submit → exam feedback form → results.
+7. Submit → exam feedback form → results.
 
 Admin:
 

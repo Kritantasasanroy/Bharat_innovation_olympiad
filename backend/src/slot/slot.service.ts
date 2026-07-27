@@ -5,8 +5,9 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus } from '@prisma/client';
+import { AccessPassStatus, BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isDemoExam } from '../common/demo-exams';
 import { validateSlotWindow } from '../exam/exam-lifecycle';
 import { BookSlotDto, CreateSlotDto } from './dto/slot.dto';
 
@@ -106,6 +107,25 @@ export class SlotService {
         const now = new Date();
         if (now > slot.endsAt) throw new BadRequestException('Slot has already ended');
 
+        // Picking a sitting comes *after* paying. A confirmed booking can no
+        // longer be changed by the student (see cancelBooking), so letting an
+        // unpaid student book would lock them into a slot they cannot yet use
+        // and cannot swap once they do pay.
+        //
+        // Read directly rather than injecting AccessPassService: SlotModule is
+        // reachable from PaymentModule via Partner→School, so importing it here
+        // would close a module cycle. AccessPassService.hasActivePass is the
+        // canonical rule — this must stay in step with it.
+        if (!isDemoExam(slot.examInstance.examId)) {
+            const pass = await this.prisma.accessPass.findUnique({
+                where: { userId },
+                select: { status: true },
+            });
+            if (pass?.status !== AccessPassStatus.ACTIVE) {
+                throw new ForbiddenException('ACCESS_PASS_REQUIRED');
+            }
+        }
+
         // One active booking per exam per user
         const existingBooking = await this.prisma.booking.findFirst({
             where: {
@@ -157,6 +177,14 @@ export class SlotService {
         if (booking.userId !== userId) throw new ForbiddenException();
         if (booking.status === BookingStatus.CANCELLED) {
             throw new BadRequestException('Booking already cancelled');
+        }
+        // Once confirmed, the slot is locked for the student — only an admin
+        // (via reassignBooking) can move them. This is what makes the pick a
+        // real commitment rather than a placeholder they can swap at will.
+        if (booking.status === BookingStatus.CONFIRMED) {
+            throw new BadRequestException(
+                'Your slot is confirmed and can no longer be changed. Contact support if you need it moved.',
+            );
         }
 
         await this.prisma.$transaction([
