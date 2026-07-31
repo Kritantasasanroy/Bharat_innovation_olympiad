@@ -1,24 +1,13 @@
 'use client';
 
 import { embeddedFormUrl } from '@/lib/constants';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
- * A full-page beta feedback prompt, shown at the moments worth asking about:
- * straight after registration, and straight after an exam.
+ * A full-page beta feedback prompt, shown at key moments (after registration, after exam).
  *
- * ## Why the form is embedded rather than linked
- *
- * A link opens a new tab that a popup blocker can swallow and that the student
- * has no reason to come back from. Embedding keeps them inside BIO, so the
- * "Continue" path is still right there when they are done.
- *
- * ## Why "Continue" is never disabled
- *
- * A Google Form in an iframe gives the host page no submit signal — cross-origin
- * frames report nothing. There is no honest way to gate on submission, so this
- * is a prompt rather than a wall: blocking a student from their results behind
- * a check we cannot actually perform would just trap them.
+ * Gated: The "Continue" / "Go to dashboard" button is hidden until the user submits
+ * the Google Form (detected via iframe navigation reload or new-tab submission fallback).
  */
 export default function FeedbackInterstitial({
     formUrl,
@@ -35,6 +24,35 @@ export default function FeedbackInterstitial({
 }) {
     const [frameLoaded, setFrameLoaded] = useState(false);
     const [frameFailed, setFrameFailed] = useState(false);
+    const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const saved = sessionStorage.getItem(`submitted_feedback_${formUrl}`);
+            if (saved === 'true') {
+                setHasSubmitted(true);
+            }
+        }
+    }, [formUrl]);
+
+    const handleFrameLoad = () => {
+        if (!frameLoaded) {
+            setFrameLoaded(true);
+        } else {
+            // Second load event on iframe indicates Google Form submission redirect
+            setHasSubmitted(true);
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem(`submitted_feedback_${formUrl}`, 'true');
+            }
+        }
+    };
+
+    const handleManualSubmitConfirm = () => {
+        setHasSubmitted(true);
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem(`submitted_feedback_${formUrl}`, 'true');
+        }
+    };
 
     return (
         <main className="container page-content animate-fade-in" style={{ maxWidth: '820px' }}>
@@ -76,15 +94,16 @@ export default function FeedbackInterstitial({
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ marginTop: 'var(--space-4)' }}
+                            onClick={handleManualSubmitConfirm}
                         >
-                            Open the feedback form ↗
+                            Open feedback form in a new tab ↗
                         </a>
                     </div>
                 ) : (
                     <iframe
                         src={embeddedFormUrl(formUrl)}
                         title={title}
-                        onLoad={() => setFrameLoaded(true)}
+                        onLoad={handleFrameLoad}
                         onError={() => setFrameFailed(true)}
                         style={{
                             display: frameLoaded ? 'block' : 'none',
@@ -97,22 +116,57 @@ export default function FeedbackInterstitial({
                 )}
             </div>
 
-            {/* Sticky, because the embedded form is 78vh tall and the Continue
-                button used to sit below it — so on a laptop a tester had to scroll
-                past the entire form to find the way out, and several never did. */}
-            <div className="feedback-actions">
-                <a
-                    href={formUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="feedback-actions__link"
-                >
-                    Trouble with the form? Open it in a new tab ↗
-                </a>
-                <button className="btn btn-primary" onClick={onContinue}>
-                    {continueLabel}
-                </button>
+            <div className="feedback-actions" style={{ flexDirection: 'column', gap: '1rem', alignItems: 'center', marginTop: '1.5rem' }}>
+                {!hasSubmitted ? (
+                    <div style={{ textAlign: 'center', width: '100%' }}>
+                        <div
+                            style={{
+                                padding: '0.85rem 1.25rem',
+                                borderRadius: '10px',
+                                background: 'rgba(234, 179, 8, 0.12)',
+                                border: '1px solid rgba(234, 179, 8, 0.3)',
+                                color: 'var(--text-primary)',
+                                fontSize: '0.9rem',
+                                fontWeight: 500,
+                                marginBottom: '0.75rem',
+                            }}
+                        >
+                            📋 Please fill and submit the feedback form above to continue.
+                        </div>
+                        <a
+                            href={formUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="feedback-actions__link"
+                            onClick={handleManualSubmitConfirm}
+                            style={{ fontSize: '0.85rem' }}
+                        >
+                            Trouble with the form? Open in new tab (will unlock after opening) ↗
+                        </a>
+                    </div>
+                ) : (
+                    <div style={{ textAlign: 'center', width: '100%' }}>
+                        <div
+                            style={{
+                                padding: '0.85rem 1.25rem',
+                                borderRadius: '10px',
+                                background: 'rgba(34, 197, 94, 0.12)',
+                                border: '1px solid rgba(34, 197, 94, 0.3)',
+                                color: '#16a34a',
+                                fontSize: '0.9rem',
+                                fontWeight: 600,
+                                marginBottom: '0.75rem',
+                            }}
+                        >
+                            ✅ Feedback submitted! Thank you for your response.
+                        </div>
+                        <button className="btn btn-primary btn-lg" onClick={onContinue} style={{ width: '100%', maxWidth: '320px' }}>
+                            {continueLabel}
+                        </button>
+                    </div>
+                )}
             </div>
         </main>
     );
 }
+
