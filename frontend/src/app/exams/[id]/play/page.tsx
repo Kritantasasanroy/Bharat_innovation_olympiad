@@ -917,13 +917,6 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             <div className="question-topic">
                                 {currentQuestion.sectionName || currentQuestion.topic || ''}
                             </div>
-                            <button
-                                className={`btn btn-sm ${flagged.has(currentQuestion.id) ? 'btn-danger' : 'btn-secondary'}`}
-                                onClick={() => !isGated && toggleFlag(currentQuestion.id)}
-                                disabled={isGated}
-                            >
-                                {flagged.has(currentQuestion.id) ? '🔖 Marked for later' : '🔖 Mark for later'}
-                            </button>
                         </div>
 
                         <div className="question-text">
@@ -978,6 +971,13 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className="question-nav">
                             <button className="btn btn-secondary" disabled={currentIndex === 0 || isGated} onClick={prevQuestion}>← Previous</button>
                             <button className="btn btn-secondary" disabled={isGated} onClick={() => { setSelectedOption(null); if (currentQuestion) saveAnswer(currentQuestion.id, null); }}>Clear</button>
+                            <button
+                                className={`btn ${flagged.has(currentQuestion.id) ? 'btn-danger' : 'btn-secondary'}`}
+                                onClick={() => !isGated && toggleFlag(currentQuestion.id)}
+                                disabled={isGated}
+                            >
+                                {flagged.has(currentQuestion.id) ? '🔖 Marked' : '🔖 Mark for later'}
+                            </button>
                             {currentIndex < questions.length - 1 ? (
                                 <button className="btn btn-primary" onClick={nextQuestion} disabled={isGated}>Next →</button>
                             ) : (
