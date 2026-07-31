@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { normalizePhone } from '../auth/phone.helpers';
 import { SubmitGuardianDto } from './dto/guardian.dto';
 
@@ -38,7 +39,10 @@ const MIN_AGE_YEARS = 3;
  */
 @Injectable()
 export class GuardianService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private notifications?: NotificationService,
+    ) {}
 
     /**
      * Create or update the guardian profile.
@@ -83,6 +87,8 @@ export class GuardianService {
             city: dto.city?.trim() || null,
             state: dto.state?.trim() || null,
             pincode: dto.pincode?.trim() || null,
+            idDocumentType: dto.idDocumentType ?? null,
+            idDocumentUrl: dto.idDocumentUrl ?? null,
         };
 
         const profile = await this.prisma.guardianProfile.upsert({
@@ -107,6 +113,19 @@ export class GuardianService {
                       }),
             },
         });
+
+        // Send parent approval confirmation email
+        if (this.notifications) {
+            const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+            const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Student';
+            const guardianName = `${profile.guardianFirstName} ${profile.guardianLastName}`.trim();
+            
+            await this.notifications.sendParentApprovalEmail(
+                profile.guardianEmail,
+                guardianName,
+                studentName,
+            );
+        }
 
         return this.present(profile);
     }

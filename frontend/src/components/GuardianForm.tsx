@@ -19,6 +19,7 @@ import { FormEvent, useEffect, useState } from 'react';
 
 export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian', 'Other'] as const;
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
+export const ID_DOC_TYPES = ['Aadhaar Card', 'School ID Card', 'Passport'] as const;
 
 const PINCODE_LENGTH = 6;
 
@@ -33,6 +34,8 @@ export interface GuardianFormValues {
     city: string;
     state: string;
     pincode: string;
+    idDocumentType: string;
+    idDocumentUrl: string;
     parentalConsent: boolean;
     dataConsent: boolean;
 }
@@ -48,6 +51,8 @@ export const EMPTY_GUARDIAN: GuardianFormValues = {
     city: '',
     state: '',
     pincode: '',
+    idDocumentType: 'Aadhaar Card',
+    idDocumentUrl: '',
     parentalConsent: false,
     dataConsent: false,
 };
@@ -71,6 +76,7 @@ export default function GuardianForm({
     const [values, setValues] = useState<GuardianFormValues>({ ...EMPTY_GUARDIAN, ...initial });
     const [locating, setLocating] = useState(false);
     const [localError, setLocalError] = useState('');
+    const [fileName, setFileName] = useState('');
 
     // Re-seed if the parent component loads an existing profile after first paint.
     useEffect(() => {
@@ -102,6 +108,19 @@ export default function GuardianForm({
     const set = <K extends keyof GuardianFormValues>(key: K, value: GuardianFormValues[K]) =>
         setValues((v) => ({ ...v, [key]: value }));
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (event.target?.result) {
+                set('idDocumentUrl', event.target.result as string);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
     const bothConsents = values.parentalConsent && values.dataConsent;
 
     const handleSubmit = async (e: FormEvent) => {
@@ -118,6 +137,10 @@ export default function GuardianForm({
         }
         if (!values.guardianPhone.trim()) {
             setLocalError("Enter the parent or guardian's mobile number.");
+            return;
+        }
+        if (!values.idDocumentUrl) {
+            setLocalError("Upload the student's Aadhaar, School ID, or Passport document.");
             return;
         }
         if (!bothConsents) {
@@ -262,6 +285,39 @@ export default function GuardianForm({
                         value={values.state}
                         onChange={(e) => set('state', e.target.value)}
                     />
+                </div>
+            </fieldset>
+
+            <fieldset className="guardian-fieldset">
+                <legend>Student Identity Document (Mandatory)</legend>
+                <p className="input-hint" style={{ marginTop: 0 }}>
+                    Upload a copy of the student&apos;s Aadhaar Card, School ID Card, or Passport for identity verification.
+                </p>
+                <div className="form-row">
+                    <div className="input-group">
+                        <label className="input-label" htmlFor="idDocumentType">Document type</label>
+                        <select
+                            id="idDocumentType" className="input-field"
+                            value={values.idDocumentType}
+                            onChange={(e) => set('idDocumentType', e.target.value)}
+                        >
+                            {ID_DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </div>
+                    <div className="input-group">
+                        <label className="input-label" htmlFor="idDocumentFile">Upload document (Image / PDF)</label>
+                        <input
+                            id="idDocumentFile" className="input-field" type="file"
+                            accept="image/*,application/pdf"
+                            onChange={handleFileUpload}
+                            style={{ padding: '0.4rem' }}
+                        />
+                        {fileName && (
+                            <p className="input-hint" style={{ color: '#22c55e', fontWeight: 500 }}>
+                                ✓ Uploaded: {fileName}
+                            </p>
+                        )}
+                    </div>
                 </div>
             </fieldset>
 

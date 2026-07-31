@@ -101,7 +101,9 @@ model GuardianProfile {
   gender            String?
   city              String?
   state             String?
-  pincode           String?
+  // ── Student ID Document (Aadhaar / School ID / Passport) ──
+  idDocumentType    String?
+  idDocumentUrl     String?
   /// Explicit, separately-ticked consents. Both must be set for the row to be
   /// accepted — `GuardianService` rejects a partial submission rather than
   /// storing half a consent.

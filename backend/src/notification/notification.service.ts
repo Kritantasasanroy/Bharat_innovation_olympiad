@@ -12,6 +12,7 @@ import {
     resultsPublishedEmail,
     slotConfirmedEmail,
     welcomeEmail,
+    parentApprovalEmail,
 } from './templates';
 import {
     ConsoleSmsProvider,
@@ -239,6 +240,18 @@ export class NotificationService implements OnModuleInit {
     /** Milestone 4b — the final report is published and the score is no longer provisional. */
     async sendResultsPublished(to: string, firstName: string, examTitle: string): Promise<void> {
         await this.deliver(to, resultsPublishedEmail({ firstName, examTitle, appUrl: this.appUrl }));
+    }
+
+    async sendParentApprovalEmail(
+        to: string,
+        guardianName: string,
+        studentName: string,
+    ): Promise<void> {
+        const approvalLink = `${this.appUrl}/consent`;
+        await this.deliver(
+            to,
+            parentApprovalEmail({ guardianName, studentName, approvalLink }),
+        );
     }
 
     /**

@@ -233,3 +233,21 @@ export function adminBroadcastEmail(vars: { subject: string; message: string; ap
         .join('');
     return build(vars.subject, vars.subject, body);
 }
+
+export function parentApprovalEmail(vars: {
+    guardianName: string;
+    studentName: string;
+    approvalLink: string;
+}): RenderedEmail {
+    const body = `
+        <p style="margin:0 0 12px;">Dear ${vars.guardianName},</p>
+        <p style="margin:0 0 12px;">Your details and consent were submitted for <strong>${vars.studentName}</strong>'s participation in the <strong>Bharat Innovation Olympiad</strong>.</p>
+        <p style="margin:0 0 12px;">Please review and confirm your parental approval by clicking the link below.</p>
+    `;
+    return build(
+        'Parental Consent Confirmation — Bharat Innovation Olympiad',
+        'Parental Approval Required',
+        body,
+        { label: 'Review & Confirm Approval', url: vars.approvalLink },
+    );
+}

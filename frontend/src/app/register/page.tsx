@@ -50,8 +50,8 @@ const STEPS: { id: Step; label: string }[] = [
     { id: 'details', label: 'Your details' },
     { id: 'verify', label: 'Verify email' },
     { id: 'face', label: 'Face scan' },
-    { id: 'guardian', label: 'Parent details' },
     { id: 'payment', label: 'Payment' },
+    { id: 'guardian', label: 'Parent details' },
 ];
 
 const SUBTITLES: Record<Step, string> = {
@@ -171,9 +171,8 @@ export default function RegisterPage() {
         stopProctoring();
         setFaceCapturing(false);
         if (ok) {
-            // Registration no longer ends here — the parent section and payment
-            // still follow, so this advances rather than navigating away.
-            setStep('guardian');
+            // Face enrolled — proceed to payment, then parent consent follows.
+            setStep('payment');
         } else {
             setFaceMsg('Enrollment failed. Please try again.');
         }
@@ -352,14 +351,12 @@ export default function RegisterPage() {
                     <PaymentStep
                         studentEmail={user?.email ?? formData.email}
                         rollNumber={user?.rollNumber}
-                        // The beta feedback prompt still sits between registration
-                        // and the dashboard, and hands off from there.
-                        onDone={() => router.push('/feedback/registration')}
+                        onDone={() => { setError(''); setStep('guardian'); }}
                     />
                 ) : step === 'guardian' ? (
                     <GuardianStep
                         studentName={`${formData.firstName} ${formData.lastName}`.trim() || undefined}
-                        onDone={() => { setError(''); setStep('payment'); }}
+                        onDone={() => router.push('/feedback/registration')}
                     />
                 ) : step === 'face' ? (
                     <div className="auth-form">

@@ -67,6 +67,16 @@ export class SubmitGuardianDto {
     @IsOptional()
     pincode?: string;
 
+    // ── Student ID Document (Aadhaar / School ID / Passport) ──
+
+    @IsString()
+    @IsOptional()
+    idDocumentType?: string;
+
+    @IsString()
+    @IsOptional()
+    idDocumentUrl?: string;
+
     // ── Consents. Both mandatory. ──
 
     @IsBoolean()

@@ -98,6 +98,16 @@ export default function PaymentStep({
         if (pass?.isActive) stopPolling();
     }, [pass?.isActive, stopPolling]);
 
+    // Automatically check status when returning to this tab after paying on Razorpay
+    useEffect(() => {
+        if (!waiting) return;
+        const handleFocus = () => {
+            void loadPass();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [waiting, loadPass]);
+
     const startPolling = useCallback(() => {
         setWaiting(true);
         setPollsExhausted(false);
@@ -211,7 +221,7 @@ export default function PaymentStep({
                 </ol>
 
                 <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={onDone}>
-                    Continue →
+                    Payment Confirmed! Proceed to Parent Details →
                 </button>
             </div>
         );

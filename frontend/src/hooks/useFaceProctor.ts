@@ -8,8 +8,8 @@ import { useProctorStore } from '@/store/proctorStore';
 type FaceApi = typeof import('face-api.js');
 
 const DETECTION_INTERVAL_MS = 5000;  // run inference every 5s
-const GAZE_THRESHOLD = 0.25;          // nose deviation ratio to trigger LOOKING_AWAY
-const IDENTITY_THRESHOLD = 0.5;       // Euclidean distance below which faces match
+const GAZE_THRESHOLD = 0.35;          // nose deviation ratio to trigger LOOKING_AWAY (relaxed from 0.25 to reduce false popups)
+const IDENTITY_THRESHOLD = 0.6;       // Euclidean distance threshold for identity match (relaxed from 0.5 to reduce false popups)
 // tinyFaceDetector's default inputSize (416) is tuned for lower-res input —
 // a larger inputSize gives the detector more pixel detail to work with,
 // which helped with missed detections on a 320x240 feed. scoreThreshold is
@@ -27,9 +27,9 @@ const DETECTOR_SCORE_THRESHOLD = 0.5;
 // checks whether the LAST KNOWN state has persisted long enough to count.
 const SUSTAIN_CHECK_INTERVAL_MS = 1000;
 // Exported so UI popups (countdowns) stay in sync with the actual thresholds.
-export const NO_FACE_SUSTAIN_MS = 7000;       // face must be missing continuously for >7s
-export const LOOKING_AWAY_SUSTAIN_MS = 5000;  // gaze must be away continuously for >=5s
-export const FACE_MISMATCH_SUSTAIN_MS = 5000; // identity mismatch must persist for >=5s
+export const NO_FACE_SUSTAIN_MS = 10000;      // face must be missing continuously for >10s
+export const LOOKING_AWAY_SUSTAIN_MS = 8000;  // gaze must be away continuously for >=8s
+export const FACE_MISMATCH_SUSTAIN_MS = 8000; // identity mismatch must persist for >=8s
 const SUB_EVENTS_PER_VIOLATION = 2;    // 2 sustained occurrences = 1 counted violation
 // Safety net: a SINGLE continuous episode that drags on past this counts as
 // its own violation even without a second occurrence to pair with — closes
@@ -151,19 +151,28 @@ export function useFaceProctor({
     const loadModels = useCallback(async () => {
         if (faceApiRef.current) return; // already loaded
 
-        setState((s) => ({ ...s, loadingProgress: 'Loading face detection models…' }));
+        let countdown = 6;
+        setState((s) => ({ ...s, loadingProgress: `Loading AI models... (${countdown}s)` }));
 
-        const faceapi = await import('face-api.js');
-        faceApiRef.current = faceapi;
+        const timer = setInterval(() => {
+            countdown = Math.max(1, countdown - 1);
+            setState((s) => ({ ...s, loadingProgress: `Loading AI models... (${countdown}s)` }));
+        }, 1000);
 
-        const MODEL_URL = '/models';
-        await Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        ]);
+        try {
+            const faceapi = await import('face-api.js');
+            faceApiRef.current = faceapi;
 
-        setState((s) => ({ ...s, loadingProgress: '', isLoaded: true }));
+            const MODEL_URL = '/models';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+            ]);
+        } finally {
+            clearInterval(timer);
+            setState((s) => ({ ...s, loadingProgress: '', isLoaded: true }));
+        }
     }, []);
 
     const startCamera = useCallback(async (): Promise<MediaStream | null> => {

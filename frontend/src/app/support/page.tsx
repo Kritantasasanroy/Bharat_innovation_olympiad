@@ -139,12 +139,11 @@ export default function SupportPage() {
     return (
         <AuthGuard>
             <Navbar />
-            <div className="page-content" style={{ padding: 'var(--space-8) var(--space-6)' }}>
+            <div className="page-content" style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '900px', margin: '0 auto' }}>
                 <div className="page-header">
                     <h1>Support</h1>
                     <p className="text-muted">
-                        Raise a grievance, request a re-attempt, or ask for a refund. Our team reviews every
-                        request and records a written decision.
+                        Raise a grievance. Our team reviews every request and records a written decision.
                     </p>
                 </div>
 
@@ -155,130 +154,64 @@ export default function SupportPage() {
                     </div>
                 )}
 
-                <div className="grid-2">
-                    {/* ── Grievance / re-attempt ── */}
-                    <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
-                        <h2>Grievance or re-attempt</h2>
-                        <form className="exam-form" onSubmit={submitGrievance}>
-                            <div className="form-group">
-                                <label htmlFor="gtype">Type</label>
-                                <select
-                                    id="gtype"
-                                    className="form-control"
-                                    value={gType}
-                                    onChange={(e) => setGType(e.target.value as 'GRIEVANCE' | 'REATTEMPT')}
-                                >
-                                    <option value="GRIEVANCE">Grievance / complaint</option>
-                                    <option value="REATTEMPT">Request a re-attempt</option>
-                                </select>
-                            </div>
+                {/* ── Grievance ── */}
+                <div className="glass-card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+                    <h2>Raise a Grievance</h2>
+                    <form className="exam-form" onSubmit={submitGrievance}>
+                        <div className="form-group">
+                            <label htmlFor="gattempt">Related attempt (optional)</label>
+                            <select
+                                id="gattempt"
+                                className="form-control"
+                                value={gAttemptId}
+                                onChange={(e) => setGAttemptId(e.target.value)}
+                            >
+                                <option value="">— none —</option>
+                                {attempts.map((attempt) => (
+                                    <option key={attempt.id} value={attempt.id}>
+                                        {attempt.examTitle ?? attempt.exam?.title ?? attempt.id.slice(0, 8)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                            <div className="form-group">
-                                <label htmlFor="gattempt">
-                                    Related attempt {gType === 'REATTEMPT' ? '(required)' : '(optional)'}
-                                </label>
-                                <select
-                                    id="gattempt"
-                                    className="form-control"
-                                    value={gAttemptId}
-                                    onChange={(e) => setGAttemptId(e.target.value)}
-                                    required={gType === 'REATTEMPT'}
-                                >
-                                    <option value="">— none —</option>
-                                    {attempts.map((attempt) => (
-                                        <option key={attempt.id} value={attempt.id}>
-                                            {attempt.examTitle ?? attempt.exam?.title ?? attempt.id.slice(0, 8)}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                        <div className="form-group">
+                            <label htmlFor="gsubject">Subject</label>
+                            <input
+                                id="gsubject"
+                                className="form-control"
+                                required
+                                value={gSubject}
+                                onChange={(e) => setGSubject(e.target.value)}
+                                placeholder="e.g. Technical issue during exam"
+                            />
+                        </div>
 
-                            <div className="form-group">
-                                <label htmlFor="gsubject">Subject</label>
-                                <input
-                                    id="gsubject"
-                                    className="form-control"
-                                    required
-                                    value={gSubject}
-                                    onChange={(e) => setGSubject(e.target.value)}
-                                    placeholder="e.g. Power cut during my exam"
-                                />
-                            </div>
+                        <div className="form-group">
+                            <label htmlFor="gdesc">What happened?</label>
+                            <textarea
+                                id="gdesc"
+                                className="form-control"
+                                rows={4}
+                                required
+                                value={gDescription}
+                                onChange={(e) => setGDescription(e.target.value)}
+                            />
+                        </div>
 
-                            <div className="form-group">
-                                <label htmlFor="gdesc">What happened?</label>
-                                <textarea
-                                    id="gdesc"
-                                    className="form-control"
-                                    rows={4}
-                                    required
-                                    value={gDescription}
-                                    onChange={(e) => setGDescription(e.target.value)}
-                                />
-                            </div>
-
-                            <button type="submit" className="btn btn-primary" disabled={busy}>
-                                {busy ? 'Submitting…' : 'Submit request'}
-                            </button>
-                        </form>
-                    </div>
-
-                    {/* ── Refund ── */}
-                    <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
-                        <h2>Request a refund</h2>
-                        <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                            Refunds are available before the cutoff (48 hours before the exam) and only while no
-                            slot is booked.
-                        </p>
-                        {payments.length === 0 ? (
-                            <p className="text-muted">You have no paid payments to refund.</p>
-                        ) : (
-                            <form className="exam-form" onSubmit={submitRefund}>
-                                <div className="form-group">
-                                    <label htmlFor="rpayment">Payment</label>
-                                    <select
-                                        id="rpayment"
-                                        className="form-control"
-                                        required
-                                        value={rPaymentId}
-                                        onChange={(e) => setRPaymentId(e.target.value)}
-                                    >
-                                        <option value="">— select —</option>
-                                        {payments.map((payment) => (
-                                            <option key={payment.id} value={payment.id}>
-                                                ₹{(payment.amount / 100).toFixed(2)} ·{' '}
-                                                {new Date(payment.createdAt).toLocaleDateString()}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label htmlFor="rreason">Reason</label>
-                                    <textarea
-                                        id="rreason"
-                                        className="form-control"
-                                        rows={3}
-                                        required
-                                        value={rReason}
-                                        onChange={(e) => setRReason(e.target.value)}
-                                    />
-                                </div>
-                                <button type="submit" className="btn btn-primary" disabled={busy}>
-                                    {busy ? 'Submitting…' : 'Request refund'}
-                                </button>
-                            </form>
-                        )}
-                    </div>
+                        <button type="submit" className="btn btn-primary" disabled={busy}>
+                            {busy ? 'Submitting…' : 'Submit grievance'}
+                        </button>
+                    </form>
                 </div>
 
                 {/* ── History ── */}
-                <div className="glass-card table-responsive" style={{ marginTop: 'var(--space-6)' }}>
-                    <h2 style={{ padding: 'var(--space-4) var(--space-5) 0' }}>Your requests</h2>
+                <div className="glass-card table-responsive">
+                    <h2 style={{ padding: 'var(--space-4) var(--space-5) 0' }}>Your grievances</h2>
                     <table className="data-table">
                         <thead>
                             <tr>
-                                <th>Type</th>
-                                <th>Detail</th>
+                                <th>Subject</th>
                                 <th>Status</th>
                                 <th>Outcome</th>
                             </tr>
@@ -286,7 +219,6 @@ export default function SupportPage() {
                         <tbody>
                             {grievances.map((g) => (
                                 <tr key={g.id}>
-                                    <td>{g.type === 'REATTEMPT' ? 'Re-attempt' : 'Grievance'}</td>
                                     <td>{g.subject}</td>
                                     <td>
                                         <span className={STATUS_CLASS[g.status] ?? 'badge'}>{g.status}</span>
@@ -294,25 +226,10 @@ export default function SupportPage() {
                                     <td className="text-muted">{g.resolution ?? '—'}</td>
                                 </tr>
                             ))}
-                            {refunds.map((r) => (
-                                <tr key={r.id}>
-                                    <td>Refund</td>
-                                    <td>
-                                        ₹{(r.payment.amount / 100).toFixed(2)} — {r.reason}
-                                        {!r.eligible && (
-                                            <div className="join-date">Auto-check: {r.eligibilityNote}</div>
-                                        )}
-                                    </td>
-                                    <td>
-                                        <span className={STATUS_CLASS[r.status] ?? 'badge'}>{r.status}</span>
-                                    </td>
-                                    <td className="text-muted">{r.decisionReason ?? '—'}</td>
-                                </tr>
-                            ))}
-                            {grievances.length === 0 && refunds.length === 0 && (
+                            {grievances.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="text-muted">
-                                        You have not raised any requests yet.
+                                    <td colSpan={3} className="text-muted">
+                                        You have not raised any grievances yet.
                                     </td>
                                 </tr>
                             )}

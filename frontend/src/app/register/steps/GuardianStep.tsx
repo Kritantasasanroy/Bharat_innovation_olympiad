@@ -49,7 +49,7 @@ export default function GuardianStep({
     return (
         <GuardianForm
             studentName={studentName}
-            submitLabel="Save and continue to payment"
+            submitLabel="Save parent details and finish registration"
             busy={busy}
             error={error}
             onSubmit={handleSubmit}
