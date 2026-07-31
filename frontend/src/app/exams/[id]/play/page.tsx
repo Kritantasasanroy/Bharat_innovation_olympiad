@@ -1,13 +1,16 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import MascotToast from '@/components/MascotToast';
 import { useExamSession } from '@/hooks/useExamSession';
 import { useFaceProctor, NO_FACE_SUSTAIN_MS, LOOKING_AWAY_SUSTAIN_MS, FACE_MISMATCH_SUSTAIN_MS } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
-import { use, useEffect, useMemo, useRef, useState } from 'react';
+import { cueIsWorthShowing, MascotCue, nextMascotCue } from '@/lib/mascot';
+import { useAuthStore } from '@/store/authStore';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -43,6 +46,112 @@ function groupBySection(questions: any[]): SectionBlock[] {
         }
     });
     return blocks;
+}
+
+/**
+ * Question media that fails visibly rather than silently.
+ *
+ * "Image based questions to be checked." A question whose illustration does not
+ * load is not merely ugly — it is unanswerable, and a browser's broken-image
+ * glyph gives the student no idea whether the picture is missing, still loading,
+ * or simply not part of the question. Under exam time pressure that is the
+ * difference between "wait a second" and "give up on this one".
+ *
+ * `key={src}` on the state reset matters: moving between two questions that both
+ * carry media reuses this component, and a stale `failed` from the previous
+ * question would hide an image that is perfectly fine.
+ */
+function QuestionImage({ src, alt }: { src: string; alt: string }) {
+    const [failed, setFailed] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+
+    useEffect(() => {
+        setFailed(false);
+        setLoaded(false);
+    }, [src]);
+
+    if (failed) {
+        return (
+            <div className="question-media-error">
+                <p>
+                    <strong>The image for this question didn&apos;t load.</strong> It is usually a
+                    brief network problem — your answers are saved, and the timer is unaffected.
+                </p>
+                <div className="question-media-error__actions">
+                    <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                            setFailed(false);
+                            // Cache-bust so a failed fetch is genuinely retried
+                            // rather than served from the browser's negative cache.
+                            setAttempt((a) => a + 1);
+                        }}
+                    >
+                        ↻ Try loading it again
+                    </button>
+                    <a
+                        href={src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm btn-secondary"
+                    >
+                        Open in a new tab ↗
+                    </a>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <>
+            {!loaded && <div className="question-media-loading">Loading image…</div>}
+            <img
+                src={attempt === 0 ? src : `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}`}
+                alt={alt}
+                className="question-media"
+                style={loaded ? undefined : { display: 'none' }}
+                onLoad={() => setLoaded(true)}
+                onError={() => setFailed(true)}
+            />
+        </>
+    );
+}
+
+/** Same contract as {@link QuestionImage}, for video. */
+function QuestionVideo({ src }: { src: string }) {
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => setFailed(false), [src]);
+
+    if (failed) {
+        return (
+            <div className="question-media-error">
+                <p>
+                    <strong>The video for this question didn&apos;t load.</strong> Your answers are
+                    saved and the timer is unaffected.
+                </p>
+                <div className="question-media-error__actions">
+                    <a href={src} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary">
+                        Open in a new tab ↗
+                    </a>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <video
+            src={src}
+            controls
+            // No autoplay: a video starting on its own during a timed exam is
+            // startling, and several questions may carry one.
+            preload="metadata"
+            className="question-media"
+            onError={() => setFailed(true)}
+        />
+    );
 }
 
 export default function ExamPlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -182,6 +291,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         pauseTimeoutSec: 20,
     });
 
+    // The student's own grade, for the "Grade N Olympiad" label on the paper.
+    const user = useAuthStore((s) => s.user);
+
     const {
         videoRef,
         isLoaded: faceModelsLoaded,
@@ -254,6 +366,46 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
+    /**
+     * Mid-exam encouragement at 20 and 40 minutes.
+     *
+     * Elapsed time is derived from the **server** timer (`duration − remaining`)
+     * rather than from `Date.now()` against the attempt's start: the timer is
+     * server-authoritative, so this survives a clock skew, a page refresh and a
+     * dropped connection, and a student who reloads at minute 25 still gets the
+     * 20-minute cue they missed.
+     *
+     * `timerReady` guards the first render. Before the socket's first tick,
+     * `remaining` is 0, which would compute elapsed as the *whole* duration and
+     * fire both cues instantly on a paper the student has not started.
+     */
+    const durationSeconds = (exam?.durationMinutes ?? 0) * 60;
+    const [timerReady, setTimerReady] = useState(false);
+    useEffect(() => {
+        if (remaining > 0) setTimerReady(true);
+    }, [remaining]);
+
+    const [firedCueIds, setFiredCueIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [activeCue, setActiveCue] = useState<MascotCue | null>(null);
+
+    useEffect(() => {
+        // Never during the trial: a rehearsal is short and the point of it is the
+        // mechanics, not a pep talk. Never while the paper is paused/gated either —
+        // a toast behind the fullscreen overlay would be unreadable and unclosable.
+        if (!timerReady || isTrialRun || isGated || activeCue || durationSeconds <= 0) return;
+
+        const elapsed = durationSeconds - remaining;
+        const cue = nextMascotCue(elapsed, firedCueIds);
+        if (!cue) return;
+
+        // Mark fired even when suppressed, so a cue that is not worth showing on a
+        // short paper is not re-evaluated on every tick for the rest of the exam.
+        setFiredCueIds((prev) => new Set(prev).add(cue.id));
+        if (cueIsWorthShowing(cue, exam?.durationMinutes ?? 0)) setActiveCue(cue);
+    }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, activeCue, firedCueIds, exam?.durationMinutes]);
+
+    const dismissCue = useCallback(() => setActiveCue(null), []);
+
     // Start the exam once on mount.
     useEffect(() => {
         startExam().catch(err => console.warn('Exam init warning:', err));
@@ -321,7 +473,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const destinationAfterSubmit = async (redirectUrl?: string): Promise<string> => {
         if (isTrialRun) return finishTrialRun();
         if (redirectUrl) return redirectUrl;
-        return '/feedback/exam';
+        // The beta feedback prompt still comes first — it is asked while the exam
+        // is fresh — and hands off to the submitted page, which answers the
+        // questions a student actually has at that moment.
+        return `/feedback/exam?next=${encodeURIComponent(`/exams/${id}/submitted`)}`;
     };
     useEffect(() => { destinationRef.current = destinationAfterSubmit; });
 
@@ -395,6 +550,37 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         );
     }
 
+    /**
+     * Parental consent is missing (registration part 2).
+     *
+     * Reached by a student who registered before the parent section existed, or
+     * whose consent version has been superseded. `?next=` brings them straight
+     * back here once it is done, rather than dropping them on the dashboard to
+     * find their own way back to the paper they were trying to sit.
+     */
+    if (error === 'GUARDIAN_CONSENT_REQUIRED') {
+        return (
+            <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '520px' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👨‍👩‍👧</div>
+                    <h2 style={{ marginBottom: '1rem' }}>Parent consent needed first</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        Every participant is a school student, so a parent or guardian has to give
+                        consent before we can proctor an exam. It takes about two minutes and only
+                        needs doing once.
+                    </p>
+                    <button
+                        className="btn btn-primary"
+                        style={{ marginTop: '1.5rem' }}
+                        onClick={() => { window.location.href = `/guardian?next=/exams/${id}/instructions`; }}
+                    >
+                        Complete the parent section
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (error) {
         return (
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
@@ -431,6 +617,20 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div style={{ width: '16px', height: '16px', border: '2px solid rgba(14,165,233,0.4)', borderTopColor: 'var(--primary-400)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{loadingProgress}</span>
                     </div>
+                )}
+
+                {/* ── Mid-exam encouragement (20 / 40 min) ──
+                    Rendered before the blocking overlays below so it can never sit
+                    on top of the fullscreen gate or the auto-submit notice, both of
+                    which are terminal and must not be obscured by a pep talk. */}
+                {activeCue && (
+                    <MascotToast
+                        cue={activeCue}
+                        answeredCount={Object.keys(answers).length}
+                        totalQuestions={questions.length}
+                        remainingSeconds={remaining}
+                        onDismiss={dismissCue}
+                    />
                 )}
 
                 {/* ── Face-check popup — center-screen, dismissed via OK button ── */}
@@ -585,7 +785,19 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 {/* ── Header ── */}
                 <header className="exam-header">
                     <div className="flex items-center gap-4">
-                        <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>{exam?.title || 'Exam'}</h2>
+                        {/* "Mention of Specific Grade olympiad during exam" — the
+                            grade is stated on the paper itself, not just on the way
+                            in, so a student who suspects they are on the wrong paper
+                            can see it at any moment without leaving the exam. */}
+                        <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>
+                            {user?.classBand ? (
+                                <>
+                                    <span className="exam-header__grade">Grade {user.classBand} Olympiad</span>
+                                    <span className="exam-header__sep"> · </span>
+                                </>
+                            ) : null}
+                            {exam?.title || 'Exam'}
+                        </h2>
                         {/* The rehearsal runs in exactly the same environment as the
                             real paper — fullscreen, webcam, timer, the lot — so the
                             only thing distinguishing it is saying so. */}
@@ -718,31 +930,24 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             <p>{currentQuestion.text}</p>
 
                             {/* A question can carry a picture AND a video at once, so these
-                                are independent slots rather than one switched-on media type. */}
+                                are independent slots rather than one switched-on media type.
+                                Each is wrapped so a URL that fails to load renders an
+                                explanation and a retry rather than a browser broken-image
+                                glyph — a student mid-exam cannot tell those apart, and an
+                                image-based question with no visible image is unanswerable. */}
                             {currentQuestion.imageUrl && (
-                                <img
-                                    src={currentQuestion.imageUrl}
-                                    alt="Question illustration"
-                                    className="question-media"
-                                />
+                                <QuestionImage src={currentQuestion.imageUrl} alt="Question illustration" />
                             )}
                             {currentQuestion.videoUrl && (
-                                <video
-                                    src={currentQuestion.videoUrl}
-                                    controls
-                                    // No autoplay: a video starting on its own during a timed
-                                    // exam is startling, and several questions may carry one.
-                                    preload="metadata"
-                                    className="question-media"
-                                />
+                                <QuestionVideo src={currentQuestion.videoUrl} />
                             )}
 
                             {/* Legacy single-media questions authored before the split. */}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'IMAGE' && (
-                                <img src={currentQuestion.mediaUrl} alt="Question Media" className="question-media" />
+                                <QuestionImage src={currentQuestion.mediaUrl} alt="Question media" />
                             )}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'VIDEO' && (
-                                <video src={currentQuestion.mediaUrl} controls preload="metadata" className="question-media" />
+                                <QuestionVideo src={currentQuestion.mediaUrl} />
                             )}
                             {currentQuestion.mediaUrl && currentQuestion.mediaType === 'AUDIO' && (
                                 <audio src={currentQuestion.mediaUrl} controls style={{ width: '100%', marginTop: '1rem' }} />

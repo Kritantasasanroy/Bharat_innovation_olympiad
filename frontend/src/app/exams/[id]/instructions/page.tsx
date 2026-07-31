@@ -1,10 +1,14 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import TooSmallForExam from '@/components/TooSmallForExam';
 import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import api from '@/lib/api';
+import { MONITORED_ACTIVITIES } from '@/lib/copy/onboarding';
+import { useAuthStore } from '@/store/authStore';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
@@ -56,9 +60,38 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
      */
     const [rulesAccepted, setRulesAccepted] = useState(false);
 
+    /**
+     * Explicit grade confirmation, separate from the rules tick.
+     *
+     * "Explicit confirmation for grade before the exam starts." Sitting the wrong
+     * grade's paper is unrecoverable — the attempt is scored against that grade's
+     * cohort — and the class was chosen once, at registration, possibly months
+     * earlier by a parent. So it is confirmed again here, as its own deliberate
+     * act, with a route out if it is wrong.
+     */
+    const [gradeConfirmed, setGradeConfirmed] = useState(false);
+
+    const user = useAuthStore((s) => s.user);
+
     // The paper itself — needed for the marking rule, the section count, and
     // whether this exam gates on the trial.
     const [exam, setExam] = useState<any>(null);
+
+    /**
+     * Parental consent (registration part 2).
+     *
+     * Resolved here rather than letting the player refuse, for the same reason the
+     * pass and the trial are: a student should not complete every device check and
+     * *then* be turned away.
+     */
+    const [guardianState, setGuardianState] = useState<'checking' | 'complete' | 'missing'>('checking');
+    useEffect(() => {
+        api.get('/guardian/me')
+            .then((r) => setGuardianState(r.data.complete ? 'complete' : 'missing'))
+            // On a read failure, do not invent a refusal — the server-side gate in
+            // startAttempt is authoritative and will stop them if it matters.
+            .catch(() => setGuardianState('complete'));
+    }, []);
 
     /**
      * Rehearsal gate. The server refuses to start a real exam until the trial
@@ -66,7 +99,18 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
      * student to the trial first rather than letting them finish every device
      * check and then be turned away by the player.
      */
-    const [trialState, setTrialState] = useState<'checking' | 'required' | 'done' | 'not_needed'>('checking');
+    /**
+     * `unavailable` is distinct from `not_needed` on purpose.
+     *
+     * "Beta test not available / slot not open." `not_needed` means this paper does
+     * not gate on a rehearsal at all. `unavailable` means it *does*, but no trial
+     * paper is published yet — the server logs a warning and waives the gate in that
+     * case, and the student deserves to be told that rather than silently shown
+     * "not needed" and left to wonder where the practice run went.
+     */
+    const [trialState, setTrialState] = useState<
+        'checking' | 'required' | 'done' | 'not_needed' | 'unavailable'
+    >('checking');
     const [trialExamId, setTrialExamId] = useState<string | null>(null);
 
     // Face ID enrollment gate — must be enrolled before Start Exam is enabled.
@@ -136,9 +180,11 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                 if (cancelled) return;
 
                 // No trial paper configured at all: do not strand every student
-                // behind a rehearsal that does not exist.
+                // behind a rehearsal that does not exist. Reported as `unavailable`
+                // rather than `not_needed` so the student is told the practice run
+                // is missing, not told it was never required.
                 if (!trialExam?.id) {
-                    setTrialState('not_needed');
+                    setTrialState('unavailable');
                     return;
                 }
                 setTrialExamId(trialExam.id);
@@ -210,13 +256,17 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     };
 
     const handleStartClick = () => {
+        // Both boxes reset every time the modal opens, so neither is ever
+        // pre-ticked from a previous attempt to start.
         setRulesAccepted(false);
+        setGradeConfirmed(false);
         setShowConfirmModal(true);
     };
 
     const closeConfirmModal = () => {
         setShowConfirmModal(false);
         setRulesAccepted(false);
+        setGradeConfirmed(false);
     };
 
     const RULES = buildRules(
@@ -270,6 +320,18 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     : 'Required — enroll below before starting',
             passed: faceEnrollStatus === 'checking' ? null : faceEnrollStatus === 'enrolled',
         },
+        // Listed as a check rather than hidden, so the parent section reads as one
+        // more thing to complete rather than a refusal that arrives at Start.
+        {
+            label: 'Parent / guardian consent',
+            description:
+                guardianState === 'checking'
+                    ? 'Checking…'
+                    : guardianState === 'complete'
+                      ? 'Recorded — nothing more needed'
+                      : 'Required — a parent or guardian must complete this once',
+            passed: guardianState === 'checking' ? null : guardianState === 'complete',
+        },
         // Listed as a check rather than hidden, so the rehearsal reads as one
         // more thing to complete rather than an unexplained detour on the way
         // to the exam.
@@ -283,11 +345,29 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                               ? 'Checking…'
                               : trialState === 'done'
                                 ? 'Trial test completed — you are ready'
-                                : 'Required — a short practice run starts when you click below',
-                      passed: trialState === 'checking' ? null : trialState === 'done',
+                                : trialState === 'unavailable'
+                                  ? 'The trial paper is not open yet — you can still start this exam'
+                                  : 'Required — a short practice run starts when you click below',
+                      passed:
+                          trialState === 'checking'
+                              ? null
+                              : trialState === 'done' || trialState === 'unavailable',
                   },
               ]),
     ];
+
+    /**
+     * A phone or a small window cannot run the player, so say so here rather than
+     * showing a device-check row reading "Screen Resolution ✗" with a disabled
+     * button and no explanation of what to change.
+     */
+    if (deviceChecks.viewport === false) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <TooSmallForExam />
+            </AuthGuard>
+        );
+    }
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
@@ -300,6 +380,21 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         </p>
                     </div>
 
+                    {/* Which paper this is. Stated before anything else, because it
+                        is the one thing that cannot be undone after the fact. */}
+                    {user?.classBand && (
+                        <div className="grade-banner">
+                            <span className="grade-banner__eyebrow">You are about to sit</span>
+                            <strong className="grade-banner__grade">
+                                Grade {user.classBand} Olympiad
+                            </strong>
+                            {exam?.title && <span className="grade-banner__exam">{exam.title}</span>}
+                            <Link href="/support" className="grade-banner__wrong">
+                                Not your grade?
+                            </Link>
+                        </div>
+                    )}
+
                     {/* Instructions */}
                     <div className="glass-card instructions-card">
                         <h2>📋 Rules & Guidelines</h2>
@@ -307,6 +402,45 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                             {RULES.map((rule, i) => <li key={i}>{rule}</li>)}
                         </ul>
                     </div>
+
+                    {/* What the proctoring actually looks for.
+                        Openly listed rather than left to be discovered as a
+                        violation: a student who knows the rules can follow them, and
+                        surprise is what makes proctoring feel punitive. */}
+                    <div className="glass-card instructions-card">
+                        <h2>👁️ What the invigilator watches for</h2>
+                        <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
+                            These are recorded during the exam. Nothing is decided automatically — a
+                            person reviews anything serious before any conclusion is drawn.
+                        </p>
+                        <ul className="rules-list">
+                            {MONITORED_ACTIVITIES.map((activity) => (
+                                <li key={activity}>{activity}</li>
+                            ))}
+                        </ul>
+                        <p style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 'var(--space-3)' }}>
+                            Face analysis runs inside your own browser. No video is recorded, sent or
+                            stored — only the events above.
+                        </p>
+                    </div>
+
+                    {/* Parental consent gate — mirrors the server-side refusal. */}
+                    {guardianState === 'missing' && (
+                        <div className="glass-card instructions-card instructions-card--blocked">
+                            <h2>👨‍👩‍👧 Parent consent needed</h2>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
+                                A parent or guardian has to give consent before you can start any
+                                exam, including the practice paper. It takes about two minutes and
+                                only needs doing once.
+                            </p>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => router.push(`/guardian?next=/exams/${id}/instructions`)}
+                            >
+                                Complete the parent section
+                            </button>
+                        </div>
+                    )}
 
                     {/* Device Checks */}
                     <div className="glass-card instructions-card">
@@ -421,6 +555,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                 !webcamStarted ||
                                 faceEnrollStatus !== 'enrolled' ||
                                 passStatus === 'locked' ||
+                                guardianState !== 'complete' ||
                                 trialState === 'checking'
                             }
                             onClick={handleStartClick}
@@ -470,6 +605,33 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                 </span>
                             </label>
 
+                            {/* Grade confirmed as its own act, not folded into the
+                                rules tick. Sitting the wrong grade's paper cannot be
+                                undone — the attempt is scored against that grade's
+                                cohort — and the class was chosen once at registration,
+                                possibly months ago by a parent. */}
+                            {user?.classBand && (
+                                <>
+                                    <label className="rules-ack rules-ack--grade">
+                                        <input
+                                            type="checkbox"
+                                            checked={gradeConfirmed}
+                                            onChange={(e) => setGradeConfirmed(e.target.checked)}
+                                        />
+                                        <span>
+                                            I confirm I am in <strong>Class {user.classBand}</strong> and
+                                            that the <strong>Grade {user.classBand} Olympiad</strong> is
+                                            the correct paper for me.
+                                        </span>
+                                    </label>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: '0 0 1rem' }}>
+                                        This cannot be changed once the exam starts. If your class is
+                                        wrong, <Link href="/support">contact support</Link> before
+                                        starting — do not sit the wrong paper.
+                                    </p>
+                                </>
+                            )}
+
                             {trialState === 'required' && (
                                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
                                     You will start with a short <strong>trial test</strong> in the same
@@ -490,8 +652,15 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                     type="button"
                                     className="btn btn-primary"
                                     style={{ flex: 1, padding: '0.85rem' }}
-                                    disabled={!rulesAccepted}
-                                    title={rulesAccepted ? undefined : 'Tick the box above to continue'}
+                                    // The grade tick is only demanded when there is a
+                                    // grade to confirm, so an account without a class
+                                    // band is not stuck behind an unanswerable box.
+                                    disabled={!rulesAccepted || (Boolean(user?.classBand) && !gradeConfirmed)}
+                                    title={
+                                        rulesAccepted && (!user?.classBand || gradeConfirmed)
+                                            ? undefined
+                                            : 'Tick both boxes above to continue'
+                                    }
                                     onClick={handleProceed}
                                 >
                                     {trialState === 'required' ? 'Start Trial Test' : 'Start Exam'}

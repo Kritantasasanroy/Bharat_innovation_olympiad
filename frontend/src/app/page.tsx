@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
+import { TECH_REQUIREMENTS } from '@/lib/copy/onboarding';
 import {
   Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
   Target, ScrollText, Star, ArrowRight, CheckCircle2, XCircle,
@@ -77,7 +78,7 @@ export default function LandingPage() {
           <polygon fill="rgba(125,200,50,0.4)" points="912,300 917,314 931,319 917,324 912,338 907,324 893,319 907,314" />
         </svg>
 
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '64px 32px 48px', display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: 56, alignItems: 'center', position: 'relative', zIndex: 1 }}>
+        <div className="lp-hero-grid">
           {/* Left */}
           <div>
             <div className="lp-fade-up lp-badge-glow" style={{
@@ -183,6 +184,69 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── TRUST BAND ──
+          "Prominently on website — Online olympiad with fair, authentic and
+          credible assessment." Placed directly under the hero, above the
+          alumni stories, because it is the objection a parent has *before*
+          they are interested in anything else: is an online exam real? */}
+      <section className="lp-trust">
+        <div className="lp-trust__inner">
+          <div className="lp-trust__head">
+            <BadgeCheck size={22} />
+            <h2>A fair, authentic and credible online assessment</h2>
+            <p>
+              Taken from home, judged like a hall exam. Here is exactly how we make an
+              online olympiad something a school, a parent and a student can all trust.
+            </p>
+          </div>
+
+          <div className="lp-trust__grid">
+            {([
+              {
+                Icon: Target,
+                title: 'Fairness',
+                body: 'Every student sits the same paper under the same conditions, in a scheduled slot, on a server-run timer that does not stop if their internet does.',
+              },
+              {
+                Icon: BadgeCheck,
+                title: 'Authenticity',
+                body: 'A face scan taken at registration confirms the registered student is the one sitting the paper — so a rank belongs to the person who earned it.',
+              },
+              {
+                Icon: ScrollText,
+                title: 'Credibility',
+                body: 'Papers flagged during the exam are reviewed by a person, with written reasons, before anything is concluded. Nothing is decided by the computer alone.',
+              },
+              {
+                Icon: Users,
+                title: 'Child-friendly',
+                body: 'No warnings pile up mid-exam and no video is ever recorded. Analysis runs inside the student’s own browser — only the events leave the device.',
+              },
+            ] as const).map(({ Icon, title, body }) => (
+              <div key={title} className="lp-trust__card">
+                <span className="lp-trust__icon"><Icon size={20} /></span>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* The published tech requirements, on the way in rather than after
+              a family has paid and discovered they need a webcam. */}
+          <details className="lp-trust__tech">
+            <summary>What you need to take the exam</summary>
+            <dl className="lp-trust__techlist">
+              {TECH_REQUIREMENTS.map((req) => (
+                <div key={req.label}>
+                  <dt>{req.label}</dt>
+                  <dd>{req.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        </div>
+      </section>
+
       {/* ── SUCCESS STORIES ── */}
       <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg-primary)', padding: '76px 32px 84px' }}>
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 55% 40% at 80% 20%, rgba(255,203,5,0.04), transparent)' }} />
@@ -209,7 +273,7 @@ export default function LandingPage() {
 
             {/* Guransh */}
             <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+              <div className="lp-alumni-card__media">
                 <Image src="/assets/alumni-guransh.jpg" alt="Guransh Singh" fill sizes="280px" style={{ objectFit: 'cover' }} />
                 <span style={{ position: 'absolute', top: 14, left: 14, background: '#7dc832', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(125,200,50,0.4)' }}>National Champion &apos;26</span>
               </div>
@@ -235,7 +299,7 @@ export default function LandingPage() {
 
             {/* Falak */}
             <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+              <div className="lp-alumni-card__media">
                 <Image src="/assets/alumni-falak.jpg" alt="Falak Arora" fill sizes="280px" style={{ objectFit: 'cover' }} />
                 <span style={{ position: 'absolute', top: 14, left: 14, background: '#d4a017', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(212,160,23,0.4)' }}>Founder</span>
               </div>
@@ -261,7 +325,7 @@ export default function LandingPage() {
 
             {/* Anay & Abeer */}
             <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div style={{ flexShrink: 0, width: 280, minHeight: 260, position: 'relative', overflow: 'hidden' }}>
+              <div className="lp-alumni-card__media">
                 <Image src="/assets/alumni-anay-abeer.jpg" alt="Anay and Abeer Ramakrishnan" fill sizes="280px" style={{ objectFit: 'cover' }} />
                 <span style={{ position: 'absolute', top: 14, left: 14, background: '#3b6fe0', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1 }}>AI Pioneers</span>
               </div>
@@ -307,7 +371,7 @@ export default function LandingPage() {
           <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>Why This Olympiad Is Different</h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 520 }}>We don&apos;t test what students memorise. We measure how they think, create and solve.</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 0, alignItems: 'stretch', maxWidth: 860, margin: '0 auto', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.4)' }}>
+          <div className="lp-compare-grid">
             <div style={{ padding: '34px 30px', textAlign: 'left' }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 22 }}>Traditional Olympiad</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -435,7 +499,7 @@ export default function LandingPage() {
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>One Registration. Four Powerful Benefits.</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Everything a young innovator needs to be recognised and grow.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 22 }}>
+          <div className="lp-grid-4">
             {([
               { Icon: Medal,        col: '#7dc832',  bg: 'rgba(125,200,50,0.1)',  title: 'National Rankings',          desc: 'Stand out with verified All-India, State, City & School ranks.' },
               { Icon: Lightbulb,    col: '#ffcb05',  bg: 'rgba(255,203,5,0.1)',   title: 'Innopreneurs Advantage',      desc: 'A direct pathway into startup contests and innovation labs.' },
@@ -461,7 +525,7 @@ export default function LandingPage() {
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 32, margin: '0 0 10px', letterSpacing: -0.5 }}>The Innovation Journey Roadmap</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>From your first Olympiad to becoming a recognised innovator.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16 }}>
+          <div className="lp-grid-5">
             {([
               { n: '01', Icon: Trophy,        label: 'Register & Assess',  sub: 'Sign up and take the Olympiad',    col: '#7dc832', bg: 'rgba(125,200,50,0.15)' },
               { n: '02', Icon: BarChart3,      label: 'Get Ranked',         sub: 'National & school recognition',    col: '#ffcb05', bg: 'rgba(255,203,5,0.15)' },
@@ -489,7 +553,7 @@ export default function LandingPage() {
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Student Receives</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score — a complete innovation identity.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20 }}>
+          <div className="lp-grid-3">
             {([
               { Icon: Trophy,        col: '#7dc832', bg: 'rgba(125,200,50,0.1)',  title: 'Rankings',                 desc: 'National, State, City & School ranks.' },
               { Icon: BarChart3,     col: '#ffcb05', bg: 'rgba(255,203,5,0.1)',   title: 'Innovation Profile',       desc: 'A skill radar across 5 dimensions.' },
@@ -527,7 +591,7 @@ export default function LandingPage() {
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Students. Real Ideas. Real Impact.</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 640, lineHeight: 1.65 }}>For over four years, Innopreneurs Junior has helped school students across India identify problems, build solutions and present their ideas on a national stage.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 14 }}>
+          <div className="lp-gallery-grid">
             <div className="lp-gallery-cell" style={{ gridColumn: 'span 7', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 308 }}>
               <Image src="/assets/hof-grand-finale-group.jpg" alt="Innopreneurs Junior Grand Finale cohort" fill sizes="(max-width: 900px) 100vw, 600px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px 14px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 1 }}>Grand Finale · The national cohort of young innovators</div>
@@ -570,17 +634,37 @@ export default function LandingPage() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', padding: '36px 32px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+      <footer className="lp-footer">
+        <div className="lp-footer__inner">
+          <div className="lp-footer__brand">
             <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad — Become Future Ready" height={34} width={112} style={{ height: 34, width: 'auto', display: 'block' }} />
             <span className="lp-brand-name" style={{ fontSize: '0.95rem' }}>Bharat Innovation Olympiad</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+
+          <nav className="lp-footer__links" aria-label="Footer">
+            <Link href="/terms">Terms &amp; Conditions</Link>
+            <Link href="/support">Support</Link>
+            <Link href="/register">Register</Link>
+            <Link href="/login">Student login</Link>
+            <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">
+              Lemon Ideas ↗
+            </a>
+            <a href="https://innopreneurs.in" target="_blank" rel="noopener noreferrer">
+              Innopreneurs ↗
+            </a>
+            <a href="https://worldskillchallenge.com" target="_blank" rel="noopener noreferrer">
+              World Skill Challenge ↗
+            </a>
+          </nav>
+
+          <div className="lp-footer__powered">
             <span>Powered by</span>
             <Image src="/lemon-ideas-logo.png" alt="Lemon Ideas" height={15} width={75} style={{ height: 15, width: 'auto', filter: 'brightness(0.7)' }} />
           </div>
-          <div style={{ marginTop: 4, color: 'var(--text-tertiary)' }}>© 2026 Bharat Innovation Olympiad · An Innovation &amp; Future Skills Ecosystem</div>
+
+          <div className="lp-footer__legal">
+            © 2026 Bharat Innovation Olympiad · An Innovation &amp; Future Skills Ecosystem
+          </div>
         </div>
       </footer>
 

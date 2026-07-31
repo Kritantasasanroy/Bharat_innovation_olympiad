@@ -9,11 +9,12 @@ import {
     accessPassActivatedEmail,
     adminBroadcastEmail,
     examSubmittedEmail,
+    resultsPublishedEmail,
+    slotConfirmedEmail,
     welcomeEmail,
 } from './templates';
 import {
     ConsoleSmsProvider,
-    Fast2SmsProvider,
     SmsDiagnostics,
     SmsProvider,
     TwoFactorSmsProvider,
@@ -24,8 +25,21 @@ import {
 export class NotificationService implements OnModuleInit {
     private readonly logger = new Logger(NotificationService.name);
     private email: EmailProvider = new ConsoleEmailProvider();
-    // SMS OTP and voice OTP are tracked separately: only 2Factor does voice, so a
-    // switch of the SMS gateway (e.g. to Fast2SMS) must not take voice down with it.
+    /**
+     * 2Factor is the only SMS gateway.
+     *
+     * A Fast2SMS path used to sit alongside it as an escape hatch for the
+     * "reports Success but nothing arrives" problem. That turned out not to be a
+     * gateway problem at all — the same 2Factor account delivers *voice* OTPs
+     * perfectly, which is the signature of an unverified account rather than a
+     * broken API — so a second gateway added a configuration surface and a whole
+     * second set of failure modes while fixing nothing. The real fix is KYC on the
+     * 2Factor account; see `docs/2FACTOR-KYC-SETUP.md`.
+     *
+     * SMS and voice are still separate fields: they are different 2Factor routes
+     * with different failure modes, and voice working while SMS does not is
+     * precisely the diagnostic that matters.
+     */
     private sms: SmsProvider = new ConsoleSmsProvider();
     private voice: SmsProvider = new ConsoleSmsProvider();
 
@@ -44,12 +58,10 @@ export class NotificationService implements OnModuleInit {
             );
         }
 
-        // Both gateways send under their own DLT-registered header, so OTP
-        // delivery to Indian numbers works without the 2–4 week TRAI/DLT
-        // registration a self-registered sender ID would require.
+        // 2Factor sends under its own DLT-registered header, so OTP delivery to
+        // Indian numbers works without the 2–4 week TRAI/DLT registration a
+        // self-registered sender ID would require.
         const twoFactorKey = process.env.TWOFACTOR_API_KEY?.trim();
-        const fast2smsKey = process.env.FAST2SMS_API_KEY?.trim();
-        const preferred = process.env.SMS_PROVIDER?.trim().toLowerCase();
 
         const twoFactor = twoFactorKey
             ? new TwoFactorSmsProvider(
@@ -60,19 +72,22 @@ export class NotificationService implements OnModuleInit {
                   process.env.TWOFACTOR_VERIFY_DELIVERY?.trim().toLowerCase() !== 'false',
               )
             : null;
-        const fast2sms = fast2smsKey ? new Fast2SmsProvider(fast2smsKey) : null;
 
-        // SMS OTP gateway: honour an explicit SMS_PROVIDER override, else prefer
-        // 2Factor, else Fast2SMS. Set SMS_PROVIDER=fast2sms to move SMS off a
-        // 2Factor account whose sends report "delivered" but never arrive.
-        if (preferred === 'fast2sms' && fast2sms) this.sms = fast2sms;
-        else if (preferred === '2factor' && twoFactor) this.sms = twoFactor;
-        else if (twoFactor) this.sms = twoFactor;
-        else if (fast2sms) this.sms = fast2sms;
+        if (twoFactor) {
+            this.sms = twoFactor;
+            this.voice = twoFactor;
+        }
 
-        // Voice OTP: only 2Factor offers it, so keep it on 2Factor no matter which
-        // gateway sends SMS. Falls back to the SMS provider only if 2Factor is absent.
-        this.voice = twoFactor ?? this.sms;
+        // A leftover SMS_PROVIDER=fast2sms on a deployed environment would
+        // silently do nothing now that there is one gateway. Say so, loudly,
+        // rather than letting someone believe they switched gateway.
+        const legacyProvider = process.env.SMS_PROVIDER?.trim().toLowerCase();
+        if (legacyProvider && legacyProvider !== '2factor') {
+            this.logger.warn(
+                `SMS_PROVIDER="${legacyProvider}" is ignored — 2Factor is now the only SMS ` +
+                    'gateway. Remove the variable to avoid confusion.',
+            );
+        }
 
         this.logger.log(`SMS provider: ${this.sms.name} · voice provider: ${this.voice.name}`);
         if (twoFactor) {
@@ -85,7 +100,8 @@ export class NotificationService implements OnModuleInit {
                 this.logger.warn(
                     'TWOFACTOR_OTP_TEMPLATE is unset/AUTOGEN — sending under the 2Factor ' +
                         'account-default template. If SMS OTPs are accepted but never arrive, ' +
-                        'set this to your DLT-approved template name. ' +
+                        'the account almost certainly needs KYC / business verification — ' +
+                        'see docs/2FACTOR-KYC-SETUP.md. ' +
                         'Check balances with GET /api/admin/notifications/sms-health.',
                 );
             }
@@ -182,8 +198,14 @@ export class NotificationService implements OnModuleInit {
         }
     }
 
-    async sendWelcome(to: string, firstName: string): Promise<void> {
-        await this.deliver(to, welcomeEmail({ firstName, appUrl: this.appUrl }));
+    // ── The four milestone mails ──────────────────────────────────────────────
+    // Registration → exam start → (during exam: in-product, no mail) → post exam.
+    // All of them go through `deliver`, so a mail outage can never fail the
+    // business action that triggered it.
+
+    /** Milestone 1 — registration complete. */
+    async sendWelcome(to: string, firstName: string, rollNumber?: string | null): Promise<void> {
+        await this.deliver(to, welcomeEmail({ firstName, rollNumber, appUrl: this.appUrl }));
     }
 
     async sendAccessPassActivated(to: string, firstName: string, amountPaise: number): Promise<void> {
@@ -193,8 +215,30 @@ export class NotificationService implements OnModuleInit {
         );
     }
 
+    /** Milestone 2 — a confirmed slot means the exam is really happening. */
+    async sendSlotConfirmed(
+        to: string,
+        vars: {
+            firstName: string;
+            examTitle: string;
+            slotLabel?: string | null;
+            startsAt: Date;
+            endsAt: Date;
+            rollNumber?: string | null;
+            bookingId: string;
+        },
+    ): Promise<void> {
+        await this.deliver(to, slotConfirmedEmail({ ...vars, appUrl: this.appUrl }));
+    }
+
+    /** Milestone 4a — receipt of the submission (score still provisional). */
     async sendExamSubmitted(to: string, firstName: string, examTitle: string): Promise<void> {
         await this.deliver(to, examSubmittedEmail({ firstName, examTitle, appUrl: this.appUrl }));
+    }
+
+    /** Milestone 4b — the final report is published and the score is no longer provisional. */
+    async sendResultsPublished(to: string, firstName: string, examTitle: string): Promise<void> {
+        await this.deliver(to, resultsPublishedEmail({ firstName, examTitle, appUrl: this.appUrl }));
     }
 
     /**

@@ -300,43 +300,9 @@ export class TwoFactorSmsProvider implements SmsProvider {
     }
 }
 
-/**
- * Fast2SMS (https://fast2sms.com) — alternative Indian gateway. Its `otp` route
- * accepts a caller-supplied code, so we generate it, send it, and return it.
- */
-export class Fast2SmsProvider implements SmsProvider {
-    readonly name = 'fast2sms';
-    private readonly logger = new Logger('SmsProvider:fast2sms');
-
-    constructor(private readonly apiKey: string) {}
-
-    async sendSmsOtp(toE164: string): Promise<string> {
-        const code = genOtp();
-        const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-            method: 'POST',
-            headers: {
-                authorization: this.apiKey,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                route: 'otp',
-                variables_values: code,
-                numbers: toIndianLocal(toE164),
-            }),
-        });
-        const body = await res.text().catch(() => '');
-        if (!res.ok) {
-            throw new Error(`Fast2SMS responded ${res.status}: ${body.slice(0, 300)}`);
-        }
-        if (!/"return"\s*:\s*true/i.test(body)) {
-            throw new Error(`Fast2SMS rejected the send: ${body.slice(0, 300)}`);
-        }
-        this.logger.log(`OTP SMS sent to ${toE164}`);
-        return code;
-    }
-
-    async sendOtpVoice(_toE164: string, _code: string): Promise<void> {
-        // Fast2SMS has no voice-call OTP product; callers fall back to SMS.
-        throw new Error('Voice OTP is not supported by the Fast2SMS provider.');
-    }
-}
+// A Fast2SmsProvider used to live here as a second gateway to switch to when
+// 2Factor sends reported success but never arrived. Removed deliberately: the
+// same 2Factor account places voice OTP calls that *do* arrive, which points at
+// account verification rather than at the SMS API, so a second gateway added
+// configuration surface and its own failure modes without addressing the cause.
+// 2Factor is now the only gateway; the fix is KYC (docs/2FACTOR-KYC-SETUP.md).

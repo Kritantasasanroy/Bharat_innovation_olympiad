@@ -14,10 +14,18 @@ type Mode = 'search' | 'code';
 interface Props {
     value: DirectorySchool | null;
     onChange: (school: DirectorySchool | null) => void;
+    /**
+     * Class section, as the school writes it. Only collected once a school is
+     * chosen — a student with no school has no section to record.
+     */
+    section?: string;
+    onSectionChange?: (section: string) => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
 const PINCODE_LENGTH = 6;
+/** Long enough for "Rose"/"B2"; short enough to print on a roster. */
+const SECTION_MAX_LENGTH = 10;
 
 /**
  * Choose a school during registration, three ways:
@@ -29,9 +37,21 @@ const PINCODE_LENGTH = 6;
  *     so two students adding the same school agree about where it is; the
  *     backend refuses to create a duplicate.
  *
- * Choosing a school is optional — a student with no school registers anyway.
+ * ## School is required
+ *
+ * It used to be optional, which left school-level tracking patchy — and
+ * school-level tracking is only as good as its worst row. Every route above ends
+ * in a real school, including "my school isn't listed", so there is no student for
+ * whom this is impossible to answer.
+ *
+ * ## Section
+ *
+ * Free text, not an A–H dropdown: Indian schools name sections inconsistently
+ * ("A", "B2", "Rose", "Alpha") and a fixed list would leave real students unable
+ * to register. It appears only after a school is picked, so the two are never out
+ * of step.
  */
-export default function SchoolPicker({ value, onChange }: Props) {
+export default function SchoolPicker({ value, onChange, section, onSectionChange }: Props) {
     const [mode, setMode] = useState<Mode>('search');
 
     // Search
@@ -141,38 +161,74 @@ export default function SchoolPicker({ value, onChange }: Props) {
 
     if (value) {
         return (
-            <div className="input-group">
-                <label className="input-label">School</label>
-                <div className="school-chip">
-                    <div className="school-chip__text">
-                        <strong>{value.name}</strong>
-                        <span>
-                            {value.code} · {value.city}, {value.state}
-                            {value.onboarded ? ' · Onboarded' : ''}
-                        </span>
+            <>
+                <div className="input-group">
+                    <label className="input-label">School</label>
+                    <div className="school-chip">
+                        <div className="school-chip__text">
+                            <strong>{value.name}</strong>
+                            <span>
+                                {value.code} · {value.city}, {value.state}
+                                {value.onboarded ? ' · Onboarded' : ''}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => {
+                                onChange(null);
+                                setQuery('');
+                                setCode('');
+                                setError('');
+                                // A section belongs to a school — dropping the
+                                // school must drop it too, or the student keeps
+                                // "7-B" from a school they no longer attend.
+                                onSectionChange?.('');
+                            }}
+                        >
+                            Change
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => {
-                            onChange(null);
-                            setQuery('');
-                            setCode('');
-                            setError('');
-                        }}
-                    >
-                        Change
-                    </button>
                 </div>
-            </div>
+
+                {onSectionChange && (
+                    <div className="input-group">
+                        <label className="input-label" htmlFor="section">
+                            Your section
+                        </label>
+                        <input
+                            id="section"
+                            name="section"
+                            type="text"
+                            className="input-field"
+                            placeholder="A"
+                            maxLength={SECTION_MAX_LENGTH}
+                            autoComplete="off"
+                            value={section ?? ''}
+                            onChange={(event) =>
+                                onSectionChange(event.target.value.slice(0, SECTION_MAX_LENGTH))
+                            }
+                        />
+                        <p className="input-hint">
+                            Exactly as your school writes it — <strong>A</strong>,{' '}
+                            <strong>B2</strong>, <strong>Rose</strong>. This is how your teachers
+                            find your class in their results.
+                        </p>
+                    </div>
+                )}
+            </>
         );
     }
 
     return (
         <div className="input-group" ref={containerRef} style={{ position: 'relative' }}>
             <label className="input-label" htmlFor="schoolSearch">
-                School <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                School
             </label>
+            <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
+                Your results are grouped by school, so your teachers can see how your class did.
+                Every student needs one — if yours isn&apos;t listed, you can add it.
+            </p>
 
             <div className="school-tabs">
                 <button
@@ -192,30 +248,40 @@ export default function SchoolPicker({ value, onChange }: Props) {
             </div>
 
             {mode === 'code' ? (
-                <div className="school-code-row">
-                    <input
-                        id="schoolCode"
-                        className="input-field"
-                        placeholder="SCH-XXXXXX"
-                        value={code}
-                        spellCheck={false}
-                        onChange={(event) => setCode(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                                event.preventDefault();
-                                if (code.trim()) void applyCode();
-                            }
-                        }}
-                    />
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy || !code.trim()}
-                        onClick={() => void applyCode()}
-                    >
-                        {busy ? 'Checking…' : 'Apply'}
-                    </button>
-                </div>
+                <>
+                    <div className="school-code-row">
+                        <input
+                            id="schoolCode"
+                            className="input-field"
+                            placeholder="SCH-XXXXXX"
+                            value={code}
+                            spellCheck={false}
+                            onChange={(event) => setCode(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    if (code.trim()) void applyCode();
+                                }
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={busy || !code.trim()}
+                            onClick={() => void applyCode()}
+                        >
+                            {busy ? 'Checking…' : 'Apply'}
+                        </button>
+                    </div>
+                    {/* Students arrive with a code they were handed and no idea what
+                        it is, or with none and no idea whether they should have one. */}
+                    <p className="input-hint">
+                        A school code looks like <strong>SCH-ABC123</strong>. Your school
+                        coordinator or class teacher gives it out — it may be on a circular or a
+                        message from the school. <strong>You do not need one:</strong> if you
+                        haven&apos;t been given a code, just search for your school by name instead.
+                    </p>
+                </>
             ) : adding ? (
                 <div className="school-add">
                     <input

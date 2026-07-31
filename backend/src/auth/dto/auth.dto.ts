@@ -1,4 +1,14 @@
-import { IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+    IsEmail,
+    IsEnum,
+    IsIn,
+    IsInt,
+    IsOptional,
+    IsString,
+    Max,
+    MaxLength,
+    Min,
+} from 'class-validator';
 import { Role } from '@prisma/client';
 
 export class SyncUserDto {
@@ -37,6 +47,27 @@ export class SyncUserDto {
     @IsString()
     @IsOptional()
     schoolCode?: string;
+
+    /**
+     * Class section as the school writes it — "A", "B2", "Rose".
+     *
+     * Free text rather than an A–H enum: Indian schools name sections
+     * inconsistently and a fixed list would leave real students unable to
+     * register. Length-capped because it is printed on rosters and admit cards.
+     */
+    @IsString()
+    @MaxLength(10)
+    @IsOptional()
+    section?: string;
+
+    /**
+     * Acceptance of the olympiad terms & conditions, ticked during registration.
+     * Sent as the version string the student was actually shown, so a later
+     * revision is distinguishable from the text they agreed to.
+     */
+    @IsString()
+    @IsOptional()
+    termsVersion?: string;
 
     /** Partner campaign referral code the student arrived with (`?ref=CODE`). */
     @IsString()

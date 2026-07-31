@@ -30,6 +30,14 @@ interface ResultInstance {
     canRelease: boolean;
     /** Why the Release button is disabled, straight from the server. */
     releaseBlockedReason: string | null;
+    // ── Stage two: the final report ──
+    finalResultsReleasedAt: string | null;
+    answerKeyReleasedAt: string | null;
+    canPublishFinal: boolean;
+    publishFinalBlockedReason: string | null;
+    /** Attempts a human reviewer has not yet decided on. */
+    pendingReviews: number;
+    disqualifiedAttempts: number;
 }
 
 /**
@@ -98,6 +106,65 @@ export default function ResultsPage() {
             () => api.post(`/admin/exam-instances/${row.id}/certificates`),
             'Certificates issued.',
         );
+
+    /**
+     * Stage two — turn provisional scores into final ones.
+     *
+     * Confirmation is a real prompt rather than a modal because the consequence is
+     * one-way in the eyes of every student at once: the moment this fires, ranks
+     * and the answer key are public. The outstanding-review count is surfaced in
+     * the prompt because publishing with reviews open is exactly how a rank gets
+     * published and then quietly changed.
+     */
+    async function publishFinal(row: ResultInstance, undo: boolean) {
+        if (undo) {
+            const reason = window.prompt(
+                'Un-publish the final report?\n\n' +
+                    'Every score in this exam returns to "provisional", and ranks and the answer key ' +
+                    'are hidden again.\n\nReason (recorded in the audit log):',
+            );
+            if (!reason?.trim()) return;
+            await run(
+                row.id,
+                () => api.post(`/admin/exam-instances/${row.id}/revoke-final`, { reason: reason.trim() }),
+                'Final report withdrawn — scores are provisional again.',
+            );
+            return;
+        }
+
+        const warning =
+            row.pendingReviews > 0
+                ? `\n\n⚠️ ${row.pendingReviews} attempt(s) are still awaiting proctoring review. ` +
+                  'Publishing now means any later disqualification will change ranks that students have already seen.'
+                : '';
+
+        const reason = window.prompt(
+            'Publish the final report?\n\n' +
+                'Students get their final score, rank, percentile, dimension analysis and the ' +
+                'answer key with explanations. Their scores stop being labelled provisional.' +
+                warning +
+                '\n\nReason (recorded in the audit log):',
+        );
+        if (!reason?.trim()) return;
+
+        const withAnswerKey = window.confirm(
+            'Publish the answer key as well?\n\n' +
+                'OK  — publish scores AND the answer key (normal).\n' +
+                'Cancel — publish scores only, and hold the key back (use if a re-sit is still pending).',
+        );
+
+        await run(
+            row.id,
+            () =>
+                api.post(`/admin/exam-instances/${row.id}/publish-final`, {
+                    reason: reason.trim(),
+                    withAnswerKey,
+                }),
+            withAnswerKey
+                ? 'Final report and answer key published.'
+                : 'Final report published — answer key held back.',
+        );
+    }
 
     async function submitRelease(event: FormEvent) {
         event.preventDefault();
@@ -228,6 +295,7 @@ export default function ResultsPage() {
                                     <th>Attempts</th>
                                     <th>Normalized</th>
                                     <th>Released</th>
+                                    <th>Final report</th>
                                     <th>Certificates</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
@@ -277,6 +345,47 @@ export default function ResultsPage() {
                                                     );
                                                 })}
                                             </div>
+                                        </td>
+                                        <td>
+                                            {row.finalResultsReleasedAt ? (
+                                                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                                    <span
+                                                        className="badge badge-success"
+                                                        title={`Published ${new Date(row.finalResultsReleasedAt).toLocaleString()}`}
+                                                    >
+                                                        ✓ Final
+                                                    </span>
+                                                    <span
+                                                        className={`badge ${row.answerKeyReleasedAt ? 'badge-success' : 'badge-muted'}`}
+                                                        title={
+                                                            row.answerKeyReleasedAt
+                                                                ? 'Answer key is visible to students'
+                                                                : 'Answer key is held back'
+                                                        }
+                                                    >
+                                                        {row.answerKeyReleasedAt ? '✓' : '·'} Key
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                    <span className="badge badge-warning">Provisional</span>
+                                                    {/* The number that decides whether publishing now
+                                                        is safe, shown where the decision is made. */}
+                                                    {row.pendingReviews > 0 && (
+                                                        <span
+                                                            className="badge badge-danger"
+                                                            title="Attempts still awaiting proctoring review — disqualifying one later would change published ranks"
+                                                        >
+                                                            {row.pendingReviews} to review
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {row.disqualifiedAttempts > 0 && (
+                                                <div className="join-date">
+                                                    {row.disqualifiedAttempts} disqualified
+                                                </div>
+                                            )}
                                         </td>
                                         <td>
                                             {row.certificatesIssued > 0 ? (
@@ -339,6 +448,31 @@ export default function ResultsPage() {
                                                 >
                                                     Withdraw…
                                                 </button>
+                                                {/* Stage two. Until this is pressed every
+                                                    student sees their score labelled
+                                                    "provisional" and has no rank or key. */}
+                                                {row.finalResultsReleasedAt ? (
+                                                    <button
+                                                        className="btn btn-sm btn-secondary"
+                                                        disabled={busyId === row.id}
+                                                        onClick={() => publishFinal(row, true)}
+                                                        title="Return every score in this exam to provisional"
+                                                    >
+                                                        Un-publish final
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        disabled={busyId === row.id || !row.canPublishFinal}
+                                                        onClick={() => publishFinal(row, false)}
+                                                        title={
+                                                            row.publishFinalBlockedReason ??
+                                                            'Publish final scores, ranks, analysis and the answer key'
+                                                        }
+                                                    >
+                                                        Publish final…
+                                                    </button>
+                                                )}
                                                 <button
                                                     className="btn btn-sm btn-secondary"
                                                     disabled={busyId === row.id || row.attempts === 0}

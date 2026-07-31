@@ -1535,3 +1535,100 @@ h4 {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   POST-EXAM REVIEW CONSOLE  (/proctor/review)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Small print under a control — used by the review modal's warning. */
+.input-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* The facts a reviewer needs at a glance, before reading the timeline. */
+.review-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-top: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+}
+
+.review-facts > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.review-facts span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.review-facts strong {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  /* An IP address or a long school name must wrap, not widen the modal. */
+  overflow-wrap: anywhere;
+}
+
+/**
+ * The event timeline.
+ *
+ * Scrolls rather than growing: a heavily-flagged attempt can carry a hundred
+ * events, and a modal that grows past the viewport puts the decision buttons
+ * out of reach.
+ */
+.review-timeline {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+}
+
+.review-timeline__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.82rem;
+}
+
+.review-timeline__row:last-child { border-bottom: none; }
+
+.review-timeline__row time {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.review-timeline__row span {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-full, 999px);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+.review-timeline__row small { margin-left: auto; color: var(--text-tertiary); font-size: 0.72rem; }
+
+.review-previous {
+  margin-top: var(--space-4);
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--warning-400, #eab308);
+  border-radius: var(--radius-md, 8px);
+}
+
+.review-previous strong { display: block; font-size: 0.85rem; color: var(--text-primary); text-transform: capitalize; }
+.review-previous p { margin: 0.3rem 0 0; font-size: 0.84rem; line-height: 1.55; color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+  .review-facts { grid-template-columns: 1fr 1fr; }
+}

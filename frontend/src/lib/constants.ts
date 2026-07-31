@@ -22,9 +22,30 @@ export const FEEDBACK_FORMS = {
 
 export const embeddedFormUrl = (url: string) => `${url}?embedded=true`;
 
-// Minimum viewport for "10-inch class" screens
-export const MIN_VIEWPORT_WIDTH = 800; // Adjusted for smaller 10-inch tablets (often 800x1280 or similar)
-export const MIN_VIEWPORT_HEIGHT = 600;
+/**
+ * Minimum viewport to *sit an exam*.
+ *
+ * 1024×768 is the published requirement in the olympiad's own technology
+ * spec ("Screen Resolution 1024 x 768 or higher"), and it is what the exam
+ * player's three-pane layout — header, question column, question navigator —
+ * genuinely needs. It was 800×600, which let a small tablet through into a
+ * layout that overlapped.
+ *
+ * This gate applies to the exam player only. Every other page is responsive
+ * down to ~360px; a phone reaching the player gets `TooSmallForExam`, which
+ * explains what device to use instead of failing a nameless "viewport" check.
+ */
+export const MIN_VIEWPORT_WIDTH = 1024;
+export const MIN_VIEWPORT_HEIGHT = 768;
+
+/**
+ * Terms & conditions version the registration form presents.
+ *
+ * Sent to `/auth/sync` and stored on the user, so a later revision is
+ * distinguishable from the text a student actually agreed to. Bump this whenever
+ * `/terms` changes materially.
+ */
+export const TERMS_VERSION = '2026-07-v1';
 
 // Timer thresholds (seconds)
 export const TIMER_WARNING_THRESHOLD = 300;  // 5 minutes

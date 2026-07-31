@@ -4,6 +4,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
+import { GuardianService } from '../guardian/guardian.service';
+import { ProctorService } from '../proctor/proctor.service';
+
+/**
+ * Attempt states a student may see in their **own** results list.
+ *
+ * Includes `DISQUALIFIED`, unlike every other status list in the codebase.
+ * Disqualifying an attempt removes it from normalization, ranking, certificates
+ * and the school/partner exports precisely because those lists omit it — but
+ * applying that same omission here would make a student's exam silently vanish
+ * from their results with no explanation and no route to appeal. They are told
+ * instead.
+ */
+const STUDENT_VISIBLE_STATUSES = [
+    AttemptStatus.SUBMITTED,
+    AttemptStatus.AUTO_SUBMITTED,
+    AttemptStatus.DISQUALIFIED,
+];
 
 // Fields returned to students — correctAnswer intentionally excluded.
 //
@@ -26,7 +44,12 @@ const QUESTION_SELECT = {
     imageUrl: true,
     videoUrl: true,
     tags: true,
-    explanation: true,
+    // `explanation` is NOT here, deliberately. It was, and it was shipped to the
+    // browser with every question of a live paper — never rendered, but plainly
+    // readable in the network tab. An explanation routinely states the right
+    // answer, so this leaked the key mid-exam alongside the `correctAnswer`
+    // exclusion that was carefully guarding it. It is now served only by
+    // `getStudentReport`, and only once the answer key has been published.
     externalId: true,
     partCode: true,
     partName: true,
@@ -108,6 +131,8 @@ export class AttemptService {
     constructor(
         private prisma: PrismaService,
         private accessPassService: AccessPassService,
+        private guardianService: GuardianService,
+        private proctorService: ProctorService,
     ) { }
 
     // ── Seeded PRNG helpers ─────────────────────────────────────────────────
@@ -321,6 +346,21 @@ export class AttemptService {
         });
         if (!user?.faceEmbedding) {
             throw new ForbiddenException('FACE_ENROLLMENT_REQUIRED');
+        }
+
+        // Parental consent (registration part 2). Sits beside the face check
+        // rather than further down with the paywall because it is the same *kind*
+        // of gate: an incomplete account, fixable by the student in a minute,
+        // not a commercial or scheduling condition.
+        //
+        // Applies to the trial and the free practice paper too, deliberately.
+        // Those run the identical proctored environment — a webcam pointed at a
+        // child — and the DPDP Act does not care that the paper is unscored. A
+        // student registered before this existed is not locked out of their
+        // account: only *starting* a proctored attempt is blocked, and the error
+        // code sends the UI straight to the form.
+        if (!(await this.guardianService.hasGuardianConsent(userId))) {
+            throw new ForbiddenException('GUARDIAN_CONSENT_REQUIRED');
         }
 
         const instance = await this.prisma.examInstance.findUnique({
@@ -728,10 +768,30 @@ export class AttemptService {
             },
         });
 
+        await this.flagForReview(attemptId);
+
         return {
             ...updated,
             redirectUrl: attempt.examInstance.quitUrl || undefined,
         };
+    }
+
+    /**
+     * Queue this attempt for human review if its risk warrants one.
+     *
+     * Best-effort by design: a submission that has already been scored and stored
+     * must not fail because the review queue could not be written to. A missed flag
+     * is recoverable — an admin can still find the attempt by risk score — whereas
+     * a failed submit loses a student their exam.
+     */
+    private async flagForReview(attemptId: string): Promise<void> {
+        try {
+            await this.proctorService.flagForReviewIfRisky(attemptId);
+        } catch (err) {
+            this.logger.error(
+                `Could not flag attempt ${attemptId} for review: ${(err as Error).message}`,
+            );
+        }
     }
 
     async autoSubmit(attemptId: string) {
@@ -754,6 +814,10 @@ export class AttemptService {
             }
         }
 
+        // An auto-submit is a violation-driven ending far more often than a
+        // manual one, so flagging it for review matters at least as much.
+        await this.flagForReview(attemptId);
+
         await this.prisma.attempt.update({
             where: { id: attemptId },
             data: {
@@ -768,7 +832,11 @@ export class AttemptService {
         const attempts = await this.prisma.attempt.findMany({
             where: {
                 userId,
-                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                // Includes DISQUALIFIED deliberately — see STUDENT_VISIBLE_STATUSES.
+                // The rank and cohort counts below stay on the submitted-only list,
+                // so a disqualified attempt is shown to its owner without being
+                // counted in anybody's ranking.
+                status: { in: STUDENT_VISIBLE_STATUSES },
             },
             include: {
                 examInstance: {
@@ -858,17 +926,44 @@ export class AttemptService {
             // Scale rank out of 500
             const rankOutOf500 = totalStudents > 0 ? Math.round((rank / totalStudents) * 500) : rank;
 
+            // Stage two. Until the final report is published, everything here is
+            // provisional — a proctoring review or an upheld grievance can still
+            // move this student's rank, or anyone else's.
+            const isFinal = Boolean(attempt.examInstance.finalResultsReleasedAt);
+            const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+
             results.push({
                 id: attempt.id,
+                // The exam (not the instance) this attempt belongs to, so the
+                // post-submit page can pick out the paper just sat rather than
+                // assuming the most recent row is the right one.
+                examId: attempt.examInstance.examId,
+                examInstanceId: attempt.examInstanceId,
                 title: attempt.examInstance.exam.title,
                 score,
                 total: attempt.maxScore || attempt.examInstance.exam.totalMarks,
                 date: attempt.submittedAt,
                 percentage: ((score) / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100,
                 isReleased: attempt.examInstance.exam.isResultReleased,
-                rank: rankOutOf500,
-                totalStudents: 500,
-                radarData
+                // A disqualified attempt carries no score, rank or analysis — but
+                // it is still returned, so the student is told plainly rather than
+                // finding their exam has silently vanished from their results.
+                isDisqualified,
+                disqualificationNote: isDisqualified
+                    ? 'This attempt was disqualified after review. If you believe this is wrong, you can raise it with us from the support page.'
+                    : null,
+                isProvisional: !isFinal && !isDisqualified,
+                isFinal,
+                answerKeyAvailable: Boolean(attempt.examInstance.answerKeyReleasedAt),
+                // Rank and analysis are meaningless on a provisional score and
+                // actively misleading on a disqualified one.
+                rank: isFinal && !isDisqualified ? rankOutOf500 : null,
+                totalStudents: isFinal && !isDisqualified ? 500 : null,
+                // Prefer the normalized figures once they exist — they are what the
+                // rank was actually computed from.
+                normalizedScore: isFinal ? attempt.normalizedScore : null,
+                percentile: isFinal && !isDisqualified ? attempt.percentile : null,
+                radarData: isDisqualified ? [] : radarData,
             });
         }
 
@@ -879,7 +974,7 @@ export class AttemptService {
         const attempts = await this.prisma.attempt.findMany({
             where: {
                 userId,
-                status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED] },
+                status: { in: STUDENT_VISIBLE_STATUSES },
             },
             include: {
                 examInstance: {
@@ -894,14 +989,120 @@ export class AttemptService {
             take: 5,
         });
 
-        return attempts.map((attempt) => ({
-            id: attempt.id,
-            examTitle: attempt.examInstance.exam.title,
-            score: attempt.totalScore || 0,
-            totalMarks: attempt.maxScore || attempt.examInstance.exam.totalMarks,
-            completedAt: attempt.submittedAt,
-            isReleased: attempt.examInstance.exam.isResultReleased,
-        }));
+        return attempts.map((attempt) => {
+            const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+            return {
+                id: attempt.id,
+                examTitle: attempt.examInstance.exam.title,
+                score: attempt.totalScore || 0,
+                totalMarks: attempt.maxScore || attempt.examInstance.exam.totalMarks,
+                completedAt: attempt.submittedAt,
+                isReleased: attempt.examInstance.exam.isResultReleased,
+                isDisqualified,
+                // Drives the "Provisional" chip on the dashboard, so a score there
+                // never reads as settled while it can still move.
+                isProvisional:
+                    !isDisqualified && !attempt.examInstance.finalResultsReleasedAt,
+            };
+        });
+    }
+
+    /**
+     * The student's own detailed report for one attempt.
+     *
+     * Two stages, decided entirely by the exam instance's columns:
+     *
+     *  - **Provisional** — the score and a per-section breakdown, labelled
+     *    unverified. No rank, no percentile, no answer key.
+     *  - **Final** — once `finalResultsReleasedAt` is set: normalized score, rank,
+     *    percentile, and (if `answerKeyReleasedAt` is set) every question with the
+     *    correct answer, what the student chose, and the explanation.
+     *
+     * The gating happens **here, in the query**, not in the response shaping and
+     * certainly not in the client: before publication the correct answers are
+     * never read out of the database at all, so there is nothing in the payload
+     * for a curious student to find in their network tab.
+     */
+    async getStudentReport(userId: string, attemptId: string) {
+        const attempt = await this.prisma.attempt.findFirst({
+            // Scoped to the owner. A bare attempt id must never let one student
+            // read another's answers — reported as not-found rather than
+            // forbidden, so "no such attempt" and "not yours" look identical.
+            where: { id: attemptId, userId },
+            include: {
+                examInstance: { include: { exam: true } },
+                items: { include: { question: true }, orderBy: { sortOrder: 'asc' } },
+            },
+        });
+        if (!attempt) throw new NotFoundException('Attempt not found');
+
+        const { examInstance } = attempt;
+        const isFinal = Boolean(examInstance.finalResultsReleasedAt);
+        const answerKeyReleased = Boolean(examInstance.answerKeyReleasedAt);
+        const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+
+        const maxScore = attempt.maxScore || examInstance.exam.totalMarks || 0;
+        const score = attempt.totalScore ?? 0;
+
+        const base = {
+            attemptId: attempt.id,
+            examTitle: examInstance.exam.title,
+            submittedAt: attempt.submittedAt,
+            score,
+            maxScore,
+            percentage: maxScore > 0 ? (score / maxScore) * 100 : 0,
+            stage: isDisqualified ? 'DISQUALIFIED' : isFinal ? 'FINAL' : 'PROVISIONAL',
+            isProvisional: !isFinal && !isDisqualified,
+            isDisqualified,
+            answerKeyAvailable: answerKeyReleased && !isDisqualified,
+            totalQuestions: attempt.items.length,
+            answeredQuestions: attempt.items.filter((i) => i.answer !== null).length,
+        };
+
+        if (isDisqualified) {
+            return {
+                ...base,
+                score: null,
+                percentage: null,
+                disqualificationNote:
+                    'This attempt was disqualified following a review of the proctoring record. If you believe this is wrong, raise a grievance from the support page and a person will look at it again.',
+                questions: [],
+            };
+        }
+
+        if (!isFinal) {
+            return {
+                ...base,
+                provisionalNote:
+                    'This is an unverified, provisional score. It can still change while proctoring reviews and grievances are settled. Your final score, rank and the answer key are published once the season closes.',
+                questions: [],
+            };
+        }
+
+        return {
+            ...base,
+            normalizedScore: attempt.normalizedScore,
+            rank: attempt.rank,
+            percentile: attempt.percentile,
+            // The answer key. Only assembled once it has actually been published —
+            // `correctAnswer` and `explanation` do not leave the server before then.
+            questions: answerKeyReleased
+                ? attempt.items.map((item, index) => ({
+                      number: index + 1,
+                      questionId: item.questionId,
+                      text: item.question.text,
+                      options: item.question.options,
+                      sectionName: item.question.sectionName,
+                      topic: item.question.topic,
+                      yourAnswer: item.answer,
+                      correctAnswer: item.question.correctAnswer,
+                      isCorrect: item.isCorrect,
+                      marks: item.question.marks,
+                      scored: item.score,
+                      explanation: item.question.explanation,
+                  }))
+                : [],
+        };
     }
 
     async findById(id: string) {

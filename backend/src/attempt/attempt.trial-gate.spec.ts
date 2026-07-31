@@ -41,7 +41,11 @@ describe('AttemptService — rehearsal gate covers practice exams', () => {
                     .mockResolvedValue(opts.trialSat ? { id: 'tc-1', completedAt: new Date() } : null),
             },
         };
-        return new AttemptService(prisma, {} as any);
+        // Parental consent is satisfied here so these cases exercise the
+        // rehearsal gate; `attempt.guardian-gate.spec.ts` covers the refusal.
+        const guardian: any = { hasGuardianConsent: jest.fn().mockResolvedValue(true) };
+        const proctor: any = { flagForReviewIfRisky: jest.fn().mockResolvedValue('NOT_REQUIRED') };
+        return new AttemptService(prisma, {} as any, guardian, proctor);
     }
 
     it('reports the trial as required for a practice exam', async () => {

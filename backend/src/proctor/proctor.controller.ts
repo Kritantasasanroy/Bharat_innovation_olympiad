@@ -9,11 +9,27 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ProctorService } from './proctor.service';
+
+/** A reviewer's verdict on one attempt. */
+export class RecordReviewDto {
+    @IsIn(['CLEARED', 'DISQUALIFIED'])
+    verdict: 'CLEARED' | 'DISQUALIFIED';
+
+    /**
+     * Mandatory for both verdicts — a clearance with no stated reason is as
+     * unaccountable as a disqualification with none.
+     */
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(4000)
+    notes: string;
+}
 
 @Controller('proctor')
 export class ProctorController {
@@ -100,6 +116,49 @@ export class ProctorController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async getReport(@Param('attemptId') attemptId: string) {
         return this.proctorService.getReport(attemptId);
+    }
+
+    // ── Post-exam human review (admin) ────────────────────────────────────────
+
+    /**
+     * The review queue — finished attempts a person should look at, worst first.
+     *
+     * Declared before `report/:attemptId`-style dynamic segments is unnecessary
+     * here (the paths do not overlap), but it is grouped with its siblings so the
+     * review endpoints read as one feature.
+     */
+    @Get('review/queue')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async listReviewQueue(
+        @Query('status') status?: string,
+        @Query('examInstanceId') examInstanceId?: string,
+    ) {
+        return this.proctorService.listReviewQueue({
+            status: status as any,
+            examInstanceId,
+        });
+    }
+
+    /** Everything a reviewer needs to decide one case: timeline, session, verdict. */
+    @Get('review/:attemptId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    async getReviewEvidence(@Param('attemptId') attemptId: string) {
+        return this.proctorService.getReviewEvidence(attemptId);
+    }
+
+    /** Record a verdict. Notes are mandatory for both outcomes. */
+    @Post('review/:attemptId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    @HttpCode(200)
+    async recordReview(
+        @Param('attemptId') attemptId: string,
+        @Body() body: RecordReviewDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.proctorService.recordReview(attemptId, adminId, body.verdict, body.notes);
     }
 
     /**

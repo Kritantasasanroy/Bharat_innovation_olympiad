@@ -46,6 +46,21 @@ export class AttemptController {
         return this.attemptService.getTrialStatus(userId, examInstanceId);
     }
 
+    /**
+     * The student's own report for one attempt — provisional, or final with the
+     * answer key once it has been published.
+     *
+     * Ownership is enforced in the service, not here: an attempt id in a URL must
+     * never let one student read another's answers.
+     */
+    @Get('attempts/:id/report')
+    async getStudentReport(
+        @Param('id') attemptId: string,
+        @CurrentUser('id') userId: string,
+    ) {
+        return this.attemptService.getStudentReport(userId, attemptId);
+    }
+
     @Get('attempts/:id')
     async getAttempt(
         @Param('id') id: string,

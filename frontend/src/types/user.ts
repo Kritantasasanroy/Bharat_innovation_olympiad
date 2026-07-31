@@ -11,11 +11,36 @@ export interface User {
     phone?: string | null;
     role: Role;
     classBand?: number;
+    /** Olympiad roll number, e.g. `BIO26-G8-00123`. Issued at registration. */
+    rollNumber?: string | null;
+    /** Class section as the school writes it — "A", "B2", "Rose". */
+    section?: string | null;
     schoolId?: string;
     school?: { name: string };
     profileImageUrl?: string;
     isActive: boolean;
     createdAt: string;
+}
+
+/** Registration part 2 — what `GET /guardian/me` returns. */
+export interface GuardianStatus {
+    version: string;
+    complete: boolean;
+    profile: {
+        guardianFirstName: string;
+        guardianLastName: string;
+        relationship: string;
+        guardianEmail: string;
+        guardianPhone: string;
+        studentDob?: string | null;
+        gender?: string | null;
+        city?: string | null;
+        state?: string | null;
+        pincode?: string | null;
+        parentalConsentAt: string;
+        dataConsentAt: string;
+        consentVersion: string;
+    } | null;
 }
 
 export interface AuthTokens {

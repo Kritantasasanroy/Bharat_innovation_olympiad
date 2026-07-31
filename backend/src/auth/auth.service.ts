@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
 import { SchoolSlotService } from '../slot/school-slot.service';
+import { RollNumberService } from '../user/roll-number.service';
 import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 import { PhoneOtpService } from './phone-otp.service';
 import { normalizePhone } from './phone.helpers';
@@ -14,6 +15,7 @@ export class AuthService {
         private schoolSlotService: SchoolSlotService,
         private notifications: NotificationService,
         private phoneOtpService: PhoneOtpService,
+        private rollNumbers: RollNumberService,
     ) { }
 
     /**
@@ -67,6 +69,36 @@ export class AuthService {
         return phone;
     }
 
+    /**
+     * School is now mandatory for students.
+     *
+     * "The school option in registration form needs clarity/detailing/enhancement"
+     * and "Section of student needs to be captured for school level
+     * tracking/mapping by teachers/school admin" — school-level tracking is only
+     * as good as its worst row, and an optional school left it patchy.
+     *
+     * Enforced for `STUDENT` only: staff and partner accounts have no school, and
+     * an invited roster row already carries the school that invited it.
+     */
+    private assertSchoolResolved(
+        role: SyncUserDto['role'],
+        schoolId: string | null | undefined,
+    ): void {
+        const isStudent = (role ?? 'STUDENT') === 'STUDENT';
+        if (isStudent && !schoolId) {
+            throw new BadRequestException(
+                'Choose your school to continue. Search for it by name, city or pincode, enter your school code, or add it if it is not listed.',
+            );
+        }
+    }
+
+    /** A section only means something alongside a school, so it is stored with one. */
+    private normaliseSection(raw: string | undefined, schoolId: string | null | undefined) {
+        const section = raw?.trim();
+        if (!section || !schoolId) return null;
+        return section.slice(0, 10);
+    }
+
     async syncUser(email: string, dto: SyncUserDto) {
         const existing = await this.prisma.user.findUnique({ where: { email } });
 
@@ -82,20 +114,34 @@ export class AuthService {
             // otherwise they stay invisible to every school-scoped query.
             const schoolId =
                 existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+            this.assertSchoolResolved(existing.role, schoolId);
             const phone = await this.resolveVerifiedPhone(dto.phone, existing.id, dto.phoneCode);
+            const classBand = dto.classBand ?? existing.classBand;
 
             const claimed = await this.prisma.user.update({
                 where: { id: existing.id },
                 data: {
                     firstName: dto.firstName || existing.firstName,
                     lastName: dto.lastName || existing.lastName,
-                    classBand: dto.classBand ?? existing.classBand,
+                    classBand,
                     schoolId,
+                    section: this.normaliseSection(dto.section, schoolId) ?? existing.section,
                     activatedAt: new Date(),
                     ...(phone ? { phone } : {}),
                     ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
+                    // Only stamp acceptance we were actually told about, and never
+                    // overwrite an earlier acceptance with nothing.
+                    ...(dto.termsVersion
+                        ? { termsAcceptedAt: new Date(), termsVersion: dto.termsVersion }
+                        : {}),
                 },
             });
+
+            // Issued here too, not only for brand-new accounts: a student who
+            // arrived through a school's roster is just as much a participant and
+            // needs a roll number on their admit card. `ensureFor` is a no-op if
+            // they somehow already have one.
+            const rollNumber = await this.rollNumbers.ensureFor(claimed.id, claimed.classBand);
 
             // This was missing: only brand-new users were ever auto-allocated, so
             // a student who came in through a school's roster — the common case for
@@ -106,10 +152,14 @@ export class AuthService {
                 await this.schoolSlotService.autoAllocateForNewStudent(claimed.id, schoolId);
             }
 
-            return claimed;
+            // `claimed` was read before the roll number was written, so merge it
+            // in rather than returning a row that says `rollNumber: null` to a
+            // client that is about to display it.
+            return { ...claimed, rollNumber };
         }
 
-        const schoolId = await this.resolveSchoolId(dto.schoolCode);
+        const schoolId = (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+        this.assertSchoolResolved(dto.role, schoolId);
         const phone = await this.resolveVerifiedPhone(dto.phone, undefined, dto.phoneCode);
 
         const user = await this.prisma.user.create({
@@ -121,12 +171,18 @@ export class AuthService {
                 role: dto.role || 'STUDENT',
                 classBand: dto.classBand,
                 schoolId,
+                section: this.normaliseSection(dto.section, schoolId),
                 activatedAt: new Date(),
+                ...(dto.termsVersion
+                    ? { termsAcceptedAt: new Date(), termsVersion: dto.termsVersion }
+                    : {}),
                 // Remembered so the later paid conversion can be credited to
                 // the referring partner's campaign (PRD-046 attribution).
                 referralCode: dto.referralCode ?? null,
             }
         });
+
+        const rollNumber = await this.rollNumbers.ensureFor(user.id, user.classBand);
 
         // Same school -> same slot: if this student's school already has a
         // slot assignment for any exam instance, book them into it
@@ -139,9 +195,12 @@ export class AuthService {
 
         // Only for genuinely new accounts — claiming an invited roster row
         // returns earlier, so a student is never welcomed twice.
-        await this.notifications.sendWelcome(user.email, user.firstName);
+        //
+        // Milestone 1 of 4 (registration). The roll number rides along so the
+        // student has it in writing from the first minute.
+        await this.notifications.sendWelcome(user.email, user.firstName, rollNumber);
 
-        return user;
+        return { ...user, rollNumber };
     }
 
     async getUserByEmail(email: string) {
@@ -159,6 +218,8 @@ export class AuthService {
                 lastName: true,
                 role: true,
                 classBand: true,
+                rollNumber: true,
+                section: true,
                 schoolId: true,
                 school: { select: { name: true } },
                 isActive: true,
@@ -178,6 +239,8 @@ export class AuthService {
                 lastName: true,
                 role: true,
                 classBand: true,
+                rollNumber: true,
+                section: true,
                 schoolId: true,
                 school: { select: { name: true } },
                 isActive: true,
@@ -218,6 +281,8 @@ export class AuthService {
                 lastName: true,
                 role: true,
                 classBand: true,
+                rollNumber: true,
+                section: true,
                 schoolId: true,
                 school: { select: { name: true } },
                 profileImageUrl: true,
@@ -273,6 +338,8 @@ export class AuthService {
                 phone: true,
                 role: true,
                 classBand: true,
+                rollNumber: true,
+                section: true,
                 schoolId: true,
                 school: { select: { name: true } },
                 profileImageUrl: true,

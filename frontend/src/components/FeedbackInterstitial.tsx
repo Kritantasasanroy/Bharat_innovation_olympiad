@@ -97,21 +97,15 @@ export default function FeedbackInterstitial({
                 )}
             </div>
 
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 'var(--space-4)',
-                    flexWrap: 'wrap',
-                    marginTop: 'var(--space-5)',
-                }}
-            >
+            {/* Sticky, because the embedded form is 78vh tall and the Continue
+                button used to sit below it — so on a laptop a tester had to scroll
+                past the entire form to find the way out, and several never did. */}
+            <div className="feedback-actions">
                 <a
                     href={formUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}
+                    className="feedback-actions__link"
                 >
                     Trouble with the form? Open it in a new tab ↗
                 </a>

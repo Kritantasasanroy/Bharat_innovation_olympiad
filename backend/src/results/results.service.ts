@@ -1,10 +1,31 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    Logger,
+    NotFoundException,
+} from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { canReleaseResults } from '../exam/exam-lifecycle';
 import { normalizeScores } from './normalization';
 
-/** Attempt states that count as "sat the exam" for normalization and certificates. */
+/**
+ * Attempt states that count as "sat the exam" for normalization and certificates.
+ *
+ * `DISQUALIFIED` is deliberately absent. That single omission is what removes a
+ * disqualified attempt from normalization, from the rank and percentile
+ * computation, from certificate issue, and from the school and partner result
+ * exports — every one of those queries filters on a list like this one, and none
+ * of them lists `DISQUALIFIED`. So disqualifying an attempt is a single status
+ * write, with no exclusion logic to remember to add in six places.
+ *
+ * The one place that must NOT inherit the exclusion is the student's own results
+ * list: a disqualified student needs to see that they were disqualified, and a
+ * route to appeal it. `AttemptService.getResults` therefore queries for it
+ * explicitly rather than reusing this list.
+ */
 export const SUBMITTED_STATUSES = [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED];
 
 /** Who a result release is visible to. Each is granted and revoked separately. */
@@ -33,7 +54,12 @@ const labelOf = (audience: ResultAudience) => audience.toLowerCase();
  */
 @Injectable()
 export class ResultsService {
-    constructor(private prisma: PrismaService) {}
+    private readonly logger = new Logger(ResultsService.name);
+
+    constructor(
+        private prisma: PrismaService,
+        private notifications: NotificationService,
+    ) {}
 
     /** Normalization + release state for one exam instance. */
     async getStatus(examInstanceId: string) {
@@ -74,6 +100,26 @@ export class ResultsService {
             canRelease: gate.ok,
             /** Why the Release button is disabled, so the admin UI need not guess. */
             releaseBlockedReason: gate.ok ? null : gate.reason,
+            // ── Stage two ──
+            finalResultsReleasedAt: instance.finalResultsReleasedAt,
+            answerKeyReleasedAt: instance.answerKeyReleasedAt,
+            canPublishFinal: gate.ok && Boolean(instance.resultsReleasedToStudentsAt),
+            publishFinalBlockedReason: !gate.ok
+                ? gate.reason
+                : !instance.resultsReleasedToStudentsAt
+                  ? 'Release provisional results to students first.'
+                  : null,
+            disqualifiedAttempts: await this.prisma.attempt.count({
+                where: { examInstanceId, status: AttemptStatus.DISQUALIFIED },
+            }),
+            /**
+             * Reviews still open. Publishing a final report while a proctoring
+             * review is outstanding is exactly how a rank gets published and then
+             * changed, so the admin UI warns on this.
+             */
+            pendingReviews: await this.prisma.attempt.count({
+                where: { examInstanceId, reviewStatus: 'PENDING' },
+            }),
         };
     }
 
@@ -86,6 +132,24 @@ export class ResultsService {
                 _count: { select: { attempts: true, certificates: true } },
             },
         });
+
+        // Review and disqualification counts for every instance in one grouped
+        // query rather than two per row — this list is polled every 10 seconds by
+        // the admin page, so N+1 here would be N+1 forever.
+        const [pendingByInstance, disqualifiedByInstance] = await Promise.all([
+            this.prisma.attempt.groupBy({
+                by: ['examInstanceId'],
+                where: { reviewStatus: 'PENDING' },
+                _count: { _all: true },
+            }),
+            this.prisma.attempt.groupBy({
+                by: ['examInstanceId'],
+                where: { status: AttemptStatus.DISQUALIFIED },
+                _count: { _all: true },
+            }),
+        ]);
+        const countOf = (rows: { examInstanceId: string; _count: { _all: number } }[], id: string) =>
+            rows.find((r) => r.examInstanceId === id)?._count._all ?? 0;
 
         const now = new Date();
 
@@ -112,6 +176,22 @@ export class ResultsService {
                 },
                 canRelease: gate.ok,
                 releaseBlockedReason: gate.ok ? null : gate.reason,
+                // ── Stage two ──
+                finalResultsReleasedAt: instance.finalResultsReleasedAt,
+                answerKeyReleasedAt: instance.answerKeyReleasedAt,
+                canPublishFinal:
+                    gate.ok &&
+                    Boolean(instance.resultsReleasedToStudentsAt) &&
+                    !instance.finalResultsReleasedAt,
+                publishFinalBlockedReason: !gate.ok
+                    ? gate.reason
+                    : !instance.resultsReleasedToStudentsAt
+                      ? 'Release provisional results to students first.'
+                      : instance.finalResultsReleasedAt
+                        ? 'The final report is already published.'
+                        : null,
+                pendingReviews: countOf(pendingByInstance as any, instance.id),
+                disqualifiedAttempts: countOf(disqualifiedByInstance as any, instance.id),
             };
         });
     }
@@ -297,5 +377,162 @@ export class ResultsService {
         ]);
 
         return { examInstanceId, revoked: audiences };
+    }
+
+    // ── Stage two: the final report ───────────────────────────────────────────
+
+    /**
+     * Publishes the final report — the second, later gate.
+     *
+     * ## Why releasing to students is not enough on its own
+     *
+     * `release(…, ['STUDENTS'])` publishes a score, but that score is still
+     * **provisional**: a proctoring review can disqualify attempts and an upheld
+     * grievance can change a mark, and both of those move everybody else's rank.
+     * Telling a student their rank is "3rd" and then silently making it 4th is
+     * worse than saying "provisional" for a fortnight.
+     *
+     * So this is the separate, audited decision that the season is settled. Only
+     * after it do final score, rank, percentile, section analysis and the answer
+     * key become visible ("Unverified score displayed. Final scores, rank,
+     * analysis, Answer key in report after the season ends").
+     *
+     * ## Why the answer key is a separate column
+     *
+     * An admin may legitimately want the analysis out while a re-sit is still
+     * pending for a handful of students, and publishing the key would hand those
+     * students the paper. `withAnswerKey: false` allows exactly that.
+     */
+    async publishFinalReport(
+        examInstanceId: string,
+        adminId: string,
+        reason: string,
+        withAnswerKey = true,
+    ) {
+        if (!reason?.trim()) {
+            throw new BadRequestException('A reason is required to publish the final report.');
+        }
+
+        const instance = await this.prisma.examInstance.findUnique({ where: { id: examInstanceId } });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        // The same window/normalization gate as a release — a "final" report for
+        // an exam still in progress is a contradiction.
+        const check = canReleaseResults({
+            instance,
+            normalizedAt: instance.resultsNormalizedAt,
+            now: new Date(),
+        });
+        if (!check.ok) throw new ConflictException(check.reason);
+
+        // Final results are the *upgrade* of a provisional score. Publishing them
+        // to a cohort that has never been given a provisional score at all would
+        // skip the stage the two-stage design exists to provide.
+        if (!instance.resultsReleasedToStudentsAt) {
+            throw new ConflictException(
+                'Release provisional results to students first, then publish the final report.',
+            );
+        }
+
+        if (instance.finalResultsReleasedAt) {
+            throw new ConflictException('The final report is already published for this exam.');
+        }
+
+        const now = new Date();
+        await this.prisma.$transaction([
+            this.prisma.examInstance.update({
+                where: { id: examInstanceId },
+                data: {
+                    finalResultsReleasedAt: now,
+                    finalReleasedBy: adminId,
+                    ...(withAnswerKey ? { answerKeyReleasedAt: now } : {}),
+                },
+            }),
+            this.prisma.auditLog.create({
+                data: {
+                    userId: adminId,
+                    action: 'results.final_published',
+                    resource: 'exam-instance',
+                    details: { examInstanceId, reason: reason.trim(), withAnswerKey },
+                },
+            }),
+        ]);
+
+        // Milestone 4 of 4 — the score is no longer provisional. Fired after the
+        // transaction commits and never allowed to fail the publish: results are
+        // published either way, and a partial mail-out is recoverable where a
+        // rolled-back publish is confusing to everyone watching for it.
+        void this.announceFinalResults(examInstanceId);
+
+        return { examInstanceId, finalResultsReleasedAt: now, answerKeyReleased: withAnswerKey };
+    }
+
+    /**
+     * Tells every student whose attempt counts that their final report is out.
+     *
+     * Disqualified attempts are excluded by `SUBMITTED_STATUSES` — a student who
+     * has just been disqualified should hear that through the grievance route,
+     * not via a cheerful "your result is ready".
+     */
+    private async announceFinalResults(examInstanceId: string): Promise<void> {
+        try {
+            const attempts = await this.prisma.attempt.findMany({
+                where: { examInstanceId, status: { in: SUBMITTED_STATUSES } },
+                select: {
+                    user: { select: { email: true, firstName: true } },
+                    examInstance: { select: { exam: { select: { title: true } } } },
+                },
+            });
+
+            for (const attempt of attempts) {
+                if (!attempt.user?.email) continue;
+                await this.notifications.sendResultsPublished(
+                    attempt.user.email,
+                    attempt.user.firstName,
+                    attempt.examInstance.exam.title,
+                );
+            }
+        } catch (err) {
+            this.logger.error(
+                `Final-results announcement failed for ${examInstanceId}: ${(err as Error).message}`,
+            );
+        }
+    }
+
+    /**
+     * Takes the final report back, returning every score to provisional.
+     *
+     * Used when a report goes out and turns out to be wrong — the mirror of
+     * `revoke`, and the reason `publishFinalReport` is recoverable rather than
+     * one-way.
+     */
+    async revokeFinalReport(examInstanceId: string, adminId: string, reason: string) {
+        if (!reason?.trim()) {
+            throw new BadRequestException('A reason is required to revoke the final report.');
+        }
+
+        const instance = await this.prisma.examInstance.findUnique({ where: { id: examInstanceId } });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        await this.prisma.$transaction([
+            this.prisma.examInstance.update({
+                where: { id: examInstanceId },
+                data: {
+                    finalResultsReleasedAt: null,
+                    answerKeyReleasedAt: null,
+                    finalReleasedBy: null,
+                },
+            }),
+            this.prisma.auditLog.create({
+                data: {
+                    userId: adminId,
+                    action: 'results.final_revoked',
+                    resource: 'exam-instance',
+                    details: { examInstanceId, reason: reason.trim() },
+                },
+            }),
+        ]);
+
+        return { examInstanceId, revoked: true };
     }
 }

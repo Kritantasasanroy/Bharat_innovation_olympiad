@@ -3,9 +3,11 @@ import {
     ConflictException,
     ForbiddenException,
     Injectable,
+    Logger,
     NotFoundException,
 } from '@nestjs/common';
 import { AccessPassStatus, BookingStatus } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { validateSlotWindow } from '../exam/exam-lifecycle';
@@ -13,7 +15,12 @@ import { BookSlotDto, CreateSlotDto } from './dto/slot.dto';
 
 @Injectable()
 export class SlotService {
-    constructor(private prisma: PrismaService) {}
+    private readonly logger = new Logger(SlotService.name);
+
+    constructor(
+        private prisma: PrismaService,
+        private notifications: NotificationService,
+    ) {}
 
     async createSlot(dto: CreateSlotDto) {
         const instance = await this.prisma.examInstance.findUnique({
@@ -140,7 +147,7 @@ export class SlotService {
 
         const feeAmount = slot.examInstance.exam.feeAmount ?? 0;
 
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
             const fresh = await tx.examSlot.findUnique({ where: { id: slotId } });
             if (!fresh || fresh.booked >= fresh.capacity) {
                 throw new ConflictException('Slot is full');
@@ -166,6 +173,45 @@ export class SlotService {
             });
             return { booking, requiresPayment: true, amount: feeAmount };
         });
+
+        // Milestone 2 of 4 — "exam start": a confirmed slot is the moment the exam
+        // becomes a real appointment. Sent AFTER the transaction commits, never
+        // inside it: a mail provider timeout must not roll back a seat the student
+        // has already been told they hold.
+        if (result.booking.status === BookingStatus.CONFIRMED) {
+            await this.sendSlotConfirmation(userId, result.booking);
+        }
+
+        return result;
+    }
+
+    /**
+     * Best-effort slot confirmation email. Swallows its own failures — the seat is
+     * booked either way, and failing the booking over a mail problem would be a
+     * strictly worse outcome for the student.
+     */
+    private async sendSlotConfirmation(userId: string, booking: any): Promise<void> {
+        try {
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+                select: { email: true, firstName: true, rollNumber: true },
+            });
+            if (!user?.email) return;
+
+            await this.notifications.sendSlotConfirmed(user.email, {
+                firstName: user.firstName,
+                examTitle: booking.slot.examInstance.exam.title,
+                slotLabel: booking.slot.label,
+                startsAt: booking.slot.startsAt,
+                endsAt: booking.slot.endsAt,
+                rollNumber: user.rollNumber,
+                bookingId: booking.id,
+            });
+        } catch (err) {
+            this.logger.error(
+                `Slot confirmation email failed for booking ${booking?.id}: ${(err as Error).message}`,
+            );
+        }
     }
 
     async cancelBooking(bookingId: string, userId: string) {

@@ -1,3 +1,4 @@
+import FeedbackTab from '@/components/FeedbackTab';
 import ThemeProvider from '@/components/ThemeProvider';
 import type { Metadata } from 'next';
 import './globals.css';
@@ -42,7 +43,12 @@ export default function RootLayout({
                     /favicon.ico this used to reference did not exist and 404'd. */}
             </head>
             <body>
-                <ThemeProvider>{children}</ThemeProvider>
+                <ThemeProvider>
+                    {children}
+                    {/* Right-edge beta feedback tab. Hides itself on the exam
+                        player and the auth pages — see FeedbackTab. */}
+                    <FeedbackTab />
+                </ThemeProvider>
             </body>
         </html>
     );

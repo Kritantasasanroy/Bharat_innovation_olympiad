@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, CLASS_BANDS, COMPANY_NAME, TAGLINE } from '@/lib/constants';
+import { APP_NAME, CLASS_BANDS, COMPANY_NAME, TAGLINE, TERMS_VERSION } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -9,13 +9,62 @@ import { useRouter } from 'next/navigation';
 import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import SchoolPicker from '@/components/SchoolPicker';
+import GuardianStep from './steps/GuardianStep';
+import PaymentStep from './steps/PaymentStep';
+import PresenceStep from './steps/PresenceStep';
 import type { DirectorySchool } from '@/lib/schools';
 import { FormEvent, useState, useEffect } from 'react';
 
-type Step = 'details' | 'verify' | 'face';
+/**
+ * Student registration, in six steps.
+ *
+ * ## The order, and why it is this order
+ *
+ * `presence` → `details` → `verify` → `face` → `guardian` → `payment`
+ *
+ *  - **presence first**, before a single field: the student has to be at the
+ *    keyboard for the face scan, and discovering that at step 4 is too late.
+ *    It also carries the T&C acceptance, so nobody types their details before
+ *    seeing what they are agreeing to.
+ *  - **verify before the account exists**: the account is created at the end of
+ *    `verify`, once the email is proven. Everything after that point can rely on
+ *    a real, authenticated user, which is why `guardian` and `payment` can simply
+ *    call authenticated endpoints.
+ *  - **face before guardian**: it is the step that needs the student personally,
+ *    so it happens while they are certainly still there. The parent section can
+ *    be finished by a parent leaning over afterwards.
+ *  - **payment last**, and mandatory: paying unlocks the dashboard and every
+ *    exam. It is last because a student who abandons here still has a usable
+ *    account — they land on the dashboard's locked state and can pay from there,
+ *    rather than having no account at all.
+ *
+ * Each step lives in its own component under `./steps/`. Only `details` and
+ * `verify` remain inline, because they share the form state and the OTP handshake.
+ */
+
+type Step = 'presence' | 'details' | 'verify' | 'face' | 'guardian' | 'payment';
+
+/** Ordered, so the progress indicator and the labels derive from one list. */
+const STEPS: { id: Step; label: string }[] = [
+    { id: 'presence', label: 'Before you start' },
+    { id: 'details', label: 'Your details' },
+    { id: 'verify', label: 'Verify email' },
+    { id: 'face', label: 'Face scan' },
+    { id: 'guardian', label: 'Parent details' },
+    { id: 'payment', label: 'Payment' },
+];
+
+const SUBTITLES: Record<Step, string> = {
+    presence: 'Please read this before you begin',
+    details: 'Create your student account',
+    verify: 'Verify your email',
+    face: 'Enrol your face',
+    guardian: 'Parent or guardian details',
+    payment: 'Complete your registration',
+};
 
 export default function RegisterPage() {
-    const [step, setStep] = useState<Step>('details');
+    const [step, setStep] = useState<Step>('presence');
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -24,12 +73,19 @@ export default function RegisterPage() {
         classBand: 6,
     });
     const [school, setSchool] = useState<DirectorySchool | null>(null);
+    const [section, setSection] = useState('');
     const [otp, setOtp] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const register = useAuthStore((s) => s.register);
+    const user = useAuthStore((s) => s.user);
     const router = useRouter();
+
+    // ── Step 0: presence + terms acknowledgements ──
+    const [presenceAck, setPresenceAck] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(false);
+    const [dataConsent, setDataConsent] = useState(false);
 
     // Optional mobile number, proven by an SMS code submitted with the form.
     // number is submitted — an unverified one would let a student claim someone
@@ -37,7 +93,6 @@ export default function RegisterPage() {
     const [phone, setPhone] = useState('');
     const [phoneOtpCode, setPhoneOtpCode] = useState('');
     const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-    const [phoneVerified, setPhoneVerified] = useState(false);
     const [phoneBusy, setPhoneBusy] = useState(false);
     const [phoneMsg, setPhoneMsg] = useState('');
 
@@ -77,7 +132,7 @@ export default function RegisterPage() {
     // server-side at /auth/sync. Verifying here would consume the single-use
     // code before registration could use it.
 
-    // Mandatory face enrollment (step 3, after account creation)
+    // Mandatory face enrollment (after account creation)
     const [faceCameraOn, setFaceCameraOn] = useState(false);
     const [faceCapturing, setFaceCapturing] = useState(false);
     const [faceMsg, setFaceMsg] = useState('');
@@ -116,10 +171,9 @@ export default function RegisterPage() {
         stopProctoring();
         setFaceCapturing(false);
         if (ok) {
-            // Face enrollment is the last step, so this is where registration
-            // actually completes — there is no /register/success page. The beta
-            // feedback prompt goes here, and hands off to the dashboard.
-            router.push('/feedback/registration');
+            // Registration no longer ends here — the parent section and payment
+            // still follow, so this advances rather than navigating away.
+            setStep('guardian');
         } else {
             setFaceMsg('Enrollment failed. Please try again.');
         }
@@ -137,7 +191,7 @@ export default function RegisterPage() {
         }));
     };
 
-    // Step 1: Send OTP to email
+    // Step: send OTP to email
     const handleSendOtp = async (e: FormEvent) => {
         e.preventDefault();
         setError('');
@@ -147,6 +201,12 @@ export default function RegisterPage() {
         }
         if (!formData.email.trim()) {
             setError('Please enter your email address.');
+            return;
+        }
+        // School is required — checked here as well as server-side so the student
+        // is told before an OTP is spent rather than after.
+        if (!school) {
+            setError('Please choose your school. Search for it, enter a school code, or add it.');
             return;
         }
         setIsLoading(true);
@@ -166,7 +226,7 @@ export default function RegisterPage() {
         }
     };
 
-    // Step 2: Verify OTP and create account
+    // Step: verify OTP and create account
     const handleVerifyOtp = async (e: FormEvent) => {
         e.preventDefault();
         setError('');
@@ -192,6 +252,10 @@ export default function RegisterPage() {
             await register({
                 ...formData,
                 ...(school ? { schoolCode: school.code } : {}),
+                ...(section.trim() ? { section: section.trim() } : {}),
+                // The version actually shown on the presence step, so a later
+                // revision is distinguishable from what was agreed to.
+                termsVersion: TERMS_VERSION,
                 ...(referralCode ? { referralCode } : {}),
                 // Both, or neither — the backend rejects a phone without a code.
                 ...(phone.trim() && phoneOtpCode.length === 6
@@ -199,9 +263,9 @@ export default function RegisterPage() {
                     : {}),
             });
             clearReferralCode();
+            setSuccess('');
 
-            // Account created — face enrollment is mandatory for new students
-            // before they can reach the dashboard.
+            // Account created — face enrollment is mandatory for new students.
             setStep('face');
         } catch (err: any) {
             console.error('Verify OTP error:', err);
@@ -229,6 +293,10 @@ export default function RegisterPage() {
         }
     };
 
+    const stepIndex = STEPS.findIndex((s) => s.id === step);
+    // The account exists from `face` onwards, so leaving is no longer destructive.
+    const accountExists = stepIndex >= STEPS.findIndex((s) => s.id === 'face');
+
     return (
         <div className="auth-page">
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
@@ -244,19 +312,60 @@ export default function RegisterPage() {
                         <span>by</span>
                         <img src="/lemon-ideas-logo.png" alt={COMPANY_NAME} style={{ height: '18px', width: 'auto' }} />
                     </p>
-                    <p className="auth-subtitle">
-                        {step === 'details' ? 'Create your student account' : step === 'verify' ? 'Verify your email' : 'One last step — enroll your face'}
-                    </p>
+                    <p className="auth-subtitle">{SUBTITLES[step]}</p>
                 </div>
 
-                {error && <div className="auth-error">{error}</div>}
-                {success && <div className="auth-success" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', color: '#16a34a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.9rem' }}>{success}</div>}
+                {/* Progress — six steps is enough that "am I nearly done?" needs answering. */}
+                <ol className="register-progress" aria-label="Registration progress">
+                    {STEPS.map((s, i) => (
+                        <li
+                            key={s.id}
+                            className={
+                                i < stepIndex
+                                    ? 'register-progress__step is-done'
+                                    : i === stepIndex
+                                      ? 'register-progress__step is-current'
+                                      : 'register-progress__step'
+                            }
+                            aria-current={i === stepIndex ? 'step' : undefined}
+                        >
+                            <span className="register-progress__dot">{i < stepIndex ? '✓' : i + 1}</span>
+                            <span className="register-progress__label">{s.label}</span>
+                        </li>
+                    ))}
+                </ol>
 
-                {step === 'face' ? (
+                {error && <div className="auth-error">{error}</div>}
+                {success && <div className="auth-success">{success}</div>}
+
+                {step === 'presence' ? (
+                    <PresenceStep
+                        acknowledged={presenceAck}
+                        onAcknowledgedChange={setPresenceAck}
+                        termsAccepted={termsAccepted}
+                        onTermsAcceptedChange={setTermsAccepted}
+                        dataConsent={dataConsent}
+                        onDataConsentChange={setDataConsent}
+                        onContinue={() => { setError(''); setStep('details'); }}
+                    />
+                ) : step === 'payment' ? (
+                    <PaymentStep
+                        studentEmail={user?.email ?? formData.email}
+                        rollNumber={user?.rollNumber}
+                        // The beta feedback prompt still sits between registration
+                        // and the dashboard, and hands off from there.
+                        onDone={() => router.push('/feedback/registration')}
+                    />
+                ) : step === 'guardian' ? (
+                    <GuardianStep
+                        studentName={`${formData.firstName} ${formData.lastName}`.trim() || undefined}
+                        onDone={() => { setError(''); setStep('payment'); }}
+                    />
+                ) : step === 'face' ? (
                     <div className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor — no photo is saved.
-                            This step cannot be skipped.
+                            This step cannot be skipped, and <strong>the student must do it themselves</strong>.
                         </p>
 
                         {faceMsg && (
@@ -291,7 +400,7 @@ export default function RegisterPage() {
                                     onClick={handleCaptureFace}
                                     disabled={faceCapturing || !modelsLoaded}
                                 >
-                                    {faceCapturing ? 'Saving…' : modelsLoaded ? 'Capture & Finish' : loadingProgress || 'Loading models…'}
+                                    {faceCapturing ? 'Saving…' : modelsLoaded ? 'Capture & Continue' : loadingProgress || 'Loading models…'}
                                 </button>
                             )}
                         </div>
@@ -390,12 +499,29 @@ export default function RegisterPage() {
                                     <option key={c} value={c}>Class {c}</option>
                                 ))}
                             </select>
+                            <p className="input-hint">
+                                You will sit the Class {formData.classBand} paper. Choose carefully — you
+                                will be asked to confirm this before the exam starts, and it cannot be
+                                changed afterwards.
+                            </p>
                         </div>
 
-                        <SchoolPicker value={school} onChange={setSchool} />
+                        <SchoolPicker
+                            value={school}
+                            onChange={setSchool}
+                            section={section}
+                            onSectionChange={setSection}
+                        />
 
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
                             {isLoading ? 'Sending Code...' : 'Send Verification Code →'}
+                        </button>
+                        <button
+                            type="button"
+                            className="register-back"
+                            onClick={() => { setError(''); setStep('presence'); }}
+                        >
+                            ← Back
                         </button>
                     </form>
                 ) : (
@@ -443,9 +569,18 @@ export default function RegisterPage() {
                 )}
 
                 <div className="auth-footer" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
-                    <div>
-                        Already have an account? <Link href="/login">Sign in</Link>
-                    </div>
+                    {/* Once the account exists, "sign in instead" is misleading and
+                        leaving is safe — so the footer says something different. */}
+                    {accountExists ? (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                            Your account is created. If you leave now you can sign in and finish the
+                            remaining steps from your dashboard.
+                        </div>
+                    ) : (
+                        <div>
+                            Already have an account? <Link href="/login">Sign in</Link>
+                        </div>
+                    )}
                     <Link href="/" style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                         ← Back to Home
                     </Link>

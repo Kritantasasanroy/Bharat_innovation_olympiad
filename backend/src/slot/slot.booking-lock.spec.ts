@@ -4,6 +4,13 @@ import { DEMO_EXAM_IDS } from '../common/demo-exams';
 import { SlotService } from './slot.service';
 
 /**
+ * Booking a free slot now also sends the "your slot is confirmed" milestone
+ * email. It is best-effort and deliberately cannot fail a booking, so a stub is
+ * all these tests need — `slot.confirmation-email.spec.ts` covers the sending.
+ */
+const notifications: any = { sendSlotConfirmed: jest.fn().mockResolvedValue(undefined) };
+
+/**
  * A student's chosen sitting is a commitment, not a placeholder.
  *
  * Once a booking is CONFIRMED the student can no longer cancel it — moving them
@@ -26,7 +33,7 @@ describe('SlotService.cancelBooking — confirmed slots are locked to the studen
             examSlot: { update: jest.fn().mockResolvedValue({}) },
             $transaction: jest.fn().mockResolvedValue([]),
         };
-        return { service: new SlotService(prisma), prisma };
+        return { service: new SlotService(prisma, notifications), prisma };
     }
 
     const bookingWith = (status: BookingStatus, userId = OWNER) => ({
@@ -119,7 +126,7 @@ describe('SlotService.bookSlot — booking requires an active access pass', () =
                 }),
             ),
         };
-        return { service: new SlotService(prisma), prisma };
+        return { service: new SlotService(prisma, notifications), prisma };
     }
 
     it('refuses to book a real exam without a pass, and takes no seat', async () => {

@@ -1,6 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AttemptStatus, ProctorEventType } from '@prisma/client';
+import {
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    Logger,
+    NotFoundException,
+} from '@nestjs/common';
+import { AttemptStatus, ProctorEventType, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Risk at or above which a finished attempt is put in front of a human.
+ *
+ * 0.5 is where the live monitoring console already draws "high risk", so the
+ * queue and the dashboard agree about what counts as serious. It is a threshold
+ * for *attention*, never for a decision — nothing is disqualified without a
+ * person and a written reason.
+ */
+export const REVIEW_RISK_THRESHOLD = 0.5;
 
 @Injectable()
 export class ProctorService {
@@ -175,6 +191,218 @@ export class ProctorService {
             recentEvents: a.proctorEvents,
             eventCounts: this.summarizeEvents(a.proctorEvents),
         }));
+    }
+
+    // ── Post-exam human review ────────────────────────────────────────────────
+
+    /**
+     * Flags a finished attempt for human review if its risk warrants one.
+     *
+     * Called on submit. Nothing is decided here — this only decides whether a
+     * *person* should look, which is the whole point: "A human proctor reviews
+     * serious cases as per certain logic, confirm cheating and prepares logs,
+     * evidences and leading to disqualification."
+     *
+     * Never downgrades an existing verdict: an attempt a reviewer has already
+     * cleared must not silently return to the queue if it is re-scored.
+     */
+    async flagForReviewIfRisky(attemptId: string): Promise<ReviewStatus> {
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            select: { riskScore: true, reviewStatus: true },
+        });
+        if (!attempt) return ReviewStatus.NOT_REQUIRED;
+        if (attempt.reviewStatus !== ReviewStatus.NOT_REQUIRED) return attempt.reviewStatus;
+
+        if ((attempt.riskScore ?? 0) < REVIEW_RISK_THRESHOLD) return ReviewStatus.NOT_REQUIRED;
+
+        await this.prisma.attempt.update({
+            where: { id: attemptId },
+            data: { reviewStatus: ReviewStatus.PENDING },
+        });
+        this.logger.log(`[Review] attempt=${attemptId} flagged (risk ${attempt.riskScore})`);
+        return ReviewStatus.PENDING;
+    }
+
+    /**
+     * The review queue: finished attempts a person should look at.
+     *
+     * Ordered by risk descending — a reviewer working top-down deals with the
+     * most serious first, which matters when a season closes and there are more
+     * flagged attempts than review hours.
+     */
+    async listReviewQueue(options: { status?: ReviewStatus; examInstanceId?: string } = {}) {
+        const attempts = await this.prisma.attempt.findMany({
+            where: {
+                // Only finished attempts — an exam in progress has nothing to review
+                // and its risk score is still moving.
+                status: {
+                    in: [
+                        AttemptStatus.SUBMITTED,
+                        AttemptStatus.AUTO_SUBMITTED,
+                        AttemptStatus.DISQUALIFIED,
+                    ],
+                },
+                reviewStatus: options.status ?? { not: ReviewStatus.NOT_REQUIRED },
+                ...(options.examInstanceId ? { examInstanceId: options.examInstanceId } : {}),
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        rollNumber: true,
+                        classBand: true,
+                        school: { select: { name: true } },
+                    },
+                },
+                examInstance: { include: { exam: { select: { title: true } } } },
+                proctorEvents: { select: { type: true } },
+            },
+            orderBy: [{ riskScore: 'desc' }, { submittedAt: 'asc' }],
+        });
+
+        return attempts.map((a) => ({
+            attemptId: a.id,
+            status: a.status,
+            reviewStatus: a.reviewStatus,
+            reviewedAt: a.reviewedAt,
+            reviewNotes: a.reviewNotes,
+            riskScore: a.riskScore ?? 0,
+            submittedAt: a.submittedAt,
+            totalScore: a.totalScore,
+            maxScore: a.maxScore,
+            student: {
+                id: a.user.id,
+                name: `${a.user.firstName} ${a.user.lastName}`.trim(),
+                email: a.user.email,
+                rollNumber: a.user.rollNumber,
+                classBand: a.user.classBand,
+                school: a.user.school?.name ?? null,
+            },
+            examTitle: a.examInstance.exam.title,
+            examInstanceId: a.examInstanceId,
+            totalEvents: a.proctorEvents.length,
+            eventCounts: this.summarizeEvents(a.proctorEvents),
+        }));
+    }
+
+    /**
+     * Everything a reviewer needs to decide, in one call.
+     *
+     * The full event timeline rather than a summary: "prepares logs, evidences".
+     * A decision to disqualify a child has to be defensible afterwards, and a
+     * count of violations is not evidence — the sequence and timing is. Six
+     * `LOOKING_AWAY` events spread over an hour is a student thinking; six in
+     * ninety seconds is something else.
+     */
+    async getReviewEvidence(attemptId: string) {
+        const report = await this.getReport(attemptId);
+
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            select: {
+                reviewStatus: true,
+                reviewedBy: true,
+                reviewedAt: true,
+                reviewNotes: true,
+                ipAddress: true,
+                deviceFingerprint: true,
+                user: { select: { rollNumber: true, section: true } },
+            },
+        });
+
+        return {
+            ...report,
+            review: {
+                status: attempt?.reviewStatus ?? ReviewStatus.NOT_REQUIRED,
+                reviewedBy: attempt?.reviewedBy ?? null,
+                reviewedAt: attempt?.reviewedAt ?? null,
+                notes: attempt?.reviewNotes ?? null,
+            },
+            session: {
+                ipAddress: attempt?.ipAddress ?? null,
+                deviceFingerprint: attempt?.deviceFingerprint ?? null,
+            },
+            rollNumber: attempt?.user?.rollNumber ?? null,
+            section: attempt?.user?.section ?? null,
+            reviewThreshold: REVIEW_RISK_THRESHOLD,
+        };
+    }
+
+    /**
+     * Records a reviewer's verdict.
+     *
+     * Notes are mandatory for both outcomes, not just disqualification: a
+     * clearance with no stated reason is just as unaccountable, and "why was this
+     * cleared?" is the question asked when a pattern is spotted later.
+     *
+     * Disqualifying writes `AttemptStatus.DISQUALIFIED`, which is what actually
+     * removes the attempt from normalization, ranking, certificates and the
+     * school/partner exports — see the note on `SUBMITTED_STATUSES`.
+     */
+    async recordReview(
+        attemptId: string,
+        adminId: string,
+        verdict: 'CLEARED' | 'DISQUALIFIED',
+        notes: string,
+    ) {
+        if (!notes?.trim()) {
+            throw new BadRequestException(
+                'A written reason is required — a decision with no recorded reason cannot be defended in a grievance.',
+            );
+        }
+
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            select: { id: true, status: true, examInstance: { select: { finalResultsReleasedAt: true } } },
+        });
+        if (!attempt) throw new NotFoundException('Attempt not found');
+
+        // Disqualifying after the final report is out would silently move every
+        // published rank below this student. Take the report back first.
+        if (attempt.examInstance.finalResultsReleasedAt) {
+            throw new ConflictException(
+                'The final report for this exam is already published. Revoke it before changing a verdict, or the published ranks will silently change.',
+            );
+        }
+
+        const now = new Date();
+        const reviewStatus =
+            verdict === 'DISQUALIFIED' ? ReviewStatus.DISQUALIFIED : ReviewStatus.CLEARED;
+
+        const [updated] = await this.prisma.$transaction([
+            this.prisma.attempt.update({
+                where: { id: attemptId },
+                data: {
+                    reviewStatus,
+                    reviewedBy: adminId,
+                    reviewedAt: now,
+                    reviewNotes: notes.trim(),
+                    ...(verdict === 'DISQUALIFIED'
+                        ? { status: AttemptStatus.DISQUALIFIED }
+                        : {}),
+                },
+            }),
+            this.prisma.auditLog.create({
+                data: {
+                    userId: adminId,
+                    action: `proctor.review.${verdict.toLowerCase()}`,
+                    resource: 'attempt',
+                    details: { attemptId, verdict, notes: notes.trim() },
+                },
+            }),
+        ]);
+
+        this.logger.log(`[Review] attempt=${attemptId} verdict=${verdict} by=${adminId}`);
+        return {
+            attemptId,
+            status: updated.status,
+            reviewStatus: updated.reviewStatus,
+            reviewedAt: updated.reviewedAt,
+        };
     }
 
     // ── Helpers ──

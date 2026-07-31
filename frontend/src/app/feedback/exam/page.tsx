@@ -4,7 +4,8 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import FeedbackInterstitial from '@/components/FeedbackInterstitial';
 import { FEEDBACK_FORMS } from '@/lib/constants';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
 /**
  * Shown immediately after an exam is submitted, before the results page.
@@ -12,21 +13,39 @@ import { useRouter } from 'next/navigation';
  * This is the moment the experience is freshest and the only point at which a
  * beta tester can reliably be reached — once they are looking at a score, they
  * are gone. The exam player routes both its manual and auto-submit paths here.
+ *
+ * `?next=` carries the destination, so the player decides where the student lands
+ * afterwards (normally the post-submit summary for the paper they just sat).
+ * Validated as a relative path: an unchecked `next` is an open redirect.
  */
-export default function ExamFeedbackPage() {
+function ExamFeedbackInner() {
     const router = useRouter();
+    const searchParams = useSearchParams();
 
+    const raw = searchParams.get('next');
+    // Must start with a single "/" — `//evil.com` is protocol-relative and would
+    // send a student straight off the site.
+    const next = raw && /^\/(?!\/)/.test(raw) ? raw : '/results';
+
+    return (
+        <FeedbackInterstitial
+            formUrl={FEEDBACK_FORMS.exam}
+            title="How was your exam?"
+            intro="Your paper is submitted and safe. We are in beta, so tell us what worked and
+                   what did not — bugs, confusing questions, anything that slowed you down."
+            continueLabel="Continue →"
+            onContinue={() => router.push(next)}
+        />
+    );
+}
+
+export default function ExamFeedbackPage() {
     return (
         <AuthGuard>
             <Navbar />
-            <FeedbackInterstitial
-                formUrl={FEEDBACK_FORMS.exam}
-                title="How was your exam?"
-                intro="Your paper is submitted and safe. We are in beta, so tell us what worked and
-                       what did not — bugs, confusing questions, anything that slowed you down."
-                continueLabel="Continue to my results →"
-                onContinue={() => router.push('/results')}
-            />
+            <Suspense fallback={<div className="loading-container"><div className="spinner" /></div>}>
+                <ExamFeedbackInner />
+            </Suspense>
         </AuthGuard>
     );
 }

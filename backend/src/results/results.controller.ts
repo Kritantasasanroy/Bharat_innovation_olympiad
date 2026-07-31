@@ -5,7 +5,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { ReleaseResultsDto, RevokeResultsDto } from './dto/results.dto';
+import {
+    PublishFinalReportDto,
+    ReleaseResultsDto,
+    RevokeFinalReportDto,
+    RevokeResultsDto,
+} from './dto/results.dto';
 import { ResultsExportService } from './results-export.service';
 import { ResultsService } from './results.service';
 
@@ -57,6 +62,36 @@ export class ResultsController {
         @CurrentUser('id') adminId: string,
     ) {
         return this.resultsService.revoke(examInstanceId, adminId, dto.reason, dto.audiences);
+    }
+
+    /**
+     * Stage two — publish the final report.
+     *
+     * Turns every provisional score for this instance into a final one and opens
+     * the rank, the dimension analysis and (unless suppressed) the answer key.
+     */
+    @Post('exam-instances/:id/publish-final')
+    publishFinal(
+        @Param('id') examInstanceId: string,
+        @Body() dto: PublishFinalReportDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.resultsService.publishFinalReport(
+            examInstanceId,
+            adminId,
+            dto.reason,
+            dto.withAnswerKey ?? true,
+        );
+    }
+
+    /** The undo — returns every score in this instance to provisional. */
+    @Post('exam-instances/:id/revoke-final')
+    revokeFinal(
+        @Param('id') examInstanceId: string,
+        @Body() dto: RevokeFinalReportDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.resultsService.revokeFinalReport(examInstanceId, adminId, dto.reason);
     }
 
     /** The full results sheet for an instance — every student, every school. */

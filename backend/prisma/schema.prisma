@@ -21,6 +21,22 @@ model User {
   /// their request rows. Unique because it doubles as a login identifier for
   /// phone-OTP sign-in, which resolves an account by this column alone.
   phone            String?           @unique
+  /// The student's olympiad roll number, e.g. `BIO26-G8-00123` — season year,
+  /// grade, then a per-(year, grade) sequence allocated from `Sequence`. Issued
+  /// once, at registration, and never reissued: it is printed on the admit card
+  /// and quoted in every support conversation, so it must not change if the
+  /// student later moves grade. Nullable only so pre-existing rows stay valid
+  /// until `scripts/backfill-roll-numbers.ts` has run.
+  rollNumber       String?           @unique
+  /// Class section as the school writes it — "A", "B2", "Rose". Free text
+  /// because Indian schools name sections inconsistently and a fixed A–H list
+  /// would lock real students out. Only meaningful alongside `schoolId`, which
+  /// is what school admins and teachers group by.
+  section          String?
+  /// Terms & conditions acceptance captured during registration. Versioned so a
+  /// later revision can be re-consented without losing the original record.
+  termsAcceptedAt  DateTime?
+  termsVersion     String?
   faceEmbedding    Bytes?
   profileImageUrl  String?
   isActive         Boolean           @default(true)
@@ -48,10 +64,67 @@ model User {
   refundRequests   RefundRequest[]
   consents         Consent[]
   trialCompletions TrialCompletion[]
+  guardianProfile  GuardianProfile?
 
   @@index([email])
   @@index([schoolId])
   @@index([role])
+  @@index([rollNumber])
+}
+
+/// Registration "part 2" — the details a parent or guardian fills in, and the
+/// parental consent that makes a minor's participation lawful.
+///
+/// Held in its own table rather than as more columns on `User` for two reasons:
+/// it is filled in at a different moment by a different person, and the consent
+/// timestamps here are the legal record under the DPDP Act's rules on
+/// processing children's data. `AttemptService.startAttempt` refuses to open a
+/// real exam until a row exists with both consents given.
+///
+/// Distinct from `Consent`, which records the *student's* exam-time permissions
+/// (media capture, monitoring). Both are kept; neither replaces the other.
+model GuardianProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guardianFirstName String
+  guardianLastName  String
+  /// Mother / Father / Legal guardian / Other — free text so an unusual family
+  /// arrangement is never unrepresentable.
+  relationship      String
+  guardianEmail     String
+  /// E.164, same convention as `User.phone`. Deliberately NOT unique: siblings
+  /// registering separately legitimately share a parent's number.
+  guardianPhone     String
+  // ── Demographics (optional; used for cohort reporting, never for gating) ──
+  studentDob        DateTime?
+  gender            String?
+  city              String?
+  state             String?
+  pincode           String?
+  /// Explicit, separately-ticked consents. Both must be set for the row to be
+  /// accepted — `GuardianService` rejects a partial submission rather than
+  /// storing half a consent.
+  parentalConsentAt DateTime
+  dataConsentAt     DateTime
+  consentVersion    String
+  ipAddress         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/// A named, monotonically increasing counter.
+///
+/// Exists so roll numbers can be allocated without a race: `getNextSequence`
+/// bumps the row inside a transaction and returns the value it claimed, so two
+/// simultaneous registrations can never be handed the same number. Counting
+/// existing `User` rows instead would hand both requests the same count.
+model Sequence {
+  key       String   @id
+  next      Int      @default(1)
+  updatedAt DateTime @updatedAt
 }
 
 model RefreshToken {
@@ -283,6 +356,18 @@ model ExamInstance {
   resultsReleasedToStudentsAt DateTime?
   resultsReleasedToSchoolsAt  DateTime?
   resultsReleasedToPartnersAt DateTime?
+  /// The second, later gate on top of `resultsReleasedToStudentsAt`.
+  ///
+  /// Releasing to students publishes a score they are told is **provisional** —
+  /// it can still move if a proctoring review disqualifies attempts or a
+  /// grievance is upheld, both of which change the ranking. Publishing the final
+  /// report is the separate, audited decision that says the season is settled:
+  /// only then do final score, rank, percentile, section analysis and the answer
+  /// key become visible. Kept as two columns rather than one because an admin may
+  /// legitimately want the analysis out before the key.
+  finalResultsReleasedAt      DateTime?
+  answerKeyReleasedAt         DateTime?
+  finalReleasedBy             String?
   createdAt                   DateTime               @default(now())
   attempts                    Attempt[]
   slots                       ExamSlot[]
@@ -333,6 +418,20 @@ model Attempt {
   ipAddress         String?
   deviceFingerprint String?
   riskScore         Float?         @default(0)
+  // ── Post-exam human proctoring review ────────────────────────────────────
+  // The doc's rule: "A human proctor reviews serious cases … confirm cheating
+  // and prepares logs, evidences and leading to disqualification." Risk score
+  // alone never disqualifies anyone — a flaky webcam scores like a cheat — so a
+  // reviewer's verdict is recorded separately from the signal that flagged it.
+  /// PENDING once the attempt lands above the review threshold; CLEARED or
+  /// DISQUALIFIED once a human has decided. NOT_REQUIRED for the vast majority
+  /// that never trip the threshold.
+  reviewStatus      ReviewStatus   @default(NOT_REQUIRED)
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  /// The reviewer's written justification. Mandatory for both verdicts — a
+  /// disqualification with no stated reason cannot be defended in a grievance.
+  reviewNotes       String?
   createdAt         DateTime       @default(now())
   examInstance      ExamInstance   @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -345,6 +444,7 @@ model Attempt {
   @@index([userId])
   @@index([examInstanceId])
   @@index([status])
+  @@index([reviewStatus])
 }
 
 model AttemptItem {
@@ -770,6 +870,19 @@ enum AttemptStatus {
   SUBMITTED
   AUTO_SUBMITTED
   EXPIRED
+  /// Set only by a human reviewer via `ProctorService.recordReview`. Deliberately
+  /// NOT in `SUBMITTED_STATUSES`, which is the single list normalization, ranking
+  /// and certificate issue all read — so a disqualified attempt drops out of all
+  /// three at once rather than each one needing its own exclusion.
+  DISQUALIFIED
+}
+
+/// Where an attempt sits in the post-exam human review process.
+enum ReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  CLEARED
+  DISQUALIFIED
 }
 
 enum ProctorEventType {
