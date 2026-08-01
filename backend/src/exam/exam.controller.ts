@@ -74,6 +74,8 @@ export class ExamController {
         isTrial?: boolean;
         /** Whether students must sit the rehearsal before this exam starts. */
         requiresTrial?: boolean;
+        /** False lets students sit it any time in its window, with no slot. */
+        requiresSlot?: boolean;
     }) {
         return this.examService.createExam(body);
     }
@@ -103,6 +105,7 @@ export class ExamController {
         isResultReleased?: boolean;
         isTrial?: boolean;
         requiresTrial?: boolean;
+        requiresSlot?: boolean;
         // `isArchived` is deliberately absent: archiving must also unpublish,
         // and that pairing lives in `setExamArchived` behind /archive.
     }) {

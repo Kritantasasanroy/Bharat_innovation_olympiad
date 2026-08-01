@@ -2,6 +2,7 @@
 
 import GuardianForm, { GuardianFormValues } from '@/components/GuardianForm';
 import api from '@/lib/api';
+import { describeError } from '@/lib/errors';
 import { useState } from 'react';
 
 /**
@@ -36,10 +37,7 @@ export default function GuardianStep({
             });
             onDone();
         } catch (err: any) {
-            setError(
-                err?.response?.data?.message ??
-                    'Could not save these details. Check them and try again.',
-            );
+            setError(describeError(err, "save your parent's details"));
         } finally {
             setBusy(false);
         }

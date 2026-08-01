@@ -4,6 +4,7 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import GuardianForm, { GuardianFormValues } from '@/components/GuardianForm';
 import api from '@/lib/api';
+import { describeError } from '@/lib/errors';
 import { useAuthStore } from '@/store/authStore';
 import type { GuardianStatus } from '@/types/user';
 import Link from 'next/link';
@@ -42,7 +43,7 @@ function GuardianPageInner() {
     useEffect(() => {
         api.get<GuardianStatus>('/guardian/me')
             .then(({ data }) => setStatus(data))
-            .catch(() => setError('Could not load the form. Please refresh and try again.'))
+            .catch((err) => setError(describeError(err, 'load this form')))
             .finally(() => setLoading(false));
     }, []);
 
@@ -61,10 +62,7 @@ function GuardianPageInner() {
             });
             setSaved(true);
         } catch (err: any) {
-            setError(
-                err?.response?.data?.message ??
-                    'Could not save the form. Check your details and try again.',
-            );
+            setError(describeError(err, "save your parent's details"));
         } finally {
             setBusy(false);
         }

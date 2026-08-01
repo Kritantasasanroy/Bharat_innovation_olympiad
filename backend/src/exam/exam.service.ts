@@ -167,7 +167,11 @@ export class ExamService {
                           isPublished: exam.isPublished,
                           instance,
                           slot: booking?.slot ?? null,
-                          hasSlots: instance._count.slots > 0,
+                          // An exam with `requiresSlot: false` behaves like a
+                          // practice paper: open for its whole window, no sitting
+                          // to pick. Its slots stay configured and bookable, they
+                          // just stop being a precondition.
+                          hasSlots: exam.requiresSlot !== false && instance._count.slots > 0,
                           now,
                       });
 
@@ -556,6 +560,7 @@ export class ExamService {
         isResultReleased?: boolean;
         isTrial?: boolean;
         requiresTrial?: boolean;
+        requiresSlot?: boolean;
     }) {
         // Turning a flag ON is gated; turning it OFF is always allowed — taking a
         // bad exam down or pulling back a wrong result must never be blocked.

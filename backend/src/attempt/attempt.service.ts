@@ -437,9 +437,13 @@ export class AttemptService {
                   include: { slot: true },
               });
 
-        const hasSlots = demo
-            ? false
-            : (await this.prisma.examSlot.count({ where: { examInstanceId: instanceId } })) > 0;
+        // `requiresSlot: false` waives the slot gate outright, so the exam is
+        // startable at any point inside its window. Checked here, not only in the
+        // exam list, because this is the endpoint that actually authorises a start.
+        const hasSlots =
+            demo || instance.exam.requiresSlot === false
+                ? false
+                : (await this.prisma.examSlot.count({ where: { examInstanceId: instanceId } })) > 0;
 
         const phase = examPhase({
             // A demo/practice exam is exempt from the publication gate by design —

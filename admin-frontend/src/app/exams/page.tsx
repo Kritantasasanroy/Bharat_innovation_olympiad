@@ -27,6 +27,8 @@ interface Exam {
     isTrial: boolean;
     /** Whether students must complete the trial before this exam will start. */
     requiresTrial: boolean;
+    /** False lets students sit it any time in its window, with no slot booking. */
+    requiresSlot: boolean;
     createdAt: string;
     instances: ExamInstance[];
     /** Questions actually attached to this exam's sections. */
@@ -222,6 +224,38 @@ export default function AdminExamsPage() {
         }
     };
 
+    /**
+     * Turns the slot requirement on or off for one exam.
+     *
+     * Off means students may sit it at any point inside its window without
+     * booking a sitting. Slots and existing bookings are left untouched, so
+     * turning it back on restores the timetable exactly as it was.
+     */
+    const toggleSlotRequirement = async (exam: Exam) => {
+        const turningOff = exam.requiresSlot !== false;
+        if (
+            turningOff &&
+            !confirm(
+                'Let students sit this exam without booking a slot?\n\n' +
+                    'It becomes startable at any time inside its exam window, for every eligible ' +
+                    'student. Existing slots and bookings are kept and are restored if you turn ' +
+                    'this back on.',
+            )
+        ) {
+            return;
+        }
+        try {
+            setActionError('');
+            setActiveExamAction(`slot-${exam.id}`);
+            await api.put(`/admin/exams/${exam.id}`, { requiresSlot: turningOff ? false : true });
+            await fetchExams();
+        } catch (err: unknown) {
+            setActionError(getApiErrorMessage(err, 'Failed to change the slot requirement.'));
+        } finally {
+            setActiveExamAction('');
+        }
+    };
+
     const deleteExam = async (examId: string) => {
         if (!confirm('Delete this exam? All questions, instances, and attempts will be permanently lost.')) return;
         try {
@@ -338,6 +372,18 @@ export default function AdminExamsPage() {
                                             Trial required
                                         </span>
                                     )}
+                                    {/* Loud on purpose: an exam anyone can walk into
+                                        at any time is a deliberate, temporary state,
+                                        and it should be obvious at a glance which
+                                        exams are in it. */}
+                                    {exam.requiresSlot === false && (
+                                        <span
+                                            className="badge badge-warning"
+                                            title="Students can sit this exam at any time inside its window — no slot booking needed. Slots and bookings are kept."
+                                        >
+                                            No slot needed
+                                        </span>
+                                    )}
                                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                         {exam.questionCount} questions · {exam._count.instances} instances
                                     </span>
@@ -418,6 +464,36 @@ export default function AdminExamsPage() {
 
                                 {!exam.isResultReleased && exam.releaseBlockedReason && (
                                     <p className="hint hint-muted">🔒 {exam.releaseBlockedReason}</p>
+                                )}
+
+                                {/* Action row 3: slot requirement. Hidden for the
+                                    trial paper, which never runs slots anyway. */}
+                                {!exam.isTrial && (
+                                    <>
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            style={{ width: '100%' }}
+                                            onClick={() => toggleSlotRequirement(exam)}
+                                            disabled={activeExamAction === `slot-${exam.id}`}
+                                            title={
+                                                exam.requiresSlot === false
+                                                    ? 'Go back to requiring a booked slot'
+                                                    : 'Let students sit this exam any time inside its window'
+                                            }
+                                        >
+                                            {activeExamAction === `slot-${exam.id}`
+                                                ? '...'
+                                                : exam.requiresSlot === false
+                                                  ? '🗓 Require a slot again'
+                                                  : '🔓 Allow any time (no slot)'}
+                                        </button>
+                                        {exam.requiresSlot === false && (
+                                            <p className="hint hint-warn">
+                                                ⚠ Open to every eligible student for the whole exam
+                                                window. Slots and bookings are kept.
+                                            </p>
+                                        )}
+                                    </>
                                 )}
 
                                 {/* Timings + slots (item 6) */}

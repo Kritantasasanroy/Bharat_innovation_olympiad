@@ -1,6 +1,7 @@
 'use client';
 
 import api from '@/lib/api';
+import { describeError, describeOversizeFile } from '@/lib/errors';
 import { FormEvent, useEffect, useState } from 'react';
 
 /**
@@ -22,7 +23,8 @@ export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const
 export const ID_DOC_TYPES = ['Aadhaar Card', 'School ID Card', 'Passport'] as const;
 
 /** Mirrors `DOCUMENT_RULES.maxBytes` on the server, so the reject is instant. */
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const MAX_DOCUMENT_MB = 10;
+const MAX_DOCUMENT_BYTES = MAX_DOCUMENT_MB * 1024 * 1024;
 
 export interface GuardianFormValues {
     guardianFirstName: string;
@@ -112,9 +114,7 @@ export default function GuardianForm({
         setUploadError('');
 
         if (file.size > MAX_DOCUMENT_BYTES) {
-            setUploadError(
-                `That file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB — try photographing it again at a lower resolution.`,
-            );
+            setUploadError(describeOversizeFile(file.size, MAX_DOCUMENT_BYTES));
             e.target.value = '';
             return;
         }
@@ -132,10 +132,7 @@ export default function GuardianForm({
             setFileName('');
             set('idDocumentUrl', '');
             e.target.value = '';
-            setUploadError(
-                err?.response?.data?.message ??
-                    'Could not upload that file. Check your connection and try again.',
-            );
+            setUploadError(describeError(err, 'upload that document'));
         } finally {
             setUploading(false);
         }
@@ -301,7 +298,15 @@ export default function GuardianForm({
                         </select>
                     </div>
                     <div className="input-group">
-                        <label className="input-label" htmlFor="idDocumentFile">Upload document (Image / PDF)</label>
+                        {/* The limit is in the label, not only in the error —
+                            a parent should know it before they pick a 12 MB
+                            photo, not after waiting for it to be refused. */}
+                        <label className="input-label" htmlFor="idDocumentFile">
+                            Upload document{' '}
+                            <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                                (JPG, PNG, HEIC or PDF · max {MAX_DOCUMENT_MB} MB)
+                            </span>
+                        </label>
                         <input
                             id="idDocumentFile" className="input-field" type="file"
                             accept="image/*,application/pdf"
@@ -323,7 +328,8 @@ export default function GuardianForm({
                             </p>
                         )}
                         <p className="input-hint">
-                            A clear photo is fine. Up to 10 MB — JPG, PNG, HEIC or PDF.
+                            A clear phone photo is fine — it does not need to be a scan. If yours is
+                            over {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
                         </p>
                     </div>
                 </div>

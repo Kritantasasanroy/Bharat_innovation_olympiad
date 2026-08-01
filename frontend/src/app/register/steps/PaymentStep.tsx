@@ -2,6 +2,7 @@
 
 import PaymentTerms from '@/components/PaymentTerms';
 import api from '@/lib/api';
+import { describeError } from '@/lib/errors';
 import { THANK_YOU, NEXT_STEPS } from '@/lib/copy/onboarding';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -85,7 +86,7 @@ export default function PaymentStep({
 
     useEffect(() => {
         loadPass()
-            .catch(() => setError('Could not read your payment status. You can still pay below.'))
+            .catch(() => setError('We could not check whether you have already paid. You can still pay below — if you have already paid, use “I have paid — check now”.'))
             .finally(() => setLoading(false));
         // Always clear the timer on unmount — a poll firing after the student has
         // navigated away sets state on a dead component.
@@ -144,11 +145,13 @@ export default function PaymentStep({
             const p = await loadPass();
             if (!p.isActive) {
                 setError(
-                    'We cannot see the payment yet. If you have just paid, give it a minute and check again.',
+                    "We can't see your payment yet. Bank confirmations can take a minute or two — " +
+                        'wait a moment and check again. If you have already been charged, use ' +
+                        '“Already paid but still locked?” below and we will unlock it by hand.',
                 );
             }
-        } catch {
-            setError('Could not refresh — please try again.');
+        } catch (err) {
+            setError(describeError(err, 'check your payment'));
         } finally {
             setChecking(false);
         }

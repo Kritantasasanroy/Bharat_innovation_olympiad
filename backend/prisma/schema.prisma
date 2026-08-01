@@ -203,6 +203,15 @@ model Exam {
   /// When true, a student must complete the trial exam before this exam will
   /// start. Enforced server-side in AttemptService.startAttempt.
   requiresTrial    Boolean        @default(true)
+  /// When false, the exam may be sat at any point inside its instance window
+  /// without booking a slot — the slot gate is skipped entirely even if slots
+  /// are configured.
+  ///
+  /// Exists for the beta, where forcing every tester into a numbered sitting got
+  /// in the way of the thing actually being tested. Defaults to true, so a real
+  /// olympiad still runs to a timetable; existing slots and bookings are left
+  /// untouched, so flipping this back restores the schedule exactly as it was.
+  requiresSlot     Boolean        @default(true)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   instances        ExamInstance[]

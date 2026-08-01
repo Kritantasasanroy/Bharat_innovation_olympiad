@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
+import { describeCameraError, describeError } from '@/lib/errors';
 import SchoolPicker from '@/components/SchoolPicker';
 import GuardianStep from './steps/GuardianStep';
 import PaymentStep from './steps/PaymentStep';
@@ -121,8 +122,8 @@ export default function RegisterPage() {
                 setPhoneOtpSent(true);
                 setPhoneMsg(channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.');
             }
-        } catch {
-            setPhoneMsg('Network error. Please try again.');
+        } catch (err) {
+            setPhoneMsg(describeError(err, 'send the code to your phone'));
         } finally {
             setPhoneBusy(false);
         }
@@ -152,9 +153,9 @@ export default function RegisterPage() {
         try {
             await startEnrollmentCamera();
             setFaceMsg('Position your face in the frame and click Capture.');
-        } catch {
+        } catch (err) {
             setFaceCameraOn(false);
-            setFaceMsg('Could not access camera. Please allow camera permissions and try again.');
+            setFaceMsg(describeCameraError(err));
         }
     };
 
@@ -164,7 +165,9 @@ export default function RegisterPage() {
         const descriptor = await captureDescriptor();
         if (!descriptor) {
             setFaceCapturing(false);
-            setFaceMsg('No face detected. Ensure your face is clearly visible and try again.');
+            setFaceMsg(
+                "We couldn't see a face in the picture. Sit facing the camera in good light, with nothing covering your face, then capture again.",
+            );
             return;
         }
         const ok = await enrollFace(descriptor);
@@ -174,7 +177,9 @@ export default function RegisterPage() {
             // Face enrolled — proceed to payment, then parent consent follows.
             setStep('payment');
         } else {
-            setFaceMsg('Enrollment failed. Please try again.');
+            setFaceMsg(
+                "We couldn't save your face scan. Make sure your whole face is lit and in frame, then capture again.",
+            );
         }
     };
 
@@ -212,14 +217,17 @@ export default function RegisterPage() {
         try {
             const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email);
             if (otpError) {
-                setError(otpError.message || 'Failed to send OTP. Please try again.');
+                setError(
+                    otpError.message ||
+                        "We couldn't send the code to that email address. Check it is spelled correctly, then try again.",
+                );
             } else {
                 setSuccess(`A 6-digit code has been sent to ${formData.email}`);
                 setStep('verify');
             }
         } catch (err: any) {
             console.error('Send OTP error:', err);
-            setError('Network error. Please check your connection and try again.');
+            setError(describeError(err, 'send your verification code'));
         } finally {
             setIsLoading(false);
         }
@@ -238,7 +246,10 @@ export default function RegisterPage() {
             // Verify the OTP via Neon Auth
             const { error: verifyError } = await emailOtp.verifyEmail(formData.email, otp);
             if (verifyError) {
-                setError(verifyError.message || 'Invalid or expired code. Please try again.');
+                setError(
+                    verifyError.message ||
+                        "That code didn't work. Codes expire after a few minutes — use “Resend code” to get a fresh one, and check your spam folder.",
+                );
                 setIsLoading(false);
                 return;
             }
@@ -268,7 +279,7 @@ export default function RegisterPage() {
             setStep('face');
         } catch (err: any) {
             console.error('Verify OTP error:', err);
-            setError(err?.response?.data?.message || err?.message || 'Account creation failed. Please try again.');
+            setError(describeError(err, 'create your account'));
         } finally {
             setIsLoading(false);
         }
@@ -281,12 +292,12 @@ export default function RegisterPage() {
         try {
             const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email);
             if (otpError) {
-                setError(otpError.message || 'Failed to resend OTP.');
+                setError(otpError.message || "We couldn't send another code just now. Wait a moment and try again.");
             } else {
                 setSuccess('A new code has been sent to your email.');
             }
-        } catch {
-            setError('Network error. Please try again.');
+        } catch (err) {
+            setError(describeError(err, 'send another code'));
         } finally {
             setIsLoading(false);
         }
