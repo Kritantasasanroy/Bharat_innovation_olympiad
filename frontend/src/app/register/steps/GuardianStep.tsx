@@ -33,7 +33,6 @@ export default function GuardianStep({
                 gender: values.gender || undefined,
                 city: values.city || undefined,
                 state: values.state || undefined,
-                pincode: values.pincode || undefined,
             });
             onDone();
         } catch (err: any) {

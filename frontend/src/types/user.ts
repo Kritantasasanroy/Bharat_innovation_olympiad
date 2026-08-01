@@ -36,7 +36,6 @@ export interface GuardianStatus {
         gender?: string | null;
         city?: string | null;
         state?: string | null;
-        pincode?: string | null;
         parentalConsentAt: string;
         dataConsentAt: string;
         consentVersion: string;

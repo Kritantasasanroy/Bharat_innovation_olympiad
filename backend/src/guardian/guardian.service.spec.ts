@@ -19,6 +19,8 @@ describe('GuardianService', () => {
             relationship: 'Mother',
             guardianEmail: 'Meera.Sharma@Example.COM',
             guardianPhone: '98765 43210',
+            idDocumentType: 'Aadhaar Card',
+            idDocumentUrl: 'https://cdn.example/id.jpg',
             parentalConsent: true,
             dataConsent: true,
             ...overrides,
@@ -48,6 +50,46 @@ describe('GuardianService', () => {
             // The important half: a refused consent must not leave a row behind
             // that the exam gate would then read as complete.
             expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('the mandatory ID document', () => {
+        it.each([
+            ['missing', undefined],
+            ['blank', ''],
+            ['whitespace only', '   '],
+        ])('rejects a submission whose document URL is %s', async (_label, url) => {
+            const { service, prisma } = serviceWith();
+            await expect(
+                service.submit(USER, valid({ idDocumentUrl: url as string })),
+            ).rejects.toThrow(BadRequestException);
+            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
+        });
+
+        it('stores the trimmed URL and the document type', async () => {
+            const { service, prisma } = serviceWith();
+            await service.submit(USER, valid({ idDocumentUrl: '  https://cdn.example/id.jpg  ' }));
+
+            const { create } = prisma.guardianProfile.upsert.mock.calls[0][0];
+            expect(create.idDocumentUrl).toBe('https://cdn.example/id.jpg');
+            expect(create.idDocumentType).toBe('Aadhaar Card');
+        });
+
+        it('does not retroactively bar a student who consented before it existed', async () => {
+            // `hasGuardianConsent` gates the exam. It must keep passing for a row
+            // with no document, or a change of policy locks out students who did
+            // nothing wrong. The requirement applies to new submissions only.
+            const prisma: any = {
+                guardianProfile: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        parentalConsentAt: new Date(),
+                        dataConsentAt: new Date(),
+                        consentVersion: CURRENT_GUARDIAN_CONSENT_VERSION,
+                        idDocumentUrl: null,
+                    }),
+                },
+            };
+            await expect(new GuardianService(prisma).hasGuardianConsent(USER)).resolves.toBe(true);
         });
     });
 

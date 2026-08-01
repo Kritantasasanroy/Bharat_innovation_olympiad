@@ -58,7 +58,6 @@ function GuardianPageInner() {
                 gender: values.gender || undefined,
                 city: values.city || undefined,
                 state: values.state || undefined,
-                pincode: values.pincode || undefined,
             });
             setSaved(true);
         } catch (err: any) {
@@ -156,7 +155,6 @@ function GuardianPageInner() {
                                   gender: status.profile.gender ?? '',
                                   city: status.profile.city ?? '',
                                   state: status.profile.state ?? '',
-                                  pincode: status.profile.pincode ?? '',
                               }
                             : undefined
                     }

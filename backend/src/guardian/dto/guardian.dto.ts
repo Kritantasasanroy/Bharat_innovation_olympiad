@@ -62,10 +62,10 @@ export class SubmitGuardianDto {
     @IsOptional()
     state?: string;
 
-    @IsString()
-    @MaxLength(10)
-    @IsOptional()
-    pincode?: string;
+    // `pincode` was removed from both the form and `GuardianProfile`. It stays
+    // out of this DTO deliberately: `ValidationPipe` runs with
+    // `forbidNonWhitelisted`, so an old client still sending one now gets a
+    // clear 400 rather than a 500 from Prisma about an unknown column.
 
     // ── Student ID Document (Aadhaar / School ID / Passport) ──
 

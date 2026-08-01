@@ -1,6 +1,6 @@
 'use client';
 
-import { lookupPincode } from '@/lib/schools';
+import api from '@/lib/api';
 import { FormEvent, useEffect, useState } from 'react';
 
 /**
@@ -21,7 +21,8 @@ export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian', 'Other'] as 
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
 export const ID_DOC_TYPES = ['Aadhaar Card', 'School ID Card', 'Passport'] as const;
 
-const PINCODE_LENGTH = 6;
+/** Mirrors `DOCUMENT_RULES.maxBytes` on the server, so the reject is instant. */
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 export interface GuardianFormValues {
     guardianFirstName: string;
@@ -30,10 +31,11 @@ export interface GuardianFormValues {
     guardianEmail: string;
     guardianPhone: string;
     studentDob: string;
-    gender: string;
+    // Kept so an existing profile's values survive a re-submit from `/guardian`;
+    // no longer collected by the form, and `pincode` is gone from the database.
     city: string;
     state: string;
-    pincode: string;
+    gender: string;
     idDocumentType: string;
     idDocumentUrl: string;
     parentalConsent: boolean;
@@ -50,7 +52,6 @@ export const EMPTY_GUARDIAN: GuardianFormValues = {
     gender: '',
     city: '',
     state: '',
-    pincode: '',
     idDocumentType: 'Aadhaar Card',
     idDocumentUrl: '',
     parentalConsent: false,
@@ -74,9 +75,10 @@ export default function GuardianForm({
     onSubmit: (values: GuardianFormValues) => void | Promise<void>;
 }) {
     const [values, setValues] = useState<GuardianFormValues>({ ...EMPTY_GUARDIAN, ...initial });
-    const [locating, setLocating] = useState(false);
     const [localError, setLocalError] = useState('');
     const [fileName, setFileName] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
 
     // Re-seed if the parent component loads an existing profile after first paint.
     useEffect(() => {
@@ -84,41 +86,59 @@ export default function GuardianForm({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initial?.guardianEmail, initial?.guardianPhone]);
 
-    // City and state from the pincode, so nobody types them — same helper the
-    // school picker uses, so both agree about where a pincode is.
-    useEffect(() => {
-        if (values.pincode.length !== PINCODE_LENGTH) return;
-        let cancelled = false;
-        setLocating(true);
-        lookupPincode(values.pincode)
-            .then((found) => {
-                if (cancelled) return;
-                setValues((v) => ({ ...v, city: found.city, state: found.state }));
-            })
-            .catch(() => {
-                // Non-fatal — the fields stay editable by hand. A pincode service
-                // outage must not block a registration.
-            })
-            .finally(() => !cancelled && setLocating(false));
-        return () => {
-            cancelled = true;
-        };
-    }, [values.pincode]);
+    // The pincode → city/state lookup lived here. Removed along with those three
+    // fields; `lookupPincode` is still used by the school picker.
 
     const set = <K extends keyof GuardianFormValues>(key: K, value: GuardianFormValues[K]) =>
         setValues((v) => ({ ...v, [key]: value }));
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    /**
+     * Uploads the ID document and keeps only the resulting URL.
+     *
+     * It used to `readAsDataURL` and put the base64 straight into
+     * `idDocumentUrl`, which then rode along in the JSON body of `POST
+     * /guardian`. A phone photo of an ID is 2–5 MB and base64 adds a third
+     * again, so every submission with a document attached came back
+     * "request entity too large" and the parent could not finish registering.
+     *
+     * The file now goes to object storage over multipart and never enters the
+     * JSON body at all.
+     */
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        setLocalError('');
+        setUploadError('');
+
+        if (file.size > MAX_DOCUMENT_BYTES) {
+            setUploadError(
+                `That file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB — try photographing it again at a lower resolution.`,
+            );
+            e.target.value = '';
+            return;
+        }
+
         setFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (event.target?.result) {
-                set('idDocumentUrl', event.target.result as string);
-            }
-        };
-        reader.readAsDataURL(file);
+        setUploading(true);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            // No explicit Content-Type: the browser has to set the multipart
+            // boundary itself, and naming the header would strip it.
+            const { data } = await api.post<{ url: string }>('/guardian/id-document', form);
+            set('idDocumentUrl', data.url);
+        } catch (err: any) {
+            setFileName('');
+            set('idDocumentUrl', '');
+            e.target.value = '';
+            setUploadError(
+                err?.response?.data?.message ??
+                    'Could not upload that file. Check your connection and try again.',
+            );
+        } finally {
+            setUploading(false);
+        }
     };
 
     const bothConsents = values.parentalConsent && values.dataConsent;
@@ -137,6 +157,10 @@ export default function GuardianForm({
         }
         if (!values.guardianPhone.trim()) {
             setLocalError("Enter the parent or guardian's mobile number.");
+            return;
+        }
+        if (uploading) {
+            setLocalError('Wait for the document to finish uploading.');
             return;
         }
         if (!values.idDocumentUrl) {
@@ -253,39 +277,11 @@ export default function GuardianForm({
                     </div>
                 </div>
 
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianPincode">Pincode</label>
-                        <input
-                            id="guardianPincode" className="input-field" inputMode="numeric"
-                            maxLength={PINCODE_LENGTH} placeholder="440001"
-                            value={values.pincode}
-                            onChange={(e) =>
-                                set('pincode', e.target.value.replace(/\D/g, '').slice(0, PINCODE_LENGTH))
-                            }
-                        />
-                        <p className="input-hint">
-                            {locating ? 'Looking up your pincode…' : 'City and state fill in from this.'}
-                        </p>
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianCity">City</label>
-                        <input
-                            id="guardianCity" className="input-field" type="text" maxLength={80}
-                            value={values.city}
-                            onChange={(e) => set('city', e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                <div className="input-group">
-                    <label className="input-label" htmlFor="guardianState">State</label>
-                    <input
-                        id="guardianState" className="input-field" type="text" maxLength={80}
-                        value={values.state}
-                        onChange={(e) => set('state', e.target.value)}
-                    />
-                </div>
+                {/* Pincode, city and state were here. Removed — the school
+                    already carries a location, so asking a parent for it again
+                    added three fields to the longest step of registration for
+                    nothing. The columns stay on `GuardianProfile` so existing
+                    rows keep their data; nothing new is collected. */}
             </fieldset>
 
             <fieldset className="guardian-fieldset">
@@ -310,13 +306,25 @@ export default function GuardianForm({
                             id="idDocumentFile" className="input-field" type="file"
                             accept="image/*,application/pdf"
                             onChange={handleFileUpload}
+                            disabled={uploading}
                             style={{ padding: '0.4rem' }}
                         />
-                        {fileName && (
+                        {uploading && (
+                            <p className="input-hint">Uploading {fileName}…</p>
+                        )}
+                        {!uploading && values.idDocumentUrl && fileName && (
                             <p className="input-hint" style={{ color: '#22c55e', fontWeight: 500 }}>
                                 ✓ Uploaded: {fileName}
                             </p>
                         )}
+                        {uploadError && (
+                            <p className="input-hint" style={{ color: 'var(--danger-400)', fontWeight: 500 }}>
+                                {uploadError}
+                            </p>
+                        )}
+                        <p className="input-hint">
+                            A clear photo is fine. Up to 10 MB — JPG, PNG, HEIC or PDF.
+                        </p>
                     </div>
                 </div>
             </fieldset>
@@ -362,7 +370,11 @@ export default function GuardianForm({
                 )}
             </fieldset>
 
-            <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={busy || !bothConsents}>
+            <button
+                type="submit"
+                className="btn btn-primary btn-lg auth-submit"
+                disabled={busy || uploading || !bothConsents}
+            >
                 {busy ? 'Saving…' : submitLabel}
             </button>
         </form>

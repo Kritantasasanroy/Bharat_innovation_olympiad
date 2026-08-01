@@ -65,6 +65,25 @@ export const MEDIA_RULES: Record<MediaKind, { types: string[]; maxBytes: number 
 };
 
 /**
+ * Supporting documents (the guardian's ID proof), as opposed to question media.
+ *
+ * PDF is included because a scanned ID is commonly a PDF. HEIC is included
+ * because that is what an iPhone produces by default and a parent has no idea
+ * their photo is not a JPEG.
+ */
+export const DOCUMENT_RULES = {
+    types: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/heic',
+        'image/heif',
+        'application/pdf',
+    ],
+    maxBytes: 10 * 1024 * 1024, // 10 MB
+};
+
+/**
  * Everything the browser needs to upload one file, and to tell us where it landed.
  *
  * The two providers upload differently, so the ticket says which shape to use
@@ -378,9 +397,72 @@ export class ObjectStorageService {
             return { url, publicId: key, provider: 's3' };
         }
 
-        // Cloudinary signed upload, same scheme as `cloudinaryTicket`: SHA-1 of
-        // the sorted signed params with the secret appended. `file` and
-        // `api_key` are not part of the signature, by Cloudinary's design.
+        return this.cloudinaryUpload(buffer, filename, contentType, folder, 'image');
+    }
+
+    /**
+     * Uploads a supporting document — currently the guardian's ID proof.
+     *
+     * Separate from {@link uploadImageBuffer} for two reasons: it accepts PDF as
+     * well as images (a parent may have a scan rather than a photo), and it goes
+     * to its own folder so ID documents are never mixed in with question media
+     * that staff browse casually in the gallery.
+     *
+     * ⚠️ The returned URL is **unguessable but publicly readable**. That is
+     * acceptable for question media and is NOT really acceptable for a
+     * government ID belonging to a minor. Before real students use this, switch
+     * the delivery to Cloudinary `authenticated` resource type (or S3 + signed
+     * GETs, which `getPresignedGetUrl` already supports) so the URL alone is not
+     * enough to read the file.
+     */
+    async uploadDocumentBuffer(
+        buffer: Buffer,
+        filename: string,
+        contentType: string,
+        folder = 'bio/guardian-ids',
+    ): Promise<{ url: string; publicId: string; provider: 'cloudinary' | 's3' }> {
+        if (!DOCUMENT_RULES.types.includes(contentType)) {
+            throw new BadRequestException(
+                `Upload a photo or a PDF. Accepted: ${DOCUMENT_RULES.types.join(', ')}. Got "${contentType}".`,
+            );
+        }
+        if (buffer.byteLength > DOCUMENT_RULES.maxBytes) {
+            throw new BadRequestException(
+                `That file is ${mb(buffer.byteLength)} MB. The limit is ${mb(DOCUMENT_RULES.maxBytes)} MB — try photographing it again at a lower resolution.`,
+            );
+        }
+        if (!this.isConfigured) {
+            throw new ServiceUnavailableException(
+                'Document storage is not configured. Set the Cloudinary or S3 credentials.',
+            );
+        }
+
+        if (this.provider === 's3') {
+            const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
+            const key = `guardian-ids/${randomUUID()}${ext}`;
+            const url = await this.uploadBuffer(key, buffer, contentType);
+            return { url, publicId: key, provider: 's3' };
+        }
+
+        // `auto` rather than `image`: Cloudinary rejects a PDF on the image
+        // endpoint, and a scanned ID is very often a PDF.
+        return this.cloudinaryUpload(buffer, filename, contentType, folder, 'auto');
+    }
+
+    /**
+     * One Cloudinary signed upload.
+     *
+     * Signing scheme is the same as `cloudinaryTicket`: SHA-1 of the sorted
+     * signed params with the secret appended. `file` and `api_key` are not part
+     * of the signature, by Cloudinary's design.
+     */
+    private async cloudinaryUpload(
+        buffer: Buffer,
+        filename: string,
+        contentType: string,
+        folder: string,
+        resourceType: 'image' | 'auto' | 'raw',
+    ): Promise<{ url: string; publicId: string; provider: 'cloudinary' }> {
         const timestamp = Math.floor(Date.now() / 1000);
         const signed: Record<string, string> = { folder, timestamp: String(timestamp) };
         const toSign = Object.keys(signed)
@@ -397,7 +479,7 @@ export class ObjectStorageService {
         form.append('signature', signature);
 
         const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${this.cloudName}/image/upload`,
+            `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`,
             { method: 'POST', body: form },
         );
         const body = (await response.json().catch(() => ({}))) as {

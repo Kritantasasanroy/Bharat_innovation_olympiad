@@ -61,6 +61,21 @@ export class GuardianService {
             );
         }
 
+        // The form calls the ID document mandatory, so the server has to say so
+        // too — a rule enforced only in the browser is not a rule, and identity
+        // proof is exactly the field someone would want to skip.
+        //
+        // Checked on *submission* only, deliberately not inside
+        // `hasGuardianConsent`: adding it there would retroactively bar students
+        // who consented before the document existed from sitting their exam,
+        // which punishes them for a change they had no part in.
+        const idDocumentUrl = dto.idDocumentUrl?.trim();
+        if (!idDocumentUrl) {
+            throw new BadRequestException(
+                "Upload the student's ID document — an Aadhaar card, school ID or passport.",
+            );
+        }
+
         const guardianPhone = this.normaliseGuardianPhone(dto.guardianPhone);
         const studentDob = this.parseDob(dto.studentDob);
         const now = new Date();
@@ -84,11 +99,13 @@ export class GuardianService {
             guardianPhone,
             studentDob,
             gender: dto.gender ?? null,
+            // `pincode` was dropped from GuardianProfile along with the field in
+            // the form. `city`/`state` keep their columns so an existing row's
+            // values survive, but nothing collects them any more.
             city: dto.city?.trim() || null,
             state: dto.state?.trim() || null,
-            pincode: dto.pincode?.trim() || null,
             idDocumentType: dto.idDocumentType ?? null,
-            idDocumentUrl: dto.idDocumentUrl ?? null,
+            idDocumentUrl,
         };
 
         const profile = await this.prisma.guardianProfile.upsert({
