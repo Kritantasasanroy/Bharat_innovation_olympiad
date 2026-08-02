@@ -682,19 +682,27 @@ export class ExamService {
         return assets.map((asset) => ({ ...asset, inUse: inUse.has(asset.url) }));
     }
 
-    /** Whether the Drive gallery is reachable, and where it is. */
+    /**
+     * Whether the Drive gallery is reachable, and where it is.
+     *
+     * A folder is now syncable without an API key, so `configured` turns on the
+     * Sync button as soon as a folder id is set. The key only decides *how* the
+     * folder is listed — the API when it is present, the public folder page when
+     * it is not — so it is reported separately rather than gating the feature.
+     */
     driveGalleryStatus() {
         const folderId = this.drive.defaultFolderId;
         return {
-            configured: this.drive.isConfigured && Boolean(folderId),
+            configured: Boolean(folderId),
             hasApiKey: this.drive.isConfigured,
             folderId: folderId || null,
             folderUrl: folderId ? `https://drive.google.com/drive/folders/${folderId}` : null,
-            hint: !this.drive.isConfigured
-                ? 'Set GOOGLE_DRIVE_API_KEY (Drive API enabled) to sync from Drive.'
-                : !folderId
-                  ? 'Set GOOGLE_DRIVE_GALLERY_FOLDER_ID to the shared gallery folder.'
-                  : 'The folder must be shared "Anyone with the link — Viewer".',
+            hint: !folderId
+                ? 'Set GOOGLE_DRIVE_GALLERY_FOLDER_ID to the shared gallery folder.'
+                : this.drive.isConfigured
+                  ? 'The folder must be shared "Anyone with the link — Viewer".'
+                  : 'Reading this folder anonymously — it must be shared "Anyone with the link — Viewer". ' +
+                    'Set GOOGLE_DRIVE_API_KEY to use the Drive API instead.',
         };
     }
 
@@ -717,8 +725,16 @@ export class ExamService {
             where: { kind: 'IMAGE' },
             select: { filename: true },
         });
+        // Compared on the same canonical key the importer matches on, so a file
+        // already in the gallery as "Copy of X.png" is not mirrored again as
+        // "X.png" — two rows for one picture, and the paper picking whichever.
+        const mirroredKey = (filename: string) =>
+            filename.replace(/^(?:Copy of\s+)+/i, '').trim().toLowerCase();
         const alreadyMirrored = new Set(
-            existing.map((a) => a.filename).filter((f): f is string => Boolean(f)),
+            existing
+                .map((a) => a.filename)
+                .filter((f): f is string => Boolean(f))
+                .map(mirroredKey),
         );
 
         const imported: { filename: string; url: string }[] = [];
@@ -726,7 +742,7 @@ export class ExamService {
         const failed: { filename: string; reason: string }[] = [];
 
         for (const file of files) {
-            if (alreadyMirrored.has(file.name)) {
+            if (alreadyMirrored.has(mirroredKey(file.name))) {
                 skipped.push(file.name);
                 continue;
             }
@@ -747,6 +763,7 @@ export class ExamService {
                         bytes: buffer.byteLength,
                     },
                 });
+                alreadyMirrored.add(mirroredKey(file.name));
                 imported.push({ filename: file.name, url: uploaded.url });
             } catch (err) {
                 failed.push({ filename: file.name, reason: (err as Error).message });
@@ -876,16 +893,28 @@ export class ExamService {
             where: { kind: 'IMAGE' },
             select: { url: true, filename: true },
         });
-        const byFilename = new Map(
-            gallery
-                .filter((a): a is { url: string; filename: string } => Boolean(a.filename))
-                .map((a) => [a.filename.toLowerCase(), a.url]),
-        );
+        /**
+         * Gallery filenames are matched loosely on purpose. The same picture
+         * reaches the gallery as `08_EM_CE_004.png` from a Drive sync and as
+         * `Copy of 08_EM_CE_004.PNG` from a hand upload, and a workbook that
+         * names one should find the other — an exact, case-sensitive match is
+         * the difference between a paper with pictures and a paper without.
+         */
+        const galleryKey = (filename: string) =>
+            filename.replace(/^(?:Copy of\s+)+/i, '').trim().toLowerCase();
+        const byFilename = new Map<string, string>();
+        for (const asset of gallery) {
+            if (!asset.filename) continue;
+            const key = galleryKey(asset.filename);
+            // First writer wins, so a later "Copy of" upload never displaces the
+            // canonical asset a paper is already rendering.
+            if (!byFilename.has(key)) byFilename.set(key, asset.url);
+        }
 
         const imagesUnresolved: { externalId?: string; wanted: string }[] = [];
         const resolveImage = (q: ImportQuestionDto): string | null => {
             if (q.imageFilename) {
-                const hit = byFilename.get(q.imageFilename.toLowerCase());
+                const hit = byFilename.get(galleryKey(q.imageFilename));
                 if (hit) return hit;
             }
             // A Drive link resolves through the mirror, never by hot-linking:

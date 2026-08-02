@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MEDIA_RULES } from './object-storage.service';
 
@@ -20,6 +20,20 @@ import { MEDIA_RULES } from './object-storage.service';
  * refresh, and no offline-access grant to keep alive for a folder that is
  * already public. If the folder is *not* shared, every call here 404s — which is
  * the correct and loud failure.
+ *
+ * ## Why there is a listing path that needs no key at all
+ *
+ * A folder shared "Anyone with the link" already serves its own contents to an
+ * anonymous browser, as a JSON blob (`window['_DRIVE_ivd']`) embedded in the
+ * folder page. {@link listPublicFolder} reads that.
+ *
+ * This is the fallback, not the default: the API is used whenever a key is
+ * configured, because it is a contract and this is a page scrape. It exists
+ * because the alternative was worse — without a key, "Sync from Drive" was a
+ * button that could only ever return 503, so the question images for a live
+ * paper could not be loaded at all without first provisioning a GCP project.
+ * Both paths return the same {@link DriveFile} shape, and both feed the same
+ * mirror-into-object-storage step, so nothing downstream can tell them apart.
  *
  * ## Why images get mirrored rather than hot-linked
  *
@@ -49,6 +63,26 @@ export interface DriveFile {
     mimeType: string;
 }
 
+/**
+ * Decodes a JavaScript single-quoted string literal.
+ *
+ * Drive writes its embedded folder listing as one, escaped with `\xNN` for every
+ * punctuation character — which is legal JS and *illegal* JSON, so `JSON.parse`
+ * cannot be pointed at it directly and `eval` is not on the table. One pass over
+ * the recognised escape forms, so an escaped backslash cannot be mistaken for
+ * the start of the next escape.
+ */
+function unescapeJsString(literal: string): string {
+    return literal.replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)/g, (_, seq: string) => {
+        const kind = seq[0];
+        if (kind === 'x' || kind === 'u') return String.fromCharCode(parseInt(seq.slice(1), 16));
+        const simple: Record<string, string> = {
+            n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', '0': '\0',
+        };
+        return simple[seq] ?? seq;
+    });
+}
+
 @Injectable()
 export class GoogleDriveService {
     private readonly logger = new Logger(GoogleDriveService.name);
@@ -66,6 +100,17 @@ export class GoogleDriveService {
 
     get isConfigured(): boolean {
         return Boolean(this.apiKey);
+    }
+
+    /**
+     * Drive prefixes a duplicated file with "Copy of ", and question images get
+     * duplicated into the shared folder as a matter of course. The workbook's
+     * `Image File` column names `08_EM_CE_004.png`, so that is what the gallery
+     * has to be keyed on — otherwise every image in the folder is one the paper
+     * cannot find.
+     */
+    static canonicalFilename(name: string): string {
+        return name.replace(/^(?:Copy of\s+)+/i, '').trim();
     }
 
     /**
@@ -109,16 +154,15 @@ export class GoogleDriveService {
      */
     async listFolder(folderId?: string): Promise<DriveFile[]> {
         const folder = (folderId ?? this.defaultFolderId).trim();
-        if (!this.isConfigured) {
-            throw new ServiceUnavailableException(
-                'Google Drive is not configured. Set GOOGLE_DRIVE_API_KEY.',
-            );
-        }
         if (!folder) {
             throw new BadRequestException(
                 'No Drive folder configured. Set GOOGLE_DRIVE_GALLERY_FOLDER_ID.',
             );
         }
+        if (!FILE_ID_RE.test(folder)) {
+            throw new BadRequestException(`"${folder}" is not a valid Google Drive folder id.`);
+        }
+        if (!this.isConfigured) return this.listPublicFolder(folder);
 
         const files: DriveFile[] = [];
         let pageToken: string | undefined;
@@ -155,6 +199,79 @@ export class GoogleDriveService {
             pageToken = body.nextPageToken;
         } while (pageToken);
 
+        return files.map((f) => ({ ...f, name: GoogleDriveService.canonicalFilename(f.name) }));
+    }
+
+    /**
+     * Lists a link-shared folder with no credentials, by reading the file table
+     * Drive embeds in its own folder page.
+     *
+     * `window['_DRIVE_ivd']` is a hex-escaped JSON document whose first element
+     * is the file list; each entry is `[id, [parentIds], name, mimeType, …]`.
+     * Only those four positions are read, and every entry that does not have
+     * them in the expected shape is dropped rather than guessed at — this is a
+     * scrape, so it must fail to a short list, never to a wrong one.
+     *
+     * Unlike the API path this is not paginated. Drive renders roughly the first
+     * few hundred entries into the page, so a very large gallery would come back
+     * truncated: {@link syncDriveGallery} reports the count it saw, and a folder
+     * near that size wants a real API key. For the ~20 images a question paper
+     * carries, it is exact.
+     */
+    private async listPublicFolder(folderId: string): Promise<DriveFile[]> {
+        const url = `https://drive.google.com/drive/folders/${folderId}`;
+        const res = await fetch(url, {
+            redirect: 'follow',
+            // Drive serves a scriptless shell to clients it does not recognise,
+            // and that shell contains no file table at all.
+            headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+                    '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+        });
+        if (!res.ok) {
+            throw new BadRequestException(
+                `Could not open the Drive folder (HTTP ${res.status}). It must be shared ` +
+                    '"Anyone with the link — Viewer", or set GOOGLE_DRIVE_API_KEY to use the API.',
+            );
+        }
+
+        const html = await res.text();
+        const match = html.match(/window\['_DRIVE_ivd'\]\s*=\s*'((?:[^'\\]|\\.)*)'/);
+        if (!match) {
+            throw new BadRequestException(
+                'That Drive folder did not return a file listing. The usual cause is that it ' +
+                    'is not shared "Anyone with the link — Viewer". Set GOOGLE_DRIVE_API_KEY to ' +
+                    'list private folders instead.',
+            );
+        }
+
+        let entries: unknown;
+        try {
+            entries = JSON.parse(unescapeJsString(match[1]));
+        } catch {
+            throw new BadRequestException(
+                'That Drive folder returned a listing this server could not read. ' +
+                    'Set GOOGLE_DRIVE_API_KEY to use the Drive API instead.',
+            );
+        }
+
+        const rows = Array.isArray(entries) && Array.isArray(entries[0]) ? entries[0] : [];
+        const files: DriveFile[] = [];
+        for (const row of rows) {
+            if (!Array.isArray(row)) continue;
+            const [id, , name, mimeType] = row as unknown[];
+            if (typeof id !== 'string' || typeof name !== 'string' || typeof mimeType !== 'string') {
+                continue;
+            }
+            if (!FILE_ID_RE.test(id)) continue;
+            if (!mimeType.startsWith('image/')) continue;
+            files.push({ id, name: GoogleDriveService.canonicalFilename(name), mimeType });
+        }
+
+        this.logger.log(`Listed ${files.length} image(s) in public Drive folder ${folderId}.`);
         return files;
     }
 

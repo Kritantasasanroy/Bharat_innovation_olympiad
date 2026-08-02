@@ -1,3 +1,4 @@
+import { releaseCamera } from '@/lib/camera';
 import { DeviceCheckStatus, ProctorEvent } from '@/types/proctor';
 import { create } from 'zustand';
 
@@ -50,7 +51,15 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
 
     setRiskScore: (score) => set({ currentRiskScore: score }),
 
-    reset: () =>
+    /**
+     * Clears proctoring state and turns the camera off.
+     *
+     * The camera part is not incidental. Setting `webcamStream: null` on its own
+     * drops the only reference to a stream whose tracks are still live, which
+     * leaves the camera on with nothing left able to stop it.
+     */
+    reset: () => {
+        releaseCamera();
         set({
             deviceChecks: { viewport: false, webcam: false, fullscreen: false, audio: false },
             allChecksPassed: false,
@@ -58,5 +67,6 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
             isWebcamActive: false,
             events: [],
             currentRiskScore: 0,
-        }),
+        });
+    },
 }));

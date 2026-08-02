@@ -1,5 +1,6 @@
 'use client';
 
+import { isStreamLive, openCamera, releaseCamera } from '@/lib/camera';
 import { useProctorStore } from '@/store/proctorStore';
 import { useCallback, useEffect, useRef } from 'react';
 
@@ -40,13 +41,13 @@ export function useWebcam() {
         try {
             // Reuse an existing live stream (avoids re-prompting permission)
             const existing = useProctorStore.getState().webcamStream;
-            if (existing && existing.getTracks().some((t) => t.readyState === 'live')) {
+            if (isStreamLive(existing)) {
                 attachStreamToElement(videoElementRef.current, existing);
                 setDeviceCheck('webcam', true);
                 return existing;
             }
 
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await openCamera({
                 video: { width: 320, height: 240, facingMode: 'user' },
                 audio: false,
             });
@@ -62,12 +63,19 @@ export function useWebcam() {
         }
     }, []);
 
+    /**
+     * Turns the camera off.
+     *
+     * Goes through `releaseCamera()` rather than reading the stream back off the
+     * `<video>` element, which is what this used to do and why the camera stayed
+     * on: React detaches refs before running passive effect cleanups, so on
+     * unmount `videoElementRef.current` was already null and this stopped
+     * nothing while still clearing the store — losing the only handle on a live
+     * stream. See `lib/camera.ts`.
+     */
     const stopWebcam = useCallback(() => {
-        if (videoElementRef.current?.srcObject) {
-            const stream = videoElementRef.current.srcObject as MediaStream;
-            stream.getTracks().forEach((track) => track.stop());
-            videoElementRef.current.srcObject = null;
-        }
+        releaseCamera();
+        if (videoElementRef.current) videoElementRef.current.srcObject = null;
         setWebcamStream(null);
     }, []);
 

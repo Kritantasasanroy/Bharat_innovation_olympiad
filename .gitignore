@@ -69,6 +69,12 @@ proctor-service/models/*.onnx
 *.pptx
 *.ppt
 
+# …except the question papers themselves, which are source: they are what
+# `backend/scripts/setup-beta-exams.js` imports, and the `.xlsm` papers were
+# already tracked. A paper the repo cannot see is an import nobody can re-run.
+!Grade_*_Question_*.xlsx
+!Trial_Test_*.xlsx
+
 # ── Source / raw image assets ─────────────────────────────────
 # Optimised copies live in */public/ — don't commit originals
 Bio logo.png

@@ -76,9 +76,50 @@ const LETTER_TO_INDEX: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 const PREFERRED_SHEETS = ['Question Bank', 'Trial Questions', 'Questions'];
 
 /** Headers that only exist in the Olympiad format. */
-const OLYMPIAD_MARKERS = ['Part Name', 'Correct Option', 'Section Name'];
+const OLYMPIAD_MARKERS = ['Part Name', 'Correct Option', 'Section Name', 'Part ID'];
+
+/**
+ * Column aliases, newest naming first.
+ *
+ * The approved workbook template was renamed between the trial papers and the
+ * v1.0 beta sets — `Part Name` became `Part`, `Bloom Level` grew an apostrophe,
+ * `Image Filename` became `Image File`. Both namings are read rather than the
+ * parser being switched over, because the older `.xlsm` papers are still in the
+ * repo and still importable, and a header rename should never be the thing that
+ * silently drops a paper's taxonomy on the floor.
+ */
+const COLUMNS = {
+    partCode: ['Part ID', 'Part Code'],
+    partName: ['Part', 'Part Name'],
+    sectionCode: ['Section ID', 'Section Code'],
+    sectionName: ['Section', 'Section Name'],
+    topic: ['Topic'],
+    bloomLevel: ["Bloom's Level", 'Bloom Level', 'Blooms Level'],
+    imageFilename: ['Image File', 'Image Filename'],
+    imageSourceUrl: ['Image Link', 'Image URL'],
+    competency: ['Competency Assessed', 'Competency'],
+} as const;
 
 const str = (v: unknown): string => (v == null ? '' : String(v).trim());
+
+/**
+ * A cell's value, ignoring the workbook's "not applicable" sentinels.
+ *
+ * The v1.0 sets fill every unused cell with the literal string `NA` rather than
+ * leaving it blank — `Image File` reads `NA` on all 31 text-only questions. Read
+ * naively that becomes an `imageFilename` of "NA" on every one of them, which
+ * turns into 31 unresolvable images and an import report full of noise.
+ */
+const cell = (row: Record<string, unknown>, names: readonly string[]): string => {
+    for (const name of names) {
+        const value = str(row[name]);
+        if (!value) continue;
+        const flat = value.toUpperCase().replace(/[^A-Z]/g, '');
+        if (flat === 'NA' || flat === 'NIL' || flat === 'NONE') return '';
+        return value;
+    }
+    return '';
+};
 
 const num = (v: unknown): number | undefined => {
     const n = Number(v);
@@ -87,7 +128,13 @@ const num = (v: unknown): number | undefined => {
 
 function normaliseDifficulty(raw: string, fallback: Difficulty): Difficulty {
     const up = raw.trim().toUpperCase();
-    return up === 'EASY' || up === 'MEDIUM' || up === 'HARD' ? up : fallback;
+    if (up === 'EASY' || up === 'MEDIUM' || up === 'HARD') return up;
+    // The v1.0 sets spell the top band "Difficult", not "Hard". Left unmapped it
+    // fell through to the fallback and every hard question imported as EASY,
+    // which quietly breaks the paper's easy/medium/hard mix.
+    if (up === 'DIFFICULT' || up === 'HARDER' || up === 'TOUGH') return 'HARD';
+    if (up === 'MODERATE') return 'MEDIUM';
+    return fallback;
 }
 
 /**
@@ -196,12 +243,19 @@ function parseOlympiad(rows: Record<string, unknown>[], sheetName: string): Pars
             );
         }
 
-        const partName = str(row['Part Name']) || str(row['Part Code']) || 'General';
+        const partName = cell(row, COLUMNS.partName) || cell(row, COLUMNS.partCode) || 'General';
         partCounts.set(partName, (partCounts.get(partName) ?? 0) + 1);
 
-        const imageFilename = str(row['Image Filename']);
-        const imageSourceUrl = str(row['Image Link']);
+        const imageFilename = cell(row, COLUMNS.imageFilename);
+        const imageSourceUrl = cell(row, COLUMNS.imageSourceUrl);
         if (imageFilename || imageSourceUrl) imageCount++;
+
+        // A row that says it needs a picture but names none is an authoring gap,
+        // not a text question — it imports, but it is called out, because the
+        // question ("Which chart shows…") is unanswerable without the image.
+        if (/^y/i.test(str(row['Visual Required'])) && !imageFilename && !imageSourceUrl) {
+            warnings.push(`Row ${rowNo}: "Visual Required" is Yes but no image file is named.`);
+        }
 
         // Everything the student never sees, kept for the authoring trail.
         const metadata: Record<string, unknown> = {};
@@ -209,11 +263,14 @@ function parseOlympiad(rows: Record<string, unknown>[], sheetName: string): Pars
             ['imageDescription', 'Image Description'],
             ['canvaPrompt', 'Canva Prompt'],
             ['reviewerComments', 'Reviewer Comments'],
+            ['reviewerName', 'Reviewer Name'],
             ['version', 'Version'],
             ['questionType', 'Question Type'],
             ['visualRequired', 'Visual Required'],
+            ['topicId', 'Topic ID'],
+            ['questionSequenceNo', 'Question Sequence No.'],
         ] as const) {
-            const value = str(row[col]);
+            const value = cell(row, [col]);
             if (value) metadata[key] = value;
         }
 
@@ -226,20 +283,20 @@ function parseOlympiad(rows: Record<string, unknown>[], sheetName: string): Pars
             // question, no negative marking, matching the published scheme.
             marks: num(row['Marks']) ?? 1,
             negativeMarks: num(row['Negative Marks']) ?? 0,
-            explanation: str(row['Explanation']) || undefined,
-            externalId: str(row['Question ID']) || undefined,
+            explanation: cell(row, ['Explanation']) || undefined,
+            externalId: cell(row, ['Question ID']) || undefined,
             grade: num(row['Grade']) !== undefined ? Math.round(num(row['Grade'])!) : undefined,
-            partCode: str(row['Part Code']) || undefined,
+            partCode: cell(row, COLUMNS.partCode) || undefined,
             partName,
-            sectionCode: str(row['Section Code']) || undefined,
-            sectionName: str(row['Section Name']) || undefined,
-            topic: str(row['Topic']) || undefined,
-            learningObjective: str(row['Learning Objective']) || undefined,
-            questionCategory: str(row['Question Category']) || undefined,
-            bloomLevel: str(row['Bloom Level']) || undefined,
-            competency: str(row['Competency Assessed']) || undefined,
-            questionFormat: str(row['Question Format']) || undefined,
-            futureReadyInsight: str(row['Future Ready Insight']) || undefined,
+            sectionCode: cell(row, COLUMNS.sectionCode) || undefined,
+            sectionName: cell(row, COLUMNS.sectionName) || undefined,
+            topic: cell(row, COLUMNS.topic) || undefined,
+            learningObjective: cell(row, ['Learning Objective']) || undefined,
+            questionCategory: cell(row, ['Question Category']) || undefined,
+            bloomLevel: cell(row, COLUMNS.bloomLevel) || undefined,
+            competency: cell(row, COLUMNS.competency) || undefined,
+            questionFormat: cell(row, ['Question Format']) || undefined,
+            futureReadyInsight: cell(row, ['Future Ready Insight']) || undefined,
             imageFilename: imageFilename || undefined,
             imageSourceUrl: imageSourceUrl || undefined,
             metadata: Object.keys(metadata).length ? metadata : undefined,

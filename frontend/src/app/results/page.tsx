@@ -37,6 +37,15 @@ interface ExamResult {
     totalStudents?: number | null;
     date: string;
     percentage: number | null;
+    /**
+     * `Exam.isResultReleased` — the legacy exam-level switch. Deliberately not
+     * what this page gates the score on: `ExamService.releaseResults` refuses to
+     * set it until every instance of the exam has finished, so on a paper whose
+     * window runs for months it stays false and a marked attempt showed "Results
+     * Pending" indefinitely. The two-stage design is provisional-then-final, and
+     * the *final* stage is gated on `isFinal` (rank, percentile, answer key)
+     * further down. Kept on the type because the API still returns it.
+     */
     isReleased?: boolean;
     radarData?: RadarDataPoint[];
     /** Stage-two flags — see `AttemptService.getResults`. */
@@ -253,7 +262,7 @@ export default function ResultsPage() {
                                             Raise a grievance
                                         </Link>
                                     </div>
-                                ) : result.isReleased ? (
+                                ) : typeof result.score === 'number' ? (
                                     <>
                                         {/* The honesty banner. A provisional score that looks
                                             final is the thing this whole two-stage design

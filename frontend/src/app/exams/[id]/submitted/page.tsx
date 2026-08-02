@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
+import { releaseCamera } from '@/lib/camera';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
@@ -29,6 +30,17 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
     const [result, setResult] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    /**
+     * The exam is over, so the camera goes off — unconditionally, on arrival.
+     *
+     * The player already stops proctoring when it submits, and `lib/camera.ts`
+     * now makes that reach every open stream. This is the backstop: whatever
+     * happened during the paper, and by whatever route a student reached this
+     * page, nobody sits in front of a live camera light after they have
+     * finished. Idempotent, so calling it with nothing running costs nothing.
+     */
+    useEffect(() => { releaseCamera(); }, []);
+
     useEffect(() => {
         // The most recent attempt for this exam is the one just submitted.
         api.get('/attempts/results')
@@ -40,7 +52,23 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
             .finally(() => setLoading(false));
     }, [id]);
 
-    const scoreShown = result && !result.isDisqualified && result.isReleased;
+    /**
+     * The provisional score is shown here as soon as the paper is marked, and
+     * does **not** wait for `isReleased`.
+     *
+     * `isResultReleased` is the switch for the *results page* — the settled,
+     * published, rankable result. This page is the other thing: the moment the
+     * paper ends, where the first question a student has is "how did I do".
+     * Gating it on the same flag meant every beta tester finished their exam and
+     * was told "your score is not published yet", which is exactly the screen
+     * this page was written to replace.
+     *
+     * A disqualified attempt still shows nothing — it genuinely carries no score
+     * — and the provisional caveat below stays, because the number can still
+     * move under review.
+     */
+    const scoreShown =
+        result && !result.isDisqualified && typeof result.score === 'number';
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
@@ -78,6 +106,11 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                                 change while proctoring reviews and grievances are settled.
                             </p>
                         </>
+                    ) : result?.isDisqualified ? (
+                        <p className="text-muted">
+                            {result.disqualificationNote ??
+                                'This attempt was disqualified after review, so it carries no score.'}
+                        </p>
                     ) : (
                         <p className="text-muted">
                             Your score is not published yet. It appears on your results page as soon as

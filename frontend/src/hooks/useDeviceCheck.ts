@@ -1,6 +1,8 @@
 'use client';
 
+import { openCamera } from '@/lib/camera';
 import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
+import { isFullscreenSupported } from '@/lib/fullscreen';
 import { useProctorStore } from '@/store/proctorStore';
 import { useEffect } from 'react';
 
@@ -19,46 +21,45 @@ export function useDeviceCheck() {
     const { setDeviceCheck, deviceChecks, allChecksPassed } = useProctorStore();
 
     useEffect(() => {
-        // 1. Viewport check — minimum 1024×768 ("10-inch class")
+        /**
+         * 1. Screen check — is this device capable of running the player at all?
+         *
+         * Measured against `window.screen`, not `window.inner*`. The exam is
+         * entered fullscreen, so the window becomes the screen a moment after
+         * this passes; judging a student on the size their browser window
+         * happened to be was failing them for something the Start button fixes.
+         *
+         * Orientation is normalised because a tablet held in portrait reports a
+         * width below the floor while being perfectly able to sit the exam once
+         * it is turned — and fullscreen does not rotate it, the student does.
+         */
         const checkViewport = () => {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            const sw = window.screen.width;
-            const sh = window.screen.height;
+            const long = Math.max(window.screen.width, window.screen.height);
+            const short = Math.min(window.screen.width, window.screen.height);
 
-            const viewportOk =
-                w >= MIN_VIEWPORT_WIDTH &&
-                h >= MIN_VIEWPORT_HEIGHT &&
-                sw >= MIN_VIEWPORT_WIDTH &&
-                sh >= MIN_VIEWPORT_HEIGHT;
-
-            setDeviceCheck('viewport', viewportOk);
+            setDeviceCheck(
+                'viewport',
+                long >= MIN_VIEWPORT_WIDTH && short >= MIN_VIEWPORT_HEIGHT,
+            );
         };
 
         checkViewport();
+        // `resize` still matters: a rotated tablet or a screen change fires it,
+        // and `orientationchange` is not reliable across browsers.
         window.addEventListener('resize', checkViewport);
+        window.addEventListener('orientationchange', checkViewport);
 
         // 2. Fullscreen capability check
-        const checkFullscreen = () => {
-            const elem = document.documentElement;
-            const hasFullscreen = !!(
-                elem.requestFullscreen ||
-                (elem as any).webkitRequestFullscreen ||
-                (elem as any).mozRequestFullScreen ||
-                (elem as any).msRequestFullscreen
-            );
-            setDeviceCheck('fullscreen', hasFullscreen);
-        };
-
-        checkFullscreen();
+        setDeviceCheck('fullscreen', isFullscreenSupported());
 
         // 3 & 4. Webcam + Audio — always request permission first
         const checkCamera = async () => {
             try {
-                // Request camera permission — this triggers the browser prompt
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user' },
-                });
+                // Request camera permission — this triggers the browser prompt.
+                // Opened through the registry so that even if this probe is
+                // interrupted mid-flight, the stream is still something
+                // `releaseCamera()` can reach. See `lib/camera.ts`.
+                const stream = await openCamera({ video: { facingMode: 'user' } });
                 // Camera works — stop the temporary stream
                 stream.getTracks().forEach((t) => t.stop());
                 setDeviceCheck('webcam', true);
@@ -95,6 +96,7 @@ export function useDeviceCheck() {
 
         return () => {
             window.removeEventListener('resize', checkViewport);
+            window.removeEventListener('orientationchange', checkViewport);
         };
     }, []);
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
+import { isStreamLive, openCamera, releaseCamera } from '@/lib/camera';
 import { useProctorStore } from '@/store/proctorStore';
 
 // face-api.js is loaded dynamically to avoid SSR issues
@@ -177,7 +178,7 @@ export function useFaceProctor({
 
     const startCamera = useCallback(async (): Promise<MediaStream | null> => {
         const existing = useProctorStore.getState().webcamStream;
-        if (existing && existing.getTracks().some((t) => t.readyState === 'live')) {
+        if (isStreamLive(existing)) {
             if (videoElementRef.current) {
                 videoElementRef.current.srcObject = existing;
                 videoElementRef.current.play().catch(() => {});
@@ -187,7 +188,7 @@ export function useFaceProctor({
         }
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await openCamera({
                 // Higher resolution than the old 320x240 gives the detector more
                 // pixel detail to work with — see DETECTOR_INPUT_SIZE comment above.
                 video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
@@ -383,11 +384,12 @@ export function useFaceProctor({
         awayTrackerRef.current = freshTracker();
         mismatchTrackerRef.current = freshTracker();
         multiFaceActiveRef.current = false;
-        const stream = useProctorStore.getState().webcamStream;
-        if (stream) {
-            stream.getTracks().forEach((t) => t.stop());
-            setWebcamStream(null);
-        }
+        // Every open stream, not just the one the store is holding. During an
+        // exam there is reliably more than one — see `lib/camera.ts` — and
+        // stopping only the store's was why the camera light stayed on after a
+        // student had finished.
+        releaseCamera();
+        setWebcamStream(null);
         if (videoElementRef.current) {
             videoElementRef.current.srcObject = null;
         }

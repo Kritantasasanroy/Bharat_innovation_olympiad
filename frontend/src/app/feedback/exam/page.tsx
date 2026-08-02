@@ -3,9 +3,10 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import FeedbackInterstitial from '@/components/FeedbackInterstitial';
+import { releaseCamera } from '@/lib/camera';
 import { FEEDBACK_FORMS } from '@/lib/constants';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 
 /**
  * Shown immediately after an exam is submitted, before the results page.
@@ -26,6 +27,11 @@ function ExamFeedbackInner() {
     // Must start with a single "/" — `//evil.com` is protocol-relative and would
     // send a student straight off the site.
     const next = raw && /^\/(?!\/)/.test(raw) ? raw : '/results';
+
+    // This is the first page after the paper ends, so it is the first chance to
+    // be certain the camera is off — before the student spends a minute or two
+    // filling in a feedback form with the light still on. See `lib/camera.ts`.
+    useEffect(() => { releaseCamera(); }, []);
 
     return (
         <FeedbackInterstitial

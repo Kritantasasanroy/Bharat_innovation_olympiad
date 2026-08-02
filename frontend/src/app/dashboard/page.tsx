@@ -42,9 +42,16 @@ interface ResultSummary {
     totalMarks: number;
     rank?: number;
     completedAt: string;
+    /**
+     * `Exam.isResultReleased`. Not what the score is gated on — see the note on
+     * `ExamResult.isReleased` in `app/results/page.tsx`. Kept because the API
+     * still returns it.
+     */
     isReleased?: boolean;
     /** True until the final report is published — the score can still move. */
     isProvisional?: boolean;
+    /** A disqualified attempt carries no score, and must not show a 0 as if it did. */
+    isDisqualified?: boolean;
 }
 
 /** What the non-startable phases say on the dashboard, in the student's words. */
@@ -280,7 +287,7 @@ export default function StudentDashboard() {
                                                 </div>
                                             </div>
                                             <div className="exam-item-actions">
-                                                {result.isReleased ? (
+                                                {!result.isDisqualified ? (
                                                     <div className="score-display">
                                                         <span className="score-value">{result.score}</span>
                                                         <span className="score-total">/ {result.totalMarks}</span>
@@ -291,7 +298,7 @@ export default function StudentDashboard() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>Pending Result</span>
+                                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>Under review</span>
                                                 )}
                                             </div>
                                         </div>

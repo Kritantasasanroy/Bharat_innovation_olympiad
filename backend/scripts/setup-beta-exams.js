@@ -12,10 +12,18 @@
  *
  * Usage (from backend/):
  *   node scripts/setup-beta-exams.js
- *   node scripts/setup-beta-exams.js --dry-run      # report, change nothing
- *   node scripts/setup-beta-exams.js --skip-archive # leave other exams alone
+ *   node scripts/setup-beta-exams.js --dry-run        # report, change nothing
+ *   node scripts/setup-beta-exams.js --skip-archive   # leave other exams alone
+ *   node scripts/setup-beta-exams.js --questions-only # ONLY re-import both papers
  *
- * Env: API_URL (default http://localhost:4000/api), ADMIN_EMAIL, ADMIN_PASSWORD
+ * `--questions-only` exists because replacing a question paper and re-cutting the
+ * timetable are different jobs with very different blast radii. Loading a
+ * corrected workbook should not also delete slots, move the exam window, or
+ * archive other exams — and it should not require an operator to reason about
+ * which of those side effects they are about to trigger.
+ *
+ * Env: API_URL (default http://localhost:4000/api), ADMIN_EMAIL, ADMIN_PASSWORD,
+ *      MAIN_WORKBOOK (override the Grade 8 paper), IMPORT_QUESTIONS=true
  */
 
 const path = require('path');
@@ -48,6 +56,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'BIO@Admin2025';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const SKIP_ARCHIVE = process.argv.includes('--skip-archive');
+const QUESTIONS_ONLY = process.argv.includes('--questions-only');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -63,7 +72,13 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
  */
 const MAIN_EXAM = {
     title: process.env.MAIN_EXAM_TITLE || 'Bharat Innovation Olympiad — Class 8',
+    /**
+     * `Bharat Innovation Olympiad` — no grade suffix — is the exam the beta is
+     * actually being sat on, and it is listed first so a run adopts it rather
+     * than creating a near-duplicate beside it.
+     */
     titleMatches: [
+        'Bharat Innovation Olympiad',
         'Bharat Innovation Olympiad — Class 8',
         'Bharat Innovation Olympiad — Grade 8',
         'Bharat Innovation Olympiad - Class 8',
@@ -71,13 +86,20 @@ const MAIN_EXAM = {
     description:
         'The Class 8 Innovation Olympiad paper. 50 questions across five future-ready ' +
         'dimensions, sat one section at a time. One mark per question, no negative marking.',
-    workbook: 'Grade_8_Easy_Question_Paper_50.xlsm',
+    workbook: process.env.MAIN_WORKBOOK || 'Grade_08_Beta_Question_Set_01_v1.0.xlsx',
+    /**
+     * Left off the update payload in `--questions-only` mode. The live beta exam
+     * is open to grades 6–12 even though this paper is written for Grade 8, and
+     * narrowing it here as a side effect of loading questions would lock every
+     * other grade's testers out of the beta mid-flight.
+     */
     classBands: [8],
     durationMinutes: 60,
     totalMarks: 50,
     /** Set IMPORT_QUESTIONS=true to re-import the paper; off by default so a
-     *  re-slot never silently rewrites 50 live questions. */
-    importQuestions: process.env.IMPORT_QUESTIONS === 'true',
+     *  re-slot never silently rewrites 50 live questions. Implied by
+     *  `--questions-only`, which has no other purpose. */
+    importQuestions: process.env.IMPORT_QUESTIONS === 'true' || QUESTIONS_ONLY,
 };
 
 const TRIAL_EXAM = {
@@ -133,8 +155,45 @@ const SCHEDULE = {
 const LETTER_TO_INDEX = { A: 0, B: 1, C: 2, D: 3 };
 const PREFERRED_SHEETS = ['Question Bank', 'Trial Questions', 'Questions'];
 
+/** Column aliases, newest naming first. Mirrors `COLUMNS` in questionWorkbook.ts. */
+const COLUMNS = {
+    partCode: ['Part ID', 'Part Code'],
+    partName: ['Part', 'Part Name'],
+    sectionCode: ['Section ID', 'Section Code'],
+    sectionName: ['Section', 'Section Name'],
+    bloomLevel: ["Bloom's Level", 'Bloom Level', 'Blooms Level'],
+    imageFilename: ['Image File', 'Image Filename'],
+    imageSourceUrl: ['Image Link', 'Image URL'],
+    competency: ['Competency Assessed', 'Competency'],
+};
+
 const str = (v) => (v == null ? '' : String(v).trim());
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
+
+/**
+ * A cell's value, ignoring the "not applicable" sentinels the v1.0 sets write
+ * into every unused cell. Without this, `Image File` = "NA" on the 31 text-only
+ * questions becomes 31 images that can never resolve.
+ */
+const cell = (row, names) => {
+    for (const name of names) {
+        const value = str(row[name]);
+        if (!value) continue;
+        const flat = value.toUpperCase().replace(/[^A-Z]/g, '');
+        if (flat === 'NA' || flat === 'NIL' || flat === 'NONE') return '';
+        return value;
+    }
+    return '';
+};
+
+/** "Difficult" is how the v1.0 sets spell the top band. */
+function normaliseDifficulty(raw) {
+    const up = str(raw).toUpperCase();
+    if (['EASY', 'MEDIUM', 'HARD'].includes(up)) return up;
+    if (['DIFFICULT', 'HARDER', 'TOUGH'].includes(up)) return 'HARD';
+    if (up === 'MODERATE') return 'MEDIUM';
+    return 'EASY';
+}
 
 async function api(method, pathSuffix, token, body) {
     const res = await fetch(`${API_URL}${pathSuffix}`, {
@@ -221,37 +280,45 @@ function parseWorkbook(file) {
             ['imageDescription', 'Image Description'],
             ['canvaPrompt', 'Canva Prompt'],
             ['reviewerComments', 'Reviewer Comments'],
+            ['reviewerName', 'Reviewer Name'],
             ['version', 'Version'],
             ['questionType', 'Question Type'],
             ['visualRequired', 'Visual Required'],
+            ['topicId', 'Topic ID'],
+            ['questionSequenceNo', 'Question Sequence No.'],
         ]) {
-            const value = str(row[col]);
+            const value = cell(row, [col]);
             if (value) metadata[key] = value;
         }
 
-        const difficulty = str(row['Difficulty']).toUpperCase();
+        const imageFilename = cell(row, COLUMNS.imageFilename);
+        const imageSourceUrl = cell(row, COLUMNS.imageSourceUrl);
+        if (/^y/i.test(str(row['Visual Required'])) && !imageFilename && !imageSourceUrl) {
+            warnings.push(`Row ${rowNo}: "Visual Required" is Yes but no image file is named.`);
+        }
+
         questions.push({
             text,
             options,
-            difficulty: ['EASY', 'MEDIUM', 'HARD'].includes(difficulty) ? difficulty : 'EASY',
+            difficulty: normaliseDifficulty(row['Difficulty']),
             marks: 1,
             negativeMarks: 0,
-            explanation: str(row['Explanation']) || undefined,
+            explanation: cell(row, ['Explanation']) || undefined,
             externalId,
             grade: num(row['Grade']) !== undefined ? Math.round(num(row['Grade'])) : undefined,
-            partCode: str(row['Part Code']) || undefined,
-            partName: str(row['Part Name']) || str(row['Part Code']) || 'General',
-            sectionCode: str(row['Section Code']) || undefined,
-            sectionName: str(row['Section Name']) || undefined,
-            topic: str(row['Topic']) || undefined,
-            learningObjective: str(row['Learning Objective']) || undefined,
-            questionCategory: str(row['Question Category']) || undefined,
-            bloomLevel: str(row['Bloom Level']) || undefined,
-            competency: str(row['Competency Assessed']) || undefined,
-            questionFormat: str(row['Question Format']) || undefined,
-            futureReadyInsight: str(row['Future Ready Insight']) || undefined,
-            imageFilename: str(row['Image Filename']) || undefined,
-            imageSourceUrl: str(row['Image Link']) || undefined,
+            partCode: cell(row, COLUMNS.partCode) || undefined,
+            partName: cell(row, COLUMNS.partName) || cell(row, COLUMNS.partCode) || 'General',
+            sectionCode: cell(row, COLUMNS.sectionCode) || undefined,
+            sectionName: cell(row, COLUMNS.sectionName) || undefined,
+            topic: cell(row, ['Topic']) || undefined,
+            learningObjective: cell(row, ['Learning Objective']) || undefined,
+            questionCategory: cell(row, ['Question Category']) || undefined,
+            bloomLevel: cell(row, COLUMNS.bloomLevel) || undefined,
+            competency: cell(row, COLUMNS.competency) || undefined,
+            questionFormat: cell(row, ['Question Format']) || undefined,
+            futureReadyInsight: cell(row, ['Future Ready Insight']) || undefined,
+            imageFilename: imageFilename || undefined,
+            imageSourceUrl: imageSourceUrl || undefined,
             metadata: Object.keys(metadata).length ? metadata : undefined,
         });
     });
@@ -281,7 +348,10 @@ async function upsertExam(token, allExams, spec, extra, wantTrial = false) {
     const existing = findExam(allExams, spec, wantTrial);
     if (existing) {
         console.log(`  adopting existing exam "${existing.title}" (${existing.id})`);
-        if (!DRY_RUN) {
+        // In `--questions-only` mode the exam's own settings are left exactly as
+        // an admin left them. Rewriting classBands/duration/marks here is how a
+        // "just reload the questions" run would quietly re-scope a live exam.
+        if (!DRY_RUN && !QUESTIONS_ONLY) {
             await api('PUT', `/admin/exams/${existing.id}`, token, {
                 description: spec.description,
                 classBands: spec.classBands,
@@ -348,14 +418,18 @@ async function upsertExam(token, allExams, spec, extra, wantTrial = false) {
             questions: trial.questions,
             replaceExisting: true,
         });
-        // A wide window with no slots: the rehearsal has to be available the
-        // instant a student needs it, which is any time before their sitting.
-        await ensureInstance(token, trialExam.id, {
-            startsAt: ist(2026, 1, 1, 0).toISOString(),
-            endsAt: ist(2027, 12, 31, 23, 59).toISOString(),
-        });
-        await api('POST', `/admin/exams/${trialExam.id}/publish`, token);
-        console.log('  imported, scheduled and published\n');
+        if (QUESTIONS_ONLY) {
+            console.log('  questions re-imported (window, slots and publish left alone)\n');
+        } else {
+            // A wide window with no slots: the rehearsal has to be available the
+            // instant a student needs it, which is any time before their sitting.
+            await ensureInstance(token, trialExam.id, {
+                startsAt: ist(2026, 1, 1, 0).toISOString(),
+                endsAt: ist(2027, 12, 31, 23, 59).toISOString(),
+            });
+            await api('POST', `/admin/exams/${trialExam.id}/publish`, token);
+            console.log('  imported, scheduled and published\n');
+        }
     }
 
     // ── 2. The live paper ──
@@ -384,9 +458,14 @@ async function upsertExam(token, allExams, spec, extra, wantTrial = false) {
             result.sections.forEach((s) => console.log(`    • ${s.title} — ${s.questions}`));
             if (result.imagesUnresolved?.length) {
                 console.warn(
-                    `  ! ${result.imagesUnresolved.length} question(s) still need an image. ` +
-                    'Run "Sync from Drive" on the Media Gallery, then re-run with IMPORT_QUESTIONS=true.',
+                    `  ! ${result.imagesUnresolved.length} question(s) still need an image: ` +
+                    `${result.imagesUnresolved.map((u) => u.wanted).join(', ')}`,
                 );
+                console.warn(
+                    '    Run "Sync from Drive" on the Media Gallery, then re-run this import.',
+                );
+            } else {
+                console.log('  every image referenced by the workbook resolved from the gallery');
             }
         } else {
             console.log(
@@ -395,12 +474,20 @@ async function upsertExam(token, allExams, spec, extra, wantTrial = false) {
             );
         }
 
-        const first = SCHEDULE.days[0];
-        const last = SCHEDULE.days[SCHEDULE.days.length - 1];
-        instance = await ensureInstance(token, mainExam.id, {
-            startsAt: ist(SCHEDULE.year, first[0], first[1], 0, 0).toISOString(),
-            endsAt: ist(SCHEDULE.year, last[0], last[1], 23, 59).toISOString(),
-        });
+        if (!QUESTIONS_ONLY) {
+            const first = SCHEDULE.days[0];
+            const last = SCHEDULE.days[SCHEDULE.days.length - 1];
+            instance = await ensureInstance(token, mainExam.id, {
+                startsAt: ist(SCHEDULE.year, first[0], first[1], 0, 0).toISOString(),
+                endsAt: ist(SCHEDULE.year, last[0], last[1], 23, 59).toISOString(),
+            });
+        }
+    }
+
+    if (QUESTIONS_ONLY) {
+        console.log('\n--questions-only: slots, exam window and archiving all skipped.');
+        console.log('\nDone.');
+        return;
     }
 
     // ── 3. Slots: two a day across the window ──

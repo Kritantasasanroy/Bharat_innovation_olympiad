@@ -17,35 +17,46 @@ import { useEffect, useState } from 'react';
  * What this replaces: a device-compatibility row reading "Screen Resolution ✗"
  * with a disabled Start button and no explanation. A student on a phone had no way
  * to know a phone was the problem.
+ *
+ * Since the exam now enters fullscreen on Start, a small *window* is no longer
+ * a reason to be here — only a small *screen* is. A tablet held in portrait is
+ * told to turn it rather than told to go away, because rotating genuinely fixes
+ * it and `useDeviceCheck` re-checks on `orientationchange`.
  */
 export default function TooSmallForExam() {
-    const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+    const [screen, setScreen] = useState<{ w: number; h: number } | null>(null);
 
-    // Reported back so a student on a laptop with a small window can see that
-    // maximising it is all that is needed — the usual cause on a real computer.
     useEffect(() => {
-        const read = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+        const read = () => setScreen({ w: window.screen.width, h: window.screen.height });
         read();
         window.addEventListener('resize', read);
-        return () => window.removeEventListener('resize', read);
+        window.addEventListener('orientationchange', read);
+        return () => {
+            window.removeEventListener('resize', read);
+            window.removeEventListener('orientationchange', read);
+        };
     }, []);
 
-    const onlyWindowTooSmall =
-        size !== null &&
-        window.screen.width >= MIN_VIEWPORT_WIDTH &&
-        window.screen.height >= MIN_VIEWPORT_HEIGHT;
+    // Wide enough the long way round, just being held the wrong way round.
+    const onlyRotationNeeded =
+        screen !== null &&
+        Math.max(screen.w, screen.h) >= MIN_VIEWPORT_WIDTH &&
+        Math.min(screen.w, screen.h) >= MIN_VIEWPORT_HEIGHT &&
+        screen.w < screen.h;
 
     return (
         <div className="too-small">
             <div className="too-small__card glass-card">
-                <div className="too-small__icon" aria-hidden="true">💻</div>
+                <div className="too-small__icon" aria-hidden="true">
+                    {onlyRotationNeeded ? '🔄' : '💻'}
+                </div>
 
-                {onlyWindowTooSmall ? (
+                {onlyRotationNeeded ? (
                     <>
-                        <h1>Make this window a little bigger</h1>
+                        <h1>Turn your device sideways</h1>
                         <p className="too-small__lede">
-                            Your screen is fine — the browser window just needs to be larger. Maximise
-                            it and this will clear on its own.
+                            Your screen is big enough — it just needs to be landscape. Rotate it and
+                            this will clear on its own.
                         </p>
                     </>
                 ) : (
@@ -66,17 +77,17 @@ export default function TooSmallForExam() {
                             {MIN_VIEWPORT_WIDTH} × {MIN_VIEWPORT_HEIGHT} or larger
                         </dd>
                     </div>
-                    {size && (
+                    {screen && (
                         <div className="tech-req-row">
-                            <dt>This window</dt>
+                            <dt>This screen</dt>
                             <dd>
-                                {size.w} × {size.h}
+                                {screen.w} × {screen.h}
                             </dd>
                         </div>
                     )}
                 </dl>
 
-                {!onlyWindowTooSmall && (
+                {!onlyRotationNeeded && (
                     <>
                         <p className="too-small__sub">Everything you need for the exam:</p>
                         <dl className="tech-req-list">

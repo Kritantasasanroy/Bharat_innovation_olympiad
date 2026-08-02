@@ -97,12 +97,19 @@ services:
         sync: false
 
       # ── Google Drive question-image gallery ──────────────────────────────
-      # The folder must be shared "Anyone with the link — Viewer" for a plain
-      # API key to list it. Used by POST /admin/media/sync-drive.
+      # The folder must be shared "Anyone with the link — Viewer". Used by
+      # POST /admin/media/sync-drive.
+      #
+      # The API key is optional: without one the folder is listed anonymously
+      # from its own public folder page (google-drive.service.ts). Set it to use
+      # the Drive API instead, which is also the only way to list a folder that
+      # is not link-shared.
       - key: GOOGLE_DRIVE_API_KEY
         sync: false
+      # A folder id, not a secret — committed so a fresh deploy can sync the
+      # question images without anyone remembering to fill in the dashboard.
       - key: GOOGLE_DRIVE_GALLERY_FOLDER_ID
-        sync: false
+        value: 17uieaNy6KULjNjJ-47AIcIrEn_QROR52
 
       # ── Redis (optional) ─────────────────────────────────────────────────
       # Required only if TimerService uses Redis for distributed state.

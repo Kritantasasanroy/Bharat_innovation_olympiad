@@ -6,7 +6,9 @@ import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import api from '@/lib/api';
+import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
 import { MONITORED_ACTIVITIES } from '@/lib/copy/onboarding';
+import { enterFullscreen } from '@/lib/fullscreen';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -22,7 +24,7 @@ import { use, useEffect, useState } from 'react';
  */
 function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } | null) {
     return [
-        <>The exam must be taken in <strong>fullscreen mode</strong>.</>,
+        <>The exam runs in <strong>fullscreen mode</strong> — your browser goes fullscreen by itself when you start, and must stay that way.</>,
         <>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</>,
         <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
         <>Exiting fullscreen or switching tabs will pause the exam.</>,
@@ -246,8 +248,21 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
      * Leaving the modal. The rehearsal comes first when it is still owed —
      * the same trial paper gates every exam, so it is told which one it is
      * unlocking via `?next=`, and it sends the student back here afterwards.
+     *
+     * Fullscreen is requested **here**, and this is the only place it can be:
+     * the Fullscreen API needs the transient user activation from this very
+     * click, and the player's mount-time attempt has none, so it was always
+     * rejected and every student was met with a manual "Enter Fullscreen &
+     * Start" gate instead. Next.js routes without unloading the document, so
+     * the fullscreen state survives the push and the player opens already
+     * fullscreen — which is also what makes the resolution check pass, since
+     * the window is then the size of the screen.
+     *
+     * Not awaited before navigating, and never blocking: if the browser refuses,
+     * the player's own gate asks again rather than the student being stuck.
      */
     const handleProceed = () => {
+        void enterFullscreen();
         if (trialState === 'required' && trialExamId) {
             router.push(`/exams/${trialExamId}/play?next=${id}`);
             return;
@@ -285,12 +300,16 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const checks = [
         {
             label: 'Screen Resolution',
-            description: 'Minimum 800×600 display required',
+            // Said as the actual rule. It read "Minimum 800×600" while the code
+            // checked 1024×768 against the browser window, so a student on a
+            // perfectly adequate laptop was failed by a row that agreed with
+            // their screen.
+            description: `Minimum ${MIN_VIEWPORT_WIDTH}×${MIN_VIEWPORT_HEIGHT} screen — your window is sized automatically when the exam starts`,
             passed: deviceChecks.viewport,
         },
         {
             label: 'Fullscreen Support',
-            description: 'Browser must support fullscreen mode',
+            description: 'The exam opens fullscreen automatically when you start',
             passed: deviceChecks.fullscreen,
         },
         {
