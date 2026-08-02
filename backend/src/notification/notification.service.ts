@@ -187,15 +187,26 @@ export class NotificationService implements OnModuleInit {
      * roll the user's experience back over a mail problem, so failures are
      * logged for follow-up instead.
      */
-    private async deliver(to: string | null | undefined, mail: RenderedEmail): Promise<void> {
-        if (!to) return;
+    /**
+     * Reports whether the mail actually went out.
+     *
+     * Still never throws — a mail outage must not fail the business action that
+     * triggered it, which is the whole reason this wrapper exists. The boolean
+     * is for callers that record *that* a message was sent (parent consent
+     * stamps `approvalEmailSentAt` from it); everything else ignores it, and a
+     * `false` reads exactly as the old silent failure did.
+     */
+    private async deliver(to: string | null | undefined, mail: RenderedEmail): Promise<boolean> {
+        if (!to) return false;
         try {
             await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
             this.logger.log(`Sent "${mail.subject}" to ${to}`);
+            return true;
         } catch (err) {
             this.logger.error(
                 `Failed to send "${mail.subject}" to ${to}: ${(err as Error).message}`,
             );
+            return false;
         }
     }
 
@@ -242,13 +253,14 @@ export class NotificationService implements OnModuleInit {
         await this.deliver(to, resultsPublishedEmail({ firstName, examTitle, appUrl: this.appUrl }));
     }
 
+    /** Returns whether the mail was actually delivered, so the consent record can stamp it. */
     async sendParentApprovalEmail(
         to: string,
         guardianName: string,
         studentName: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         const approvalLink = `${this.appUrl}/consent`;
-        await this.deliver(
+        return this.deliver(
             to,
             parentApprovalEmail({ guardianName, studentName, approvalLink }),
         );

@@ -363,7 +363,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                           trialState === 'checking'
                               ? 'Checking…'
                               : trialState === 'done'
-                                ? 'Trial test completed — you are ready'
+                                ? 'Trial test completed — you can practise again as often as you like'
                                 : trialState === 'unavailable'
                                   ? 'The trial paper is not open yet — you can still start this exam'
                                   : 'Required — a short practice run starts when you click below',
@@ -586,6 +586,31 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                 ? 'A short trial test runs first, in the same environment as the real exam.'
                                 : 'You will be asked to confirm the exam rules before the paper opens.'}
                         </p>
+
+                        {/* The practice run, offered every time.
+                            The rehearsal is not a one-off gate to be cleared and
+                            forgotten — it is the only place a student can feel what
+                            fullscreen, the webcam and the timer are actually like,
+                            and there is no reason to allow that exactly once. It is
+                            deliberately here rather than on the dashboard: the trial
+                            is part of sitting an exam, not an exam of its own. */}
+                        {trialState === 'done' && (
+                            <button
+                                className="btn btn-secondary"
+                                style={{ marginTop: 'var(--space-3)' }}
+                                disabled={!deviceChecks.viewport || !deviceChecks.fullscreen}
+                                onClick={() => {
+                                    if (!trialExamId) return;
+                                    // Same click-gesture fullscreen entry as the real
+                                    // exam — the practice run has to be a faithful
+                                    // rehearsal or it is not rehearsing anything.
+                                    void enterFullscreen();
+                                    router.push(`/exams/${trialExamId}/play?next=${id}`);
+                                }}
+                            >
+                                🎯 Take the practice test again
+                            </button>
+                        )}
                     </div>
                 </div>
 

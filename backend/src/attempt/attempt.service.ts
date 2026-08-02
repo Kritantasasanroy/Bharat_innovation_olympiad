@@ -17,6 +17,15 @@ import { ProctorService } from '../proctor/proctor.service';
  * from their results with no explanation and no route to appeal. They are told
  * instead.
  */
+/**
+ * Slack allowed past an attempt's nominal end before the server closes it.
+ *
+ * Covers the ordinary case of a save that was already in flight when the clock
+ * ran out, on a school connection. Small enough to be worthless as extra time,
+ * large enough that nobody loses a genuine last answer.
+ */
+const EXPIRY_GRACE_MS = 30_000;
+
 const STUDENT_VISIBLE_STATUSES = [
     AttemptStatus.SUBMITTED,
     AttemptStatus.AUTO_SUBMITTED,
@@ -481,6 +490,14 @@ export class AttemptService {
         });
 
         if (existing) {
+            // Re-entering after the clock has run out closes the paper rather
+            // than reopening it. Without this, leaving the player (Back button,
+            // closed tab) stopped every timer that could have ended the attempt,
+            // and coming back handed the student a fresh sitting of the same
+            // paper — repeatedly. See {@link expireIfOverdue}.
+            if (await this.expireIfOverdue({ ...existing, examInstance: instance })) {
+                throw new BadRequestException('You have already completed this exam');
+            }
             if (existing.status === AttemptStatus.IN_PROGRESS) {
                 if (existing.items.length > 0) {
                     // Normal resume — derive questions from pre-stored items.
@@ -642,9 +659,19 @@ export class AttemptService {
 
     async saveAnswer(attemptId: string, userId: string, questionId: string, answer: any) {
         // Validate attempt belongs to user and is active
-        const attempt = await this.prisma.attempt.findUnique({ where: { id: attemptId } });
+        const attempt = await this.prisma.attempt.findUnique({
+            where: { id: attemptId },
+            include: { examInstance: { include: { exam: true } } },
+        });
         if (!attempt) throw new NotFoundException();
         if (attempt.userId !== userId) throw new ForbiddenException();
+        // The paper closes on time regardless of what the client is doing. This
+        // check used to be absent entirely: a student who left the player kept an
+        // IN_PROGRESS attempt with nothing running to end it, and could go on
+        // saving answers for as long as they liked. See {@link expireIfOverdue}.
+        if (await this.expireIfOverdue(attempt)) {
+            throw new BadRequestException('Your time for this exam is up — it has been submitted.');
+        }
         if (attempt.status !== AttemptStatus.IN_PROGRESS) {
             throw new BadRequestException('Attempt is not active');
         }
@@ -738,12 +765,22 @@ export class AttemptService {
             where: { id: attemptId },
             include: {
                 items: { include: { question: true } },
-                examInstance: true,
+                examInstance: { include: { exam: true } },
             },
         });
 
         if (!attempt) throw new NotFoundException();
         if (attempt.userId !== userId) throw new ForbiddenException();
+
+        // A submit that arrives after the deadline still ends the paper — it is
+        // scored from the same saved answers either way — so it is closed and
+        // reported as done rather than refused. Refusing would leave a student
+        // pressing Submit against an error on an attempt that is already over.
+        if (await this.expireIfOverdue(attempt)) {
+            const expired = await this.prisma.attempt.findUniqueOrThrow({ where: { id: attemptId } });
+            return { ...expired, redirectUrl: attempt.examInstance.quitUrl || undefined };
+        }
+
         if (attempt.status !== AttemptStatus.IN_PROGRESS) {
             throw new BadRequestException('Attempt is not active');
         }
@@ -796,6 +833,64 @@ export class AttemptService {
                 `Could not flag attempt ${attemptId} for review: ${(err as Error).message}`,
             );
         }
+    }
+
+    /**
+     * When an attempt's paper closes, computed from the server's own clock.
+     *
+     * `startedAt` is written once, when the attempt is genuinely created, and is
+     * never moved by a resume — so this is a fixed wall-clock deadline that
+     * leaving the page cannot push back.
+     */
+    private static deadlineOf(startedAt: Date, durationMinutes: number): Date {
+        return new Date(startedAt.getTime() + durationMinutes * 60_000 + EXPIRY_GRACE_MS);
+    }
+
+    /**
+     * Ends an attempt whose time is up, wherever we notice it.
+     *
+     * ## Why this has to exist server-side
+     *
+     * Every mechanism that used to end a paper on time lived in the browser: the
+     * countdown and the violation/pause auto-submits are React state in the
+     * player, and `TimerService` only ticks while that page holds a WebSocket
+     * open. All of them die the instant the player unmounts.
+     *
+     * So a student could start their exam, leave fullscreen, press Back before
+     * the 20-second pause elapsed, and walk away from a paper that was still
+     * `IN_PROGRESS` with nothing left running to close it. Coming back — an hour
+     * later, the next day, as many times as they liked — resumed the same
+     * attempt and `saveAnswer` accepted answers indefinitely, because it checked
+     * only that the attempt was active and never what the time was. That is one
+     * paper sat over unlimited sittings, unproctored.
+     *
+     * Called from every route that can touch a live attempt, so whichever one a
+     * student comes back through is the one that closes their paper.
+     *
+     * Returns true if the attempt was expired (and has now been submitted).
+     */
+    private async expireIfOverdue(attempt: {
+        id: string;
+        status: AttemptStatus;
+        startedAt: Date | null;
+        examInstance: { exam: { durationMinutes: number } };
+    }): Promise<boolean> {
+        if (attempt.status !== AttemptStatus.IN_PROGRESS || !attempt.startedAt) return false;
+
+        const deadline = AttemptService.deadlineOf(
+            attempt.startedAt,
+            attempt.examInstance.exam.durationMinutes,
+        );
+        if (Date.now() <= deadline.getTime()) return false;
+
+        this.logger.warn(
+            `Attempt ${attempt.id} was still in progress past its deadline (${deadline.toISOString()}) ` +
+                '— submitting it now. The student left the player before it could end itself.',
+        );
+        // Scores whatever was actually saved before the deadline and flags the
+        // attempt for review, exactly as a violation-driven ending does.
+        await this.autoSubmit(attempt.id);
+        return true;
     }
 
     async autoSubmit(attemptId: string) {

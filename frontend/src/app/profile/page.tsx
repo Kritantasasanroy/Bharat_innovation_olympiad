@@ -6,7 +6,41 @@ import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import { isValidPhone, normalizePhone, phoneOtp } from '@/lib/auth-client';
+import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
+
+/** What `GET /guardian/me` returns — see `GuardianService.status`. */
+interface GuardianStatus {
+    version: string;
+    complete: boolean;
+    profile: {
+        guardianFirstName: string;
+        guardianLastName: string;
+        relationship: string;
+        guardianEmail: string;
+        guardianPhone: string;
+        parentalConsentAt: string | null;
+        dataConsentAt: string | null;
+        approvalEmailSentAt: string | null;
+        consentVersion: string;
+    } | null;
+}
+
+function fmtDateTime(value: string | null | undefined) {
+    if (!value) return null;
+    return new Date(value).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+}
+
+function GuardianRow({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.6rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{label}</span>
+            <span style={{ fontSize: '0.9rem', textAlign: 'right', wordBreak: 'break-word' }}>{value}</span>
+        </div>
+    );
+}
 
 export default function ProfilePage() {
     const { user, updateProfile } = useAuthStore();
@@ -56,6 +90,21 @@ export default function ProfilePage() {
         api.get('/proctor/enrollment')
             .then((r) => setEnrollmentStatus(r.data.enrolled ? 'enrolled' : 'not_enrolled'))
             .catch(() => setEnrollmentStatus('not_enrolled'));
+    }, []);
+
+    /**
+     * Registration part 2 — the parent's details and when they consented.
+     *
+     * Shown read-only. A student should be able to see what was recorded about
+     * their parent and when it was agreed to, but changing a consent record from
+     * the child's own account would defeat the point of it being a parent's
+     * consent; edits go back through the guardian form.
+     */
+    const [guardian, setGuardian] = useState<GuardianStatus | null>(null);
+    useEffect(() => {
+        api.get<GuardianStatus>('/guardian/me')
+            .then((r) => setGuardian(r.data))
+            .catch(() => setGuardian(null));
     }, []);
 
     const handleOpenCamera = async () => {
@@ -343,6 +392,70 @@ export default function ProfilePage() {
                         </button>
                     </form>
                 </div>
+                {/* Parent / guardian — registration part 2, read-only */}
+                <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
+                    <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Parent / Guardian</h2>
+
+                    {!guardian?.profile ? (
+                        <>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                                A parent or guardian has to give consent before you can start any exam,
+                                including the practice paper. It takes about two minutes and only needs
+                                doing once.
+                            </p>
+                            <Link href="/guardian?next=/profile" className="btn btn-primary">
+                                Complete the parent section
+                            </Link>
+                        </>
+                    ) : (
+                        <>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                                What your parent or guardian gave us, and when they agreed. To change
+                                any of it, <Link href="/guardian?next=/profile">reopen the parent form</Link>.
+                            </p>
+
+                            <GuardianRow
+                                label="Name"
+                                value={`${guardian.profile.guardianFirstName} ${guardian.profile.guardianLastName}`.trim()}
+                            />
+                            <GuardianRow label="Relationship" value={guardian.profile.relationship} />
+                            <GuardianRow label="Email" value={guardian.profile.guardianEmail} />
+                            <GuardianRow label="Phone" value={guardian.profile.guardianPhone} />
+                            <GuardianRow
+                                label="Confirmation email sent"
+                                value={
+                                    fmtDateTime(guardian.profile.approvalEmailSentAt) ?? (
+                                        <span style={{ color: 'var(--warning-400)' }}>Not sent</span>
+                                    )
+                                }
+                            />
+                            <GuardianRow
+                                label="Parental consent accepted"
+                                value={
+                                    fmtDateTime(guardian.profile.parentalConsentAt) ?? (
+                                        <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
+                                    )
+                                }
+                            />
+                            <GuardianRow
+                                label="Data-processing consent accepted"
+                                value={
+                                    fmtDateTime(guardian.profile.dataConsentAt) ?? (
+                                        <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
+                                    )
+                                }
+                            />
+
+                            {!guardian.complete && (
+                                <p style={{ color: 'var(--warning-400)', fontSize: '0.85rem', marginTop: '1rem' }}>
+                                    Our consent wording has changed since your parent agreed, so it needs
+                                    confirming once more before your next exam.
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+
                 {/* Face Enrollment Section */}
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
                     <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Face ID for Proctoring</h2>

@@ -49,6 +49,34 @@ interface Booking {
     slot: { label: string | null; startsAt: string; endsAt: string; examInstance: { exam: { title: string } } };
 }
 
+/**
+ * Registration part 2 — the parent's own details and the consent they gave.
+ *
+ * Two timestamps matter and they are different things: `approvalEmailSentAt` is
+ * when the confirmation mail reached the parent, `parentalConsentAt` is when
+ * they accepted. A consent with no send time means the mail never went out, and
+ * that is worth being able to see rather than guess at.
+ */
+interface GuardianProfile {
+    guardianFirstName: string;
+    guardianLastName: string;
+    relationship: string;
+    guardianEmail: string;
+    guardianPhone: string;
+    studentDob: string | null;
+    gender: string | null;
+    city: string | null;
+    state: string | null;
+    idDocumentType: string | null;
+    idDocumentUrl: string | null;
+    parentalConsentAt: string | null;
+    dataConsentAt: string | null;
+    consentVersion: string;
+    approvalEmailSentAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
 interface StudentDetail {
     id: string;
     firstName: string;
@@ -60,6 +88,7 @@ interface StudentDetail {
     createdAt: string;
     faceEnrolled: boolean;
     school: { id: string; name: string; code: string; city: string; state: string } | null;
+    guardianProfile: GuardianProfile | null;
     attempts: Attempt[];
     payments: Payment[];
     bookings: Booking[];
@@ -107,6 +136,108 @@ function riskColor(score: number) {
     if (score >= 0.5) return 'var(--danger-400)';
     if (score >= 0.2) return 'var(--warning-400)';
     return 'var(--success-400)';
+}
+
+/** Date only — a date of birth with a 00:00 time on it reads as false precision. */
+function fmtDate(dateStr: string | null) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+    });
+}
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {label}
+            </p>
+            <p style={{ fontSize: '0.95rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>{value}</p>
+        </div>
+    );
+}
+
+function GuardianDetails({ guardian }: { guardian: GuardianProfile }) {
+    const name = `${guardian.guardianFirstName} ${guardian.guardianLastName}`.trim();
+
+    return (
+        <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--space-5)' }}>
+                <Field label="Name" value={name || '—'} />
+                <Field label="Relationship" value={guardian.relationship || '—'} />
+                <Field label="Email" value={<a href={`mailto:${guardian.guardianEmail}`}>{guardian.guardianEmail}</a>} />
+                <Field label="Phone" value={<a href={`tel:${guardian.guardianPhone}`}>{guardian.guardianPhone}</a>} />
+                <Field label="Student date of birth" value={fmtDate(guardian.studentDob)} />
+                <Field label="Gender" value={guardian.gender || '—'} />
+                {(guardian.city || guardian.state) && (
+                    <Field label="Location" value={[guardian.city, guardian.state].filter(Boolean).join(', ')} />
+                )}
+                <Field
+                    label="ID document"
+                    value={
+                        guardian.idDocumentUrl ? (
+                            <a href={guardian.idDocumentUrl} target="_blank" rel="noopener noreferrer">
+                                {guardian.idDocumentType || 'View document'} ↗
+                            </a>
+                        ) : (
+                            '—'
+                        )
+                    }
+                />
+            </div>
+
+            {/* The consent trail. Kept visually separate from contact details —
+                these are the timestamps that answer "was this child's parent
+                actually told, and did they actually agree". */}
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+                    gap: 'var(--space-5)',
+                    marginTop: 'var(--space-6)',
+                    paddingTop: 'var(--space-6)',
+                    borderTop: '1px solid var(--border-default)',
+                }}
+            >
+                <Field
+                    label="Confirmation email sent"
+                    value={
+                        guardian.approvalEmailSentAt ? (
+                            fmt(guardian.approvalEmailSentAt)
+                        ) : (
+                            // Not a failure of the consent — the mail is sent on a
+                            // best-effort path that never blocks submission — but it
+                            // does mean nobody wrote to this parent.
+                            <span style={{ color: 'var(--warning-400)' }}>Not sent</span>
+                        )
+                    }
+                />
+                <Field
+                    label="Parental consent accepted"
+                    value={
+                        guardian.parentalConsentAt ? (
+                            <span style={{ color: 'var(--success-400)' }}>{fmt(guardian.parentalConsentAt)}</span>
+                        ) : (
+                            <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
+                        )
+                    }
+                />
+                <Field
+                    label="Data-processing consent accepted"
+                    value={
+                        guardian.dataConsentAt ? (
+                            <span style={{ color: 'var(--success-400)' }}>{fmt(guardian.dataConsentAt)}</span>
+                        ) : (
+                            <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
+                        )
+                    }
+                />
+                <Field label="Consent wording version" value={guardian.consentVersion} />
+                <Field label="First submitted" value={fmt(guardian.createdAt)} />
+                <Field label="Last updated" value={fmt(guardian.updatedAt)} />
+            </div>
+        </>
+    );
 }
 
 export default function StudentDetailPage() {
@@ -199,6 +330,21 @@ export default function StudentDetailPage() {
                                 <p style={{ fontSize: '1.4rem', fontWeight: 700, color: s.color, marginTop: '0.2rem' }}>{s.value}</p>
                             </div>
                         ))}
+                    </div>
+                </div>
+
+                {/* Parent / guardian — registration part 2 */}
+                <div style={{ marginBottom: 'var(--space-8)' }}>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: 'var(--space-4)' }}>Parent / Guardian</h2>
+                    <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
+                        {!student.guardianProfile ? (
+                            <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                                No parent details on file. This student cannot start any exam — the
+                                consent gate refuses every attempt until registration part 2 is done.
+                            </p>
+                        ) : (
+                            <GuardianDetails guardian={student.guardianProfile} />
+                        )}
                     </div>
                 </div>
 

@@ -131,20 +131,33 @@ export class GuardianService {
             },
         });
 
-        // Send parent approval confirmation email
+        // Send parent approval confirmation email.
+        //
+        // The send time is recorded rather than assumed from `createdAt`: this
+        // is a best-effort path that never fails the consent submission, so a
+        // consent can legitimately exist with no mail behind it, and "we told
+        // the parent, at this time" is exactly the thing an admin needs to be
+        // able to answer. Only a genuine send stamps the column.
+        let sent = profile;
         if (this.notifications) {
             const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
             const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Student';
             const guardianName = `${profile.guardianFirstName} ${profile.guardianLastName}`.trim();
-            
-            await this.notifications.sendParentApprovalEmail(
+
+            const delivered = await this.notifications.sendParentApprovalEmail(
                 profile.guardianEmail,
                 guardianName,
                 studentName,
             );
+            if (delivered) {
+                sent = await this.prisma.guardianProfile.update({
+                    where: { userId },
+                    data: { approvalEmailSentAt: new Date() },
+                });
+            }
         }
 
-        return this.present(profile);
+        return this.present(sent);
     }
 
     /** What the student app reads to decide whether to prompt for part 2. */

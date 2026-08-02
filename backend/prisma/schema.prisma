@@ -107,9 +107,21 @@ model GuardianProfile {
   /// Explicit, separately-ticked consents. Both must be set for the row to be
   /// accepted — `GuardianService` rejects a partial submission rather than
   /// storing half a consent.
+  ///
+  /// `parentalConsentAt` is the moment the parent accepted: it is the legal
+  /// record, and it is deliberately NOT rewritten when they later edit a phone
+  /// number. Only a change to the consent wording (`consentVersion`) moves it.
   parentalConsentAt DateTime
   dataConsentAt     DateTime
   consentVersion    String
+  /// When the confirmation email to the parent actually left the building.
+  ///
+  /// Stamped only on a successful send, so null genuinely means "the parent was
+  /// never told", not "we tried". That distinction is the whole reason this is
+  /// stored rather than inferred from `createdAt` — the mail goes out on a
+  /// best-effort path that deliberately never fails the consent submission, so
+  /// a consent record can legitimately exist with no mail behind it.
+  approvalEmailSentAt DateTime?
   ipAddress         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

@@ -15,24 +15,33 @@ import { isStreamLive, openCamera, openCameraCount, releaseCamera } from './came
  * stopped, including one nothing is holding a reference to any more".
  */
 
+interface FakeTrack {
+    readyState: 'live' | 'ended';
+    stop: ReturnType<typeof vi.fn>;
+    addEventListener: (event: string, fn: () => void) => void;
+    /** Test-only: simulate the device ending the track by itself. */
+    fire: (event: string) => void;
+}
+
+type FakeStream = MediaStream & { tracks: FakeTrack[] };
+
 /** A MediaStream stand-in whose tracks record whether they were stopped. */
-function fakeStream(trackCount = 1) {
-    const tracks = Array.from({ length: trackCount }, () => {
+function fakeStream(trackCount = 1): FakeStream {
+    const tracks: FakeTrack[] = Array.from({ length: trackCount }, () => {
         const listeners: Record<string, (() => void)[]> = {};
-        return {
-            readyState: 'live' as 'live' | 'ended',
-            stop: vi.fn(function (this: { readyState: string }) {
-                this.readyState = 'ended';
+        const track: FakeTrack = {
+            readyState: 'live',
+            stop: vi.fn(() => {
+                track.readyState = 'ended';
             }),
-            addEventListener: (event: string, fn: () => void) => {
+            addEventListener: (event, fn) => {
                 (listeners[event] ??= []).push(fn);
             },
-            fire: (event: string) => listeners[event]?.forEach((fn) => fn()),
+            fire: (event) => listeners[event]?.forEach((fn) => fn()),
         };
+        return track;
     });
-    return { getTracks: () => tracks, tracks } as unknown as MediaStream & {
-        tracks: ReturnType<typeof Array.prototype.map>;
-    };
+    return { getTracks: () => tracks, tracks } as unknown as FakeStream;
 }
 
 const mockGetUserMedia = (streams: MediaStream[]) => {
@@ -74,9 +83,7 @@ describe('camera registry', () => {
         await openCamera({ video: true, audio: true });
         releaseCamera();
 
-        stream.tracks.forEach((t: { stop: ReturnType<typeof vi.fn> }) =>
-            expect(t.stop).toHaveBeenCalled(),
-        );
+        stream.tracks.forEach((t) => expect(t.stop).toHaveBeenCalled());
     });
 
     it('is safe to call when nothing is open — the post-exam pages call it blind', () => {
@@ -98,8 +105,8 @@ describe('camera registry', () => {
         await openCamera({ video: true });
 
         // Camera unplugged, or claimed by the OS.
-        (stream.tracks[0] as { readyState: string }).readyState = 'ended';
-        (stream.tracks[0] as unknown as { fire: (e: string) => void }).fire('ended');
+        stream.tracks[0].readyState = 'ended';
+        stream.tracks[0].fire('ended');
 
         expect(openCameraCount()).toBe(0);
     });
@@ -108,7 +115,7 @@ describe('camera registry', () => {
         const stream = fakeStream();
         expect(isStreamLive(stream)).toBe(true);
 
-        (stream.tracks[0] as { readyState: string }).readyState = 'ended';
+        stream.tracks[0].readyState = 'ended';
 
         expect(isStreamLive(stream)).toBe(false);
         expect(isStreamLive(null)).toBe(false);
