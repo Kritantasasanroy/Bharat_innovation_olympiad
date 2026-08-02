@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { isStreamLive, openCamera, releaseCamera } from '@/lib/camera';
+import {
+    faceModelsReady,
+    faceModelsWarm,
+    getFaceApi,
+    onFaceModelProgress,
+    preloadFaceModels,
+    warmUpFaceModels,
+} from '@/lib/faceModels';
 import { useProctorStore } from '@/store/proctorStore';
 
 // face-api.js is loaded dynamically to avoid SSR issues
@@ -53,8 +61,31 @@ interface UseFaceProctorOptions {
     onInstantViolation?: (type: 'MULTIPLE_FACES') => void;
 }
 
+/**
+ * Resolves once the element has decoded a frame, or gives up after `timeoutMs`.
+ *
+ * A camera that never produces a frame — permission granted then the device
+ * yanked, a virtual camera with no source — must not hold the exam shut. The
+ * timeout is the whole point: everything downstream of this treats "not warm"
+ * as slower, never as blocked.
+ */
+function waitForVideo(video: HTMLVideoElement | null, timeoutMs = 2500): Promise<void> {
+    if (!video || video.readyState >= 2) return Promise.resolve();
+    return new Promise((resolve) => {
+        const done = () => {
+            video.removeEventListener('loadeddata', done);
+            clearTimeout(timer);
+            resolve();
+        };
+        const timer = setTimeout(done, timeoutMs);
+        video.addEventListener('loadeddata', done);
+    });
+}
+
 interface FaceProctorState {
     isLoaded: boolean;
+    /** Models loaded *and* the first inference already paid for. */
+    isWarm: boolean;
     loadingProgress: string;
     currentFaceCount: number;
     isIdentityVerified: boolean | null; // null = not checked yet
@@ -119,7 +150,11 @@ export function useFaceProctor({
     const { setWebcamStream, setDeviceCheck } = useProctorStore();
 
     const [state, setState] = useState<FaceProctorState>({
-        isLoaded: false,
+        // Seeded from the module-scope loader, so a player that mounts after the
+        // instructions page has already preloaded starts out ready rather than
+        // flashing a loading banner for models that are sitting in memory.
+        isLoaded: faceModelsReady(),
+        isWarm: faceModelsWarm(),
         loadingProgress: '',
         currentFaceCount: 0,
         isIdentityVerified: null,
@@ -149,30 +184,35 @@ export function useFaceProctor({
         [attemptId],
     );
 
+    /**
+     * Delegates to the shared module-scope loader.
+     *
+     * This used to own the load itself, guarded by `faceApiRef` — a per-hook-
+     * instance ref, so /profile enrollment, the instructions page and the player
+     * each re-fetched and re-parsed 6.3 MB of weights. It also displayed a
+     * countdown that was pure theatre: it ticked 6→1 on a `setInterval` with no
+     * connection to how the download was actually going, so it hit "1s" and sat
+     * there. Progress now comes from the loader and reflects real bytes.
+     */
     const loadModels = useCallback(async () => {
-        if (faceApiRef.current) return; // already loaded
+        if (faceModelsReady()) {
+            faceApiRef.current = getFaceApi();
+            setState((s) => (s.isLoaded ? s : { ...s, loadingProgress: '', isLoaded: true }));
+            return;
+        }
 
-        let countdown = 6;
-        setState((s) => ({ ...s, loadingProgress: `Loading AI models... (${countdown}s)` }));
-
-        const timer = setInterval(() => {
-            countdown = Math.max(1, countdown - 1);
-            setState((s) => ({ ...s, loadingProgress: `Loading AI models... (${countdown}s)` }));
-        }, 1000);
+        const unsubscribe = onFaceModelProgress(({ ratio, label }) => {
+            setState((s) => ({
+                ...s,
+                loadingProgress: `${label} (${Math.round(ratio * 100)}%)`,
+            }));
+        });
 
         try {
-            const faceapi = await import('face-api.js');
-            faceApiRef.current = faceapi;
-
-            const MODEL_URL = '/models';
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-            ]);
+            faceApiRef.current = await preloadFaceModels();
         } finally {
-            clearInterval(timer);
-            setState((s) => ({ ...s, loadingProgress: '', isLoaded: true }));
+            unsubscribe();
+            setState((s) => ({ ...s, loadingProgress: '', isLoaded: faceModelsReady() }));
         }
     }, []);
 
@@ -350,6 +390,15 @@ export function useFaceProctor({
         await loadModels();
         await startCamera();
         await fetchEnrolledDescriptor();
+
+        // Pay the shader-compilation cost here, before the first scheduled
+        // detection lands on a student who is already reading question one.
+        // `waitForVideo` matters: the stream is live but the element may not
+        // have decoded a frame yet, and warming up against readyState < 2 is a
+        // no-op that leaves the stall exactly where it was.
+        await waitForVideo(videoElementRef.current);
+        await warmUpFaceModels(videoElementRef.current);
+        setState((s) => (s.isWarm ? s : { ...s, isWarm: true }));
 
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(() => {

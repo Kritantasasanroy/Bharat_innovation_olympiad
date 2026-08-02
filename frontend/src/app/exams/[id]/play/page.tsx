@@ -1,16 +1,43 @@
 'use client';
 
+import AutoSubmitNotice, { type AutoSubmitState } from '@/components/exam/AutoSubmitNotice';
+import ExamPreparingOverlay from '@/components/exam/ExamPreparingOverlay';
+import ViolationBanner from '@/components/exam/ViolationBanner';
 import AuthGuard from '@/components/layout/AuthGuard';
 import MascotToast from '@/components/MascotToast';
+import { useExamLockdown, type BlockedAction } from '@/hooks/useExamLockdown';
 import { useExamSession } from '@/hooks/useExamSession';
 import { useFaceProctor, NO_FACE_SUSTAIN_MS, LOOKING_AWAY_SUSTAIN_MS, FACE_MISMATCH_SUSTAIN_MS } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
 import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
+import {
+    isAttemptAlreadyFinished,
+    submitErrorMessage,
+    violationConsequence,
+    violationCopy,
+    type AutoSubmitCause,
+    type ViolationKind,
+} from '@/lib/examIntegrity';
 import { cueIsWorthShowing, MascotCue, nextMascotCue } from '@/lib/mascot';
 import { useAuthStore } from '@/store/authStore';
+import { useProctorStore } from '@/store/proctorStore';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+/** Seconds the exam is paused before it submits itself. Shared with the copy. */
+const PAUSE_TIMEOUT_SEC = 20;
+const MAX_VIOLATIONS = 3;
+
+/** What a blocked (not breached) lockdown action tells the student. */
+const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
+    reload: 'Reloading is disabled during the exam. Use the ↻ Reload button in the header if the page looks wrong — it keeps your answers and your timer.',
+    back: 'The browser Back button is disabled during the exam. You cannot leave this page until you submit.',
+    print: 'Printing the exam is not allowed. This attempt has been recorded.',
+    capture: 'Screenshots are not allowed during the exam. This attempt has been recorded.',
+    devtools: 'Developer tools are disabled during the exam.',
+    copy: 'Copying exam content is not allowed.',
+};
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -165,6 +192,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+    const [showReloadConfirm, setShowReloadConfirm] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     /**
@@ -184,7 +212,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const isTrialRun = Boolean(exam?.isTrial) || Boolean(nextExamId);
 
     const attemptId = attempt?.id || '';
-    const { remaining } = useTimer(attemptId);
+    const { remaining, isExpired } = useTimer(attemptId);
 
     // Latest-ref for submit so the auto-submit callback (registered once with
     // empty deps in the fullscreen hook) always calls the freshest version.
@@ -206,11 +234,13 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const stopProctoringRef = useRef<(() => void) | null>(null);
     const clearViolationStorageRef = useRef<() => void>(() => {});
 
+    const releaseLockdownRef = useRef<() => void>(() => {});
+
     /**
-     * Ends the exam without the student's involvement — the pause timeout or
-     * the third violation.
+     * Ends the exam without the student's involvement — time expiry, the pause
+     * timeout, the final violation, or a lockdown breach.
      *
-     * Three things this has to get right, all of which it previously got wrong:
+     * Four things this has to get right, all of which it previously got wrong:
      *
      *  1. **Never leave the student stranded.** A failed submit used to be
      *     swallowed into `console.error` with `isSubmitting` stuck at `true`.
@@ -219,53 +249,108 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
      *     in front of a paper that would not end and showed no error. Failures
      *     now retry once, then surface a manual "Submit now" control.
      *
-     *  2. **Say something on screen.** `alert()` is a blocking dialog, and
-     *     browsers throttle or suppress it (Chrome hides repeats, and it can
-     *     drop fullscreen, which fires yet another violation). The state below
-     *     drives a real overlay instead.
+     *  2. **Say something on screen, and say *why*.** `alert()` is a blocking
+     *     dialog that browsers throttle or suppress, and it can drop fullscreen —
+     *     firing yet another violation. `cause` drives a real overlay that names
+     *     the reason (see {@link AutoSubmitNotice}).
      *
-     *  3. **Still navigate on a hard failure.** If the server has already
+     *  3. **Do not navigate out from under the explanation.** The redirect is
+     *     parked in `pendingRedirectRef` and only followed once the student
+     *     acknowledges the notice, or the notice times out. On a fast connection
+     *     the old code replaced the page inside a second, so the reason was never
+     *     readable — which is exactly why an auto-submit read as a crash.
+     *
+     *  4. **Still navigate on a hard failure.** If the server has already
      *     recorded the submission, the client's error is cosmetic — leaving the
      *     student on the paper is worse than moving them on.
      */
-    const [autoSubmit, setAutoSubmit] = useState<
-        { reason: string; status: 'submitting' | 'failed'; error?: string } | null
-    >(null);
+    const [autoSubmit, setAutoSubmit] = useState<AutoSubmitState | null>(null);
+    const pendingRedirectRef = useRef<string>('/results');
 
-    const runAutoSubmit = async (reason: string, isRetry = false) => {
-        if (isSubmitting && !isRetry) return;
-        setIsSubmitting(true);
-        setAutoSubmit({ reason, status: 'submitting' });
+    /**
+     * Stage one: announce the ending.
+     *
+     * The paper is frozen here — the notice overlay covers the viewport, so no
+     * answer can be changed — but nothing has been sent yet. This exists purely
+     * so the exam does not vanish mid-question with no explanation, which is how
+     * an auto-submit reads when it fires instantly.
+     */
+    const beginAutoSubmit = (cause: AutoSubmitCause, violation?: ViolationKind) => {
+        if (autoSubmit || isSubmitting) return;
+        setAutoSubmit({ cause, violation, status: 'warning' });
         stopProctoringRef.current?.();
         clearViolationStorageRef.current();
+        // The paper is over: stop the exit guards fighting the redirect we are
+        // about to make, and clear the re-entry marker so a lock cannot outlive
+        // the attempt it belongs to.
+        releaseLockdownRef.current();
+    };
+
+    /** Stage two: actually submit. Reached by the countdown or "Submit now". */
+    const runAutoSubmit = async (
+        cause: AutoSubmitCause,
+        violation?: ViolationKind,
+        isRetry = false,
+    ) => {
+        if (isSubmitting && !isRetry) return;
+        setIsSubmitting(true);
+        setAutoSubmit({ cause, violation, status: 'submitting' });
+
+        const finish = async (redirectUrl?: string) => {
+            pendingRedirectRef.current = await destinationRef.current(redirectUrl);
+            setAutoSubmit({ cause, violation, status: 'done' });
+        };
 
         try {
             const result = await submitExamRef.current();
-            window.location.href = await destinationRef.current(result?.redirectUrl);
+            await finish(result?.redirectUrl);
         } catch (err) {
+            // The attempt is already finished — the server closed it first,
+            // which is what happens when the clock ran out (`expireIfOverdue`)
+            // or an earlier auto-submit landed. From the student's side that is
+            // a success: their answers are scored and stored. Reporting it as
+            // "Could not submit automatically — status code 400" was alarming
+            // and simply untrue, and left them pressing Submit against a paper
+            // that had already been submitted.
+            if (isAttemptAlreadyFinished(err)) {
+                await finish(undefined);
+                return;
+            }
             console.error('Auto-submit failed:', err);
             // One automatic retry — the common cause is a transient network
             // blip on a school connection, not a rejected submission.
             try {
                 const result = await submitExamRef.current();
-                window.location.href = await destinationRef.current(result?.redirectUrl);
+                await finish(result?.redirectUrl);
                 return;
             } catch (retryErr) {
+                if (isAttemptAlreadyFinished(retryErr)) {
+                    await finish(undefined);
+                    return;
+                }
                 console.error('Auto-submit retry failed:', retryErr);
                 setIsSubmitting(false); // let the student trigger it themselves
                 setAutoSubmit({
-                    reason,
+                    cause,
+                    violation,
                     status: 'failed',
-                    error: (retryErr as Error)?.message || 'Could not reach the server.',
+                    error: submitErrorMessage(retryErr),
                 });
             }
         }
     };
 
-    const handleAutoSubmit = (reason: string) => { void runAutoSubmit(reason); };
+    const handleAutoSubmit = (
+        cause: 'max_violations' | 'paused_too_long',
+        violation?: ViolationKind,
+    ) => { beginAutoSubmit(cause, violation); };
+
+    const continueAfterAutoSubmit = useCallback(() => {
+        window.location.href = pendingRedirectRef.current;
+    }, []);
 
     const {
-        isFullscreen, violationCount, isGated, lastError, maxViolations, pauseDeadline,
+        isFullscreen, violationCount, isGated, lastError, lastViolation, maxViolations, pauseDeadline,
         requestFullscreen, reportExternalViolation,
     } = useFullscreenMonitor({
         onViolation: async (type, count) => {
@@ -278,6 +363,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 const backendType =
                     type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN'
                     : type === 'tab_switch'     ? 'TAB_SWITCH'
+                    // A screenshot or print attempt. SCREEN_CAPTURE already
+                    // carries the right severity (5) in the proctor service.
+                    : type === 'screen_capture' ? 'SCREEN_CAPTURE'
                     :                              'WINDOW_BLUR';
                 await api.post('/proctor/events', {
                     attemptId,
@@ -287,8 +375,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             } catch { /* best-effort */ }
         },
         onAutoSubmit: handleAutoSubmit,
-        maxViolations: 3,
-        pauseTimeoutSec: 20,
+        maxViolations: MAX_VIOLATIONS,
+        pauseTimeoutSec: PAUSE_TIMEOUT_SEC,
     });
 
     // The student's own grade, for the "Grade N Olympiad" label on the paper.
@@ -297,6 +385,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const {
         videoRef,
         isLoaded: faceModelsLoaded,
+        isWarm: faceModelsWarm,
         loadingProgress,
         currentFaceCount,
         isIdentityVerified,
@@ -314,6 +403,68 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     });
 
     useEffect(() => { stopProctoringRef.current = stopProctoring; });
+
+    /**
+     * The "getting your exam ready" gate.
+     *
+     * Held until proctoring is genuinely running, rather than handing over a
+     * paper that stutters while 6.3 MB of models download and TensorFlow
+     * compiles its shaders underneath it. See {@link ExamPreparingOverlay} —
+     * it opens the exam anyway after {@link PREPARE_MAX_SECONDS}, so none of
+     * these steps can strand a student.
+     *
+     * Skipped entirely on a resumed paper: the models are already warm by then,
+     * and making someone who reloaded sit through a preparation screen for work
+     * that is already done is just another delay on their clock.
+     */
+    const [isPrepared, setIsPrepared] = useState(false);
+    const webcamStream = useProctorStore((s) => s.webcamStream);
+    const prepareSteps = useMemo(() => [
+        { key: 'paper', label: 'Loading your question paper', done: questions.length > 0 },
+        { key: 'camera', label: 'Starting your camera', done: Boolean(webcamStream) },
+        { key: 'models', label: 'Loading AI proctoring', done: faceModelsLoaded },
+        { key: 'warm', label: 'Warming up face detection', done: faceModelsWarm },
+    ], [questions.length, webcamStream, faceModelsLoaded, faceModelsWarm]);
+
+    const markPrepared = useCallback(() => setIsPrepared(true), []);
+    // Owned here, not in the overlay — see the `startedAt` prop's note.
+    const prepareStartedAtRef = useRef(Date.now());
+
+    // ── Browser lockdown: back, reload, screenshots ─────────────────────────
+    /** A blocked action's explanation, shown as a transient notice. */
+    const [blockedNotice, setBlockedNotice] = useState<{ action: BlockedAction; at: number } | null>(null);
+
+    const { isMasked, reload: reloadExam, release: releaseLockdown } = useExamLockdown({
+        attemptId,
+        // Never during the trial run: the rehearsal exists so a student can find
+        // out what the rules feel like, and locking their practice paper for
+        // pressing Back teaches them nothing except to be afraid of the button.
+        enabled: Boolean(attemptId) && !isTrialRun && !autoSubmit,
+        onBreach: (breach) => {
+            void api.post('/proctor/events', {
+                attemptId,
+                // No dedicated enum member for this; SEB_VIOLATION is the
+                // "secure environment was broken out of" bucket and already
+                // carries severity 5. The specific cause is in `details`.
+                type: 'SEB_VIOLATION',
+                details: { source: `navigation_${breach}`, violationCount },
+            }).catch(() => { /* best-effort */ });
+            beginAutoSubmit('navigation');
+        },
+        onBlocked: (action) => setBlockedNotice({ action, at: Date.now() }),
+        // A capture attempt is a real violation, not just a blocked keystroke —
+        // it costs a strike and is posted as SCREEN_CAPTURE for review.
+        onCaptureAttempt: () => reportExternalViolation('screen_capture'),
+    });
+    useEffect(() => { releaseLockdownRef.current = releaseLockdown; }, [releaseLockdown]);
+
+    // Blocked-action notices are informational and self-clear; violations do not.
+    useEffect(() => {
+        if (!blockedNotice) return;
+        const t = setTimeout(() => setBlockedNotice(null), 6000);
+        return () => clearTimeout(t);
+    }, [blockedNotice]);
+
 
     // Live "now" tick so the face/gaze popup countdowns re-render every 0.5s.
     const [nowTick, setNowTick] = useState(() => Date.now());
@@ -366,6 +517,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
+    // The violation banner is dismissed per *episode*, not per kind: leaving
+    // fullscreen twice must warn twice. `at` is the episode's identity.
+    const [dismissedViolationAt, setDismissedViolationAt] = useState<number | null>(null);
+    const visibleViolation =
+        lastViolation && lastViolation.at !== dismissedViolationAt && !lastViolation.isFinal
+            ? lastViolation
+            : null;
+
     /**
      * Mid-exam encouragement at 20 and 40 minutes.
      *
@@ -384,6 +543,27 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (remaining > 0) setTimerReady(true);
     }, [remaining]);
+
+    /**
+     * Time's up.
+     *
+     * The server has always closed an overdue attempt (`expireIfOverdue` /
+     * `autoSubmit` in AttemptService), and the timer socket has always emitted
+     * `exam-expired` — but nothing on this page listened. A student who ran out
+     * the clock watched the timer sit at 00:00 with the paper still on screen
+     * and no indication that anything had happened, then found their attempt
+     * already submitted when they finally pressed Submit. This closes the loop
+     * on the client and, more to the point, tells them why.
+     *
+     * `timerReady` is what keeps this from firing on the very first render,
+     * where `remaining` is 0 only because no tick has arrived yet.
+     */
+    useEffect(() => {
+        if (!attemptId || autoSubmit || isSubmitting) return;
+        if (isExpired || (timerReady && remaining <= 0)) {
+            beginAutoSubmit('time_up');
+        }
+    }, [isExpired, timerReady, remaining, attemptId, autoSubmit, isSubmitting]);
 
     const [firedCueIds, setFiredCueIds] = useState<ReadonlySet<string>>(() => new Set());
     const [activeCue, setActiveCue] = useState<MascotCue | null>(null);
@@ -484,6 +664,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         setIsSubmitting(true);
         stopProctoring();
         clearViolationStorage();
+        // Deliberate exit — drop the beforeunload prompt and the re-entry
+        // marker, or the student's own Submit would trip the lockdown.
+        releaseLockdown();
         try {
             const result = await submitExam();
             window.location.href = await destinationAfterSubmit(result?.redirectUrl);
@@ -581,6 +764,39 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         );
     }
 
+    /**
+     * The paper is over and the student has arrived back at it anyway — almost
+     * always the browser Back button, from the feedback or results page.
+     *
+     * The server has always refused this (`startAttempt` throws once the attempt
+     * is no longer IN_PROGRESS, so no second sitting was ever possible), but the
+     * refusal landed in the generic handler below under the heading "Failed to
+     * Load Exam" — which reads as a bug in the site rather than the rule working,
+     * and is exactly what makes students try again. Say plainly that it is
+     * closed, and why.
+     */
+    if (error && /already completed/i.test(error)) {
+        return (
+            <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '520px' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
+                    <h2 style={{ marginBottom: '1rem' }}>This exam is closed</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        You have already sat this paper. An exam can only be attempted once, so it
+                        cannot be reopened — going back to this page will not start it again.
+                    </p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                        Your answers were saved and submitted. Your result will appear under Results
+                        once marking is complete.
+                    </p>
+                    <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/results'}>
+                        Go to My Results
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (error) {
         return (
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
@@ -595,20 +811,31 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         );
     }
 
+    // Questions are not here yet. Same screen as the readiness gate below rather
+    // than a bare spinner, so the student sees one continuous "getting ready"
+    // step list instead of a naked spinner that swaps for a different screen the
+    // moment the paper lands.
     if (!currentQuestion) {
-        return (
-            <div className="loading-container">
-                <div className="spinner" />
-            </div>
-        );
+        return <ExamPreparingOverlay steps={prepareSteps} startedAt={prepareStartedAtRef.current} onReady={markPrepared} />;
     }
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <div className="exam-player">
 
-                {/* ── face-api.js model loading banner — shown only during first load (~3s) ── */}
-                {!faceModelsLoaded && loadingProgress && (
+                {/* ── "Getting your exam ready" ──
+                    Covers the paper until proctoring is actually running, so the
+                    student never meets a question through a page that is
+                    stuttering under a model download. Always ends — by readiness
+                    or by its own ceiling. */}
+                {!isPrepared && !autoSubmit && (
+                    <ExamPreparingOverlay steps={prepareSteps} startedAt={prepareStartedAtRef.current} onReady={markPrepared} />
+                )}
+
+                {/* ── face-api.js model loading banner ──
+                    Only ever seen if the models were still loading when the
+                    preparing screen hit its ceiling. */}
+                {isPrepared && !faceModelsLoaded && loadingProgress && (
                     <div style={{
                         position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9998,
                         background: 'rgba(14,165,233,0.10)', borderBottom: '1px solid rgba(14,165,233,0.25)',
@@ -631,6 +858,38 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         remainingSeconds={remaining}
                         onDismiss={dismissCue}
                     />
+                )}
+
+                {/* ── Violation warning ──
+                    The titled explanation the counter alone never gave. Shown for
+                    every non-final violation; the final one is handled by the
+                    terminal notice instead, which supersedes it. */}
+                {visibleViolation && (
+                    <ViolationBanner
+                        kind={visibleViolation.kind}
+                        count={visibleViolation.count}
+                        max={maxViolations}
+                        onDismiss={() => setDismissedViolationAt(visibleViolation.at)}
+                    />
+                )}
+
+                {/* ── Blocked action notice ──
+                    Something the lockdown stopped before it took effect (Back,
+                    F5, right-click). No strike was taken — nothing was gained by
+                    it — so this explains rather than warns. */}
+                {blockedNotice && (
+                    <div className="exam-blocked-notice" role="status">
+                        <span className="exam-blocked-notice__icon" aria-hidden="true">🔒</span>
+                        <span>{BLOCKED_ACTION_COPY[blockedNotice.action]}</span>
+                        <button
+                            type="button"
+                            onClick={() => setBlockedNotice(null)}
+                            aria-label="Dismiss"
+                            className="exam-blocked-notice__close"
+                        >
+                            ✕
+                        </button>
+                    </div>
                 )}
 
                 {/* ── Face-check popup — center-screen, dismissed via OK button ── */}
@@ -656,7 +915,22 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Auto-submit Overlay ──
+                {/* ── Screen-capture mask ──
+                    Above everything. A screenshot already taken cannot be
+                    recalled, but every one after it captures this instead of the
+                    paper, and the student is told the attempt was recorded. */}
+                {isMasked && (
+                    <div className="exam-capture-mask" role="alert">
+                        <div className="exam-capture-mask__icon" aria-hidden="true">📷</div>
+                        <h2>Screen capture is not allowed</h2>
+                        <p>
+                            Screenshots, screen recordings and printing are not permitted during the
+                            exam. This attempt has been recorded and counted as a violation.
+                        </p>
+                    </div>
+                )}
+
+                {/* ── Auto-submit / lock notice ──
                     Sits above the fullscreen gate (higher z-index) because it is
                     terminal: once the exam is ending, the "re-enter fullscreen"
                     affordance underneath is no longer the right thing to offer.
@@ -664,58 +938,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     nowhere else — which is what made "3 violations doesn't submit"
                     look like the counter was broken. */}
                 {autoSubmit && (
-                    <div style={{
-                        position: 'fixed', inset: 0, zIndex: 10000,
-                        backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-                    }}>
-                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '460px', width: '100%' }}>
-                            {autoSubmit.status === 'submitting' ? (
-                                <>
-                                    <div className="spinner" style={{ margin: '0 auto 1.25rem' }} />
-                                    <h2 style={{ marginBottom: '0.75rem' }}>Submitting your exam…</h2>
-                                    <p style={{ color: 'var(--text-secondary)' }}>{autoSubmit.reason}.</p>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '1rem' }}>
-                                        Please do not close this window. Your answers were saved as you went.
-                                    </p>
-                                </>
-                            ) : (
-                                <>
-                                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>⚠️</div>
-                                    <h2 style={{ marginBottom: '0.75rem' }}>Could not submit automatically</h2>
-                                    <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                        {autoSubmit.reason}, but the submission did not go through.
-                                    </p>
-                                    <p style={{
-                                        color: 'var(--danger-400)', fontSize: '0.8rem',
-                                        padding: '0.5rem', background: 'rgba(239,68,68,0.08)', borderRadius: '6px',
-                                    }}>
-                                        {autoSubmit.error}
-                                    </p>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0' }}>
-                                        Every answer you gave is already saved on the server. Check your
-                                        connection and submit again.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        className="btn btn-primary"
-                                        style={{ width: '100%', padding: '0.85rem', fontSize: '1rem' }}
-                                        onClick={() => void runAutoSubmit(autoSubmit.reason, true)}
-                                    >
-                                        ↻ Submit now
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        style={{ width: '100%', padding: '0.7rem', marginTop: '0.5rem' }}
-                                        onClick={() => { window.location.href = '/results'; }}
-                                    >
-                                        Leave and check my results
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                    <AutoSubmitNotice
+                        state={autoSubmit}
+                        maxViolations={maxViolations}
+                        pauseSeconds={PAUSE_TIMEOUT_SEC}
+                        onRetry={() => void runAutoSubmit(autoSubmit.cause, autoSubmit.violation, true)}
+                        onContinue={continueAfterAutoSubmit}
+                        onWarningElapsed={() => void runAutoSubmit(autoSubmit.cause, autoSubmit.violation)}
+                    />
                 )}
 
                 {/* ── Fullscreen Gate Overlay ──
@@ -730,16 +960,30 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     }}>
                         <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '460px', width: '90%' }}>
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🖥️</div>
+                            {/* The gate now names the rule that was broken rather
+                                than saying "Violation 2 of 3" and leaving the
+                                student to guess which of six rules they hit. */}
                             <h2 style={{ marginBottom: '0.75rem' }}>
-                                {violationCount === 0 ? 'Fullscreen Required' : isFullscreen ? 'Exam Paused' : 'Return to Fullscreen'}
+                                {violationCount === 0
+                                    ? 'Fullscreen Required'
+                                    : lastViolation
+                                        ? violationCopy(lastViolation.kind).title
+                                        : isFullscreen ? 'Exam Paused' : 'Return to Fullscreen'}
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                                 {violationCount === 0
                                     ? 'This exam must be taken in fullscreen mode. Click below to begin — your camera will activate automatically.'
-                                    : isFullscreen
-                                        ? `Violation ${violationCount} of ${maxViolations} recorded. Click below to resume your exam.`
-                                        : `Violation ${violationCount} of ${maxViolations} — re-enter fullscreen to continue your exam.`}
+                                    : lastViolation
+                                        ? violationCopy(lastViolation.kind).what
+                                        : isFullscreen
+                                            ? 'Your exam is paused. Click below to resume.'
+                                            : 'Re-enter fullscreen to continue your exam.'}
                             </p>
+                            {violationCount > 0 && (
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                                    {violationConsequence(violationCount, maxViolations)}
+                                </p>
+                            )}
                             {/* A live countdown, not a static sentence. The old copy
                                 promised an auto-submit "within 20 seconds" with nothing
                                 ticking, which reads exactly like a timer that is not
@@ -755,11 +999,6 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             {violationCount > 0 && pauseSecondsLeft === null && (
                                 <p style={{ color: 'var(--danger-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
                                     Exam will auto-submit if fullscreen is not restored in time.
-                                </p>
-                            )}
-                            {violationCount >= maxViolations - 1 && violationCount < maxViolations && (
-                                <p style={{ color: 'var(--warning-400)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                                    ⚠️ One more violation will auto-submit your exam.
                                 </p>
                             )}
                             {lastError && (
@@ -847,15 +1086,44 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             {showViolationInfo && (
                                 <div style={{
                                     position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', zIndex: 100,
-                                    width: '260px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                                    width: '320px', maxHeight: '60vh', overflowY: 'auto',
+                                    background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
                                     borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
                                     fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5,
                                 }}>
-                                    Violations are recorded when exam integrity rules are broken — for example leaving fullscreen, switching tabs, or camera/face issues.
-                                    After {maxViolations} violations, your exam will be automatically submitted. Please follow all on-screen instructions carefully throughout the exam.
+                                    <strong style={{ color: 'var(--text-primary)' }}>What counts as a violation</strong>
+                                    <ul style={{ margin: '0.5rem 0 0.5rem 1rem', padding: 0 }}>
+                                        <li>Leaving fullscreen, or switching tabs, windows or apps</li>
+                                        <li>No face, more than one face, or a face that is not yours on camera</li>
+                                        <li>Looking away from the screen for several seconds</li>
+                                        <li>Taking a screenshot, or printing the paper</li>
+                                    </ul>
+                                    Each one shows a warning explaining what happened. After {maxViolations} violations your exam
+                                    is submitted automatically and cannot be reopened.
+                                    <br /><br />
+                                    <strong style={{ color: 'var(--text-primary)' }}>Ends the exam immediately</strong>
+                                    <br />
+                                    Reloading the page or using the browser Back button. Use the ↻ Reload
+                                    button above if you need to refresh.
                                 </div>
                             )}
                         </div>
+                        {/* The only sanctioned way to refresh the paper.
+                            F5, Ctrl+R and the browser's own reload button all end
+                            the exam now, so there has to be one route that does
+                            not — a stuck image or a dropped socket is a real
+                            reason to reload and must not cost a student their
+                            olympiad. It keeps the attempt, the answers and the
+                            server-side timer; only the page is rebuilt. */}
+                        <button
+                            type="button"
+                            className="exam-reload-btn"
+                            onClick={() => setShowReloadConfirm(true)}
+                            disabled={isSubmitting}
+                            title="Reload the exam page safely — your answers and timer are kept"
+                        >
+                            ↻ Reload
+                        </button>
                         <div className={`timer-display ${timerClass}`}>
                             ⏱ {formatTime(remaining)}
                         </div>
@@ -1050,6 +1318,35 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         Submit Exam
                     </button>
                 </aside>
+
+                {/* ── Safe Reload Modal ──
+                    Confirmed rather than instant, because a reload drops the
+                    student back through the fullscreen gate and the camera
+                    warm-up, which is disorienting mid-paper if it was a misclick. */}
+                {showReloadConfirm && (
+                    <div className="modal-overlay">
+                        <div className="modal glass-card">
+                            <h2>Reload the exam page?</h2>
+                            <p>
+                                Use this if the page looks wrong — a question image that will not
+                                load, or a timer that has stopped moving.
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                                Your answers and your remaining time are kept — the timer runs on our
+                                server, not in this page. You will be asked to re-enter fullscreen and
+                                your camera will restart.
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--warning-400)', marginTop: '8px' }}>
+                                This is the only safe way to reload. Pressing F5 or your browser&apos;s
+                                reload button will end and lock your exam.
+                            </p>
+                            <div className="modal-actions">
+                                <button className="btn btn-secondary" onClick={() => setShowReloadConfirm(false)}>Go Back</button>
+                                <button className="btn btn-primary" onClick={reloadExam}>Reload safely</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Submit Confirmation Modal ── */}
                 {showSubmitConfirm && (

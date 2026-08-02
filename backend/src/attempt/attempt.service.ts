@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { AttemptStatus, BookingStatus, QuestionType } from '@prisma/client';
+import { AttemptStatus, BookingStatus, ProctorEventType, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
@@ -499,6 +499,33 @@ export class AttemptService {
                 throw new BadRequestException('You have already completed this exam');
             }
             if (existing.status === AttemptStatus.IN_PROGRESS) {
+                // Re-entering a paper that is already running.
+                //
+                // The player calls this endpoint exactly once, on mount, so
+                // reaching here at all means the student left the exam page and
+                // came back: a reload, the Back button, a reopened tab, or a
+                // second device. The client-side lockdown ends the paper for the
+                // first two, but it lives in sessionStorage and therefore cannot
+                // see a closed tab or another machine — this can, because it is
+                // the one chokepoint every route back into a live attempt has to
+                // pass through.
+                //
+                // Recorded rather than punished, deliberately. A genuine crash on
+                // a school connection looks identical from here, and ending a
+                // paying student's olympiad on that guess is the worse mistake.
+                // The event carries severity 5, so a re-entry lands the attempt
+                // in the human review queue with the count attached.
+                await this.proctorService
+                    .createEvent(existing.id, ProctorEventType.SEB_VIOLATION, {
+                        source: 'attempt_resumed',
+                        ipAddress,
+                        resumedAt: now.toISOString(),
+                    })
+                    .catch((err) =>
+                        // Never block a legitimate resume on the audit trail.
+                        this.logger.error(`Could not record resume of attempt ${existing.id}: ${err}`),
+                    );
+
                 if (existing.items.length > 0) {
                     // Normal resume — derive questions from pre-stored items.
                     // AttemptItem carries no section, so re-attach it or the

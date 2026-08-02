@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import {
+    autoSubmitCopy,
+    isAttemptAlreadyFinished,
+    submitErrorMessage,
+    violationConsequence,
+    violationCopy,
+    type AutoSubmitCause,
+    type ViolationKind,
+} from './examIntegrity';
+
+/** Shapes an axios-style rejection the way `api` actually produces one. */
+const httpError = (status: number, message?: string) => ({
+    message: `Request failed with status code ${status}`,
+    response: { status, data: message === undefined ? {} : { message } },
+});
+
+const ALL_KINDS: ViolationKind[] = [
+    'exit_fullscreen',
+    'tab_switch',
+    'window_blur',
+    'no_face',
+    'looking_away',
+    'face_mismatch',
+    'multiple_faces',
+    'screen_capture',
+];
+
+const ALL_CAUSES: AutoSubmitCause[] = [
+    'time_up',
+    'max_violations',
+    'paused_too_long',
+    'navigation',
+];
+
+describe('violationCopy', () => {
+    it('names, explains and gives a fix for every violation kind', () => {
+        for (const kind of ALL_KINDS) {
+            const copy = violationCopy(kind);
+            expect(copy.title, kind).toBeTruthy();
+            expect(copy.what, kind).toBeTruthy();
+            expect(copy.fix, kind).toBeTruthy();
+            // The generic fallback means a kind was added without copy — which
+            // would put "An exam integrity rule was broken" on screen instead of
+            // the rule's actual name.
+            expect(copy.title, kind).not.toBe('Exam rule broken');
+        }
+    });
+
+    it('falls back rather than throwing on an unknown kind', () => {
+        expect(violationCopy('nonsense' as ViolationKind).title).toBe('Exam rule broken');
+    });
+});
+
+describe('violationConsequence', () => {
+    it('warns explicitly when one violation remains', () => {
+        expect(violationConsequence(2, 3)).toContain('One more');
+    });
+
+    it('states the paper is over on the final violation', () => {
+        expect(violationConsequence(3, 3)).toContain('final violation');
+    });
+
+    it('does not promise "one more" when two or more remain', () => {
+        expect(violationConsequence(1, 3)).not.toContain('One more');
+    });
+
+    // A count past the maximum can arrive if two violations land in the same
+    // tick; it must still read as terminal, not as negative headroom.
+    it('treats an overshoot as terminal', () => {
+        expect(violationConsequence(4, 3)).toContain('final violation');
+    });
+});
+
+describe('isAttemptAlreadyFinished', () => {
+    // The exact strings AttemptService throws. A student whose clock ran out
+    // hits the first one; a second auto-submit landing after the first hits it
+    // too. Neither is a failure — the paper is scored and stored.
+    it('recognises a submit refused because the attempt is over', () => {
+        expect(isAttemptAlreadyFinished(httpError(400, 'Attempt is not active'))).toBe(true);
+        expect(isAttemptAlreadyFinished(httpError(400, 'You have already completed this exam'))).toBe(true);
+    });
+
+    it('does not swallow a genuine failure', () => {
+        expect(isAttemptAlreadyFinished(httpError(400, 'Answer is malformed'))).toBe(false);
+        expect(isAttemptAlreadyFinished(httpError(401, 'Unauthorized'))).toBe(false);
+        expect(isAttemptAlreadyFinished(httpError(500, 'Internal server error'))).toBe(false);
+        expect(isAttemptAlreadyFinished(new Error('Network Error'))).toBe(false);
+        expect(isAttemptAlreadyFinished(undefined)).toBe(false);
+    });
+
+    // A 500 that happens to mention the phrase is still a real outage; the
+    // status check is what keeps this from hiding one.
+    it('requires the status, not just the wording', () => {
+        expect(isAttemptAlreadyFinished(httpError(500, 'Attempt is not active'))).toBe(false);
+    });
+});
+
+describe('submitErrorMessage', () => {
+    it('prefers the server message over the axios boilerplate', () => {
+        expect(submitErrorMessage(httpError(400, 'Attempt is not active')))
+            .toBe('Attempt is not active');
+    });
+
+    it('falls back to the error message, then to something readable', () => {
+        expect(submitErrorMessage(new Error('Network Error'))).toBe('Network Error');
+        expect(submitErrorMessage({})).toBe('Could not reach the server.');
+    });
+});
+
+describe('autoSubmitCopy', () => {
+    it('gives a title, a reason and a detail for every cause', () => {
+        for (const cause of ALL_CAUSES) {
+            const copy = autoSubmitCopy(cause);
+            expect(copy.title, cause).toBeTruthy();
+            expect(copy.reason, cause).toBeTruthy();
+            expect(copy.detail, cause).toBeTruthy();
+        }
+    });
+
+    it('names the rule that ended the paper when one is known', () => {
+        const copy = autoSubmitCopy('max_violations', {
+            maxViolations: 3,
+            violation: 'tab_switch',
+        });
+        expect(copy.reason).toContain(violationCopy('tab_switch').title);
+    });
+
+    it('still explains itself when the rule is not known', () => {
+        const copy = autoSubmitCopy('max_violations', { maxViolations: 3 });
+        expect(copy.reason).toContain('3');
+        expect(copy.reason).toBeTruthy();
+    });
+
+    it('uses the configured pause timeout rather than a hard-coded one', () => {
+        expect(autoSubmitCopy('paused_too_long', { pauseSeconds: 45 }).reason).toContain('45');
+    });
+
+    // Every auto-submit must reassure the student their saved answers counted —
+    // this is the single most common thing they panic about.
+    it('confirms saved answers were counted, whatever the cause', () => {
+        for (const cause of ALL_CAUSES) {
+            expect(autoSubmitCopy(cause).detail.toLowerCase(), cause).toContain('saved');
+        }
+    });
+});

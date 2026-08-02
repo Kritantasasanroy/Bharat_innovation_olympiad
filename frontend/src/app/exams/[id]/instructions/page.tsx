@@ -8,6 +8,7 @@ import { useFaceProctor } from '@/hooks/useFaceProctor';
 import api from '@/lib/api';
 import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
 import { MONITORED_ACTIVITIES } from '@/lib/copy/onboarding';
+import { preloadFaceModels } from '@/lib/faceModels';
 import { enterFullscreen } from '@/lib/fullscreen';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
@@ -29,7 +30,18 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
         <>Exiting fullscreen or switching tabs will pause the exam.</>,
         <>If paused for more than 20 seconds, the exam will auto-submit.</>,
-        <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, or camera/face issues. After 3 violations, the exam auto-submits.</>,
+        <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, camera/face issues, or taking a screenshot. Each one shows an on-screen warning explaining what happened. After 3 violations, the exam auto-submits.</>,
+        // Stated here because it is the one rule that ends the paper without a
+        // warning first, and a student must not meet it for the first time by
+        // accidentally pressing F5. The in-exam ↻ Reload button is named so they
+        // know there is a safe alternative.
+        <>
+            <strong>Do not reload the page or use your browser&apos;s Back button.</strong> An exam
+            may only be sat once, in one continuous sitting — doing either will submit and{' '}
+            <strong>permanently lock</strong> your paper. If you need to refresh, use the{' '}
+            <strong>↻ Reload</strong> button inside the exam, which keeps your answers and your timer.
+        </>,
+        <>Screenshots, screen recordings and printing are not allowed, and are recorded for review.</>,
         ...(exam?.sectionCount && exam.sectionCount > 1
             ? [
                   <>
@@ -243,6 +255,27 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
             handleStartWebcam();
         }
     }, [deviceChecks.webcam]);
+
+    /**
+     * Pull the face-api models down while the student reads the rules.
+     *
+     * This is the actual fix for the exam feeling laggy in its first seconds.
+     * The models are 6.3 MB and used to be fetched inside the player, on the
+     * exam clock, with the paper already interactive — so the student got
+     * question one and then several seconds of a page that stuttered under the
+     * download and the WebGL shader compilation that follows it.
+     *
+     * Here the same work costs nothing: there is no timer running, and reading
+     * the rules and ticking the acknowledgement takes far longer than the load.
+     * Next.js routes to the player client-side without tearing down the JS
+     * context, so the weights are still in memory when it mounts.
+     *
+     * Fire-and-forget by design. A failure is not worth blocking the page over —
+     * the player retries, and the preparing screen there has its own ceiling.
+     */
+    useEffect(() => {
+        void preloadFaceModels().catch(() => { /* player will retry */ });
+    }, []);
 
     /**
      * Leaving the modal. The rehearsal comes first when it is still owed —

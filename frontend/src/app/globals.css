@@ -717,6 +717,466 @@ h4 {
   grid-template-rows: auto 1fr;
   height: 100vh;
   overflow: hidden;
+
+  /* The paper is not selectable, draggable or copyable. Blocking Ctrl+C in JS
+     handles the keyboard; this handles the mouse. Inputs opt back in below. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.exam-player input,
+.exam-player textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.exam-player img,
+.exam-player .question-media {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* ── "Getting your exam ready" ──
+   Sits below the fullscreen gate (9999) deliberately: if the browser still
+   needs a click to go fullscreen, that click must not be covered by a progress
+   screen the student cannot dismiss. */
+.exam-preparing {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.exam-preparing__card {
+  width: min(440px, 100%);
+  text-align: center;
+}
+
+.exam-preparing__ring {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto var(--space-5);
+  border-radius: 50%;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--primary-400);
+  animation: spin 1.1s linear infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exam-preparing__count {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  /* Counter-rotate so the number stays upright inside the spinning ring. */
+  animation: spin 1.1s linear infinite reverse;
+}
+
+.exam-preparing__title {
+  font-size: 1.25rem;
+  margin-bottom: var(--space-2);
+}
+
+.exam-preparing__sub {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-5);
+}
+
+.exam-preparing__bar {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-5);
+}
+
+.exam-preparing__bar-fill {
+  height: 100%;
+  background: var(--gradient-brand);
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+.exam-preparing__steps {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.exam-preparing__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.exam-preparing__step.is-done { color: var(--text-primary); }
+
+.exam-preparing__step-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.exam-preparing__step.is-done .exam-preparing__step-icon {
+  background: var(--success-500, #22c55e);
+  color: #fff;
+}
+
+.exam-preparing__note {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* The spinning ring is decoration; a student who has asked for less motion
+   still needs the countdown and the step list, which carry the actual meaning. */
+@media (prefers-reduced-motion: reduce) {
+  .exam-preparing__ring,
+  .exam-preparing__count {
+    animation: none;
+  }
+  .exam-preparing__bar-fill { transition: none; }
+}
+
+/* ── Screen capture / print blocking ──
+   A browser cannot stop the operating system taking a screenshot, so this is
+   deterrence and evidence rather than prevention: the capture is detected, the
+   paper is masked so the *next* one is worthless, and a SCREEN_CAPTURE proctor
+   event goes on the attempt for human review. Printing, which the page CAN
+   control, is blocked outright. */
+.exam-capture-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: #000;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-8);
+}
+
+.exam-capture-mask__icon { font-size: 3rem; }
+.exam-capture-mask h2 { font-size: 1.25rem; }
+.exam-capture-mask p { max-width: 460px; color: rgba(255, 255, 255, 0.75); font-size: 0.9rem; }
+
+@media print {
+  /* Printing an exam paper is a screenshot with a paper trail. The whole
+     document is replaced rather than merely hidden, so "Print to PDF" cannot
+     recover the questions from the print stylesheet's leftovers. */
+  body * { display: none !important; }
+  body::after {
+    content: 'Bharat Innovation Olympiad — exam papers cannot be printed. This attempt has been recorded.';
+    display: block !important;
+    font-family: sans-serif;
+    font-size: 14pt;
+    padding: 2cm;
+    text-align: center;
+  }
+}
+
+/* ── Violation warning banner ──
+   Drops from under the header. Titled, explained, and dismissed only by the
+   student — an integrity warning that fades on a timer is one a student who was
+   mid-question never saw. */
+.violation-banner {
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9995;
+  width: min(680px, calc(100vw - 2rem));
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-left: 4px solid var(--warning-400);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  animation: violation-banner-in 0.25s ease-out;
+}
+
+.violation-banner--last-chance {
+  border-color: rgba(239, 68, 68, 0.5);
+  border-left-color: var(--danger-400);
+}
+
+@keyframes violation-banner-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.violation-banner__icon { font-size: 1.5rem; line-height: 1.2; flex-shrink: 0; }
+.violation-banner__body { flex: 1; min-width: 0; }
+
+.violation-banner__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.violation-banner__title {
+  font-size: 1rem;
+  color: var(--warning-400);
+}
+
+.violation-banner--last-chance .violation-banner__title { color: var(--danger-400); }
+
+.violation-banner__count {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.violation-banner__what,
+.violation-banner__fix,
+.violation-banner__consequence {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.violation-banner__consequence {
+  margin-bottom: 0;
+  font-weight: 600;
+  color: var(--warning-400);
+}
+
+.violation-banner__consequence.is-critical { color: var(--danger-400); }
+
+.violation-banner__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: var(--space-1);
+  line-height: 1;
+}
+
+.violation-banner__close:hover { color: var(--text-primary); }
+
+/* ── Blocked-action notice ──
+   For things the lockdown stopped *before* they took effect. No strike was
+   taken, so this is quieter than a violation banner and self-dismisses. */
+.exam-blocked-notice {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9994;
+  width: min(560px, calc(100vw - 2rem));
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  animation: violation-banner-in 0.2s ease-out;
+}
+
+.exam-blocked-notice__icon { flex-shrink: 0; }
+
+.exam-blocked-notice__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 0 0 var(--space-2);
+  line-height: 1;
+}
+
+/* ── In-header safe reload ── */
+.exam-reload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.exam-reload-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--primary-400);
+}
+
+.exam-reload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Terminal notice (auto-submit / lock) ──
+   Deliberately the highest-priority surface in the player: whatever else is on
+   screen, the reason the exam ended has to be the thing the student reads. */
+.exam-terminal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.exam-terminal-card {
+  text-align: center;
+  padding: var(--space-8);
+  max-width: 520px;
+  width: 100%;
+
+  /* Opaque, overriding .glass-card deliberately.
+     `--glass-bg` is translucent — rgba(255,255,255,0.8) in the light theme —
+     so on this overlay's near-black scrim the card rendered as mid-grey while
+     its text kept the light theme's colours. `--text-muted` (#999) on that grey
+     was genuinely unreadable, which is no way to deliver the one screen that
+     explains why a student's exam ended. */
+  background: var(--bg-secondary);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border-default);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+/* This card never moves — it is not a hoverable surface, and lifting the
+   "your exam has ended" panel on mouseover reads as an invitation to click it. */
+.exam-terminal-card:hover {
+  transform: none;
+  border-color: var(--border-default);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.exam-terminal-icon { font-size: 3rem; margin-bottom: var(--space-3); }
+
+.exam-terminal-title {
+  font-size: 1.35rem;
+  margin-bottom: var(--space-4);
+}
+
+.exam-terminal-reason {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: var(--space-4);
+}
+
+.exam-terminal-detail {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-bottom: var(--space-5);
+}
+
+.exam-terminal-error {
+  color: var(--danger-400);
+  font-size: 0.8rem;
+  padding: var(--space-2) var(--space-3);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: var(--space-4);
+  word-break: break-word;
+}
+
+.exam-terminal-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-4);
+}
+
+.exam-terminal-action {
+  width: 100%;
+  padding: var(--space-3);
+  font-size: 1rem;
+}
+
+.exam-terminal-action--secondary { margin-top: var(--space-2); font-size: 0.9rem; }
+
+/* --text-muted is a decorative grey that fails contrast on the card behind it.
+   Nothing on this panel is decorative, so the quietest text here is still
+   --text-secondary. */
+.exam-terminal-fineprint {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin-top: var(--space-3);
+}
+
+/* ── Pre-submit warning ──
+   The countdown shown *before* the paper is submitted, so the ending is
+   announced rather than simply happening. */
+.exam-terminal-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md, 8px);
+}
+
+.exam-terminal-countdown__number {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--danger-400);
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-terminal-countdown__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .exam-header {

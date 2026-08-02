@@ -1,12 +1,30 @@
 'use client';
 
+import type { ViolationKind } from '@/lib/examIntegrity';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type ViolationType = 'exit_fullscreen' | 'tab_switch' | 'window_blur' | 'no_face' | 'looking_away' | 'face_mismatch' | 'multiple_faces';
+type ViolationType = ViolationKind;
+
+/**
+ * The violation the student is currently being told about.
+ *
+ * `at` is the identity of the *episode*, not decoration: the banner uses it to
+ * tell a fresh violation of the same kind from one the student has already
+ * dismissed, so dismissing "you left fullscreen" once does not silence the
+ * next one.
+ */
+export interface LastViolation {
+  kind: ViolationType;
+  count: number;
+  at: number;
+  /** True when this violation is the one that ended the paper. */
+  isFinal: boolean;
+}
 
 interface FullscreenMonitorOptions {
   onViolation?: (type: ViolationType, count: number) => void;
-  onAutoSubmit?: (reason: string) => void;
+  /** `cause` drives the on-screen explanation; `violation` names the rule, when there was one. */
+  onAutoSubmit?: (cause: 'max_violations' | 'paused_too_long', violation?: ViolationType) => void;
   maxViolations?: number;
   pauseTimeoutSec?: number;
 }
@@ -87,6 +105,8 @@ export function useFullscreenMonitor({
   const [lastError, setLastError] = useState<string | null>(null);
   /** Epoch ms at which the pause auto-submit fires, or null when not paused. */
   const [pauseDeadline, setPauseDeadline] = useState<number | null>(null);
+  /** Drives the titled warning banner — see {@link LastViolation}. */
+  const [lastViolation, setLastViolation] = useState<LastViolation | null>(null);
 
   const onViolationRef = useRef(onViolation);
   const onAutoSubmitRef = useRef(onAutoSubmit);
@@ -132,7 +152,7 @@ export function useFullscreenMonitor({
     setPauseDeadline(Date.now() + pauseTimeoutSec * 1000);
     timerRef.current = setTimeout(() => {
       setPauseDeadline(null);
-      onAutoSubmitRef.current?.(`Exam paused for more than ${pauseTimeoutSec} seconds`);
+      onAutoSubmitRef.current?.('paused_too_long');
     }, pauseTimeoutSec * 1000);
   };
 
@@ -152,6 +172,7 @@ export function useFullscreenMonitor({
     const count = violationCountRef.current;
     setViolationCount(count);
     writeStoredViolations(count);
+    setLastViolation({ kind: type, count, at: Date.now(), isFinal: count >= maxViolations });
     onViolationRef.current?.(type, count);
 
     // Gate FIRST, in every case. On the final violation this used to return
@@ -167,7 +188,7 @@ export function useFullscreenMonitor({
       // owns the submit and renders its own progress/failure state.
       clearTimer();
       setPauseDeadline(null);
-      onAutoSubmitRef.current?.(`Maximum violations reached (${maxViolations})`);
+      onAutoSubmitRef.current?.('max_violations', type);
       return;
     }
 
@@ -187,10 +208,11 @@ export function useFullscreenMonitor({
     const count = violationCountRef.current;
     setViolationCount(count);
     writeStoredViolations(count);
+    setLastViolation({ kind: type, count, at: Date.now(), isFinal: count >= maxViolations });
     onViolationRef.current?.(type, count);
 
     if (count >= maxViolations) {
-      onAutoSubmitRef.current?.(`Maximum violations reached (${maxViolations})`);
+      onAutoSubmitRef.current?.('max_violations', type);
     }
   }, [maxViolations]);
 
@@ -313,6 +335,7 @@ export function useFullscreenMonitor({
     violationCount,
     isGated,
     lastError,
+    lastViolation,
     maxViolations,
     pauseDeadline,
     requestFullscreen,
