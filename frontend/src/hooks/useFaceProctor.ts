@@ -420,6 +420,31 @@ export function useFaceProctor({
         await startCamera();
     }, [loadModels, startCamera]);
 
+    /**
+     * Everything `startProctoring` does except the parts that need an attempt.
+     *
+     * The point is *when* it can run: models, camera and the shader warm-up have
+     * no dependency on an attempt existing, so the player does all of it before
+     * calling `/start`. That matters because the server stamps `startedAt` the
+     * moment the attempt is created — so any preparation done after that comes
+     * straight out of the student's exam time. Several seconds of setup were
+     * being billed to a paper the student could not yet see.
+     *
+     * Never rejects. Preparation that fails is a slower exam, not a blocked one;
+     * `startProctoring` retries all of it once the attempt exists.
+     */
+    const prepareProctoring = useCallback(async () => {
+        try {
+            await loadModels();
+            await startCamera();
+            await waitForVideo(videoElementRef.current);
+            await warmUpFaceModels(videoElementRef.current);
+            setState((s) => (s.isWarm ? s : { ...s, isWarm: true }));
+        } catch {
+            // Best-effort — startProctoring will try again with the attempt.
+        }
+    }, [loadModels, startCamera]);
+
     const stopProctoring = useCallback(() => {
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -485,6 +510,7 @@ export function useFaceProctor({
         videoRef,
         ...state,
         startProctoring,
+        prepareProctoring,
         startEnrollmentCamera,
         stopProctoring,
         enrollFace,

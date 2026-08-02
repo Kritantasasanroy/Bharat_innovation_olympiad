@@ -233,6 +233,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // populated once useFaceProctor is called further down.
     const stopProctoringRef = useRef<(() => void) | null>(null);
     const clearViolationStorageRef = useRef<() => void>(() => {});
+    const suspendViolationsRef = useRef<() => void>(() => {});
 
     const releaseLockdownRef = useRef<() => void>(() => {});
 
@@ -278,6 +279,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const beginAutoSubmit = (cause: AutoSubmitCause, violation?: ViolationKind) => {
         if (autoSubmit || isSubmitting) return;
         setAutoSubmit({ cause, violation, status: 'warning' });
+        // The paper is ending. Leaving the page drops fullscreen, and that must
+        // not be charged to the student on their way out.
+        suspendViolationsRef.current();
         stopProctoringRef.current?.();
         clearViolationStorageRef.current();
         // The paper is over: stop the exit guards fighting the redirect we are
@@ -351,7 +355,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const {
         isFullscreen, violationCount, isGated, lastError, lastViolation, maxViolations, pauseDeadline,
-        requestFullscreen, reportExternalViolation,
+        requestFullscreen, reportExternalViolation, suspendViolations,
     } = useFullscreenMonitor({
         onViolation: async (type, count) => {
             if (!attemptId) return;
@@ -393,6 +397,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         awaySince,
         mismatchSince,
         startProctoring,
+        prepareProctoring,
         stopProctoring,
     } = useFaceProctor({
         attemptId,
@@ -403,6 +408,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     });
 
     useEffect(() => { stopProctoringRef.current = stopProctoring; });
+    useEffect(() => { suspendViolationsRef.current = suspendViolations; }, [suspendViolations]);
 
     /**
      * The "getting your exam ready" gate.
@@ -420,11 +426,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [isPrepared, setIsPrepared] = useState(false);
     const webcamStream = useProctorStore((s) => s.webcamStream);
     const prepareSteps = useMemo(() => [
-        { key: 'paper', label: 'Loading your question paper', done: questions.length > 0 },
         { key: 'camera', label: 'Starting your camera', done: Boolean(webcamStream) },
         { key: 'models', label: 'Loading AI proctoring', done: faceModelsLoaded },
         { key: 'warm', label: 'Warming up face detection', done: faceModelsWarm },
-    ], [questions.length, webcamStream, faceModelsLoaded, faceModelsWarm]);
+    ], [webcamStream, faceModelsLoaded, faceModelsWarm]);
 
     const markPrepared = useCallback(() => setIsPrepared(true), []);
     // Owned here, not in the overlay — see the `startedAt` prop's note.
@@ -586,10 +591,30 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const dismissCue = useCallback(() => setActiveCue(null), []);
 
-    // Start the exam once on mount.
+    /**
+     * Phase 1 — get proctoring ready, before there is an attempt to bill it to.
+     *
+     * None of this needs an attempt: the models, the camera and the WebGL
+     * warm-up are all client-side. Doing them first is the whole fix for "the
+     * timer starts before the exam does" — the server stamps `startedAt` when
+     * the attempt is created, so anything done after that is charged to the
+     * student's paper whether they can see it or not.
+     */
     useEffect(() => {
-        startExam().catch(err => console.warn('Exam init warning:', err));
+        void prepareProctoring();
     }, []);
+
+    /**
+     * Phase 2 — create the attempt, which is what actually starts the clock.
+     *
+     * Gated on the preparing screen letting go, either because everything is
+     * ready or because it hit its own ceiling. Nothing before this point costs
+     * the student a second of exam time.
+     */
+    useEffect(() => {
+        if (!isPrepared) return;
+        startExam().catch(err => console.warn('Exam init warning:', err));
+    }, [isPrepared]);
 
     // Start face-api.js proctoring only once the real attemptId is available.
     // (attemptId is '' during the initial render, before startExam() resolves —
@@ -662,6 +687,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
+        // Same reason as the reload button: navigating away drops fullscreen,
+        // and a student pressing Submit must not be charged a violation for it.
+        suspendViolations();
         stopProctoring();
         clearViolationStorage();
         // Deliberate exit — drop the beforeunload prompt and the re-entry
@@ -797,13 +825,46 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         );
     }
 
+    /**
+     * Anything else that stopped the paper loading.
+     *
+     * Most of what lands here is a dropped connection — a school Wi-Fi blip, or
+     * the backend restarting — and the only thing offered was "Go to Dashboard",
+     * which abandons an attempt that is very probably fine. Retrying is the
+     * obvious first move and is now the primary action; it re-runs `startExam`,
+     * which resumes the existing attempt rather than starting a new one.
+     */
     if (error) {
+        const looksTransient = /network|timeout|failed to fetch|econn/i.test(error);
         return (
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
-                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '500px' }}>
-                    <h2 style={{ color: 'var(--danger-400)', marginBottom: '1rem' }}>Failed to Load Exam</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>{error}</p>
-                    <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/dashboard'}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '520px' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>{looksTransient ? '📡' : '⚠️'}</div>
+                    <h2 style={{ marginBottom: '1rem' }}>
+                        {looksTransient ? 'Could not reach the exam server' : 'Failed to load exam'}
+                    </h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        {looksTransient
+                            ? 'This is almost always a brief internet problem. Your exam has not been lost — check your connection and try again.'
+                            : error}
+                    </p>
+                    {looksTransient && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.75rem' }}>
+                            {error}
+                        </p>
+                    )}
+                    <button
+                        className="btn btn-primary"
+                        style={{ marginTop: '1.5rem', width: '100%' }}
+                        onClick={() => { void startExam().catch(() => { /* error state re-renders */ }); }}
+                    >
+                        ↻ Try again
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ marginTop: '0.5rem', width: '100%' }}
+                        onClick={() => window.location.href = '/dashboard'}
+                    >
                         Go to Dashboard
                     </button>
                 </div>
@@ -816,26 +877,29 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // step list instead of a naked spinner that swaps for a different screen the
     // moment the paper lands.
     if (!currentQuestion) {
-        return <ExamPreparingOverlay steps={prepareSteps} startedAt={prepareStartedAtRef.current} onReady={markPrepared} />;
+        return (
+            <ExamPreparingOverlay
+                steps={prepareSteps}
+                startedAt={prepareStartedAtRef.current}
+                // Once preparation is done, the attempt is being created and the
+                // clock genuinely has started — so stop showing a countdown.
+                phase={isPrepared ? 'starting' : 'preparing'}
+                onReady={markPrepared}
+            />
+        );
     }
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <div className="exam-player">
 
-                {/* ── "Getting your exam ready" ──
-                    Covers the paper until proctoring is actually running, so the
-                    student never meets a question through a page that is
-                    stuttering under a model download. Always ends — by readiness
-                    or by its own ceiling. */}
-                {!isPrepared && !autoSubmit && (
-                    <ExamPreparingOverlay steps={prepareSteps} startedAt={prepareStartedAtRef.current} onReady={markPrepared} />
-                )}
-
                 {/* ── face-api.js model loading banner ──
                     Only ever seen if the models were still loading when the
-                    preparing screen hit its ceiling. */}
-                {isPrepared && !faceModelsLoaded && loadingProgress && (
+                    preparing screen hit its ceiling. The full "getting ready"
+                    screen lives in the `!currentQuestion` branch above: the
+                    paper cannot exist before preparation finishes now, because
+                    preparation is what triggers the attempt being created. */}
+                {!faceModelsLoaded && loadingProgress && (
                     <div style={{
                         position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9998,
                         background: 'rgba(14,165,233,0.10)', borderBottom: '1px solid rgba(14,165,233,0.25)',
@@ -1342,7 +1406,20 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </p>
                             <div className="modal-actions">
                                 <button className="btn btn-secondary" onClick={() => setShowReloadConfirm(false)}>Go Back</button>
-                                <button className="btn btn-primary" onClick={reloadExam}>Reload safely</button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={() => {
+                                        // Reloading tears the document down, which drops
+                                        // fullscreen, which fires `fullscreenchange` exactly
+                                        // like a student pressing Escape. That was being
+                                        // counted — so the safe reload we told them to use
+                                        // handed them a fresh page reading "1 / 3".
+                                        suspendViolations();
+                                        reloadExam();
+                                    }}
+                                >
+                                    Reload safely
+                                </button>
                             </div>
                         </div>
                     </div>

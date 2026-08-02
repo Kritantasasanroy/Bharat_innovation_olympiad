@@ -38,9 +38,19 @@ export interface PrepareStep {
 export default function ExamPreparingOverlay({
     steps,
     startedAt,
+    phase = 'preparing',
     onReady,
 }: {
     steps: PrepareStep[];
+    /**
+     * `preparing` — camera, models and warm-up, all before the attempt exists
+     * and therefore before the exam clock starts.
+     *
+     * `starting` — the attempt is being created. The countdown is gone here
+     * because this phase genuinely is on the clock, and showing a timer would
+     * imply the student can wait it out. It is one API call.
+     */
+    phase?: 'preparing' | 'starting';
     /**
      * Epoch ms the preparation began, owned by the player rather than by this
      * component. It is rendered from two different places — the branch where
@@ -66,8 +76,9 @@ export default function ExamPreparingOverlay({
 
     // Two independent exits: everything finished, or the ceiling was reached.
     useEffect(() => {
+        if (phase !== 'preparing') return;
         if (allDone || elapsed >= PREPARE_MAX_SECONDS) onReadyRef.current();
-    }, [allDone, elapsed]);
+    }, [phase, allDone, elapsed]);
 
     const secondsLeft = Math.max(0, Math.ceil(PREPARE_MAX_SECONDS - elapsed));
 
@@ -81,6 +92,20 @@ export default function ExamPreparingOverlay({
     const timeRatio = Math.min(1, elapsed / PREPARE_MAX_SECONDS);
     const percent = Math.round(Math.min(100, Math.max(stepRatio, timeRatio * 0.9) * 100));
 
+    if (phase === 'starting') {
+        return (
+            <div className="exam-preparing" role="status" aria-live="polite">
+                <div className="exam-preparing__card">
+                    <div className="exam-preparing__ring" aria-hidden="true" />
+                    <h2 className="exam-preparing__title">Starting your exam…</h2>
+                    <p className="exam-preparing__sub">
+                        Everything is set up. Fetching your question paper now.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="exam-preparing" role="status" aria-live="polite">
             <div className="exam-preparing__card">
@@ -90,8 +115,8 @@ export default function ExamPreparingOverlay({
 
                 <h2 className="exam-preparing__title">Getting your exam ready</h2>
                 <p className="exam-preparing__sub">
-                    Setting up proctoring and loading your paper. This takes a few seconds and only
-                    happens once — the exam will run smoothly afterwards.
+                    Setting up your camera and proctoring before the paper opens. Your exam timer has
+                    not started yet — it starts when your questions appear.
                 </p>
 
                 <div className="exam-preparing__bar" aria-hidden="true">
@@ -113,8 +138,8 @@ export default function ExamPreparingOverlay({
                 </ul>
 
                 <p className="exam-preparing__note">
-                    Your exam timer is already running, so this screen never lasts longer than{' '}
-                    {PREPARE_MAX_SECONDS} seconds.
+                    This screen never lasts longer than {PREPARE_MAX_SECONDS} seconds, and none of
+                    it comes out of your exam time.
                 </p>
             </div>
         </div>

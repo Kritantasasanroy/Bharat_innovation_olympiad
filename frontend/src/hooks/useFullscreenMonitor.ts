@@ -117,6 +117,27 @@ export function useFullscreenMonitor({
   const violationCountRef = useRef<number>(readStoredViolations());
   const isGatedRef = useRef(true);
 
+  /**
+   * Stops counting violations, permanently, for the rest of this page's life.
+   *
+   * Leaving the exam page *deliberately* — the in-page Reload button, a manual
+   * submit, an auto-submit — tears the document down, and tearing the document
+   * down exits fullscreen, which fires `fullscreenchange` like any other exit.
+   * That was charged to the student as a violation and, worse, written into
+   * `sessionStorage`, so the reload they were invited to perform handed them a
+   * fresh page already showing "1 / 3". The one safe way to refresh was the one
+   * that punished them for it.
+   *
+   * A ref, not state: the fullscreenchange this has to beat fires in the same
+   * tick as the navigation, long before React would re-render.
+   */
+  const suspendedRef = useRef(false);
+  const suspendViolations = useCallback(() => {
+    suspendedRef.current = true;
+    clearTimer();
+    setPauseDeadline(null);
+  }, []);
+
   // Suppress blur briefly after requesting fullscreen to avoid spurious events
   const ignoreBlurRef = useRef(false);
   const ignoreBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,6 +183,7 @@ export function useFullscreenMonitor({
    * physical keypress are all ignored after the first one wins.
    */
   const registerViolation = (type: ViolationType) => {
+    if (suspendedRef.current) return; // deliberate exit — not the student's doing
     if (isGatedRef.current) return; // already gated — skip
 
     // CRITICAL: try to acquire the lock synchronously.
@@ -204,6 +226,7 @@ export function useFullscreenMonitor({
    * fullscreen-recovery overlay, so the student can keep answering.
    */
   const reportExternalViolation = useCallback((type: ViolationType) => {
+    if (suspendedRef.current) return;
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolationCount(count);
@@ -340,5 +363,6 @@ export function useFullscreenMonitor({
     pauseDeadline,
     requestFullscreen,
     reportExternalViolation,
+    suspendViolations,
   };
 }

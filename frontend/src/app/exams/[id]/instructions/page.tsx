@@ -42,6 +42,22 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
             <strong>↻ Reload</strong> button inside the exam, which keeps your answers and your timer.
         </>,
         <>Screenshots, screen recordings and printing are not allowed, and are recorded for review.</>,
+        // The two things students most often mistake for the site failing. Both
+        // are cases where the correct advice is "do nothing and carry on", and a
+        // student who has not been told that will reload — which now ends their
+        // paper. Explaining it here is what makes that rule survivable.
+        <>
+            <strong>A brief internet drop will not cost you time.</strong> Your timer runs on our
+            servers, not in the page, so it keeps perfect time even if your connection stutters or
+            the countdown freezes for a moment. It reconnects on its own — keep answering and do
+            not reload.
+        </>,
+        <>
+            <strong>Before you start, the exam takes a few seconds to get ready.</strong> You will
+            see a &ldquo;Getting your exam ready&rdquo; screen while your camera and the AI proctoring
+            load. <strong>Your exam time does not start until your questions appear</strong>, so
+            none of that setup comes out of your paper.
+        </>,
         ...(exam?.sectionCount && exam.sectionCount > 1
             ? [
                   <>
