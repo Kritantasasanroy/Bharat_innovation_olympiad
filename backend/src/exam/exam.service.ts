@@ -238,7 +238,30 @@ export class ExamService {
         });
     }
 
+    /**
+     * One exam with its whole paper.
+     *
+     * `userId` is what marks this as the **student-facing** read (the controller
+     * passes it only for `role === 'STUDENT'`), and it does more than seed the
+     * shuffle: it decides which columns are read at all. See `explanation` in
+     * the select below.
+     */
     async findExamById(id: string, userId?: string) {
+        /**
+         * `explanation` routinely states the correct answer in prose, so a
+         * student read must not include it — and must not merely delete it from
+         * the response afterwards, since anything the query returns has already
+         * been assembled and is one refactor away from being serialised.
+         *
+         * `AttemptService.QUESTION_SELECT` was fixed for exactly this and this
+         * second path was missed: the instructions page fetches `/exams/:id`
+         * before the paper starts, so every explanation for all 50 questions was
+         * sitting in the network tab of anyone about to sit the exam. It is
+         * served to students only by `getStudentReport`, and only once the
+         * answer key has been published.
+         */
+        const isStudentRead = Boolean(userId);
+
         const exam = await this.prisma.exam.findUnique({
             where: { id },
             include: {
@@ -267,7 +290,8 @@ export class ExamService {
                                         imageUrl: true,
                                         videoUrl: true,
                                         tags: true,
-                                        explanation: true,
+                                        // Admin reads only — see `isStudentRead`.
+                                        explanation: !isStudentRead,
                                         // Olympiad-format fields the student is
                                         // meant to see. Authoring-only columns
                                         // (learningObjective, competency,
