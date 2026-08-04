@@ -168,6 +168,16 @@ export default function LoginPage() {
 
                 {step === 'identifier' ? (
                     <form onSubmit={handleSendOtp} className="auth-form">
+                        {/* TEMPORARILY DISABLED — Mobile sign-in.
+                            Phone sign-in depends on OTP delivery (SMS is off via
+                            SMS_OTP_ENABLED; voice is the fallback), and it's being
+                            hidden from the login page for now rather than left
+                            visible while that's sorted out. `method` defaults to
+                            'email' and nothing below can switch it away from that
+                            with this tablist gone, so the whole isPhone branch
+                            further down is unreachable but left intact.
+                            To restore: uncomment this block. */}
+                        {/*
                         <div
                             role="tablist"
                             aria-label="Sign-in method"
@@ -196,6 +206,7 @@ export default function LoginPage() {
                                 </button>
                             ))}
                         </div>
+                        */}
 
                         {isPhone ? (
                             <div className="input-group">
