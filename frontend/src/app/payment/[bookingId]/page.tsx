@@ -4,7 +4,7 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import api from '@/lib/api';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 
 declare global {
     interface Window {
@@ -55,27 +55,32 @@ export default function PaymentPage({ params }: { params: Promise<{ bookingId: s
     const [couponResult, setCouponResult] = useState<{ valid: boolean; discountPct?: number; reason?: string } | null>(null);
     const [finalAmount, setFinalAmount] = useState<number>(0);
     const [error, setError] = useState('');
+    // Kept separate from `error`: this one means the booking itself never
+    // loaded, so there is no fee, no summary and nothing for the Pay button
+    // to act on — it needs its own retry, not a relabeled payment button.
+    const [loadError, setLoadError] = useState('');
     const rzpScriptLoaded = useRef(false);
 
-    useEffect(() => {
-        const loadBooking = async () => {
-            try {
-                const res = await api.get(`/bookings/${bookingId}`);
-                const b: BookingDetail = res.data;
-                if (b.status === 'CONFIRMED') {
-                    router.replace('/payment/success?alreadyConfirmed=1');
-                    return;
-                }
-                setBooking(b);
-                setFinalAmount(b.slot.examInstance.exam.feeAmount ?? 0);
-            } catch (e: any) {
-                setError(e.response?.data?.message || 'Failed to load booking');
-            } finally {
-                setLoading(false);
+    const loadBooking = useCallback(async () => {
+        setLoading(true);
+        setLoadError('');
+        try {
+            const res = await api.get(`/bookings/${bookingId}`);
+            const b: BookingDetail = res.data;
+            if (b.status === 'CONFIRMED') {
+                router.replace('/payment/success?alreadyConfirmed=1');
+                return;
             }
-        };
-        loadBooking();
-    }, [bookingId]);
+            setBooking(b);
+            setFinalAmount(b.slot.examInstance.exam.feeAmount ?? 0);
+        } catch (e: any) {
+            setLoadError(e.response?.data?.message || 'Failed to load booking');
+        } finally {
+            setLoading(false);
+        }
+    }, [bookingId, router]);
+
+    useEffect(() => { loadBooking(); }, [loadBooking]);
 
     const handleValidateCoupon = async () => {
         if (!couponCode.trim()) return;
@@ -164,6 +169,32 @@ export default function PaymentPage({ params }: { params: Promise<{ bookingId: s
                 <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => { rzpScriptLoaded.current = true; }} />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
                     <div className="spinner" />
+                </div>
+            </AuthGuard>
+        );
+    }
+
+    // The booking itself never loaded — a network blip is the common cause.
+    // There is no fee, no summary and nothing safe to charge here, so this is
+    // its own screen with its own retry rather than a half-populated payment
+    // card sitting behind an error banner.
+    if (loadError || !booking) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <div style={{ maxWidth: '440px', margin: '4rem auto', padding: '0 1.5rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📡</div>
+                    <h2 style={{ marginBottom: '0.75rem' }}>Could not load your booking</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                        {loadError || 'Something went wrong.'} This is usually a brief connection problem
+                        — nothing has been charged.
+                    </p>
+                    <button
+                        className="btn btn-primary btn-lg"
+                        onClick={() => void loadBooking()}
+                        style={{ width: '100%', fontSize: '1rem', padding: '0.85rem' }}
+                    >
+                        ↻ Try Again
+                    </button>
                 </div>
             </AuthGuard>
         );
@@ -320,7 +351,17 @@ export default function PaymentPage({ params }: { params: Promise<{ bookingId: s
                     disabled={payLoading || loading}
                     style={{ width: '100%', fontSize: '1rem', padding: '0.85rem' }}
                 >
-                    {payLoading ? 'Opening payment...' : `Pay ₹${feeRupees.toLocaleString('en-IN')}`}
+                    {/* Re-running handlePay is already the correct retry — the
+                        backend returns the same Razorpay order for a booking that
+                        already has one (payment.service.ts createOrder), it does
+                        not create a duplicate. What was missing was the button
+                        saying so: after a failure this was still labelled
+                        "Pay ₹X", which reads as starting over, not retrying. */}
+                    {payLoading
+                        ? 'Opening payment...'
+                        : error
+                            ? '↻ Try Again'
+                            : `Pay ₹${feeRupees.toLocaleString('en-IN')}`}
                 </button>
 
                 <p style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>

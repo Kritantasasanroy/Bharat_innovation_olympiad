@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, CLASS_BANDS, COMPANY_NAME, TAGLINE, TERMS_VERSION } from '@/lib/constants';
+import { APP_NAME, CLASS_BANDS, COMPANY_NAME, SMS_OTP_ENABLED, TAGLINE, TERMS_VERSION } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -102,7 +102,7 @@ export default function RegisterPage() {
      * SMS could not create an account at all — the voice fallback existed on
      * the login page and nowhere else. Both channels are offered here now.
      */
-    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = 'sms') => {
+    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = SMS_OTP_ENABLED ? 'sms' : 'voice') => {
         setPhoneMsg('');
         if (!isValidPhone(phone)) {
             setPhoneMsg('Enter a valid mobile number.');
@@ -457,29 +457,39 @@ export default function RegisterPage() {
                                 />
                                 <button
                                     type="button" className="btn"
-                                    onClick={() => handleSendPhoneOtp('sms')}
+                                    onClick={() => handleSendPhoneOtp(SMS_OTP_ENABLED ? 'sms' : 'voice')}
                                     disabled={phoneBusy || !phone.trim()}
                                     style={{ whiteSpace: 'nowrap', background: 'var(--bg-tertiary, rgba(127,127,127,0.15))', color: 'var(--text-primary)' }}
                                 >
-                                    {phoneOtpSent ? 'Resend' : 'Send code'}
+                                    {phoneOtpSent ? 'Resend' : SMS_OTP_ENABLED ? 'Send code' : 'Call me'}
                                 </button>
                             </div>
 
-                            {/* The SMS route can be blocked by the carrier with no
-                                signal to us, so the call fallback is always offered
-                                rather than only appearing after a failure. */}
-                            <button
-                                type="button"
-                                onClick={() => handleSendPhoneOtp('voice')}
-                                disabled={phoneBusy || !phone.trim()}
-                                style={{
-                                    marginTop: '0.5rem', background: 'none', border: 'none', padding: 0,
-                                    color: 'var(--text-secondary)', fontSize: '0.85rem',
-                                    textDecoration: 'underline', cursor: phone.trim() ? 'pointer' : 'not-allowed',
-                                }}
-                            >
-                                📞 Get the code by call instead
-                            </button>
+                            {/* SMS is temporarily down (SMS_OTP_ENABLED) — the button
+                                above already calls in that case, so a second "call me"
+                                link here would just repeat it. With SMS on, the call
+                                route stays offered as a fallback: the SMS route can be
+                                blocked by the carrier with no signal to us, so it is
+                                offered up front rather than only after a failure. */}
+                            {SMS_OTP_ENABLED && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendPhoneOtp('voice')}
+                                    disabled={phoneBusy || !phone.trim()}
+                                    style={{
+                                        marginTop: '0.5rem', background: 'none', border: 'none', padding: 0,
+                                        color: 'var(--text-secondary)', fontSize: '0.85rem',
+                                        textDecoration: 'underline', cursor: phone.trim() ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    📞 Get the code by call instead
+                                </button>
+                            )}
+                            {!SMS_OTP_ENABLED && (
+                                <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                                    📞 SMS codes are temporarily unavailable — we&apos;ll call you with your code instead.
+                                </p>
+                            )}
 
                             {phoneOtpSent && (
                                 <input

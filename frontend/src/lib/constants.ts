@@ -76,6 +76,16 @@ export const HEARTBEAT_INTERVAL_MS = 10_000;  // 10 seconds
 // Class bands
 export const CLASS_BANDS = [6, 7, 8, 9, 10, 11, 12];
 
+/**
+ * SMS OTP delivery (2Factor's SMS product) is currently not working.
+ *
+ * Voice OTP is a separate 2Factor product with its own balance/route, and is
+ * unaffected — so phone sign-in stays available, it just falls back to a call
+ * instead of a text while this is off. Flip back to `true` once SMS delivery
+ * is confirmed working again; no other code needs to change.
+ */
+export const SMS_OTP_ENABLED = false;
+
 // XP rewards
 export const XP_PER_CORRECT = 10;
 export const XP_PER_STREAK = 5;

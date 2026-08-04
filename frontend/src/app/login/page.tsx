@@ -1,6 +1,6 @@
 'use client';
 
-import { APP_NAME, COMPANY_NAME, TAGLINE } from '@/lib/constants';
+import { APP_NAME, COMPANY_NAME, SMS_OTP_ENABLED, TAGLINE } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
@@ -27,6 +27,11 @@ export default function LoginPage() {
 
     const isPhone = method === 'phone';
     const identifier = isPhone ? phone : email;
+    // With SMS off, phone sign-in only ever uses voice — there is no SMS
+    // fallback button to fall back *to*, so this is the one channel value
+    // phone sign-in uses everywhere: initial send, resend, and the (now sole)
+    // submit button.
+    const phoneChannel: 'sms' | 'voice' = SMS_OTP_ENABLED ? 'sms' : 'voice';
 
     /** Send the code by SMS (default) or an automated voice call. */
     const sendCode = async (channel: 'sms' | 'voice' = 'sms') => {
@@ -66,7 +71,7 @@ export default function LoginPage() {
 
     const handleSendOtp = async (e: FormEvent) => {
         e.preventDefault();
-        await submitIdentifier('sms');
+        await submitIdentifier(phoneChannel);
     };
 
     // Step 2: Verify OTP and sign in
@@ -111,7 +116,7 @@ export default function LoginPage() {
         setSuccess('');
         setIsLoading(true);
         try {
-            const { error: otpError } = await sendCode('sms');
+            const { error: otpError } = await sendCode(phoneChannel);
             if (otpError) {
                 setError(otpError.message || 'Failed to resend code.');
             } else {
@@ -207,6 +212,15 @@ export default function LoginPage() {
                                     required
                                     suppressHydrationWarning
                                 />
+                                {/* SMS delivery is temporarily down (SMS_OTP_ENABLED),
+                                    so a student who has always signed in by text needs
+                                    to know a call is coming instead, not that
+                                    something is broken. */}
+                                {!SMS_OTP_ENABLED && (
+                                    <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                                        📞 SMS codes are temporarily unavailable — we&apos;ll call you with your code instead.
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <div className="input-group">
@@ -224,9 +238,20 @@ export default function LoginPage() {
                             </div>
                         )}
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
-                            {isLoading ? 'Sending Code...' : isPhone ? 'Send Code by SMS →' : 'Send Verification Code →'}
+                            {isLoading
+                                ? 'Sending Code...'
+                                : !isPhone
+                                    ? 'Send Verification Code →'
+                                    : SMS_OTP_ENABLED
+                                        ? 'Send Code by SMS →'
+                                        : 'Call Me With the Code →'}
                         </button>
-                        {isPhone && (
+                        {/* The voice fallback is only a *fallback* — its own button
+                            below the primary — while SMS is the default. With SMS
+                            off, the primary button already calls, so a second
+                            "call me" button here would just be the same action
+                            twice. */}
+                        {isPhone && SMS_OTP_ENABLED && (
                             <button
                                 type="button"
                                 className="btn auth-submit"
