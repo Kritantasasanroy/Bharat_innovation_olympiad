@@ -3,6 +3,10 @@ node_modules/
 .pnp
 .pnp.js
 .yarn/install-state.gz
+# pnpm's local content-addressable store, created when a machine has no
+# established global store path (e.g. a fresh container/CI run) — a cache,
+# not something to commit.
+.pnpm-store/
 
 # ── Build outputs ─────────────────────────────────────────────
 dist/

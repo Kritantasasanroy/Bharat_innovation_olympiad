@@ -14,7 +14,7 @@
 		"format:check": "biome format .",
 		"test": "pnpm -r run test",
 		"typecheck": "pnpm -r run typecheck",
-		"prepare": "lefthook install",
+		"prepare": "lefthook install || true",
 		"test:contract": "bun test packages/contract-fixtures/src/contract-version.test.ts",
 		"security:audit": "pnpm audit --audit-level high",
 		"boundaries": "pnpm --filter @bio/exam-api lint:boundaries",

@@ -117,6 +117,89 @@ services:
       - key: REDIS_URL
         sync: false
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # bio-portal-api — Bun/Elysia partner-portal seam (services/portal-api).
+  #
+  # Both bio-portal-api and bio-admin-api below were previously created by
+  # hand in the Render dashboard as plain Node web services with no build/
+  # start commands of their own, which is why they showed "Failed deploy":
+  # neither service's package.json defined a "start" script (Render's own
+  # documented Bun pattern is Build: `bun install`, Start: `bun start`), and
+  # there was nothing to run after a build that otherwise succeeded. Both
+  # gaps are fixed in the services' package.json; these entries give Render
+  # the exact commands, verified locally in a Node+Bun container against
+  # this same repo before being committed.
+  #
+  # Installs via pnpm at the repo root rather than a standalone `bun install`
+  # in services/portal-api, even though this service has no workspace:*
+  # dependencies of its own and could install standalone. Kept consistent
+  # with bio-admin-api (which genuinely needs pnpm — see below) so the whole
+  # workspace has exactly one lockfile, pnpm-lock.yaml: a per-service
+  # `bun install` would have produced its own bun.lock, a second, redundant
+  # source of truth for dependency versions that no other service here has.
+  # ──────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: bio-portal-api
+    env: node   # Render's native Node runtime ships Bun on PATH — see render.com/docs/deploy-elysiajs
+    region: singapore
+    plan: free
+    buildCommand: corepack enable && corepack prepare pnpm@10.32.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @bio/portal-api build
+    startCommand: pnpm --filter @bio/portal-api start
+    envVars:
+      - key: JWT_SECRET
+        sync: false
+      # Base URL of bio-admin-api (below) once it has its own Render URL —
+      # defaults to localhost otherwise, which only works for local dev.
+      - key: ADMIN_API_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: PARTNER_SUPPORT_EMAIL
+        sync: false
+      - key: STUDENT_APP_URL
+        sync: false
+      - key: SCHOOL_APP_URL
+        sync: false
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # bio-admin-api — Bun/Elysia partner-engine API (services/admin-api).
+  # NOT standalone: it depends on workspace:* packages (@bio/admin-shared-types,
+  # @bio/domain-contracts, etc.), and Bun's own installer does not read this
+  # repo's pnpm-workspace.yaml (only npm/Yarn-style package.json "workspaces" —
+  # see oven-sh/bun#11874), so `bun install` run inside services/admin-api can
+  # never resolve them. rootDir is deliberately left at the repo root, so the
+  # build installs with pnpm (which does resolve the workspace correctly) and
+  # only hands off to bun for this service's own build/run step.
+  #
+  # Fails closed on boot without DATABASE_URL, REDIS_URL, CORS_ORIGIN,
+  # JWT_SECRET and a matching CONTRACT_VERSION — see
+  # services/admin-api/src/config/admin-config.ts. All required, none have
+  # dev-secret defaults on purpose.
+  # ──────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: bio-admin-api
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: corepack enable && corepack prepare pnpm@10.32.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @bio/admin-api build
+    startCommand: pnpm --filter @bio/admin-api start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      # Must equal @bio/admin-contract-fixtures' EXPECTED_CONTRACT_VERSION
+      # (currently "0.1.0") or the service refuses to boot — see
+      # src/contracts/version-guard.ts.
+      - key: CONTRACT_VERSION
+        value: "0.1.0"
+      - key: PORT
+        value: "3000"
+
   # Note: there is no separate proctor service. All AI proctoring (face
   # detection, gaze estimation, identity matching) runs client-side in the
   # student's browser via face-api.js — see frontend/src/hooks/useFaceProctor.ts.

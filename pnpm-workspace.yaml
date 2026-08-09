@@ -2,6 +2,18 @@ packages:
   - "apps/*"
   - "services/*"
   - "packages/*"
+  # `packages/frontend` is a stray, never-finished duplicate of the real
+  # `frontend/` app at the repo root (same package name "olympiad-frontend",
+  # same dependency set) — it carries a package.json, config files and a few
+  # committed assets, but no committed `src/`, and was never wired up as a
+  # real workspace member. Left in the `packages/*` glob, its now-stale
+  # dependency list drifts out of sync with pnpm-lock.yaml every time the
+  # real frontend/ is worked on, which breaks `pnpm install --frozen-lockfile`
+  # for the *entire* workspace (ERR_PNPM_OUTDATED_LOCKFILE) — including
+  # services that have nothing to do with the frontend, like admin-api.
+  # Excluded here rather than deleted: nothing about its intent is certain
+  # enough to remove committed files as a side effect of a Render deploy fix.
+  - "!packages/frontend"
 
 # Mirrors the bio-contracts pnpm catalog (TDD-001 §3): the shared contract
 # packages reference `zod: catalog:` so the whole workspace pins one version.

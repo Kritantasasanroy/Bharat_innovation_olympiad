@@ -47,13 +47,13 @@ importers:
         version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: ^4.4.1
-        version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(tsx@4.22.5))
+        version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5))
       typescript:
         specifier: ^5.8.2
         version: 5.9.3
       vite:
         specifier: ^6.3.5
-        version: 6.4.3(@types/node@24.13.2)(tsx@4.22.5)
+        version: 6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5)
 
   apps/exam-web:
     dependencies:
@@ -78,13 +78,13 @@ importers:
         version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: ^4.4.1
-        version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(tsx@4.22.5))
+        version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5))
       typescript:
         specifier: ^5.8.2
         version: 5.9.3
       vite:
         specifier: ^6.3.5
-        version: 6.4.3(@types/node@24.13.2)(tsx@4.22.5)
+        version: 6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5)
 
   apps/marketing-web:
     dependencies:
@@ -287,7 +287,7 @@ importers:
         version: 1.4.2(elysia@1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(pg@8.22.0)
+        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0)
       elysia:
         specifier: ^1.2.25
         version: 1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
@@ -389,7 +389,7 @@ importers:
         version: 1.4.2(elysia@1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(pg@8.22.0)
+        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0)
       elysia:
         specifier: ^1.2.25
         version: 1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
@@ -2089,6 +2089,10 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  jiti@1.21.7:
+    resolution: {integrity: sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A==}
+    hasBin: true
+
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
@@ -2121,6 +2125,10 @@ packages:
 
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
+
+  kysely@0.28.17:
+    resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
+    engines: {node: '>=20.0.0'}
 
   lefthook-darwin-arm64@2.1.9:
     resolution: {integrity: sha512-119HryNcvr4nqn0wUIrNPgpMEPn9yMQzEcW/lezRsnb56PCJriJB92+MCySPVcWDxJnZef7o0T3jdnPNiSH7Qg==}
@@ -3427,7 +3435,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.2': {}
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@24.13.2)(tsx@4.22.5))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -3435,7 +3443,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.3(@types/node@24.13.2)(tsx@4.22.5)
+      vite: 6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5)
     transitivePeerDependencies:
       - supports-color
 
@@ -3558,10 +3566,11 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.22.5
 
-  drizzle-orm@0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(pg@8.22.0):
+  drizzle-orm@0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0):
     optionalDependencies:
       '@types/pg': 8.20.0
       bun-types: 1.3.14
+      kysely: 0.28.17
       pg: 8.22.0
 
   electron-to-chromium@1.5.384: {}
@@ -3887,6 +3896,9 @@ snapshots:
 
   isexe@2.0.0: {}
 
+  jiti@1.21.7:
+    optional: true
+
   joycon@3.1.1: {}
 
   js-tokens@4.0.0: {}
@@ -3908,6 +3920,9 @@ snapshots:
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
+
+  kysely@0.28.17:
+    optional: true
 
   lefthook-darwin-arm64@2.1.9:
     optional: true
@@ -4376,7 +4391,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  vite@6.4.3(@types/node@24.13.2)(tsx@4.22.5):
+  vite@6.4.3(@types/node@24.13.2)(jiti@1.21.7)(tsx@4.22.5):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
@@ -4387,6 +4402,7 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.13.2
       fsevents: 2.3.3
+      jiti: 1.21.7
       tsx: 4.22.5
 
   which@2.0.2:
