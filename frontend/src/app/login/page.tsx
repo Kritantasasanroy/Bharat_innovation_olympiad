@@ -229,7 +229,7 @@ export default function LoginPage() {
                                     something is broken. */}
                                 {!SMS_OTP_ENABLED && (
                                     <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                                        📞 SMS codes are temporarily unavailable — we&apos;ll call you with your code instead.
+                                        📞 SMS codes are temporarily unavailable, we&apos;ll call you with your code instead.
                                     </p>
                                 )}
                             </div>

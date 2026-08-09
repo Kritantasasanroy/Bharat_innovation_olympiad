@@ -22,7 +22,7 @@ export default function RegistrationFeedbackPage() {
             <Navbar />
             <FeedbackInterstitial
                 formUrl={FEEDBACK_FORMS.registration}
-                title="You're registered — welcome aboard"
+                title="You're registered, welcome aboard"
                 intro="Before you head to your dashboard: how did signing up go? We are in beta, so
                        anything that was confusing or broken is worth telling us about."
                 continueLabel="Go to my dashboard →"

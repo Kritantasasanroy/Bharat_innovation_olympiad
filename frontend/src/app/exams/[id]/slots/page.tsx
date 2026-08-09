@@ -150,7 +150,7 @@ function SlotCard({
                         color: 'var(--text-tertiary)',
                         fontStyle: 'italic',
                     }}>
-                        Slot locked — contact support to change
+                        Slot locked, contact support to change
                     </div>
                 ) : (
                     <button
@@ -274,7 +274,7 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{examTitle}</p>
                     <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
                         Pick the sitting that suits you. Once confirmed it becomes your assigned slot
-                        and cannot be changed — contact support if you need it moved.
+                        and cannot be changed, contact support if you need it moved.
                     </p>
                 </div>
 
@@ -305,7 +305,7 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                             </div>
                             {existingBooking.status === 'CONFIRMED' && (
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: '0.3rem' }}>
-                                    This slot is locked — contact support if you need it changed.
+                                    This slot is locked, contact support if you need it changed.
                                 </div>
                             )}
                         </div>

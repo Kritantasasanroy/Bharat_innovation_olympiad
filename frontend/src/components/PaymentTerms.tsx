@@ -30,7 +30,7 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
                     account, or a later season.
                 </li>
                 <li>
-                    <strong>Your slot is separate — and final.</strong> After paying you choose a
+                    <strong>Your slot is separate, and final.</strong> After paying you choose a
                     sitting for each exam. Once confirmed, a slot cannot be changed from your
                     account.
                 </li>

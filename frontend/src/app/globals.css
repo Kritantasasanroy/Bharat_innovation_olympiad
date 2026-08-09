@@ -892,7 +892,7 @@ h4 {
      recover the questions from the print stylesheet's leftovers. */
   body * { display: none !important; }
   body::after {
-    content: 'Bharat Innovation Olympiad — exam papers cannot be printed. This attempt has been recorded.';
+    content: 'Bharat Innovation Olympiad: exam papers cannot be printed. This attempt has been recorded.';
     display: block !important;
     font-family: sans-serif;
     font-size: 14pt;
@@ -3637,6 +3637,49 @@ textarea.form-control {
 .exam-header__sep { color: var(--text-tertiary); }
 
 .rules-ack--grade { border-color: rgba(125, 200, 50, 0.4); }
+
+/* ── Proctoring notice toast ──────────────────────────────────────────────
+   Top-left, deliberately away from the mascot toast (bottom-right), the
+   blocked-action notice (bottom-center) and the violation banner
+   (top-center) — all four can in principle be on screen at once. */
+.proctor-toast {
+  position: fixed;
+  z-index: 9993;
+  width: min(320px, calc(100vw - 2 * var(--space-5)));
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  animation: mascot-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Face-issue notices, under the header. */
+.proctor-toast--top-left { left: var(--space-5); top: 84px; }
+/* Periodic "photo captured" confirmations — its own corner so it can never
+   land on top of a face-issue notice. */
+.proctor-toast--bottom-left { left: var(--space-5); bottom: var(--space-5); }
+
+.proctor-toast.is-leaving { animation: mascot-out 0.3s ease forwards; }
+
+.proctor-toast__icon { font-size: 1.3rem; line-height: 1.2; flex-shrink: 0; }
+.proctor-toast__body { flex: 1; min-width: 0; }
+.proctor-toast__title { display: block; font-size: 0.85rem; color: var(--text-primary); }
+.proctor-toast__message { margin: 0.2rem 0 0; font-size: 0.8rem; line-height: 1.45; color: var(--text-secondary); }
+
+.proctor-toast__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
 
 /* ── Mid-exam encouragement toast ─────────────────────────────────────────── */
 .mascot-toast {

@@ -35,7 +35,7 @@ export interface MascotIdentity {
 export const MASCOT: MascotIdentity = {
     name: 'LIMON',
     avatar: '🍋',
-    watchingLine: 'Our smart invigilator is keeping an eye out — just focus on your paper.',
+    watchingLine: 'Our smart invigilator is keeping an eye out, so just focus on your paper.',
 };
 
 /** Elapsed-time marks, in minutes, at which a message fires. Straight from the doc. */
@@ -59,8 +59,8 @@ export interface MascotCue {
  * from live state, so the copy never has to guess.
  */
 const CUE_COPY: Record<MascotCueId, string> = {
-    'min-20': "You're well into it now. Keep going at your own pace — there's plenty of time left.",
-    'min-40': 'Great effort so far. Take a breath, and remember an unanswered question costs the same as a wrong one — so attempt everything.',
+    'min-20': "You're well into it now. Keep going at your own pace, there's plenty of time left.",
+    'min-40': 'Great effort so far. Take a breath, and remember an unanswered question costs the same as a wrong one, so attempt everything.',
 };
 
 export const MASCOT_CUES: MascotCue[] = MASCOT_CUE_MINUTES.map((minute) => ({

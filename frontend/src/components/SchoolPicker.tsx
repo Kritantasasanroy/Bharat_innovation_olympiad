@@ -210,7 +210,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                             }
                         />
                         <p className="input-hint">
-                            Exactly as your school writes it — <strong>A</strong>,{' '}
+                            Exactly as your school writes it: <strong>A</strong>,{' '}
                             <strong>B2</strong>, <strong>Rose</strong>. This is how your teachers
                             find your class in their results.
                         </p>
@@ -227,7 +227,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
                 Your results are grouped by school, so your teachers can see how your class did.
-                Every student needs one — if yours isn&apos;t listed, you can add it.
+                Every student needs one, if yours isn&apos;t listed, you can add it.
             </p>
 
             <div className="school-tabs">
@@ -277,7 +277,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         it is, or with none and no idea whether they should have one. */}
                     <p className="input-hint">
                         A school code looks like <strong>SCH-ABC123</strong>. Your school
-                        coordinator or class teacher gives it out — it may be on a circular or a
+                        coordinator or class teacher gives it out, it may be on a circular or a
                         message from the school. <strong>You do not need one:</strong> if you
                         haven&apos;t been given a code, just search for your school by name instead.
                     </p>
@@ -367,7 +367,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                     setOpen(false);
                                 }}
                             >
-                                + My school isn’t listed — add it
+                                + My school isn’t listed, add it
                             </button>
                         </div>
                     )}

@@ -25,19 +25,19 @@ import { use, useEffect, useState } from 'react';
  */
 function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } | null) {
     return [
-        <>The exam runs in <strong>fullscreen mode</strong> — your browser goes fullscreen by itself when you start, and must stay that way.</>,
-        <>Your webcam must remain on throughout the exam for AI proctoring — stay visible and look at the screen.</>,
-        <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you — this may result in disqualification.</>,
+        <>The exam runs in <strong>fullscreen mode</strong>, your browser goes fullscreen by itself when you start, and must stay that way.</>,
+        <>Your webcam must remain on throughout the exam for AI proctoring, stay visible and look at the screen.</>,
+        <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you, this may result in disqualification.</>,
         <>Exiting fullscreen or switching tabs will pause the exam.</>,
         <>If paused for more than 20 seconds, the exam will auto-submit.</>,
-        <>Violations are recorded for actions that break exam integrity rules — including leaving fullscreen, switching tabs, camera/face issues, or taking a screenshot. Each one shows an on-screen warning explaining what happened. After 3 violations, the exam auto-submits.</>,
+        <>Violations are recorded for actions that break exam integrity rules, including leaving fullscreen, switching tabs, camera/face issues, or taking a screenshot. Each one shows an on-screen warning explaining what happened. After 3 violations, the exam auto-submits.</>,
         // Stated here because it is the one rule that ends the paper without a
         // warning first, and a student must not meet it for the first time by
         // accidentally pressing F5. The in-exam ↻ Reload button is named so they
         // know there is a safe alternative.
         <>
             <strong>Do not reload the page or use your browser&apos;s Back button.</strong> An exam
-            may only be sat once, in one continuous sitting — doing either will submit and{' '}
+            may only be sat once, in one continuous sitting, doing either will submit and{' '}
             <strong>permanently lock</strong> your paper. If you need to refresh, use the{' '}
             <strong>↻ Reload</strong> button inside the exam, which keeps your answers and your timer.
         </>,
@@ -49,7 +49,7 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         <>
             <strong>A brief internet drop will not cost you time.</strong> Your timer runs on our
             servers, not in the page, so it keeps perfect time even if your connection stutters or
-            the countdown freezes for a moment. It reconnects on its own — keep answering and do
+            the countdown freezes for a moment. It reconnects on its own, keep answering and do
             not reload.
         </>,
         <>
@@ -69,8 +69,8 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         <>Your answers are auto-saved continuously.</>,
         exam?.negativeMarking
             ? <>Negative marking applies for incorrect MCQ answers.</>
-            : <>There is <strong>no negative marking</strong> — an incorrect answer costs you nothing, so attempt every question.</>,
-        <>Use the Submit button when done — do not close the browser.</>,
+            : <>There is <strong>no negative marking</strong>, an incorrect answer costs you nothing, so attempt every question.</>,
+        <>Use the Submit button when done. Do not close the browser.</>,
     ];
 }
 
@@ -353,7 +353,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
             // checked 1024×768 against the browser window, so a student on a
             // perfectly adequate laptop was failed by a row that agreed with
             // their screen.
-            description: `Minimum ${MIN_VIEWPORT_WIDTH}×${MIN_VIEWPORT_HEIGHT} screen — your window is sized automatically when the exam starts`,
+            description: `Minimum ${MIN_VIEWPORT_WIDTH}×${MIN_VIEWPORT_HEIGHT} screen. Your window is sized automatically when the exam starts`,
             passed: deviceChecks.viewport,
         },
         {
@@ -385,7 +385,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                 ? 'Checking enrollment status...'
                 : faceEnrollStatus === 'enrolled'
                     ? 'Face already enrolled'
-                    : 'Required — enroll below before starting',
+                    : 'Required: enroll below before starting',
             passed: faceEnrollStatus === 'checking' ? null : faceEnrollStatus === 'enrolled',
         },
         // Listed as a check rather than hidden, so the parent section reads as one
@@ -396,8 +396,8 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                 guardianState === 'checking'
                     ? 'Checking…'
                     : guardianState === 'complete'
-                      ? 'Recorded — nothing more needed'
-                      : 'Required — a parent or guardian must complete this once',
+                      ? 'Recorded: nothing more needed'
+                      : 'Required: a parent or guardian must complete this once',
             passed: guardianState === 'checking' ? null : guardianState === 'complete',
         },
         // Listed as a check rather than hidden, so the rehearsal reads as one
@@ -412,10 +412,10 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                           trialState === 'checking'
                               ? 'Checking…'
                               : trialState === 'done'
-                                ? 'Trial test completed — you can practise again as often as you like'
+                                ? 'Trial test completed: you can practise again as often as you like'
                                 : trialState === 'unavailable'
-                                  ? 'The trial paper is not open yet — you can still start this exam'
-                                  : 'Required — a short practice run starts when you click below',
+                                  ? 'The trial paper is not open yet: you can still start this exam'
+                                  : 'Required: a short practice run starts when you click below',
                       passed:
                           trialState === 'checking'
                               ? null
@@ -478,7 +478,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                     <div className="glass-card instructions-card">
                         <h2>👁️ What the invigilator watches for</h2>
                         <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-                            These are recorded during the exam. Nothing is decided automatically — a
+                            These are recorded during the exam. Nothing is decided automatically, a
                             person reviews anything serious before any conclusion is drawn.
                         </p>
                         <ul className="rules-list">
@@ -488,7 +488,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         </ul>
                         <p style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 'var(--space-3)' }}>
                             Face analysis runs inside your own browser. No video is recorded, sent or
-                            stored — only the events above.
+                            stored, only the events above.
                         </p>
                     </div>
 
@@ -563,7 +563,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <div className="glass-card instructions-card">
                             <h2>🪪 Face ID Enrollment</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
-                                This is a proctored exam — you must enroll your face before you can start. Your face is stored as an encrypted numeric descriptor, not a photo.
+                                This is a proctored exam, you must enroll your face before you can start. Your face is stored as an encrypted numeric descriptor, not a photo.
                             </p>
 
                             {faceEnrollStatus === 'checking' ? (
@@ -604,7 +604,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         >
                             <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.05rem' }}>🔒 Exam access locked</h3>
                             <p style={{ color: 'var(--text-secondary)', margin: '0 0 1rem', fontSize: '0.92rem' }}>
-                                One payment unlocks every olympiad exam. You only pay once — the free
+                                One payment unlocks every olympiad exam. You only pay once, the free
                                 practice paper stays available either way.
                             </p>
                             <button className="btn btn-primary" onClick={() => router.push('/unlock')}>
@@ -720,7 +720,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                     <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: '0 0 1rem' }}>
                                         This cannot be changed once the exam starts. If your class is
                                         wrong, <Link href="/support">contact support</Link> before
-                                        starting — do not sit the wrong paper.
+                                        starting. Do not sit the wrong paper.
                                     </p>
                                 </>
                             )}

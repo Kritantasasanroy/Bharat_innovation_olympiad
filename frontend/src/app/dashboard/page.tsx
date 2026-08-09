@@ -69,7 +69,7 @@ export default function StudentDashboard() {
     const { user } = useAuth();
     const [exams, setExams] = useState<AvailableExam[]>([]);
     const [recentResults, setRecentResults] = useState<ResultSummary[]>([]);
-    const [stats, setStats] = useState({ open: 0, completed: 0, avgScore: '—' });
+    const [stats, setStats] = useState({ open: 0, completed: 0, avgScore: '-' });
     const [loading, setLoading] = useState(true);
 
     /**
@@ -122,7 +122,7 @@ export default function StudentDashboard() {
                         released.reduce((sum, r) => sum + (r.score / (r.totalMarks || 1)) * 100, 0) / completed,
                     )
                     : 0;
-                setStats((s) => ({ ...s, completed, avgScore: completed > 0 ? `${avg}%` : '—' }));
+                setStats((s) => ({ ...s, completed, avgScore: completed > 0 ? `${avg}%` : '-' }));
             } catch {
                 // Results endpoint optional — leave defaults.
             }
@@ -162,7 +162,7 @@ export default function StudentDashboard() {
                         <div>
                             <strong>One step left: parent or guardian details.</strong>
                             <p>
-                                Required before any exam can be started — including the free practice
+                                Required before any exam can be started, including the free practice
                                 paper. It takes about two minutes.
                             </p>
                         </div>

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     ],
     icons: { icon: '/icon.png', apple: '/icon.png' },
     openGraph: {
-        title: 'Bharat Innovation Olympiad — Become Future Ready',
+        title: 'Bharat Innovation Olympiad: Become Future Ready',
         description:
             'India\'s innovation and future-skills olympiad for Grades 6–12. Assessed across five ' +
             'future-focused dimensions, not memorisation.',

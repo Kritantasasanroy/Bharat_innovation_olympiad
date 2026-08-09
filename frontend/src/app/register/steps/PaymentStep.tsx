@@ -86,7 +86,7 @@ export default function PaymentStep({
 
     useEffect(() => {
         loadPass()
-            .catch(() => setError('We could not check whether you have already paid. You can still pay below — if you have already paid, use “I have paid — check now”.'))
+            .catch(() => setError('We could not check whether you have already paid. You can still pay below, if you have already paid, use “I have paid, check now”.'))
             .finally(() => setLoading(false));
         // Always clear the timer on unmount — a poll firing after the student has
         // navigated away sets state on a dead component.
@@ -145,7 +145,7 @@ export default function PaymentStep({
             const p = await loadPass();
             if (!p.isActive) {
                 setError(
-                    "We can't see your payment yet. Bank confirmations can take a minute or two — " +
+                    "We can't see your payment yet. Bank confirmations can take a minute or two, " +
                         'wait a moment and check again. If you have already been charged, use ' +
                         '“Already paid but still locked?” below and we will unlock it by hand.',
                 );
@@ -179,7 +179,7 @@ export default function PaymentStep({
             setClaimSent(true);
         } catch {
             setError(
-                'Could not send that automatically. Please email the payment id to support — your payment is safe.',
+                'Could not send that automatically. Please email the payment id to support, your payment is safe.',
             );
         } finally {
             setClaimBusy(false);
@@ -268,7 +268,7 @@ export default function PaymentStep({
                         onClick={handleCheckNow}
                         disabled={checking}
                     >
-                        {checking ? 'Checking…' : "I've paid — check now"}
+                        {checking ? 'Checking…' : "I've paid, check now"}
                     </button>
                 </div>
             ) : (
@@ -314,7 +314,7 @@ export default function PaymentStep({
                     <h4>✅ Sent to support</h4>
                     <p>
                         We have your payment id. Someone will unlock your account, and you will get an
-                        email when it is done. You can close this page — your registration is saved.
+                        email when it is done. You can close this page, your registration is saved.
                     </p>
                 </div>
             )}

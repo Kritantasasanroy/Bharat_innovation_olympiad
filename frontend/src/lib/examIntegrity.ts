@@ -42,7 +42,7 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
     exit_fullscreen: {
         icon: '🖥️',
         title: 'You left fullscreen',
-        what: 'The exam window stopped being fullscreen — usually the Escape key, F11, or the Windows/Command key.',
+        what: 'The exam window stopped being fullscreen, usually the Escape key, F11, or the Windows/Command key.',
         fix: 'Return to fullscreen and stay there until you submit.',
     },
     tab_switch: {
@@ -54,7 +54,7 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
     window_blur: {
         icon: '↪️',
         title: 'The exam window lost focus',
-        what: 'Something outside the exam took focus — another window, a notification, or a second screen.',
+        what: 'Something outside the exam took focus: another window, a notification, or a second screen.',
         fix: 'Click back into the exam and silence notifications on your device.',
     },
     no_face: {
@@ -180,7 +180,7 @@ export function autoSubmitCopy(
             const rule = ctx.violation ? violationCopy(ctx.violation) : null;
             return {
                 icon: '🚫',
-                title: 'Exam ended — final violation',
+                title: 'Exam ended: final violation',
                 reason: rule
                     ? `${rule.title}. That was violation ${max} of ${max}, the limit for this exam, so your paper was submitted automatically.`
                     : `You reached the limit of ${max} exam integrity violations, so your paper was submitted automatically.`,
@@ -191,7 +191,7 @@ export function autoSubmitCopy(
             const secs = ctx.pauseSeconds ?? 20;
             return {
                 icon: '⏸️',
-                title: 'Exam ended — paused too long',
+                title: 'Exam ended: paused too long',
                 reason: `Your exam was paused for more than ${secs} seconds because it was not returned to fullscreen, so it was submitted automatically.`,
                 detail: 'Every answer you gave before the pause has been saved and counted. This attempt has been flagged for review by the exam team.',
             };
@@ -199,7 +199,7 @@ export function autoSubmitCopy(
         case 'navigation':
             return {
                 icon: '🔒',
-                title: 'Exam locked — you left the exam page',
+                title: 'Exam locked: you left the exam page',
                 reason: 'The browser reloaded or navigated away from the exam. For fairness, an exam can only be sat once and in one continuous sitting, so this paper has been submitted and locked.',
                 detail: 'Every answer you gave before this point has been saved and counted. You cannot re-open this paper. This attempt has been flagged for review by the exam team.',
             };

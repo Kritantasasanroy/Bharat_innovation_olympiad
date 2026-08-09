@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
@@ -106,7 +106,18 @@ export class AuthService {
         // row has `invitedAt` and no account behind it; registering claims it,
         // keeping the school that invited them.
         if (existing) {
-            if (existing.activatedAt) return existing;
+            // An email that already backs a live account cannot register a
+            // second student — one mailbox, one student. This used to return
+            // the existing account silently, which was fine when it really was
+            // the same person retrying, but the common real case is a parent's
+            // single email re-used for a second child: the form would appear to
+            // "work" and quietly sign the parent into the first child's account
+            // with none of the second child's details saved anywhere.
+            if (existing.activatedAt) {
+                throw new ConflictException(
+                    'Students must have unique email IDs for registration. One email can only be used for one student.',
+                );
+            }
 
             // The inviting school wins — a student cannot register their way out
             // of the roster that invited them. But an invited row with no school

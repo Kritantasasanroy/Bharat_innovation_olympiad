@@ -86,7 +86,7 @@ export default function AdmitCardPage() {
                                     <tr>
                                         <th>Slot</th>
                                         <td>
-                                            {card.slot.label ? `${card.slot.label} — ` : ''}
+                                            {card.slot.label ? `${card.slot.label}: ` : ''}
                                             {new Date(card.slot.startsAt).toLocaleString()} to{' '}
                                             {new Date(card.slot.endsAt).toLocaleTimeString()}
                                         </td>

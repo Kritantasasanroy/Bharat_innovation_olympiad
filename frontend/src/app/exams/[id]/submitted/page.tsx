@@ -114,7 +114,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                     ) : (
                         <p className="text-muted">
                             Your score is not published yet. It appears on your results page as soon as
-                            marking for this paper is released — we will email you.
+                            marking for this paper is released, we will email you.
                         </p>
                     )}
                 </section>
@@ -132,8 +132,8 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                             <p>
                                 Once the exam window closes, every paper goes through fair-score
                                 normalisation so students who sat different sittings are compared
-                                fairly. Any paper the proctoring flagged is reviewed by a person — not
-                                by the computer — before anything is concluded from it.
+                                fairly. Any paper the proctoring flagged is reviewed by a person, not
+                                by the computer, before anything is concluded from it.
                             </p>
                         </li>
                         <li>
@@ -167,8 +167,8 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                             who has to write down their reasoning either way.
                         </li>
                         <li>
-                            If you think something has gone wrong — a power cut, a connection drop, a
-                            score that looks wrong — you can raise it and a person will respond.
+                            If you think something has gone wrong (a power cut, a connection drop, a
+                            score that looks wrong) you can raise it and a person will respond.
                         </li>
                     </ul>
                 </section>

@@ -148,7 +148,7 @@ export default function VerifyCertificatePage() {
                         </div>
                         <p className="text-muted">
                             Revoked on {new Date(result.revokedAt).toLocaleDateString()}
-                            {result.revokeReason ? ` — ${result.revokeReason}` : ''}
+                            {result.revokeReason ? `: ${result.revokeReason}` : ''}
                         </p>
                     </div>
                 )}

@@ -248,7 +248,7 @@ function ExamCard({
                 </div>
                 <div className="meta-item">
                     <span className="meta-label">Questions</span>
-                    <span className="meta-value">{questionCount || '—'}</span>
+                    <span className="meta-value">{questionCount || '-'}</span>
                 </div>
                 <div className="meta-item">
                     <span className="meta-label">Total Marks</span>
@@ -284,7 +284,7 @@ function ExamCard({
                 <div className="exam-schedule">
                     <span className="meta-label">Exam window</span>
                     <span>
-                        {dt(instance.startsAt)} — {timeOnly(instance.endsAt)}
+                        {dt(instance.startsAt)} to {timeOnly(instance.endsAt)}
                     </span>
                 </div>
             )}
@@ -297,7 +297,7 @@ function ExamCard({
                         {slot.label && <strong>{slot.label}</strong>}
                     </div>
                     <div className="slot-card-time">
-                        {dt(slot.startsAt)} — {timeOnly(slot.endsAt)}
+                        {dt(slot.startsAt)} to {timeOnly(slot.endsAt)}
                     </div>
                     {slot.bookingStatus === 'PENDING' ? (
                         <p className="slot-note slot-note-warn">
@@ -316,7 +316,7 @@ function ExamCard({
                         <p className="slot-note slot-note-warn">
                             {mustPayFirst
                                 ? 'Unlock your exams first, then choose the date and time that suits you.'
-                                : 'You have not picked a sitting yet. Choose the date and time that suits you — places in each slot are limited. Once confirmed, your slot cannot be changed.'}
+                                : 'You have not picked a sitting yet. Choose the date and time that suits you, places in each slot are limited. Once confirmed, your slot cannot be changed.'}
                         </p>
                     </div>
                 )

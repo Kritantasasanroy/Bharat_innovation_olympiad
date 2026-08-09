@@ -40,7 +40,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '📷',
         title: 'The camera will be switched on',
-        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers, not as a photo — no picture of the student is ever saved.',
+        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers, not as a photo, so no picture of the student is ever saved.',
     },
     {
         icon: '👨‍👩‍👧',
@@ -62,7 +62,7 @@ export const NEXT_STEPS = [
     },
     {
         title: 'Take the practice paper',
-        body: 'It runs in exactly the same environment as the real exam — fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real paper will start.',
+        body: 'It runs in exactly the same environment as the real exam: fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real paper will start.',
     },
     {
         title: 'Check your device early',
@@ -77,7 +77,7 @@ export const NEXT_STEPS = [
 /** The thank-you shown once registration is fully complete. */
 export const THANK_YOU = {
     heading: 'You\'re registered. Welcome to the Olympiad.',
-    body: 'Your place is confirmed and your roll number is issued. We have emailed it to you — keep that email, as support will ask for it.',
+    body: 'Your place is confirmed and your roll number is issued. We have emailed it to you, so keep that email, as support will ask for it.',
 } as const;
 
 /**

@@ -248,7 +248,7 @@ export default function RegisterPage() {
             if (verifyError) {
                 setError(
                     verifyError.message ||
-                        "That code didn't work. Codes expire after a few minutes — use “Resend code” to get a fresh one, and check your spam folder.",
+                        "That code didn't work. Codes expire after a few minutes, use “Resend code” to get a fresh one, and check your spam folder.",
                 );
                 setIsLoading(false);
                 return;
@@ -372,7 +372,7 @@ export default function RegisterPage() {
                 ) : step === 'face' ? (
                     <div className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
-                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor — no photo is saved.
+                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor, no photo is saved.
                             This step cannot be skipped, and <strong>the student must do it themselves</strong>.
                         </p>
 
@@ -445,7 +445,7 @@ export default function RegisterPage() {
 
                         <div className="input-group">
                             <label className="input-label" htmlFor="phone">
-                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional — lets you sign in by OTP)</span>
+                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional, lets you sign in by OTP)</span>
                             </label>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <input
@@ -487,7 +487,7 @@ export default function RegisterPage() {
                             )}
                             {!SMS_OTP_ENABLED && (
                                 <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                                    📞 SMS codes are temporarily unavailable — we&apos;ll call you with your code instead.
+                                    📞 SMS codes are temporarily unavailable, we&apos;ll call you with your code instead.
                                 </p>
                             )}
 
@@ -518,7 +518,7 @@ export default function RegisterPage() {
                                 ))}
                             </select>
                             <p className="input-hint">
-                                You will sit the Class {formData.classBand} paper. Choose carefully — you
+                                You will sit the Class {formData.classBand} paper. Choose carefully, you
                                 will be asked to confirm this before the exam starts, and it cannot be
                                 changed afterwards.
                             </p>

@@ -238,7 +238,7 @@ export default function GuardianForm({
                     </div>
                 </div>
                 <p className="input-hint">
-                    We use these to reach you about the student&apos;s exam — not for marketing.
+                    We use these to reach you about the student&apos;s exam, not for marketing.
                 </p>
             </fieldset>
 
@@ -328,7 +328,7 @@ export default function GuardianForm({
                             </p>
                         )}
                         <p className="input-hint">
-                            A clear phone photo is fine — it does not need to be a scan. If yours is
+                            A clear phone photo is fine, it does not need to be a scan. If yours is
                             over {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
                         </p>
                     </div>
@@ -336,7 +336,7 @@ export default function GuardianForm({
             </fieldset>
 
             <fieldset className="guardian-fieldset guardian-fieldset--consent">
-                <legend>Consent — both are required</legend>
+                <legend>Consent: both are required</legend>
 
                 <label className="consent-check">
                     <input
@@ -363,7 +363,7 @@ export default function GuardianForm({
                         <strong>I consent to their personal data being processed.</strong> As required
                         by the Digital Personal Data Protection Act, 2023 for a child&apos;s data, I
                         consent to the collection and use of the details on this form, my child&apos;s
-                        face template and their exam records, for running the Olympiad — identifying
+                        face template and their exam records, for running the Olympiad: identifying
                         them, proctoring, marking, ranking, certificates, and contacting us about it.
                         I understand I can withdraw this consent at any time.
                     </span>

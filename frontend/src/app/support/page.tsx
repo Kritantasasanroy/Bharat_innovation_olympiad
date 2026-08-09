@@ -166,7 +166,7 @@ export default function SupportPage() {
                                 value={gAttemptId}
                                 onChange={(e) => setGAttemptId(e.target.value)}
                             >
-                                <option value="">— none —</option>
+                                <option value="">(none)</option>
                                 {attempts.map((attempt) => (
                                     <option key={attempt.id} value={attempt.id}>
                                         {attempt.examTitle ?? attempt.exam?.title ?? attempt.id.slice(0, 8)}
@@ -223,7 +223,7 @@ export default function SupportPage() {
                                     <td>
                                         <span className={STATUS_CLASS[g.status] ?? 'badge'}>{g.status}</span>
                                     </td>
-                                    <td className="text-muted">{g.resolution ?? '—'}</td>
+                                    <td className="text-muted">{g.resolution ?? '-'}</td>
                                 </tr>
                             ))}
                             {grievances.length === 0 && (

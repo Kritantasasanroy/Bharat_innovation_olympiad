@@ -2,6 +2,7 @@
 
 import AutoSubmitNotice, { type AutoSubmitState } from '@/components/exam/AutoSubmitNotice';
 import ExamPreparingOverlay from '@/components/exam/ExamPreparingOverlay';
+import ProctorToast, { type ProctorToastData } from '@/components/exam/ProctorToast';
 import ViolationBanner from '@/components/exam/ViolationBanner';
 import AuthGuard from '@/components/layout/AuthGuard';
 import MascotToast from '@/components/MascotToast';
@@ -31,7 +32,7 @@ const MAX_VIOLATIONS = 3;
 
 /** What a blocked (not breached) lockdown action tells the student. */
 const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
-    reload: 'Reloading is disabled during the exam. Use the ↻ Reload button in the header if the page looks wrong — it keeps your answers and your timer.',
+    reload: 'Reloading is disabled during the exam. Use the ↻ Reload button in the header if the page looks wrong, it keeps your answers and your timer.',
     back: 'The browser Back button is disabled during the exam. You cannot leave this page until you submit.',
     print: 'Printing the exam is not allowed. This attempt has been recorded.',
     capture: 'Screenshots are not allowed during the exam. This attempt has been recorded.',
@@ -103,7 +104,7 @@ function QuestionImage({ src, alt }: { src: string; alt: string }) {
             <div className="question-media-error">
                 <p>
                     <strong>The image for this question didn&apos;t load.</strong> It is usually a
-                    brief network problem — your answers are saved, and the timer is unaffected.
+                    brief network problem, your answers are saved, and the timer is unaffected.
                 </p>
                 <div className="question-media-error__actions">
                     <button
@@ -347,7 +348,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const handleAutoSubmit = (
         cause: 'max_violations' | 'paused_too_long',
         violation?: ViolationKind,
-    ) => { beginAutoSubmit(cause, violation); };
+    ) => {
+        // TEMPORARILY DISABLED — auto-submit on violations/pause-timeout.
+        // Violations are still recorded, the banner and fullscreen gate still
+        // show, the counter still climbs past the limit — none of it forces
+        // the exam to end while this is off. Manual Submit is unaffected.
+        // Uncomment the line below to restore.
+        // beginAutoSubmit(cause, violation);
+    };
 
     const continueAfterAutoSubmit = useCallback(() => {
         window.location.href = pendingRedirectRef.current;
@@ -454,7 +462,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 type: 'SEB_VIOLATION',
                 details: { source: `navigation_${breach}`, violationCount },
             }).catch(() => { /* best-effort */ });
-            beginAutoSubmit('navigation');
+            // TEMPORARILY DISABLED — see the note in handleAutoSubmit above.
+            // The breach is still logged as SEB_VIOLATION above; it no longer
+            // force-submits the exam while this is off.
+            // beginAutoSubmit('navigation');
         },
         onBlocked: (action) => setBlockedNotice({ action, at: Date.now() }),
         // A capture attempt is a real violation, not just a blocked keystroke —
@@ -495,28 +506,30 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [multiFaceDismissed, setMultiFaceDismissed] = useState(false);
     useEffect(() => { if (!isMultiFace) setMultiFaceDismissed(false); }, [isMultiFace]);
 
-    // Only one popup on screen at a time — priority order below.
-    type FaceIssue = { key: string; icon: string; title: string; message: string; onOk: () => void };
+    // Only one notice on screen at a time — priority order below. Rendered as
+    // a small toast (see ProctorToast), not the full-screen backdrop popup
+    // this used to be: a student mid-question should be told, not stopped.
+    type FaceIssue = ProctorToastData & { onDismiss: () => void };
     const faceIssue: FaceIssue | null =
         isMultiFace && !multiFaceDismissed ? {
-            key: 'multiface', icon: '👥', title: 'Multiple Faces Detected',
-            message: 'Only the registered student should be visible in the camera. Please make sure no one else is in frame.',
-            onOk: () => setMultiFaceDismissed(true),
+            key: 'multiface', icon: '👥', title: 'Multiple faces detected',
+            message: 'Only the registered student should be visible in the camera.',
+            onDismiss: () => setMultiFaceDismissed(true),
         }
         : noFaceSince !== null && noFaceSince !== noFaceDismissedAt ? {
-            key: 'no-face', icon: '👤', title: 'Face Not Detected',
+            key: `no-face-${noFaceSince}`, icon: '👤', title: 'Face not detected',
             message: `Please be clearly visible in the camera${noFaceSecondsLeft && noFaceSecondsLeft > 0 ? ` within ${noFaceSecondsLeft}s` : ''}.`,
-            onOk: () => setNoFaceDismissedAt(noFaceSince),
+            onDismiss: () => setNoFaceDismissedAt(noFaceSince),
         }
         : mismatchSince !== null && mismatchSince !== mismatchDismissedAt ? {
-            key: 'mismatch', icon: '⚠️', title: 'Identity Mismatch',
-            message: 'Face does not match your enrolled profile. Please ensure you are the registered student.',
-            onOk: () => setMismatchDismissedAt(mismatchSince),
+            key: `mismatch-${mismatchSince}`, icon: '⚠️', title: 'Identity mismatch',
+            message: 'The face on camera does not match your enrolled profile.',
+            onDismiss: () => setMismatchDismissedAt(mismatchSince),
         }
         : awaySince !== null && awaySince !== awayDismissedAt ? {
-            key: 'looking-away', icon: '👀', title: 'Looking Away',
+            key: `looking-away-${awaySince}`, icon: '👀', title: 'Looking away',
             message: `Please look at the screen${awaySecondsLeft && awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.`,
-            onOk: () => setAwayDismissedAt(awaySince),
+            onDismiss: () => setAwayDismissedAt(awaySince),
         }
         : null;
 
@@ -566,7 +579,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (!attemptId || autoSubmit || isSubmitting) return;
         if (isExpired || (timerReady && remaining <= 0)) {
-            beginAutoSubmit('time_up');
+            // TEMPORARILY DISABLED — see the note in handleAutoSubmit above.
+            // The timer still shows 00:00; the exam just no longer force-ends
+            // on its own while this is off.
+            // beginAutoSubmit('time_up');
         }
     }, [isExpired, timerReady, remaining, attemptId, autoSubmit, isSubmitting]);
 
@@ -590,6 +606,38 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, activeCue, firedCueIds, exam?.durationMinutes]);
 
     const dismissCue = useCallback(() => setActiveCue(null), []);
+
+    /**
+     * Three "your photo has been captured" toasts, spaced across the exam.
+     *
+     * Not tied to an actual capture — face-api.js runs inference on the live
+     * video feed and never uploads a frame (see useFaceProctor) — this exists
+     * purely so proctoring stays *visibly* present through the exam rather
+     * than only being felt when something goes wrong. Same elapsed-time basis
+     * as the mid-exam mascot cues (server timer, not wall clock), and skipped
+     * under the same conditions: never during the trial, never while gated or
+     * ending, so a fired slot is never one the student silently never saw.
+     */
+    const PHOTO_TOAST_FRACTIONS = [0.25, 0.5, 0.75] as const;
+    const [firedPhotoToasts, setFiredPhotoToasts] = useState<ReadonlySet<number>>(() => new Set());
+    const [photoToast, setPhotoToast] = useState<ProctorToastData | null>(null);
+
+    useEffect(() => {
+        if (!timerReady || isTrialRun || isGated || autoSubmit || durationSeconds <= 0) return;
+        const elapsed = durationSeconds - remaining;
+        const dueIdx = PHOTO_TOAST_FRACTIONS.findIndex(
+            (frac, i) => !firedPhotoToasts.has(i) && elapsed >= durationSeconds * frac,
+        );
+        if (dueIdx === -1) return;
+        setFiredPhotoToasts((prev) => new Set(prev).add(dueIdx));
+        setPhotoToast({
+            key: `photo-${dueIdx}-${Date.now()}`,
+            icon: '📸',
+            title: 'Photo captured',
+            message: 'Your photo has been captured for identity verification.',
+            durationMs: 5000,
+        });
+    }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, autoSubmit, firedPhotoToasts]);
 
     /**
      * Phase 1 — get proctoring ready, before there is an attempt to bill it to.
@@ -733,7 +781,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🪪</div>
                     <h2 style={{ marginBottom: '1rem' }}>Face Enrollment Required</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        This is a proctored exam — you need to enroll your face before you can start it. It only takes a few seconds.
+                        This is a proctored exam, you need to enroll your face before you can start it. It only takes a few seconds.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/profile'}>
                         Enroll Face Now
@@ -751,7 +799,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <h2 style={{ marginBottom: '1rem' }}>Exam Access Locked</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         Your exam access pass is not active yet. One payment unlocks every olympiad
-                        exam — the practice paper stays free.
+                        exam, the practice paper stays free.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/unlock'}>
                         Unlock All Exams
@@ -811,7 +859,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <h2 style={{ marginBottom: '1rem' }}>This exam is closed</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         You have already sat this paper. An exam can only be attempted once, so it
-                        cannot be reopened — going back to this page will not start it again.
+                        cannot be reopened, going back to this page will not start it again.
                     </p>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.75rem' }}>
                         Your answers were saved and submitted. Your result will appear under Results
@@ -845,7 +893,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         {looksTransient
-                            ? 'This is almost always a brief internet problem. Your exam has not been lost — check your connection and try again.'
+                            ? 'This is almost always a brief internet problem. Your exam has not been lost, check your connection and try again.'
                             : error}
                     </p>
                     {looksTransient && (
@@ -956,27 +1004,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Face-check popup — center-screen, dismissed via OK button ── */}
+                {/* ── Face-check notice — small toast, not a screen-blocking popup ──
+                    Used to be a full-screen black backdrop with an OK button the
+                    student had to click before they could touch the paper again.
+                    Now it just tells them, without taking the exam away. */}
                 {faceIssue && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)', zIndex: 9996,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: '420px', width: '90%' }}>
-                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{faceIssue.icon}</div>
-                            <h2 style={{ marginBottom: '0.75rem' }}>{faceIssue.title}</h2>
-                            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{faceIssue.message}</p>
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                style={{ width: '100%', padding: '0.85rem', fontSize: '1rem' }}
-                                onClick={faceIssue.onOk}
-                            >
-                                OK
-                            </button>
-                        </div>
-                    </div>
+                    <ProctorToast data={faceIssue} onDismiss={faceIssue.onDismiss} />
+                )}
+
+                {/* ── Periodic "photo captured" confirmation ── */}
+                {photoToast && (
+                    <ProctorToast
+                        data={photoToast}
+                        position="bottom-left"
+                        onDismiss={() => setPhotoToast(null)}
+                    />
                 )}
 
                 {/* ── Screen-capture mask ──
@@ -1036,7 +1078,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                                 {violationCount === 0
-                                    ? 'This exam must be taken in fullscreen mode. Click below to begin — your camera will activate automatically.'
+                                    ? 'This exam must be taken in fullscreen mode. Click below to begin, your camera will activate automatically.'
                                     : lastViolation
                                         ? violationCopy(lastViolation.kind).what
                                         : isFullscreen
@@ -1105,8 +1147,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             real paper — fullscreen, webcam, timer, the lot — so the
                             only thing distinguishing it is saying so. */}
                         {isTrialRun && (
-                            <span className="badge badge-warning" title="Practice run — this is not scored">
-                                Trial test — not scored
+                            <span className="badge badge-warning" title="Practice run, this is not scored">
+                                Trial test, not scored
                             </span>
                         )}
                         <span className="badge badge-primary">
@@ -1184,7 +1226,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             className="exam-reload-btn"
                             onClick={() => setShowReloadConfirm(true)}
                             disabled={isSubmitting}
-                            title="Reload the exam page safely — your answers and timer are kept"
+                            title="Reload the exam page safely, your answers and timer are kept"
                         >
                             ↻ Reload
                         </button>
@@ -1360,7 +1402,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                                 className={`question-index-item ${i === currentIndex ? 'current' : answers[q.id] ? 'answered' : flagged.has(q.id) ? 'flagged' : ''}`}
                                                 onClick={() => !isGated && goToQuestion(i)}
                                                 disabled={isGated}
-                                                title={block.title ? `${block.title} — question ${i + 1}` : undefined}
+                                                title={block.title ? `${block.title}: question ${i + 1}` : undefined}
                                             >
                                                 {i + 1}
                                             </button>
@@ -1392,11 +1434,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className="modal glass-card">
                             <h2>Reload the exam page?</h2>
                             <p>
-                                Use this if the page looks wrong — a question image that will not
+                                Use this if the page looks wrong: a question image that will not
                                 load, or a timer that has stopped moving.
                             </p>
                             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                                Your answers and your remaining time are kept — the timer runs on our
+                                Your answers and your remaining time are kept, the timer runs on our
                                 server, not in this page. You will be asked to re-enter fullscreen and
                                 your camera will restart.
                             </p>

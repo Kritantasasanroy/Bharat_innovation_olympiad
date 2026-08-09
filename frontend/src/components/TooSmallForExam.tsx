@@ -55,7 +55,7 @@ export default function TooSmallForExam() {
                     <>
                         <h1>Turn your device sideways</h1>
                         <p className="too-small__lede">
-                            Your screen is big enough — it just needs to be landscape. Rotate it and
+                            Your screen is big enough, it just needs to be landscape. Rotate it and
                             this will clear on its own.
                         </p>
                     </>
@@ -63,7 +63,7 @@ export default function TooSmallForExam() {
                     <>
                         <h1>This device is too small for the exam</h1>
                         <p className="too-small__lede">
-                            The Olympiad paper needs a laptop, desktop, or a tablet — a phone screen
+                            The Olympiad paper needs a laptop, desktop, or a tablet. A phone screen
                             cannot show the question list and the paper side by side, and we would
                                 rather tell you now than halfway through your exam.
                         </p>
@@ -102,7 +102,7 @@ export default function TooSmallForExam() {
                 )}
 
                 <p className="too-small__note">
-                    Everything else — your dashboard, results, certificates and your slot — works
+                    Everything else (your dashboard, results, certificates and your slot) works
                     fine on this device. It is only the exam itself that needs a bigger screen.
                 </p>
 

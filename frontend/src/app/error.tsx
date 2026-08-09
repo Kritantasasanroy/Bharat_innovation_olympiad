@@ -37,7 +37,7 @@ export default function GlobalError({
                 <div className="error-page__icon" aria-hidden="true">⚠️</div>
                 <h1>Something went wrong on this page</h1>
                 <p>
-                    This is our fault, not yours. Nothing you have submitted is lost — exam answers,
+                    This is our fault, not yours. Nothing you have submitted is lost, exam answers,
                     payments and registrations are all saved on our servers as they happen.
                 </p>
 

@@ -151,7 +151,7 @@ export default function AutoSubmitNotice({
                             className="btn btn-primary exam-terminal-action"
                             onClick={onContinue}
                         >
-                            I understand — continue
+                            I understand, continue
                         </button>
                         <p className="exam-terminal-fineprint">
                             Continuing automatically in {secondsLeft}s
@@ -166,7 +166,7 @@ export default function AutoSubmitNotice({
                         <p className="exam-terminal-reason">{copy.reason}</p>
                         <p className="exam-terminal-error">{state.error}</p>
                         <p className="exam-terminal-detail">
-                            Every answer you gave is already saved on the server — nothing is lost.
+                            Every answer you gave is already saved on the server, nothing is lost.
                             Check your internet connection and submit again.
                         </p>
                         <button

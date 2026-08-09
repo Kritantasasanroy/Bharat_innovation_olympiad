@@ -460,7 +460,7 @@ export default function ProfilePage() {
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
                     <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Face ID for Proctoring</h2>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                        Required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor — no photo is saved.
+                        Required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor, no photo is saved.
                     </p>
 
                     {/* Status badge */}

@@ -38,7 +38,7 @@ function ExamFeedbackInner() {
             formUrl={FEEDBACK_FORMS.exam}
             title="How was your exam?"
             intro="Your paper is submitted and safe. We are in beta, so tell us what worked and
-                   what did not — bugs, confusing questions, anything that slowed you down."
+                   what did not: bugs, confusing questions, anything that slowed you down."
             continueLabel="Continue →"
             onContinue={() => router.push(next)}
         />

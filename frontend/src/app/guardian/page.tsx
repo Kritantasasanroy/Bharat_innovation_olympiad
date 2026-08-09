@@ -89,7 +89,7 @@ function GuardianPageInner() {
                             <p className="text-muted" style={{ margin: 0 }}>
                                 {saved
                                     ? 'Thank you. The student can now sit their exams.'
-                                    : 'This is already complete — there is nothing more to do here.'}
+                                    : 'This is already complete, there is nothing more to do here.'}
                             </p>
                         </div>
                     </div>

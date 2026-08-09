@@ -53,14 +53,14 @@ export function describeError(err: unknown, action: string): string {
     const e = (err ?? {}) as ApiErrorShape;
 
     if (isOffline()) {
-        return `You appear to be offline, so we couldn't ${action}. Reconnect to the internet and try again — nothing you've entered has been lost.`;
+        return `You appear to be offline, so we couldn't ${action}. Reconnect to the internet and try again, nothing you've entered has been lost.`;
     }
 
     const status = e?.response?.status;
 
     // No response at all: DNS, CORS, a dropped connection, or the server asleep.
     if (!status) {
-        return `We couldn't reach our servers to ${action}. This is usually a brief connection problem — check your internet and try again in a moment.`;
+        return `We couldn't reach our servers to ${action}. This is usually a brief connection problem, check your internet and try again in a moment.`;
     }
 
     const fromServer = serverMessage(e);
@@ -72,7 +72,7 @@ export function describeError(err: unknown, action: string): string {
             return fromServer ?? `Some of the details weren't accepted. Check what you've entered and try again.`;
 
         case status === 401:
-            return `Your session has expired, so we couldn't ${action}. Please sign in again — your progress is saved.`;
+            return `Your session has expired, so we couldn't ${action}. Please sign in again, your progress is saved.`;
 
         case status === 403:
             return fromServer ?? `You don't have permission to ${action}. If you think that's wrong, contact support and we'll sort it out.`;
@@ -84,13 +84,13 @@ export function describeError(err: unknown, action: string): string {
             return fromServer ?? `That's already been done, so we didn't ${action} again. Refresh the page to see the current state.`;
 
         case status === 413:
-            return `That file is too large to upload. Pick a smaller one — or photograph the document again at a lower resolution — and try again.`;
+            return `That file is too large to upload. Pick a smaller one, or photograph the document again at a lower resolution, and try again.`;
 
         case status === 429:
             return `You've tried a few times in quick succession. Wait about a minute, then try again.`;
 
         case status >= 500:
-            return `Something went wrong on our side while trying to ${action}. It isn't anything you did. Please try again in a moment — if it keeps happening, contact support.`;
+            return `Something went wrong on our side while trying to ${action}. It isn't anything you did. Please try again in a moment, if it keeps happening, contact support.`;
 
         default:
             return fromServer ?? `We couldn't ${action} just now. Please try again.`;

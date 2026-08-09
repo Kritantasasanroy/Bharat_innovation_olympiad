@@ -26,7 +26,7 @@ export default function LandingPage() {
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '12px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad — Become Future Ready" height={38} width={126} style={{ height: 38, width: 'auto', display: 'block' }} />
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad: Become Future Ready" height={38} width={126} style={{ height: 38, width: 'auto', display: 'block' }} />
             <span className="lp-brand-name">Bharat Innovation Olympiad</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -99,7 +99,7 @@ export default function LandingPage() {
               <span style={{ background: 'linear-gradient(135deg,#7dc832,#ffcb05)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 Innovation
               </span>
-              {' '}Olympiad — Become Future Ready
+              {' '}Olympiad: Become Future Ready
             </h1>
 
             <p className="lp-fade-up-2" style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--text-secondary)', margin: '0 0 30px', maxWidth: 520 }}>
@@ -210,7 +210,7 @@ export default function LandingPage() {
               {
                 Icon: BadgeCheck,
                 title: 'Authenticity',
-                body: 'A face scan taken at registration confirms the registered student is the one sitting the paper — so a rank belongs to the person who earned it.',
+                body: 'A face scan taken at registration confirms the registered student is the one sitting the paper, so a rank belongs to the person who earned it.',
               },
               {
                 Icon: ScrollText,
@@ -220,7 +220,7 @@ export default function LandingPage() {
               {
                 Icon: Users,
                 title: 'Child-friendly',
-                body: 'No warnings pile up mid-exam and no video is ever recorded. Analysis runs inside the student’s own browser — only the events leave the device.',
+                body: 'No warnings pile up mid-exam and no video is ever recorded. Analysis runs inside the student’s own browser, only the events leave the device.',
               },
             ] as const).map(({ Icon, title, body }) => (
               <div key={title} className="lp-trust__card">
@@ -265,7 +265,7 @@ export default function LandingPage() {
               Real Students. Real Ideas. Real Impact.
             </h2>
             <p style={{ fontSize: 16, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 600, lineHeight: 1.65 }}>
-              Every one of them began with a single spark of curiosity — right where you are now.
+              Every one of them began with a single spark of curiosity, right where you are now.
             </p>
           </div>
 
@@ -284,7 +284,7 @@ export default function LandingPage() {
                   <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Golden Years</b></div>
                   <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>School</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>DAV Public School, Amritsar</b></div>
                 </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>He didn&apos;t stop after the contest. In 2026 he secured the 1st position nationally in Innopreneurs Junior Season 12 — competing against thousands of young innovators.</p>
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>He didn&apos;t stop after the contest. In 2026 he secured the 1st position nationally in Innopreneurs Junior Season 12, competing against thousands of young innovators.</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
                   {['Innovation Mindset', 'Problem Solving'].map(t => (
                     <span key={t} className="lp-pill" style={{ background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)', color: '#7dc832', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
@@ -310,7 +310,7 @@ export default function LandingPage() {
                   <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Zedberrie</b></div>
                   <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Field</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Sustainable fashion</b></div>
                 </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>She built fashion accessories from textile waste — turning an environmental challenge into a real business, now pursuing global opportunities.</p>
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>She built fashion accessories from textile waste, turning an environmental challenge into a real business, now pursuing global opportunities.</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
                   {['Sustainability', 'Circular Economy'].map(t => (
                     <span key={t} className="lp-pill" style={{ background: 'rgba(255,203,5,0.08)', border: '1px solid rgba(255,203,5,0.2)', color: '#ffcb05', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
@@ -412,7 +412,7 @@ export default function LandingPage() {
               <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no question paper.</b>{' '}
               The Bharat Innovation Olympiad reflects this belief by moving beyond conventional
               examinations that reward memorisation. Instead, it assesses curiosity, creativity,
-              adaptability and real-world thinking — preparing students not just for the next exam,
+              adaptability and real-world thinking, preparing students not just for the next exam,
               but for the next decade.
             </p>
             <p style={{ margin: 0 }}>
@@ -425,7 +425,7 @@ export default function LandingPage() {
             <p style={{ margin: 0 }}>
               Built on the foundation of <b style={{ color: 'var(--text-primary)' }}>Innopreneurs</b>,
               Lemon Ideas&apos; flagship innovation and entrepreneurship movement, it is far more than
-              another Olympiad — it is the beginning of a lifelong innovation ecosystem. Students from
+              another Olympiad, it is the beginning of a lifelong innovation ecosystem. Students from
               Grades 6 to 12 assess themselves across five future-focused dimensions through a balanced
               mix of knowledge-based, situational and future-oriented questions.
             </p>
@@ -450,7 +450,7 @@ export default function LandingPage() {
             The Five Dimensions
           </h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 560, textAlign: 'center' }}>
-            Every student is assessed across five future-focused dimensions — the same five sections
+            Every student is assessed across five future-focused dimensions, the same five sections
             that make up the paper.
           </p>
 
@@ -459,17 +459,17 @@ export default function LandingPage() {
               {
                 n: '01',
                 title: 'Entrepreneurship Mindset',
-                body: 'Entrepreneurship is not just about starting a business — it is a way of thinking. This dimension develops the ability to identify opportunities, take initiative, solve problems creatively and make responsible decisions, through customer empathy, teamwork, planning, resource management and ethics.',
+                body: 'Entrepreneurship is not just about starting a business, it is a way of thinking. This dimension develops the ability to identify opportunities, take initiative, solve problems creatively and make responsible decisions, through customer empathy, teamwork, planning, resource management and ethics.',
               },
               {
                 n: '02',
                 title: 'Problem Solving & Innovation',
-                body: 'Innovation begins with understanding problems that matter. Students observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation — drawing on design thinking, adaptability and evidence-based reasoning.',
+                body: 'Innovation begins with understanding problems that matter. Students observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation, drawing on design thinking, adaptability and evidence-based reasoning.',
               },
               {
                 n: '03',
                 title: 'Emerging Technologies & Digital Readiness, STEM',
-                body: 'Beginning with strong STEM foundations, this dimension introduces computational thinking, coding logic, robotics, artificial intelligence, machine learning and cybersecurity — then expands to frontier technologies such as space technology, biotechnology and quantum computing.',
+                body: 'Beginning with strong STEM foundations, this dimension introduces computational thinking, coding logic, robotics, artificial intelligence, machine learning and cybersecurity, then expands to frontier technologies such as space technology, biotechnology and quantum computing.',
               },
               {
                 n: '04',
@@ -551,7 +551,7 @@ export default function LandingPage() {
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Student Receives</h2>
-            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score — a complete innovation identity.</p>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score: a complete innovation identity.</p>
           </div>
           <div className="lp-grid-3">
             {([
@@ -637,7 +637,7 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-footer__inner">
           <div className="lp-footer__brand">
-            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad — Become Future Ready" height={34} width={112} style={{ height: 34, width: 'auto', display: 'block' }} />
+            <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad: Become Future Ready" height={34} width={112} style={{ height: 34, width: 'auto', display: 'block' }} />
             <span className="lp-brand-name" style={{ fontSize: '0.95rem' }}>Bharat Innovation Olympiad</span>
           </div>
 

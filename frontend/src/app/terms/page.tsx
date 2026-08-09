@@ -110,7 +110,7 @@ const SECTIONS: { heading: string; paragraphs: string[]; list?: string[] }[] = [
 export const metadata = {
     title: 'Terms & Conditions · Bharat Innovation Olympiad',
     description:
-        'Participation terms for the Bharat Innovation Olympiad — eligibility, fees, exam conditions, proctoring, results and personal data.',
+        'Participation terms for the Bharat Innovation Olympiad: eligibility, fees, exam conditions, proctoring, results and personal data.',
 };
 
 export default function TermsPage() {

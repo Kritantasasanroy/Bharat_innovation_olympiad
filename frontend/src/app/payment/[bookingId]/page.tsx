@@ -185,8 +185,8 @@ export default function PaymentPage({ params }: { params: Promise<{ bookingId: s
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📡</div>
                     <h2 style={{ marginBottom: '0.75rem' }}>Could not load your booking</h2>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                        {loadError || 'Something went wrong.'} This is usually a brief connection problem
-                        — nothing has been charged.
+                        {loadError || 'Something went wrong.'} This is usually a brief connection problem,
+                        nothing has been charged.
                     </p>
                     <button
                         className="btn btn-primary btn-lg"

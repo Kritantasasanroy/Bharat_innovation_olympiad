@@ -23,7 +23,7 @@ const MAX_POLLS = 45;
 const POLL_MS = 4000;
 
 const BENEFITS = [
-    'Sit every published olympiad exam — no per-exam fee',
+    'Sit every published olympiad exam, no per-exam fee',
     'Unlimited practice attempts on the practice paper',
     'Full score reports and rank breakdown after each exam',
     'Downloadable certificates for every exam you complete',
@@ -100,7 +100,7 @@ export default function UnlockPage() {
         try {
             await loadPass();
         } catch (e: any) {
-            setError(e.response?.data?.message || 'Could not refresh — please try again.');
+            setError(e.response?.data?.message || 'Could not refresh, please try again.');
         } finally {
             setChecking(false);
         }
@@ -133,7 +133,7 @@ export default function UnlockPage() {
                     <div className="glass-card" style={{ padding: '2rem' }}>
                         <h1 style={{ fontSize: '1.6rem', marginBottom: '0.35rem' }}>Unlock all exams</h1>
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                            A single payment gives you access to every Bharat Innovation Olympiad exam —
+                            A single payment gives you access to every Bharat Innovation Olympiad exam,
                             now and in the future.
                         </p>
 
@@ -174,7 +174,7 @@ export default function UnlockPage() {
                         >
                             On the payment page, enter the email your account uses
                             {user?.email ? (
-                                <> — <strong style={{ color: 'var(--text-primary)' }}>{user.email}</strong></>
+                                <>: <strong style={{ color: 'var(--text-primary)' }}>{user.email}</strong></>
                             ) : null}
                             . That&apos;s how we unlock your access automatically after payment.
                         </div>
@@ -190,7 +190,7 @@ export default function UnlockPage() {
                                     </span>
                                 </div>
                                 <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', marginBottom: '1rem' }}>
-                                    Finish the ₹{rupees} payment in the other tab. This unlocks automatically —
+                                    Finish the ₹{rupees} payment in the other tab. This unlocks automatically,
                                     usually within a few seconds.
                                 </p>
                                 <button
@@ -200,7 +200,7 @@ export default function UnlockPage() {
                                     onClick={handleCheckNow}
                                     disabled={checking}
                                 >
-                                    {checking ? 'Checking…' : "I've paid — check now"}
+                                    {checking ? 'Checking…' : "I've paid, check now"}
                                 </button>
                             </div>
                         ) : (

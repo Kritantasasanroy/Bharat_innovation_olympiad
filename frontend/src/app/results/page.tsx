@@ -185,7 +185,7 @@ function AnswerKey({ attemptId }: { attemptId: string }) {
                             </div>
                             <div>
                                 <span className="answer-key__label">Correct answer</span>
-                                <span className="answer-key__right">{optionText(q.correctAnswer) ?? '—'}</span>
+                                <span className="answer-key__right">{optionText(q.correctAnswer) ?? '-'}</span>
                             </div>
                             <div>
                                 <span className="answer-key__label">Marks</span>
@@ -269,7 +269,7 @@ export default function ResultsPage() {
                                             exists to prevent. */}
                                         {result.isProvisional && (
                                             <div className="result-provisional-banner">
-                                                <strong>Provisional — unverified score.</strong> This can still
+                                                <strong>Provisional: unverified score.</strong> This can still
                                                 change while proctoring reviews and grievances are settled.
                                                 Your rank, full analysis and the answer key are published once
                                                 the season closes.
