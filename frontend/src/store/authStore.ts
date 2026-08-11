@@ -13,7 +13,9 @@ interface AuthState {
     loginWithPhone: (phone: string, code: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
-    updateProfile: (data: { firstName: string; lastName: string; phone?: string; phoneCode?: string; classBand: number }) => Promise<void>;
+    /** No `classBand`: a student's class is final once set, and the server
+     *  refuses to change it. Support corrects a genuine mistake via admin. */
+    updateProfile: (data: { firstName: string; lastName: string; phone?: string; phoneCode?: string }) => Promise<void>;
     setUser: (user: User | null) => void;
 }
 

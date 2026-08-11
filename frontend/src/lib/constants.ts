@@ -70,6 +70,59 @@ export const PROCTOR_FRAME_WIDTH = 320;
 export const PROCTOR_FRAME_HEIGHT = 240;
 export const PROCTOR_FRAME_QUALITY = 0.6;
 
+/**
+ * The exam integrity thresholds, in one place.
+ *
+ * These numbers are quoted to the student in four separate places — the
+ * instructions list, the rules modal, the fullscreen gate's countdown and the
+ * auto-submit notice — and they were previously hard-coded in each. A paper
+ * that pauses for 45 seconds while the rules promise 20 is worse than no rule
+ * at all, so every one of those screens now reads from here.
+ */
+
+/**
+ * Seconds the paper may sit paused before it submits itself.
+ *
+ * "Paused" is one of exactly three things: the student left fullscreen, switched
+ * to another tab, or moved focus to another window. Each starts this countdown,
+ * and coming back cancels it.
+ */
+export const EXAM_PAUSE_TIMEOUT_SEC = 40;
+
+/**
+ * Violations past which an attempt is put in front of a human reviewer.
+ *
+ * **This does not end the exam.** Nothing about the violation count submits a
+ * paper any more — the only three things that do are the timer running out and
+ * the two pause cases above. Violations are counted, shown to the student, and
+ * carried into the review queue, and that is all they do.
+ *
+ * It is a review threshold, so the student is never promised a specific number
+ * of "lives": the copy says the count is recorded and looked at, not that the
+ * third one is fatal, because it isn't.
+ */
+export const VIOLATION_REVIEW_THRESHOLD = 3;
+
+/**
+ * Seconds of no mouse, key or touch input before the student is nudged.
+ *
+ * A warning, not a strike: a student re-reading a long question legitimately
+ * touches nothing for well over this, so counting it would punish reading. The
+ * event is recorded for the proctoring review either way.
+ */
+export const EXAM_IDLE_NUDGE_SEC = 20;
+
+/**
+ * Minutes a face-check warning stays quiet after showing one.
+ *
+ * The camera can lose a face several times a minute in poor light, and a toast
+ * per episode meant a student who had already been told once was told again
+ * every few seconds. It is the same message either way, so it is shown at most
+ * once per this window — the underlying violations are still all counted and
+ * all recorded, only the interruption is rate-limited.
+ */
+export const FACE_TOAST_COOLDOWN_MIN = 3;
+
 // Heartbeat
 export const HEARTBEAT_INTERVAL_MS = 10_000;  // 10 seconds
 

@@ -99,6 +99,30 @@ export class AuthService {
         return section.slice(0, 10);
     }
 
+    /**
+     * Section is mandatory for students, alongside the school.
+     *
+     * Same reasoning as {@link assertSchoolResolved}: results are reported to a
+     * school class by class, and rows with no section cannot be grouped into
+     * classes at all. Students who genuinely have no section are told on the
+     * form to write "NA", so there is no student for whom this is unanswerable.
+     *
+     * Only demanded when there is a school to attach it to — a staff or partner
+     * account has neither.
+     */
+    private assertSectionResolved(
+        role: SyncUserDto['role'],
+        schoolId: string | null | undefined,
+        section: string | null,
+    ): void {
+        const isStudent = (role ?? 'STUDENT') === 'STUDENT';
+        if (isStudent && schoolId && !section) {
+            throw new BadRequestException(
+                'Enter your class section, exactly as your school writes it. If your school does not use sections, write NA.',
+            );
+        }
+    }
+
     async syncUser(email: string, dto: SyncUserDto) {
         const existing = await this.prisma.user.findUnique({ where: { email } });
 
@@ -128,6 +152,11 @@ export class AuthService {
             this.assertSchoolResolved(existing.role, schoolId);
             const phone = await this.resolveVerifiedPhone(dto.phone, existing.id, dto.phoneCode);
             const classBand = dto.classBand ?? existing.classBand;
+            // An invited roster row may already carry a section the school set,
+            // so the incoming value only has to satisfy this when there is
+            // nothing on file to fall back to.
+            const section = this.normaliseSection(dto.section, schoolId) ?? existing.section;
+            this.assertSectionResolved(existing.role, schoolId, section);
 
             const claimed = await this.prisma.user.update({
                 where: { id: existing.id },
@@ -136,7 +165,7 @@ export class AuthService {
                     lastName: dto.lastName || existing.lastName,
                     classBand,
                     schoolId,
-                    section: this.normaliseSection(dto.section, schoolId) ?? existing.section,
+                    section,
                     activatedAt: new Date(),
                     ...(phone ? { phone } : {}),
                     ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
@@ -171,6 +200,8 @@ export class AuthService {
 
         const schoolId = (await this.resolveSchoolId(dto.schoolCode)) ?? null;
         this.assertSchoolResolved(dto.role, schoolId);
+        const section = this.normaliseSection(dto.section, schoolId);
+        this.assertSectionResolved(dto.role, schoolId, section);
         const phone = await this.resolveVerifiedPhone(dto.phone, undefined, dto.phoneCode);
 
         const user = await this.prisma.user.create({
@@ -182,7 +213,7 @@ export class AuthService {
                 role: dto.role || 'STUDENT',
                 classBand: dto.classBand,
                 schoolId,
-                section: this.normaliseSection(dto.section, schoolId),
+                section,
                 activatedAt: new Date(),
                 ...(dto.termsVersion
                     ? { termsAcceptedAt: new Date(), termsVersion: dto.termsVersion }
@@ -312,6 +343,39 @@ export class AuthService {
         // *changes*. Otherwise every profile save — even one that only edits the
         // name — would fail for any student who already has a phone on file,
         // because there is nothing in the form to satisfy the code check.
+        /**
+         * Class is locked once it has been set.
+         *
+         * "Class selection for the Olympiad is final upon confirmation and
+         * cannot be modified later." It decides which paper the student sits
+         * and which cohort they are ranked against, and it is confirmed a
+         * second time on the instructions screen immediately before the exam
+         * opens — so a student who could still change it afterwards could sit
+         * the Class 6 paper and be ranked as a Class 12 student.
+         *
+         * Refused here rather than only hidden in the profile form: the form is
+         * a `<select>` on a public API, and "the UI doesn't offer it" is not a
+         * rule. Support can still correct a genuine mistake through the admin
+         * console, which is audited.
+         *
+         * A no-op resubmission of the same value is allowed, so a student
+         * editing their name does not have to strip the field out.
+         */
+        let classBandUpdate: { classBand?: number } = {};
+        if (dto.classBand !== undefined) {
+            const current = await this.prisma.user.findUnique({
+                where: { id: userId },
+                select: { classBand: true },
+            });
+            if (current?.classBand == null) {
+                classBandUpdate = { classBand: dto.classBand };
+            } else if (current.classBand !== dto.classBand) {
+                throw new BadRequestException(
+                    'Your class cannot be changed once it is set, because it decides which paper you sit and who you are ranked against. Raise a support ticket and we will correct it for you.',
+                );
+            }
+        }
+
         let phoneUpdate: { phone?: string | null } = {};
         if (dto.phone !== undefined) {
             if (!dto.phone.trim()) {
@@ -339,7 +403,7 @@ export class AuthService {
                 firstName: dto.firstName,
                 lastName: dto.lastName,
                 ...phoneUpdate,
-                classBand: dto.classBand,
+                ...classBandUpdate,
             },
             select: {
                 id: true,

@@ -194,7 +194,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                 {onSectionChange && (
                     <div className="input-group">
                         <label className="input-label" htmlFor="section">
-                            Your section
+                            Your section <span className="input-required">required</span>
                         </label>
                         <input
                             id="section"
@@ -204,6 +204,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                             placeholder="A"
                             maxLength={SECTION_MAX_LENGTH}
                             autoComplete="off"
+                            required
                             value={section ?? ''}
                             onChange={(event) =>
                                 onSectionChange(event.target.value.slice(0, SECTION_MAX_LENGTH))
@@ -212,7 +213,8 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         <p className="input-hint">
                             Exactly as your school writes it: <strong>A</strong>,{' '}
                             <strong>B2</strong>, <strong>Rose</strong>. This is how your teachers
-                            find your class in their results.
+                            find your class in their results. If your school does not use
+                            sections, write <strong>NA</strong>.
                         </p>
                     </div>
                 )}
@@ -227,7 +229,8 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
                 Your results are grouped by school, so your teachers can see how your class did.
-                Every student needs one, if yours isn&apos;t listed, you can add it.
+                Every student needs one. <strong>Most students should just search by name</strong> —
+                a school code is only for students whose school handed them one.
             </p>
 
             <div className="school-tabs">
@@ -283,16 +286,33 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                     </p>
                 </>
             ) : adding ? (
+                /* Two fields and nothing else. Everything the directory needs
+                   beyond the name comes from the pincode, so a student who
+                   cannot find their school types what is on their uniform and
+                   what is on their address, and is done. */
                 <div className="school-add">
+                    <p className="school-add__intro">
+                        <strong>Adding your school</strong>
+                        <span>
+                            Type the full name as your school writes it, and the pincode of the
+                            area it is in. We fill in the city and state for you. If another
+                            student has already added it, we will use theirs rather than making a
+                            duplicate.
+                        </span>
+                    </p>
+                    <label className="input-label" htmlFor="newSchoolName">School name</label>
                     <input
+                        id="newSchoolName"
                         className="input-field"
-                        placeholder="School name"
+                        placeholder="e.g. Kendriya Vidyalaya No. 2"
                         value={newName}
                         onChange={(event) => setNewName(event.target.value)}
                     />
+                    <label className="input-label" htmlFor="newSchoolPincode">School pincode</label>
                     <input
+                        id="newSchoolPincode"
                         className="input-field"
-                        placeholder="Pincode"
+                        placeholder="6 digits, e.g. 440001"
                         inputMode="numeric"
                         maxLength={PINCODE_LENGTH}
                         value={pincode}
@@ -302,14 +322,14 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         {locating
                             ? 'Looking up your pincode…'
                             : location
-                              ? `${location.city}, ${location.state}`
+                              ? `📍 ${location.city}, ${location.state}`
                               : pincode.length === PINCODE_LENGTH
-                                ? 'We could not find that pincode.'
+                                ? 'We could not find that pincode. Check the six digits and try again.'
                                 : 'City and state are filled in from your pincode.'}
                     </p>
                     <div className="school-add__actions">
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAdding(false)}>
-                            Cancel
+                            Back to search
                         </button>
                         <button
                             type="button"
@@ -371,6 +391,27 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                             </button>
                         </div>
                     )}
+                    {/* The same escape hatch, outside the dropdown.
+                        It used to exist only as the last row of a list that
+                        opens on focus and closes on an outside click — so a
+                        student who searched, saw nothing, and clicked away to
+                        think had no visible way forward and no reason to believe
+                        one existed. This one is always on screen. */}
+                    <p className="school-add-prompt">
+                        Can’t find it?{' '}
+                        <button
+                            type="button"
+                            className="school-add-prompt__link"
+                            onClick={() => {
+                                setNewName(query);
+                                setAdding(true);
+                                setOpen(false);
+                            }}
+                        >
+                            Add your school
+                        </button>{' '}
+                        — it takes the name and a pincode.
+                    </p>
                 </>
             )}
 

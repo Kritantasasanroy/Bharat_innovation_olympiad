@@ -54,6 +54,12 @@ export class SyncUserDto {
      * Free text rather than an A–H enum: Indian schools name sections
      * inconsistently and a fixed list would leave real students unable to
      * register. Length-capped because it is printed on rosters and admit cards.
+     *
+     * **Required for students.** School reporting is class-by-class, and a
+     * school report whose rows have no section cannot be split into classes at
+     * all, which is the thing the report is for. Still `@IsOptional()` at the
+     * DTO level because staff and school accounts sync through this same
+     * endpoint and have no section; `syncUser` demands it of students.
      */
     @IsString()
     @MaxLength(10)

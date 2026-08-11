@@ -29,7 +29,15 @@ describe('ProctorService — post-exam review', () => {
             auditLog: { create: jest.fn().mockResolvedValue({}) },
             $transaction: jest.fn().mockImplementation((ops: any[]) => Promise.all(ops)),
         };
-        return { service: new ProctorService(prisma), prisma };
+        // Object storage is only reached by `createEvent` when a violation
+        // carries a snapshot; nothing in the review flow uploads anything, so a
+        // stub that would throw if called is the honest double here.
+        const storage: any = {
+            uploadImageBuffer: jest.fn().mockRejectedValue(
+                new Error('review flow must not upload'),
+            ),
+        };
+        return { service: new ProctorService(prisma, storage), prisma, storage };
     }
 
     describe('flagForReviewIfRisky', () => {

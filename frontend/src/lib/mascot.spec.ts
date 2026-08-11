@@ -100,9 +100,19 @@ describe('cueIsWorthShowing', () => {
 });
 
 describe('MASCOT identity', () => {
-    it('is defined in exactly one place so the placeholder name is one edit to change', () => {
+    it('is defined in exactly one place so a rename is one edit', () => {
         expect(MASCOT.name).toBeTruthy();
         expect(MASCOT.avatar).toBeTruthy();
-        expect(MASCOT.watchingLine).toMatch(/invigilator/i);
+        expect(MASCOT.watchingLine).toBeTruthy();
+    });
+
+    // He is one character across registration, the portal, the trial paper and
+    // the in-exam proctoring messages. A line that refers to him generically
+    // ("our smart invigilator") breaks that, and it is the in-exam messages
+    // where it matters most — that is where a student needs a familiar name
+    // rather than an anonymous system voice.
+    it('speaks in Limon’s name rather than a generic role', () => {
+        expect(MASCOT.name).toBe('Limon');
+        expect(MASCOT.watchingLine).toContain(MASCOT.name);
     });
 });

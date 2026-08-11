@@ -1,6 +1,7 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import LimonTour from '@/components/limon/LimonTour';
 import Navbar from '@/components/layout/Navbar';
 import PaymentTerms from '@/components/PaymentTerms';
 import { useAuth } from '@/hooks/useAuth';
@@ -134,6 +135,11 @@ export default function StudentDashboard() {
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <Navbar />
+            {/* Limon's tour of the portal, once, on a student's first landing.
+                Held until the exam list has loaded: several of its steps point
+                at things that are not on the page while it is still a spinner,
+                and a step whose target is missing is dropped for good. */}
+            <LimonTour tourId="dashboard" ready={!loading} />
             <main className="container dashboard animate-fade-in">
                 <div className="dashboard-header">
                     <div>
@@ -147,7 +153,7 @@ export default function StudentDashboard() {
                     {/* The roll number is what support asks for, so it belongs
                         where a student can read it out without hunting. */}
                     {user?.rollNumber && (
-                        <div className="dashboard-roll">
+                        <div className="dashboard-roll" data-limon="dashboard-roll">
                             <span className="dashboard-roll__label">Roll number</span>
                             <strong className="dashboard-roll__value">{user.rollNumber}</strong>
                         </div>
@@ -193,7 +199,7 @@ export default function StudentDashboard() {
                 ) : (
                     <>
                         {/* Stats */}
-                        <div className="grid-3 dashboard-stats">
+                        <div className="grid-3 dashboard-stats" data-limon="dashboard-stats">
                             <div className="stat-card">
                                 <div className="stat-value">{stats.open}</div>
                                 <div className="stat-label">Open Now</div>
@@ -209,7 +215,7 @@ export default function StudentDashboard() {
                         </div>
 
                         {/* Exams */}
-                        <section className="dashboard-section">
+                        <section className="dashboard-section" data-limon="dashboard-exams">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                                 <h2>Your Exams</h2>
                                 <Link href="/exams" style={{ fontSize: '0.9rem' }}>View all →</Link>

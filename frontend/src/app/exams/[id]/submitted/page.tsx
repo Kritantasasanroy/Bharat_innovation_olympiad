@@ -119,6 +119,45 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                     )}
                 </section>
 
+                {/* ── Violations recorded ──
+                    "The final submission message should display the user's
+                    unverified score along with the total number of violations
+                    recorded."
+
+                    Shown whether the number is zero or not, and zero is the
+                    point: a student who did nothing wrong should be told so in
+                    as many words, because the alternative is finding out weeks
+                    later that something was on their record. The count is the
+                    same one the counter in the exam header showed. */}
+                {!loading && result && typeof result.violationCount === 'number' && (
+                    <section className="glass-card submitted-card">
+                        <h2>Proctoring record</h2>
+                        {result.violationCount === 0 ? (
+                            <p className="submitted-violations submitted-violations--clean">
+                                <strong>No violations were recorded.</strong> Nothing about your exam
+                                has been flagged for review.
+                            </p>
+                        ) : (
+                            <>
+                                <p className="submitted-violations submitted-violations--flagged">
+                                    <strong>
+                                        {result.violationCount} violation
+                                        {result.violationCount === 1 ? '' : 's'} recorded.
+                                    </strong>{' '}
+                                    These are the warnings you saw during the paper: leaving fullscreen,
+                                    switching away, a camera or face issue, or a screenshot attempt.
+                                </p>
+                                <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    A violation is not a decision. A person reviews anything serious
+                                    before any conclusion is drawn, and most are ordinary
+                                    interruptions. If something went wrong during your exam, tell us
+                                    from the support page and it will be read alongside this record.
+                                </p>
+                            </>
+                        )}
+                    </section>
+                )}
+
                 {/* ── What happens next ── */}
                 <section className="glass-card submitted-card">
                     <h2>What happens next</h2>

@@ -1058,6 +1058,21 @@ export class AttemptService {
             const isFinal = Boolean(attempt.examInstance.finalResultsReleasedAt);
             const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
 
+            // The violation total the student is shown after submitting.
+            //
+            // Only rows the player marked `counted: true` — those are posted
+            // once per violation, at the moment the on-screen "2 / 3" ticked
+            // up, so this figure is the same one they watched during the paper.
+            // A raw `proctorEvents` count would be wildly higher: the face
+            // proctor posts an event every five-second detection tick, so one
+            // episode of looking away is a dozen rows.
+            const violationCount = await this.prisma.proctorEvent.count({
+                where: {
+                    attemptId: attempt.id,
+                    details: { path: ['counted'], equals: true },
+                },
+            });
+
             results.push({
                 id: attempt.id,
                 // The exam (not the instance) this attempt belongs to, so the
@@ -1080,6 +1095,7 @@ export class AttemptService {
                     : null,
                 isProvisional: !isFinal && !isDisqualified,
                 isFinal,
+                violationCount,
                 answerKeyAvailable: Boolean(attempt.examInstance.answerKeyReleasedAt),
                 // Rank and analysis are meaningless on a provisional score and
                 // actively misleading on a disqualified one.

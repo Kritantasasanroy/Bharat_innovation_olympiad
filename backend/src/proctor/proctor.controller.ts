@@ -89,9 +89,26 @@ export class ProctorController {
     @UseGuards(JwtAuthGuard)
     @HttpCode(200)
     async createEvent(
-        @Body() body: { attemptId: string; type: string; details?: Record<string, any> },
+        @Body() body: {
+            attemptId: string;
+            type: string;
+            details?: Record<string, any>;
+            /**
+             * A webcam still, as a base64 data URL, captured at the moment of a
+             * counted violation. Optional and best-effort — see
+             * `ProctorService.storeSnapshot` for why nothing is captured
+             * routinely.
+             */
+            snapshot?: string;
+        },
     ) {
-        return this.proctorService.createEvent(body.attemptId, body.type as any, body.details);
+        return this.proctorService.createEvent(
+            body.attemptId,
+            body.type as any,
+            body.details,
+            undefined,
+            body.snapshot,
+        );
     }
 
     // ── Admin Endpoints ──

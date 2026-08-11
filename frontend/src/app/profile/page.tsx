@@ -47,7 +47,6 @@ export default function ProfilePage() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [phone, setPhone] = useState('');
-    const [classBand, setClassBand] = useState<number>(6);
 
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -81,7 +80,6 @@ export default function ProfilePage() {
             setFirstName(user.firstName || '');
             setLastName(user.lastName || '');
             setPhone(user.phone || '');
-            setClassBand(user.classBand || 6);
         }
     }, [user]);
 
@@ -185,7 +183,6 @@ export default function ProfilePage() {
                 firstName,
                 lastName,
                 phone,
-                classBand,
                 ...(phoneIsNew ? { phoneCode: phoneOtpCode } : {}),
             });
             setPhoneOtpSent(false);
@@ -357,22 +354,28 @@ export default function ProfilePage() {
                             )}
                         </div>
 
+                        {/* Class is final once set — it decides which paper is
+                            sat and which cohort the result is ranked against,
+                            and it is confirmed again on the instructions screen
+                            immediately before the exam opens. Shown as a locked
+                            field rather than removed, because a student needs to
+                            be able to check it is right. The server refuses a
+                            change too; this is not the only guard. */}
                         <div className="input-group">
                             <label className="input-label">Class</label>
-                            <select
+                            <input
+                                type="text"
                                 className="input-field"
-                                value={classBand}
-                                onChange={(e) => setClassBand(parseInt(e.target.value))}
-                                required
-                            >
-                                <option value={6}>Class 6</option>
-                                <option value={7}>Class 7</option>
-                                <option value={8}>Class 8</option>
-                                <option value={9}>Class 9</option>
-                                <option value={10}>Class 10</option>
-                                <option value={11}>Class 11</option>
-                                <option value={12}>Class 12</option>
-                            </select>
+                                value={user.classBand ? `Class ${user.classBand}` : 'Not set'}
+                                disabled
+                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                            />
+                            <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
+                                Your class is final: it decides which paper you sit and who you are
+                                ranked against. If it is wrong,{' '}
+                                <Link href="/support">raise a support ticket</Link> and we will
+                                correct it before your exam.
+                            </small>
                         </div>
 
                         <button
@@ -384,8 +387,7 @@ export default function ProfilePage() {
                                 (phoneIsNew && phoneOtpCode.length !== 6) ||
                                 (firstName === user.firstName &&
                                     lastName === user.lastName &&
-                                    phone === (user.phone ?? '') &&
-                                    classBand === user.classBand)
+                                    phone === (user.phone ?? ''))
                             }
                         >
                             {isLoading ? 'Saving...' : 'Save Changes'}

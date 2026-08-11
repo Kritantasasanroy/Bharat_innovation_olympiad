@@ -1,12 +1,18 @@
 'use client';
 
+import ExamTutorial from '@/components/exam/ExamTutorial';
 import AuthGuard from '@/components/layout/AuthGuard';
 import TooSmallForExam from '@/components/TooSmallForExam';
 import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import api from '@/lib/api';
-import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
+import {
+    EXAM_PAUSE_TIMEOUT_SEC,
+    MIN_VIEWPORT_HEIGHT,
+    MIN_VIEWPORT_WIDTH,
+    VIOLATION_REVIEW_THRESHOLD,
+} from '@/lib/constants';
 import { MONITORED_ACTIVITIES } from '@/lib/copy/onboarding';
 import { preloadFaceModels } from '@/lib/faceModels';
 import { enterFullscreen } from '@/lib/fullscreen';
@@ -23,54 +29,109 @@ import { use, useEffect, useState } from 'react';
  * line was hard-coded and stayed on screen even for papers that carry none,
  * which is a rule students would reasonably change their strategy over.
  */
+/**
+ * ## Plain language
+ *
+ * "Rewrite technical exam documentation for timer and monitoring to use plain
+ * language." Every reader here is between eleven and eighteen, and about half of
+ * them are reading it in their second or third language. The rules that governed
+ * whether their paper survived were written in the vocabulary of the system that
+ * enforces them — "auto-submit", "violation", "AI proctoring", "integrity
+ * rules" — which named the mechanism and not the consequence.
+ *
+ * Three things changed, and each of them is a rule a student can act on:
+ *
+ *  1. **Consequences before mechanisms.** "Your exam will be sent in and you
+ *     cannot go back to it" is the thing they need to know; that this is called
+ *     an auto-submit is not.
+ *  2. **Numbers come from {@link EXAM_PAUSE_TIMEOUT_SEC} and
+ *     {@link EXAM_MAX_VIOLATIONS}, never typed in.** The pause rule said 20
+ *     seconds here while the player counted down from a different number, which
+ *     is worse than not stating it at all.
+ *  3. **Say what to *do*.** A rule the student cannot follow — "your background
+ *     must be a solid colour" with no reason and no fallback — reads as a threat.
+ */
 function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } | null) {
     return [
-        <>The exam runs in <strong>fullscreen mode</strong>, your browser goes fullscreen by itself when you start, and must stay that way.</>,
-        <>Your webcam must remain on throughout the exam for AI proctoring, stay visible and look at the screen.</>,
-        <>Your background must be <strong>plain and a solid colour</strong>. Cluttered, busy, or changing backgrounds can make AI proctoring fail to verify you, this may result in disqualification.</>,
-        <>Exiting fullscreen or switching tabs will pause the exam.</>,
-        <>If paused for more than 20 seconds, the exam will auto-submit.</>,
-        <>Violations are recorded for actions that break exam integrity rules, including leaving fullscreen, switching tabs, camera/face issues, or taking a screenshot. Each one shows an on-screen warning explaining what happened. After 3 violations, the exam auto-submits.</>,
-        // Stated here because it is the one rule that ends the paper without a
-        // warning first, and a student must not meet it for the first time by
-        // accidentally pressing F5. The in-exam ↻ Reload button is named so they
-        // know there is a safe alternative.
         <>
-            <strong>Do not reload the page or use your browser&apos;s Back button.</strong> An exam
-            may only be sat once, in one continuous sitting, doing either will submit and{' '}
-            <strong>permanently lock</strong> your paper. If you need to refresh, use the{' '}
-            <strong>↻ Reload</strong> button inside the exam, which keeps your answers and your timer.
-        </>,
-        <>Screenshots, screen recordings and printing are not allowed, and are recorded for review.</>,
-        // The two things students most often mistake for the site failing. Both
-        // are cases where the correct advice is "do nothing and carry on", and a
-        // student who has not been told that will reload — which now ends their
-        // paper. Explaining it here is what makes that rule survivable.
-        <>
-            <strong>A brief internet drop will not cost you time.</strong> Your timer runs on our
-            servers, not in the page, so it keeps perfect time even if your connection stutters or
-            the countdown freezes for a moment. It reconnects on its own, keep answering and do
-            not reload.
+            <strong>The exam fills your whole screen.</strong> It goes fullscreen by itself when
+            you start, and it has to stay that way until you finish.
         </>,
         <>
-            <strong>Before you start, the exam takes a few seconds to get ready.</strong> You will
-            see a &ldquo;Getting your exam ready&rdquo; screen while your camera and the AI proctoring
-            load. <strong>Your exam time does not start until your questions appear</strong>, so
-            none of that setup comes out of your paper.
+            <strong>Your camera stays on the whole time.</strong> It checks that it is you sitting
+            the paper and that you are alone. Nothing is filmed, and nobody watches you live. A
+            single photo is saved <strong>only</strong> at the moment a violation is recorded, and
+            is kept with your paper for the review team.
+        </>,
+        <>
+            <strong>Sit in front of a plain wall, with light on your face.</strong> If the camera
+            cannot see you clearly it may decide it cannot recognise you, and that counts against
+            you. A blank wall and a lamp or window in front of you is all it takes.
+        </>,
+        <>
+            <strong>If you leave fullscreen or switch to something else, the exam stops and waits
+            for you.</strong> The clock keeps running while it waits. Come straight back and carry
+            on.
+        </>,
+        <>
+            <strong>If you stay away longer than {EXAM_PAUSE_TIMEOUT_SEC} seconds, your paper is
+            sent in for you</strong> and you cannot go back to it. A countdown shows you exactly
+            how long you have left to return. Along with your time running out, this is the{' '}
+            <strong>only</strong> way your exam can end by itself.
+        </>,
+        <>
+            <strong>Some things are recorded as violations, but none of them stops your
+            exam.</strong> Leaving fullscreen, switching tab or app, your face not being visible or
+            not matching, more than one person on camera, a screenshot, or refreshing the page.
+            Each one tells you on screen what happened, and a photo is taken at that moment. Once
+            you pass {VIOLATION_REVIEW_THRESHOLD}, a person reads the record before your result is
+            confirmed. Keep answering, and tell us afterwards if something went wrong.
+        </>,
+        // Named separately because it is the one thing students most often do by
+        // reflex when a page looks stuck, and the in-exam ↻ Reload button is the
+        // answer. It no longer ends the paper, but it is still recorded.
+        <>
+            <strong>Try not to refresh the page or press your browser&apos;s Back button.</strong>{' '}
+            Your answers and your time survive it, but it is recorded on your paper. If something
+            looks broken, use the <strong>↻ Reload</strong> button inside the exam instead: it does
+            the same job and is not counted against you.
+        </>,
+        <>
+            <strong>A short internet drop will not cost you any time.</strong> Your clock is kept
+            on our servers, not in the page, so it stays right even if the countdown on screen
+            freezes for a moment. It fixes itself. Keep answering, and do not refresh.
+        </>,
+        <>
+            <strong>Your time does not start until you see your first question.</strong> There is a
+            &ldquo;Getting your exam ready&rdquo; screen first, while your camera starts up. None of
+            that comes out of your exam time.
         </>,
         ...(exam?.sectionCount && exam.sectionCount > 1
             ? [
                   <>
-                      The paper is divided into <strong>{exam.sectionCount} sections</strong>. You will
-                      work through one section at a time, and you can move freely between questions.
+                      <strong>The paper has {exam.sectionCount} parts.</strong> You go through them
+                      in order, and you can move back and forth between questions as much as you
+                      like.
                   </>,
               ]
             : []),
-        <>Your answers are auto-saved continuously.</>,
+        <>
+            <strong>Your answers save themselves</strong> the moment you choose one. There is
+            nothing to press to save.
+        </>,
         exam?.negativeMarking
-            ? <>Negative marking applies for incorrect MCQ answers.</>
-            : <>There is <strong>no negative marking</strong>, an incorrect answer costs you nothing, so attempt every question.</>,
-        <>Use the Submit button when done. Do not close the browser.</>,
+            ? <>
+                  <strong>A wrong answer loses you marks on this paper.</strong> If you truly have
+                  no idea, leaving it blank costs you less than guessing.
+              </>
+            : <>
+                  <strong>A wrong answer costs you nothing.</strong> There are no negative marks, so
+                  never leave a question blank, guess if you have to.
+              </>,
+        <>
+            <strong>Press Submit when you are done</strong>, and confirm it. Do not just close the
+            browser.
+        </>,
     ];
 }
 
@@ -471,6 +532,12 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         </ul>
                     </div>
 
+                    {/* The screen itself, drawn and labelled. Placed directly
+                        after the rules because most of the rules are about
+                        things on that screen, and a student who has just read
+                        "use the ↻ Reload button" needs to be shown where it is. */}
+                    <ExamTutorial />
+
                     {/* What the proctoring actually looks for.
                         Openly listed rather than left to be discovered as a
                         violation: a student who knows the rules can follow them, and
@@ -487,8 +554,9 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                             ))}
                         </ul>
                         <p style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 'var(--space-3)' }}>
-                            Face analysis runs inside your own browser. No video is recorded, sent or
-                            stored, only the events above.
+                            Face analysis runs inside your own browser and no video is ever recorded
+                            or stored. Only the events above are sent, along with one still photo
+                            taken at the moment a violation is recorded — never at any other time.
                         </p>
                     </div>
 

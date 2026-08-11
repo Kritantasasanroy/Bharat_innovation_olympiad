@@ -1,15 +1,19 @@
 /**
  * The invigilation persona and the in-exam encouragement schedule.
  *
- * ## Placeholder identity — read before renaming
+ * ## Identity — signed off
  *
- * The persona ("A character for communication and invigilation — Smart persona
- * with an interesting new name like LIMON ??") is **not signed off**. `LIMON` is
- * a working name taken from that note.
+ * The character is **Limon**, drawn as the approved Lemon Ideas kids avatar (see
+ * `components/limon/LimonAvatar.tsx`). He is one character everywhere: the guide
+ * who walks a student through registration, the portal and the trial paper, and
+ * the voice of the proctoring messages during an exam — "Limon can't see you"
+ * rather than "NO_FACE detected". That consistency is the point of having him at
+ * all; a friendly guide who turns into an anonymous system voice the moment
+ * something goes wrong is worse than no character.
  *
- * Everything identity-shaped lives in {@link MASCOT} so approving a different
- * name and art is a one-object edit rather than a hunt through JSX. Nothing else
- * in the codebase should hard-code the name.
+ * Everything identity-shaped lives in {@link MASCOT} so a change of name or art
+ * is a one-object edit rather than a hunt through JSX. Nothing else in the
+ * codebase should hard-code the name.
  *
  * ## Why the cue schedule is a pure function
  *
@@ -24,18 +28,18 @@
  */
 
 export interface MascotIdentity {
-    /** Display name. Placeholder — see the file header before changing. */
+    /** Display name, as it is written to students. */
     name: string;
-    /** Rendered next to the name. An emoji avoids shipping an asset for a placeholder. */
+    /** The inline fallback for text-only contexts (toasts, emails, page titles). */
     avatar: string;
     /** Shown once per exam, quietly, so the invigilation is never a surprise. */
     watchingLine: string;
 }
 
 export const MASCOT: MascotIdentity = {
-    name: 'LIMON',
+    name: 'Limon',
     avatar: '🍋',
-    watchingLine: 'Our smart invigilator is keeping an eye out, so just focus on your paper.',
+    watchingLine: 'Limon is keeping an eye out, so just focus on your paper.',
 };
 
 /** Elapsed-time marks, in minutes, at which a message fires. Straight from the doc. */

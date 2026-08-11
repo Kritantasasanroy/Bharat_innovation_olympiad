@@ -53,7 +53,7 @@ const SECTIONS: { heading: string; paragraphs: string[]; list?: string[] }[] = [
         ],
         list: [
             'The exam runs in fullscreen. Leaving fullscreen, switching tabs or opening another application is recorded and pauses the exam.',
-            'The webcam must stay on for the whole exam. Face analysis runs inside the student\'s own browser; only the resulting events are transmitted, and no video is recorded or stored.',
+            'The webcam must stay on for the whole exam. Face analysis runs inside the student\'s own browser and no video is ever recorded or stored. Only the resulting events are transmitted, together with a single still photo captured at the moment a violation is recorded, which is kept with that attempt for human review.',
             'The following are logged: more than one face in frame, looking away from the screen for an extended period, no face in frame, a face that does not match the one enrolled, and leaving fullscreen or switching away.',
             'Repeated violations will cause the exam to be submitted automatically. Answers already given are preserved.',
             'The timer runs on our servers. It continues if the student\'s connection drops.',

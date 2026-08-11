@@ -18,6 +18,8 @@
  * anywhere else.
  */
 
+import { EXAM_PAUSE_TIMEOUT_SEC } from '@/lib/constants';
+
 export type ViolationKind =
     | 'exit_fullscreen'
     | 'tab_switch'
@@ -99,16 +101,24 @@ export function violationCopy(kind: ViolationKind): ViolationCopy {
 }
 
 /**
- * The consequence line — the part students actually need and the part the old
- * player never showed. Deliberately explicit about the *next* violation rather
- * than only the current count, because "2 of 3" tells a 13-year-old nothing
- * about what happens on 3.
+ * The consequence line — what this violation actually means for the student.
+ *
+ * It used to count down lives ("one more and your exam will be submitted"),
+ * because violations used to end the paper. They no longer do: the only things
+ * that end an exam are the clock running out and staying away from the paper
+ * past the pause timeout. So this says the true thing instead, which is both
+ * less frightening and more useful — the count is a record that a person reads,
+ * not a fuse.
+ *
+ * Past {@link VIOLATION_REVIEW_THRESHOLD} the attempt is flagged for review, and
+ * the student is told so plainly rather than discovering it weeks later.
  */
-export function violationConsequence(count: number, max: number): string {
-    const left = max - count;
-    if (left <= 0) return 'This was your final violation. Your exam has been submitted automatically.';
-    if (left === 1) return `This was violation ${count} of ${max}. One more and your exam will be submitted automatically and you will not be able to continue.`;
-    return `This was violation ${count} of ${max}. After ${max} violations your exam is submitted automatically.`;
+export function violationConsequence(count: number, threshold: number): string {
+    const noun = count === 1 ? 'violation' : 'violations';
+    if (count >= threshold) {
+        return `That is ${count} ${noun} recorded on this paper. Your exam has not been stopped and you can carry on, but it has passed the point where a person will review what was recorded before your result is confirmed.`;
+    }
+    return `That is ${count} ${noun} recorded on this paper. Nothing has been taken away, keep going. Violations are only a record, and a person reads them before anything is concluded.`;
 }
 
 // ── Submission errors ───────────────────────────────────────────────────────
@@ -141,11 +151,18 @@ export function isAttemptAlreadyFinished(err: unknown): boolean {
 
 // ── Auto-submit ─────────────────────────────────────────────────────────────
 
+/**
+ * The only two ways an exam ends without the student pressing Submit.
+ *
+ * `max_violations` and `navigation` used to be here too. Neither ends a paper
+ * any more: a violation count is a record for the reviewer, and a reload or a
+ * back-navigation is warned about and logged but no longer submits. Removing
+ * them from the type is what guarantees no screen can still claim otherwise —
+ * every remaining branch has to name one of these two.
+ */
 export type AutoSubmitCause =
     | 'time_up'
-    | 'max_violations'
-    | 'paused_too_long'
-    | 'navigation';
+    | 'paused_too_long';
 
 export interface AutoSubmitCopy {
     icon: string;
@@ -165,7 +182,7 @@ export interface AutoSubmitCopy {
  */
 export function autoSubmitCopy(
     cause: AutoSubmitCause,
-    ctx: { maxViolations?: number; pauseSeconds?: number; violation?: ViolationKind } = {},
+    ctx: { pauseSeconds?: number; violation?: ViolationKind } = {},
 ): AutoSubmitCopy {
     switch (cause) {
         case 'time_up':
@@ -175,33 +192,23 @@ export function autoSubmitCopy(
                 reason: 'Your allotted time for this paper has run out, so the exam was submitted for you.',
                 detail: 'Every answer you selected before the timer reached zero has been saved and counted. Unanswered questions are simply left blank.',
             };
-        case 'max_violations': {
-            const max = ctx.maxViolations ?? 3;
-            const rule = ctx.violation ? violationCopy(ctx.violation) : null;
-            return {
-                icon: '🚫',
-                title: 'Exam ended: final violation',
-                reason: rule
-                    ? `${rule.title}. That was violation ${max} of ${max}, the limit for this exam, so your paper was submitted automatically.`
-                    : `You reached the limit of ${max} exam integrity violations, so your paper was submitted automatically.`,
-                detail: 'Every answer you gave before this point has been saved and counted. This attempt has been flagged for review by the exam team, who will look at what was recorded before deciding anything.',
-            };
-        }
         case 'paused_too_long': {
-            const secs = ctx.pauseSeconds ?? 20;
+            const secs = ctx.pauseSeconds ?? EXAM_PAUSE_TIMEOUT_SEC;
+            // Name the specific thing that paused it. "Not returned to
+            // fullscreen" was the only reason ever given, and it was simply
+            // wrong for two of the three cases — a student who had alt-tabbed to
+            // a notification was told about a fullscreen rule they had not
+            // broken, and had no idea what to avoid next time.
+            const cause =
+                ctx.violation === 'tab_switch' ? 'you switched to another tab'
+                : ctx.violation === 'window_blur' ? 'you moved to another window or app'
+                : 'you left fullscreen';
             return {
                 icon: '⏸️',
-                title: 'Exam ended: paused too long',
-                reason: `Your exam was paused for more than ${secs} seconds because it was not returned to fullscreen, so it was submitted automatically.`,
+                title: 'Exam ended: away too long',
+                reason: `Your exam paused because ${cause}, and it was not brought back within ${secs} seconds, so it was submitted for you.`,
                 detail: 'Every answer you gave before the pause has been saved and counted. This attempt has been flagged for review by the exam team.',
             };
         }
-        case 'navigation':
-            return {
-                icon: '🔒',
-                title: 'Exam locked: you left the exam page',
-                reason: 'The browser reloaded or navigated away from the exam. For fairness, an exam can only be sat once and in one continuous sitting, so this paper has been submitted and locked.',
-                detail: 'Every answer you gave before this point has been saved and counted. You cannot re-open this paper. This attempt has been flagged for review by the exam team.',
-            };
     }
 }

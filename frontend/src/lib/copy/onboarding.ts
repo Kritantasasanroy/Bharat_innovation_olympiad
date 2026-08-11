@@ -40,7 +40,11 @@ export const PRESENCE_POINTS = [
     {
         icon: '📷',
         title: 'The camera will be switched on',
-        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers, not as a photo, so no picture of the student is ever saved.',
+        // Precise about the one case where a picture *is* kept. The old wording
+        // said no picture is ever saved, which stopped being true the moment
+        // violations started capturing a frame — and a privacy promise that is
+        // quietly false is worse than one that is narrower than you would like.
+        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers, not as a photo. During an exam a photo is saved only if a violation is recorded, and it is kept with that paper for the review team.',
     },
     {
         icon: '👨‍👩‍👧',
@@ -89,9 +93,14 @@ export const THANK_YOU = {
  * list anything here that is not genuinely detected.
  */
 export const MONITORED_ACTIVITIES = [
-    'More than one face visible in the camera',
-    'Looking away from the screen for an extended period',
-    'No face visible in the camera',
-    'A face that does not match the one enrolled at registration',
-    'Leaving fullscreen, switching tabs, or moving to another app',
+    'Someone else in the picture as well as you',
+    'You looking away from the screen for a long stretch',
+    'Your face not being visible at all',
+    'A face that is not the one you scanned when you registered',
+    'Leaving fullscreen, switching tabs, or opening another app',
+    // Both were genuinely detected and neither was listed, which is exactly the
+    // surprise this list exists to prevent — a student met the screenshot rule
+    // for the first time as a warning telling them they had broken it.
+    'Taking a screenshot, or trying to print the paper',
+    'Nothing moving on your screen for a long stretch',
 ] as const;

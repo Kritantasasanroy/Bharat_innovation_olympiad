@@ -65,6 +65,7 @@ model User {
   consents         Consent[]
   trialCompletions TrialCompletion[]
   guardianProfile  GuardianProfile?
+  trainingRecords  TrainingRecord[]
 
   @@index([email])
   @@index([schoolId])
@@ -499,6 +500,31 @@ model ProctorEvent {
   @@index([type])
 }
 
+/// A training module a student says they attended.
+///
+/// Self-declared, and deliberately so: the sessions are run by schools and
+/// partners in rooms we have no system in, so the only party who can report
+/// attendance at the moment it happens is the student. `attendedAt` is when they
+/// ticked it, not when the session ran — it is an audit trail for the claim, not
+/// a record of the event.
+///
+/// One row per (student, module). A module is identified by a stable slug rather
+/// than a foreign key to a `TrainingModule` table: the six modules are the five
+/// olympiad pillars plus the orientation session, they change once a season at
+/// most, and a table would add a join and a seeding step to a fixed list.
+model TrainingRecord {
+  id         String   @id @default(uuid())
+  userId     String
+  /// Stable slug, e.g. `entrepreneurship-mindset`. See `TRAINING_MODULES`.
+  moduleKey  String
+  attendedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleKey])
+  @@index([userId])
+  @@index([moduleKey])
+}
+
 model AuditLog {
   id        String   @id @default(uuid())
   userId    String?
@@ -914,11 +940,20 @@ enum ProctorEventType {
   FACE_MISMATCH
   LOOKING_AWAY
   TAB_SWITCH
+  /// Focus left the exam window without the tab being hidden — another window,
+  /// a notification, a second screen. The player has always posted this; it was
+  /// missing from the enum, so every one of those events was rejected by
+  /// Postgres and swallowed by the client's best-effort catch.
+  WINDOW_BLUR
   EXIT_FULLSCREEN
   SCREEN_CAPTURE
   NETWORK_DISCONNECT
   SEB_VIOLATION
   IP_CHANGE
+  /// No mouse, key or touch input for the configured threshold. Severity 1: it
+  /// is a signal for the reviewer's timeline, not evidence of anything on its
+  /// own — a student reading a long question is idle by this definition.
+  INACTIVITY
 }
 
 // ── Slot booking & payment models ────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { ExamModule } from './exam/exam.module';
 import { GeoModule } from './geo/geo.module';
 import { GrievanceModule } from './grievance/grievance.module';
 import { GuardianModule } from './guardian/guardian.module';
+import { TrainingModule } from './training/training.module';
 import { HealthController } from './health.controller';
 import { PartnerModule } from './partner/partner.module';
 import { PaymentModule } from './payment/payment.module';
@@ -49,6 +50,7 @@ import { UserModule } from './user/user.module';
         ConsentModule,
         // Registration part 2 — parent/guardian details + parental consent (DPDP).
         GuardianModule,
+        TrainingModule,
         // Admin power — user/school/partner management + permanent delete.
         AdminManagementModule,
         // Partner/school support tickets, visible to admin.

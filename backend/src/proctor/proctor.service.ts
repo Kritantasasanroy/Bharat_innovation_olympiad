@@ -6,6 +6,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { AttemptStatus, ProctorEventType, ReviewStatus } from '@prisma/client';
+import { ObjectStorageService } from '../common/services/object-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -22,7 +23,51 @@ export const REVIEW_RISK_THRESHOLD = 0.5;
 export class ProctorService {
     private readonly logger = new Logger('ProctorService');
 
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private storage: ObjectStorageService,
+    ) {}
+
+    /**
+     * A webcam still, kept only when something actually went wrong.
+     *
+     * Registration promises — and the parent's DPDP consent says — that no photo
+     * of the student is stored during normal proctoring, and that stays true:
+     * nothing is captured on a timer, and a paper that raises no violation
+     * produces no images at all. A frame is kept only at the instant a violation
+     * is recorded, because "your face didn't match" with no evidence behind it
+     * is not something a reviewer can act on and not something a student can
+     * fairly appeal.
+     *
+     * The URL goes in the event's `details` rather than a column of its own, so
+     * this needs no schema change and a snapshot can never outlive the event it
+     * belongs to — `ProctorEvent` cascades on attempt deletion.
+     *
+     * Never throws. A snapshot that fails to upload must not lose the violation
+     * it was attached to: the event is the record that matters, the image is
+     * corroboration.
+     */
+    private async storeSnapshot(dataUrl: string): Promise<string | null> {
+        try {
+            const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i.exec(dataUrl.trim());
+            if (!match) return null;
+            const [, contentType, base64] = match;
+            const buffer = Buffer.from(base64, 'base64');
+            // A 320-wide JPEG is ~15 KB. Anything an order of magnitude past
+            // that is not a proctor frame, and is not worth the storage.
+            if (buffer.byteLength > 512 * 1024) return null;
+            const { url } = await this.storage.uploadImageBuffer(
+                buffer,
+                `proctor-${Date.now()}.jpg`,
+                contentType,
+                'bio/proctor-snapshots',
+            );
+            return url;
+        } catch (error) {
+            this.logger.warn(`[Snapshot] upload failed: ${(error as Error).message}`);
+            return null;
+        }
+    }
 
     // ── Face Enrollment ──
 
@@ -72,13 +117,17 @@ export class ProctorService {
         type: ProctorEventType,
         details?: Record<string, any>,
         severity?: number,
+        /** Base64 data URL of a webcam frame. Only sent with counted violations. */
+        snapshot?: string,
     ) {
+        const snapshotUrl = snapshot ? await this.storeSnapshot(snapshot) : null;
+
         const event = await this.prisma.proctorEvent.create({
             data: {
                 attemptId,
                 type,
                 severity: severity ?? this.getSeverity(type),
-                details: details ?? {},
+                details: { ...(details ?? {}), ...(snapshotUrl ? { snapshotUrl } : {}) },
             },
         });
 
@@ -424,11 +473,16 @@ export class ProctorService {
             FACE_MISMATCH: 5,
             LOOKING_AWAY: 2,
             TAB_SWITCH: 4,
+            WINDOW_BLUR: 3,
             EXIT_FULLSCREEN: 4,
             SCREEN_CAPTURE: 5,
             NETWORK_DISCONNECT: 2,
             IP_CHANGE: 2,
             SEB_VIOLATION: 5,
+            // Deliberately the floor. Stillness is not misconduct, and scoring
+            // it any higher would push honest students who read carefully over
+            // the human-review threshold.
+            INACTIVITY: 1,
         };
         return map[type] ?? 1;
     }

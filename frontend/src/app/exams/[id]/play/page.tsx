@@ -5,14 +5,23 @@ import ExamPreparingOverlay from '@/components/exam/ExamPreparingOverlay';
 import ProctorToast, { type ProctorToastData } from '@/components/exam/ProctorToast';
 import ViolationBanner from '@/components/exam/ViolationBanner';
 import AuthGuard from '@/components/layout/AuthGuard';
+import LimonTour from '@/components/limon/LimonTour';
 import MascotToast from '@/components/MascotToast';
-import { useExamLockdown, type BlockedAction } from '@/hooks/useExamLockdown';
+import { useExamLockdown, type BlockedAction, type LockdownBreach } from '@/hooks/useExamLockdown';
 import { useExamSession } from '@/hooks/useExamSession';
 import { useFaceProctor, NO_FACE_SUSTAIN_MS, LOOKING_AWAY_SUSTAIN_MS, FACE_MISMATCH_SUSTAIN_MS } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
+import { useIdleMonitor } from '@/hooks/useIdleMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
-import { TIMER_DANGER_THRESHOLD, TIMER_WARNING_THRESHOLD } from '@/lib/constants';
+import {
+    EXAM_IDLE_NUDGE_SEC,
+    EXAM_PAUSE_TIMEOUT_SEC,
+    FACE_TOAST_COOLDOWN_MIN,
+    TIMER_DANGER_THRESHOLD,
+    TIMER_WARNING_THRESHOLD,
+    VIOLATION_REVIEW_THRESHOLD,
+} from '@/lib/constants';
 import {
     isAttemptAlreadyFinished,
     submitErrorMessage,
@@ -27,8 +36,7 @@ import { useProctorStore } from '@/store/proctorStore';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /** Seconds the exam is paused before it submits itself. Shared with the copy. */
-const PAUSE_TIMEOUT_SEC = 20;
-const MAX_VIOLATIONS = 3;
+const PAUSE_TIMEOUT_SEC = EXAM_PAUSE_TIMEOUT_SEC;
 
 /** What a blocked (not breached) lockdown action tells the student. */
 const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
@@ -38,6 +46,20 @@ const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
     capture: 'Screenshots are not allowed during the exam. This attempt has been recorded.',
     devtools: 'Developer tools are disabled during the exam.',
     copy: 'Copying exam content is not allowed.',
+};
+
+/**
+ * What a *successful* reload or back-navigation says.
+ *
+ * Distinct from {@link BLOCKED_ACTION_COPY}, which is for things stopped before
+ * they happened: telling a student "reloading is disabled" on a page that has
+ * visibly just reloaded is obviously untrue and reads as a broken site. This one
+ * has to say what actually happened, that their work survived it, and that it
+ * was noted.
+ */
+const BREACH_COPY: Record<LockdownBreach, string> = {
+    reload: 'The exam page was reloaded. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your paper, so use the ↻ Reload button above if you need to refresh again.',
+    back: 'You navigated back into the exam. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your paper.',
 };
 
 function formatTime(secs: number): string {
@@ -235,6 +257,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const stopProctoringRef = useRef<(() => void) | null>(null);
     const clearViolationStorageRef = useRef<() => void>(() => {});
     const suspendViolationsRef = useRef<() => void>(() => {});
+    /** Populated from `useFaceProctor` below — same circular-dependency dodge. */
+    const captureSnapshotRef = useRef<(() => string | null) | null>(null);
+    /** When a violation snapshot was last taken, so the student can be told. */
+    const [photoCapturedAt, setPhotoCapturedAt] = useState<number | null>(null);
 
     const releaseLockdownRef = useRef<() => void>(() => {});
 
@@ -345,16 +371,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         }
     };
 
-    const handleAutoSubmit = (
-        cause: 'max_violations' | 'paused_too_long',
-        violation?: ViolationKind,
-    ) => {
-        // TEMPORARILY DISABLED — auto-submit on violations/pause-timeout.
-        // Violations are still recorded, the banner and fullscreen gate still
-        // show, the counter still climbs past the limit — none of it forces
-        // the exam to end while this is off. Manual Submit is unaffected.
-        // Uncomment the line below to restore.
-        // beginAutoSubmit(cause, violation);
+    const handleAutoSubmit = (cause: 'paused_too_long', violation?: ViolationKind) => {
+        beginAutoSubmit(cause, violation);
     };
 
     const continueAfterAutoSubmit = useCallback(() => {
@@ -362,32 +380,54 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     }, []);
 
     const {
-        isFullscreen, violationCount, isGated, lastError, lastViolation, maxViolations, pauseDeadline,
+        isFullscreen, violationCount, isGated, lastError, lastViolation, pauseDeadline,
         requestFullscreen, reportExternalViolation, suspendViolations,
     } = useFullscreenMonitor({
+        /**
+         * A violation was *counted* — the moment the on-screen "2 / 3" ticks up.
+         *
+         * Every kind is posted here, including the face ones, and every one
+         * carries `counted: true`. That flag is what the server totals for the
+         * "violations recorded" figure the student is shown after submitting.
+         *
+         * The face kinds used to be skipped on the grounds that `useFaceProctor`
+         * already posts them — but it posts one event per *detection tick*, so a
+         * student whose face was out of frame for a minute generated a dozen
+         * rows for what the counter showed as one violation. Totalling those
+         * would have reported a number nothing on screen ever agreed with.
+         */
         onViolation: async (type, count) => {
             if (!attemptId) return;
-            // Face-related violations are already logged by useFaceProctor's
-            // own postEvent calls — only fullscreen-related violations need a
-            // separate ProctorEvent posted here.
-            if (type === 'no_face' || type === 'looking_away' || type === 'face_mismatch' || type === 'multiple_faces') return;
             try {
+                // A still from the camera, kept *only* here — at the instant a
+                // violation is recorded. Nothing is captured on a timer, so a
+                // student who trips no rule has no image stored anywhere, which
+                // is what the registration copy and the parent's consent
+                // promise. Without it, "your face didn't match" is an assertion
+                // with nothing behind it that a reviewer can weigh or a student
+                // can appeal.
+                const snapshot = captureSnapshotRef.current?.() ?? null;
                 const backendType =
                     type === 'exit_fullscreen' ? 'EXIT_FULLSCREEN'
                     : type === 'tab_switch'     ? 'TAB_SWITCH'
                     // A screenshot or print attempt. SCREEN_CAPTURE already
                     // carries the right severity (5) in the proctor service.
                     : type === 'screen_capture' ? 'SCREEN_CAPTURE'
+                    : type === 'no_face'        ? 'NO_FACE'
+                    : type === 'looking_away'   ? 'LOOKING_AWAY'
+                    : type === 'face_mismatch'  ? 'FACE_MISMATCH'
+                    : type === 'multiple_faces' ? 'MULTIPLE_FACES'
                     :                              'WINDOW_BLUR';
                 await api.post('/proctor/events', {
                     attemptId,
                     type: backendType,
-                    details: { violationCount: count, source: type },
+                    details: { violationCount: count, source: type, counted: true },
+                    ...(snapshot ? { snapshot } : {}),
                 });
+                if (snapshot) setPhotoCapturedAt(Date.now());
             } catch { /* best-effort */ }
         },
         onAutoSubmit: handleAutoSubmit,
-        maxViolations: MAX_VIOLATIONS,
         pauseTimeoutSec: PAUSE_TIMEOUT_SEC,
     });
 
@@ -407,6 +447,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         startProctoring,
         prepareProctoring,
         stopProctoring,
+        captureSnapshot,
     } = useFaceProctor({
         attemptId,
         onSustainedViolation: (type) => reportExternalViolation(
@@ -417,6 +458,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     useEffect(() => { stopProctoringRef.current = stopProctoring; });
     useEffect(() => { suspendViolationsRef.current = suspendViolations; }, [suspendViolations]);
+    useEffect(() => { captureSnapshotRef.current = captureSnapshot; }, [captureSnapshot]);
 
     /**
      * The "getting your exam ready" gate.
@@ -446,6 +488,8 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // ── Browser lockdown: back, reload, screenshots ─────────────────────────
     /** A blocked action's explanation, shown as a transient notice. */
     const [blockedNotice, setBlockedNotice] = useState<{ action: BlockedAction; at: number } | null>(null);
+    /** A reload or back-navigation that actually succeeded. Recorded, not fatal. */
+    const [breachNotice, setBreachNotice] = useState<{ breach: LockdownBreach; at: number } | null>(null);
 
     const { isMasked, reload: reloadExam, release: releaseLockdown } = useExamLockdown({
         attemptId,
@@ -453,6 +497,16 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         // out what the rules feel like, and locking their practice paper for
         // pressing Back teaches them nothing except to be afraid of the button.
         enabled: Boolean(attemptId) && !isTrialRun && !autoSubmit,
+        /**
+         * A reload or a back-navigation actually got through.
+         *
+         * Recorded, and told to the student, but it no longer ends the paper —
+         * the only two things that do are the clock and the pause timeout. A
+         * refresh is very often a school laptop or a flaky connection rather
+         * than a student trying something, and ending an olympiad over it was
+         * too blunt an instrument for how ambiguous the signal is. The reviewer
+         * gets the event either way.
+         */
         onBreach: (breach) => {
             void api.post('/proctor/events', {
                 attemptId,
@@ -460,12 +514,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 // "secure environment was broken out of" bucket and already
                 // carries severity 5. The specific cause is in `details`.
                 type: 'SEB_VIOLATION',
-                details: { source: `navigation_${breach}`, violationCount },
+                details: { source: `navigation_${breach}`, violationCount, counted: true },
             }).catch(() => { /* best-effort */ });
-            // TEMPORARILY DISABLED — see the note in handleAutoSubmit above.
-            // The breach is still logged as SEB_VIOLATION above; it no longer
-            // force-submits the exam while this is off.
-            // beginAutoSubmit('navigation');
+            setBreachNotice({ breach, at: Date.now() });
         },
         onBlocked: (action) => setBlockedNotice({ action, at: Date.now() }),
         // A capture attempt is a real violation, not just a blocked keystroke —
@@ -480,6 +531,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         const t = setTimeout(() => setBlockedNotice(null), 6000);
         return () => clearTimeout(t);
     }, [blockedNotice]);
+
+    // A breach notice stays longer than a blocked one: the student has just
+    // watched the page reload and needs time to read that their work survived.
+    useEffect(() => {
+        if (!breachNotice) return;
+        const t = setTimeout(() => setBreachNotice(null), 12000);
+        return () => clearTimeout(t);
+    }, [breachNotice]);
 
 
     // Live "now" tick so the face/gaze popup countdowns re-render every 0.5s.
@@ -497,41 +556,62 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const mismatchSecondsLeft = mismatchSince ? Math.max(0, Math.ceil((FACE_MISMATCH_SUSTAIN_MS - (nowTick - mismatchSince)) / 1000)) : null;
     const isMultiFace = currentFaceCount > 1;
 
-    // Center-screen popups, dismissed via an OK button. Each type tracks WHICH
-    // episode was last dismissed (its "since" timestamp) so a fresh episode of
-    // the same issue shows the popup again instead of staying dismissed forever.
-    const [noFaceDismissedAt, setNoFaceDismissedAt] = useState<number | null>(null);
-    const [awayDismissedAt, setAwayDismissedAt] = useState<number | null>(null);
-    const [mismatchDismissedAt, setMismatchDismissedAt] = useState<number | null>(null);
-    const [multiFaceDismissed, setMultiFaceDismissed] = useState(false);
-    useEffect(() => { if (!isMultiFace) setMultiFaceDismissed(false); }, [isMultiFace]);
+    /**
+     * Face-check notices, rate-limited to one per
+     * {@link FACE_TOAST_COOLDOWN_MIN} minutes.
+     *
+     * These used to be dismissed per *episode*, which sounds equivalent and is
+     * not: in poor light the camera loses a face several times a minute, and
+     * each loss is a new episode with a new `since` timestamp, so the student
+     * got the same toast over and over for a problem they had already been told
+     * about and could not always fix. Now the first one through starts a
+     * cooldown and the rest are silent.
+     *
+     * Silent means *the toast* — every episode is still counted as a violation
+     * and still posted to the server. This throttles the interruption, not the
+     * record.
+     *
+     * The counter starts at the first violation rather than at exam start, so a
+     * student whose camera is fine for twenty minutes still gets told promptly
+     * the first time it is not.
+     */
+    const FACE_TOAST_COOLDOWN_MS = FACE_TOAST_COOLDOWN_MIN * 60_000;
+    const [faceToast, setFaceToast] = useState<ProctorToastData | null>(null);
+    const lastFaceToastAtRef = useRef(0);
 
-    // Only one notice on screen at a time — priority order below. Rendered as
-    // a small toast (see ProctorToast), not the full-screen backdrop popup
-    // this used to be: a student mid-question should be told, not stopped.
-    type FaceIssue = ProctorToastData & { onDismiss: () => void };
-    const faceIssue: FaceIssue | null =
-        isMultiFace && !multiFaceDismissed ? {
-            key: 'multiface', icon: '👥', title: 'Multiple faces detected',
-            message: 'Only the registered student should be visible in the camera.',
-            onDismiss: () => setMultiFaceDismissed(true),
-        }
-        : noFaceSince !== null && noFaceSince !== noFaceDismissedAt ? {
-            key: `no-face-${noFaceSince}`, icon: '👤', title: 'Face not detected',
-            message: `Please be clearly visible in the camera${noFaceSecondsLeft && noFaceSecondsLeft > 0 ? ` within ${noFaceSecondsLeft}s` : ''}.`,
-            onDismiss: () => setNoFaceDismissedAt(noFaceSince),
-        }
-        : mismatchSince !== null && mismatchSince !== mismatchDismissedAt ? {
-            key: `mismatch-${mismatchSince}`, icon: '⚠️', title: 'Identity mismatch',
-            message: 'The face on camera does not match your enrolled profile.',
-            onDismiss: () => setMismatchDismissedAt(mismatchSince),
-        }
-        : awaySince !== null && awaySince !== awayDismissedAt ? {
-            key: `looking-away-${awaySince}`, icon: '👀', title: 'Looking away',
-            message: `Please look at the screen${awaySecondsLeft && awaySecondsLeft > 0 ? ` within ${awaySecondsLeft}s` : ''}.`,
-            onDismiss: () => setAwayDismissedAt(awaySince),
-        }
-        : null;
+    useEffect(() => {
+        if (isTrialRun || isGated || autoSubmit) return;
+
+        const issue =
+            isMultiFace ? {
+                key: 'multiface', icon: '👥', title: 'Limon sees more than one person',
+                message: 'Only you should be in front of the camera. Ask anyone else in the room to move out of shot.',
+            }
+            : noFaceSince !== null ? {
+                key: 'no-face', icon: '👤', title: 'Limon can’t see you',
+                message: 'Move back in front of the camera and make sure there is light on your face.',
+            }
+            : mismatchSince !== null ? {
+                key: 'mismatch', icon: '⚠️', title: 'Limon isn’t sure it’s you',
+                message: 'The face on camera doesn’t match the one you scanned when you registered. Sit square to the camera, in good light.',
+            }
+            : awaySince !== null ? {
+                key: 'looking-away', icon: '👀', title: 'Limon says eyes on the screen',
+                message: 'You have been looking away for a while. Glance up only briefly if you must.',
+            }
+            : null;
+
+        if (!issue) return;
+        const now = Date.now();
+        if (now - lastFaceToastAtRef.current < FACE_TOAST_COOLDOWN_MS) return;
+        lastFaceToastAtRef.current = now;
+        // The timestamp is part of the key so a toast shown after a cooldown is
+        // a genuinely new one to ProctorToast and restarts its own dismiss timer.
+        setFaceToast({ ...issue, key: `${issue.key}-${now}`, durationMs: 7000 });
+    }, [
+        isMultiFace, noFaceSince, mismatchSince, awaySince,
+        isTrialRun, isGated, autoSubmit, FACE_TOAST_COOLDOWN_MS,
+    ]);
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
@@ -539,9 +619,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     // fullscreen twice must warn twice. `at` is the episode's identity.
     const [dismissedViolationAt, setDismissedViolationAt] = useState<number | null>(null);
     const visibleViolation =
-        lastViolation && lastViolation.at !== dismissedViolationAt && !lastViolation.isFinal
-            ? lastViolation
-            : null;
+        lastViolation && lastViolation.at !== dismissedViolationAt ? lastViolation : null;
 
     /**
      * Mid-exam encouragement at 20 and 40 minutes.
@@ -579,10 +657,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (!attemptId || autoSubmit || isSubmitting) return;
         if (isExpired || (timerReady && remaining <= 0)) {
-            // TEMPORARILY DISABLED — see the note in handleAutoSubmit above.
-            // The timer still shows 00:00; the exam just no longer force-ends
-            // on its own while this is off.
-            // beginAutoSubmit('time_up');
+            beginAutoSubmit('time_up');
         }
     }, [isExpired, timerReady, remaining, attemptId, autoSubmit, isSubmitting]);
 
@@ -608,36 +683,62 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const dismissCue = useCallback(() => setActiveCue(null), []);
 
     /**
-     * Three "your photo has been captured" toasts, spaced across the exam.
+     * The top-left slot: the photo-capture confirmation and the idle nudge.
      *
-     * Not tied to an actual capture — face-api.js runs inference on the live
-     * video feed and never uploads a frame (see useFaceProctor) — this exists
-     * purely so proctoring stays *visibly* present through the exam rather
-     * than only being felt when something goes wrong. Same elapsed-time basis
-     * as the mid-exam mascot cues (server timer, not wall clock), and skipped
-     * under the same conditions: never during the trial, never while gated or
-     * ending, so a fired slot is never one the student silently never saw.
+     * One slot rather than two because `ProctorToast` has exactly two fixed
+     * corners and the bottom-left one belongs to face notices — two toasts
+     * sharing a corner would render on top of each other.
      */
-    const PHOTO_TOAST_FRACTIONS = [0.25, 0.5, 0.75] as const;
-    const [firedPhotoToasts, setFiredPhotoToasts] = useState<ReadonlySet<number>>(() => new Set());
-    const [photoToast, setPhotoToast] = useState<ProctorToastData | null>(null);
+    const [statusToast, setStatusToast] = useState<ProctorToastData | null>(null);
 
+    /**
+     * "A photo was taken", said out loud, every time one actually is.
+     *
+     * There is no interval here any more, and that is the point. A photo is
+     * captured at the instant a violation is recorded and at no other time, so
+     * this toast fires exactly as often as a picture of the student exists —
+     * never on a clean paper. A timed "identity checked" message that fired
+     * whether or not anything was captured trained students to ignore it, which
+     * is the worst possible outcome for the one notice that reports a camera
+     * capturing them.
+     */
     useEffect(() => {
-        if (!timerReady || isTrialRun || isGated || autoSubmit || durationSeconds <= 0) return;
-        const elapsed = durationSeconds - remaining;
-        const dueIdx = PHOTO_TOAST_FRACTIONS.findIndex(
-            (frac, i) => !firedPhotoToasts.has(i) && elapsed >= durationSeconds * frac,
-        );
-        if (dueIdx === -1) return;
-        setFiredPhotoToasts((prev) => new Set(prev).add(dueIdx));
-        setPhotoToast({
-            key: `photo-${dueIdx}-${Date.now()}`,
+        if (!photoCapturedAt) return;
+        setStatusToast({
+            key: `photo-${photoCapturedAt}`,
             icon: '📸',
-            title: 'Photo captured',
-            message: 'Your photo has been captured for identity verification.',
-            durationMs: 5000,
+            title: 'Photo taken',
+            message: 'A photo was taken because a violation was recorded just now. It is kept with your paper for the review team, and it is the only time a picture of you is stored.',
+            durationMs: 7000,
         });
-    }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, autoSubmit, firedPhotoToasts]);
+    }, [photoCapturedAt]);
+
+    /**
+     * Nothing has moved for {@link EXAM_IDLE_NUDGE_SEC} seconds.
+     *
+     * Recorded for the reviewer's timeline and said to the student, but it does
+     * not cost a strike — see {@link useIdleMonitor} for why counting stillness
+     * would punish careful reading. Off during the trial and while the paper is
+     * gated, where being still is the correct thing to be doing.
+     */
+    const { markActive: markStudentActive } = useIdleMonitor({
+        enabled: Boolean(attemptId) && !isTrialRun && !isGated && !autoSubmit,
+        thresholdSec: EXAM_IDLE_NUDGE_SEC,
+        onIdle: (idleSeconds) => {
+            setStatusToast({
+                key: `idle-${Date.now()}`,
+                icon: '🖱️',
+                title: 'Still there?',
+                message: `Nothing has moved on your screen for ${idleSeconds} seconds. Your timer is still running, so carry on when you are ready.`,
+                durationMs: 6000,
+            });
+            void api.post('/proctor/events', {
+                attemptId,
+                type: 'INACTIVITY',
+                details: { idleSeconds, thresholdSec: EXAM_IDLE_NUDGE_SEC },
+            }).catch(() => { /* best-effort */ });
+        },
+    });
 
     /**
      * Phase 1 — get proctoring ready, before there is an attempt to bill it to.
@@ -760,6 +861,12 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const answeredCount = Object.keys(answers).length;
     const progressPercent = questions.length > 0
         ? Math.round((answeredCount / questions.length) * 100) : 0;
+    const unansweredCount = questions.length - answeredCount;
+    const allAnswered = questions.length > 0 && unansweredCount === 0;
+    /** Where "go to the first blank one" sends them, from the paper itself
+     *  rather than from the answer count — a student may have answered 49 of 50
+     *  with the blank one in the middle. */
+    const firstUnansweredIndex = questions.findIndex((q) => !answers[q.id]);
 
     // Section structure. The paper is sat one section at a time — all of
     // "Entrepreneurship Mindset", then all of "Problem Solving & Innovation" —
@@ -939,6 +1046,16 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
+            {/* Limon's tour of the exam screen — **trial runs only**.
+                Never on a real paper: the clock is running, and stopping a
+                student to explain a button they are already pressing costs them
+                marks. This is the whole argument for the rehearsal being free
+                and unlimited. Held until the paper is on screen and the student
+                is actually in it, so no step points at a target behind the
+                fullscreen gate. */}
+            {isTrialRun && (
+                <LimonTour tourId="exam" ready={Boolean(currentQuestion) && !isGated} />
+            )}
             <div className="exam-player">
 
                 {/* ── face-api.js model loading banner ──
@@ -980,7 +1097,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <ViolationBanner
                         kind={visibleViolation.kind}
                         count={visibleViolation.count}
-                        max={maxViolations}
+                        threshold={VIOLATION_REVIEW_THRESHOLD}
                         onDismiss={() => setDismissedViolationAt(visibleViolation.at)}
                     />
                 )}
@@ -1004,20 +1121,52 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Face-check notice — small toast, not a screen-blocking popup ──
-                    Used to be a full-screen black backdrop with an OK button the
-                    student had to click before they could touch the paper again.
-                    Now it just tells them, without taking the exam away. */}
-                {faceIssue && (
-                    <ProctorToast data={faceIssue} onDismiss={faceIssue.onDismiss} />
+                {/* ── Reload / back actually happened ──
+                    Not fatal any more, so this reassures rather than warns:
+                    the paper is intact and the student can carry on. */}
+                {breachNotice && (
+                    <div className="exam-blocked-notice exam-blocked-notice--breach" role="status">
+                        <span className="exam-blocked-notice__icon" aria-hidden="true">↻</span>
+                        <span>{BREACH_COPY[breachNotice.breach]}</span>
+                        <button
+                            type="button"
+                            onClick={() => setBreachNotice(null)}
+                            aria-label="Dismiss"
+                            className="exam-blocked-notice__close"
+                        >
+                            ✕
+                        </button>
+                    </div>
                 )}
 
-                {/* ── Periodic "photo captured" confirmation ── */}
-                {photoToast && (
+                {/* ── Face-check notice ──
+                    Bottom-left, and at most one per cooldown. Used to be a
+                    full-screen black backdrop with an OK button the student had
+                    to click before they could touch the paper again; now it just
+                    tells them, out of the way of the question. */}
+                {faceToast && (
                     <ProctorToast
-                        data={photoToast}
+                        data={faceToast}
                         position="bottom-left"
-                        onDismiss={() => setPhotoToast(null)}
+                        onDismiss={() => setFaceToast(null)}
+                    />
+                )}
+
+                {/* ── Photo-capture confirmation, and the idle nudge ──
+                    Top-left. A photo being taken of them is the more
+                    consequential of the two things, so it sits where the eye
+                    goes first rather than in the corner. */}
+                {statusToast && (
+                    <ProctorToast
+                        data={statusToast}
+                        position="top-left"
+                        onDismiss={() => {
+                            setStatusToast(null);
+                            // Dismissing is input. Without this the idle clock
+                            // is untouched, so the nudge reappears on the very
+                            // next tick after the student closes it.
+                            markStudentActive();
+                        }}
                     />
                 )}
 
@@ -1041,12 +1190,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     terminal: once the exam is ending, the "re-enter fullscreen"
                     affordance underneath is no longer the right thing to offer.
                     A failure here used to be invisible — logged to the console and
-                    nowhere else — which is what made "3 violations doesn't submit"
-                    look like the counter was broken. */}
+                    nowhere else — which is what made an auto-submit that did not
+                    land look like the counter was broken. */}
                 {autoSubmit && (
                     <AutoSubmitNotice
                         state={autoSubmit}
-                        maxViolations={maxViolations}
                         pauseSeconds={PAUSE_TIMEOUT_SEC}
                         onRetry={() => void runAutoSubmit(autoSubmit.cause, autoSubmit.violation, true)}
                         onContinue={continueAfterAutoSubmit}
@@ -1087,7 +1235,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </p>
                             {violationCount > 0 && (
                                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                                    {violationConsequence(violationCount, maxViolations)}
+                                    {violationConsequence(violationCount, VIOLATION_REVIEW_THRESHOLD)}
                                 </p>
                             )}
                             {/* A live countdown, not a static sentence. The old copy
@@ -1163,7 +1311,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
 
                     <div className="flex items-center gap-4">
                         {/* Always-visible violation counter so the student knows the score */}
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <div data-limon="exam-violations" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             <div
                                 className="violation-badge"
                                 style={{
@@ -1172,7 +1320,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     borderColor: violationCount === 0 ? 'var(--border-subtle)' : 'rgba(239,68,68,0.3)',
                                 }}
                             >
-                                ⚠️ {violationCount} / {maxViolations}
+                                {/* A bare count, not "2 / 3". The denominator
+                                    was a promise that the third one ends the
+                                    paper, and nothing does that any more. */}
+                                ⚠️ {violationCount}
                             </div>
                             <button
                                 type="button"
@@ -1197,20 +1348,28 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
                                     fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5,
                                 }}>
-                                    <strong style={{ color: 'var(--text-primary)' }}>What counts as a violation</strong>
+                                    <strong style={{ color: 'var(--text-primary)' }}>What gets counted here</strong>
                                     <ul style={{ margin: '0.5rem 0 0.5rem 1rem', padding: 0 }}>
-                                        <li>Leaving fullscreen, or switching tabs, windows or apps</li>
-                                        <li>No face, more than one face, or a face that is not yours on camera</li>
-                                        <li>Looking away from the screen for several seconds</li>
+                                        <li>Leaving fullscreen, or switching to another tab, window or app</li>
+                                        <li>Your face not visible, someone else in the picture, or a face that is not yours</li>
+                                        <li>Looking away from the screen for a long stretch</li>
                                         <li>Taking a screenshot, or printing the paper</li>
+                                        <li>Refreshing the page, or using the browser Back button</li>
                                     </ul>
-                                    Each one shows a warning explaining what happened. After {maxViolations} violations your exam
-                                    is submitted automatically and cannot be reopened.
+                                    <strong style={{ color: 'var(--text-primary)' }}>This number does not end your exam.</strong>{' '}
+                                    It is a record. Past {VIOLATION_REVIEW_THRESHOLD}, a person reads what was recorded before
+                                    your result is confirmed, and most of what lands here is an ordinary interruption.
                                     <br /><br />
-                                    <strong style={{ color: 'var(--text-primary)' }}>Ends the exam immediately</strong>
+                                    <strong style={{ color: 'var(--text-primary)' }}>What does end your exam</strong>
                                     <br />
-                                    Reloading the page or using the browser Back button. Use the ↻ Reload
-                                    button above if you need to refresh.
+                                    Only two things: your time running out, or leaving fullscreen or
+                                    switching away and not coming back within {PAUSE_TIMEOUT_SEC} seconds. A
+                                    countdown shows you exactly how long you have.
+                                    <br /><br />
+                                    <strong style={{ color: 'var(--text-primary)' }}>Does not count at all</strong>
+                                    <br />
+                                    Sitting still. If nothing moves for {EXAM_IDLE_NUDGE_SEC} seconds Limon checks you are
+                                    still there, but reading and thinking are not against the rules.
                                 </div>
                             )}
                         </div>
@@ -1224,13 +1383,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <button
                             type="button"
                             className="exam-reload-btn"
+                            data-limon="exam-reload"
                             onClick={() => setShowReloadConfirm(true)}
                             disabled={isSubmitting}
                             title="Reload the exam page safely, your answers and timer are kept"
                         >
                             ↻ Reload
                         </button>
-                        <div className={`timer-display ${timerClass}`}>
+                        <div className={`timer-display ${timerClass}`} data-limon="exam-timer">
                             ⏱ {formatTime(remaining)}
                         </div>
                         {/* Face detection status indicators */}
@@ -1284,7 +1444,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         </div>
                     )}
 
-                    <div className="question-container animate-fade-in" key={currentQuestion.id}>
+                    <div className="question-container animate-fade-in" key={currentQuestion.id} data-limon="exam-question">
                         <div className="question-header">
                             {/* The finer topic grouping from the question bank —
                                 context for the question, not a section boundary. */}
@@ -1342,10 +1502,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </div>
                         )}
 
-                        <div className="question-nav">
+                        <div className="question-nav" data-limon="exam-nav">
                             <button className="btn btn-secondary" disabled={currentIndex === 0 || isGated} onClick={prevQuestion}>← Previous</button>
                             <button className="btn btn-secondary" disabled={isGated} onClick={() => { setSelectedOption(null); if (currentQuestion) saveAnswer(currentQuestion.id, null); }}>Clear</button>
                             <button
+                                data-limon="exam-flag"
                                 className={`btn ${flagged.has(currentQuestion.id) ? 'btn-danger' : 'btn-secondary'}`}
                                 onClick={() => !isGated && toggleFlag(currentQuestion.id)}
                                 disabled={isGated}
@@ -1361,8 +1522,12 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
 
                     <div className="progress-section">
-                        <div className="flex justify-between" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                            <span>{answeredCount} of {questions.length} answered</span>
+                        <div className="flex justify-between" style={{ fontSize: '0.8rem', color: allAnswered ? 'var(--success-400)' : 'var(--text-muted)', marginBottom: '4px' }}>
+                            <span>
+                                {allAnswered
+                                    ? `✓ All ${questions.length} questions answered`
+                                    : `${answeredCount} of ${questions.length} answered`}
+                            </span>
                             <span>{progressPercent}%</span>
                         </div>
                         <div className="progress-bar">
@@ -1372,7 +1537,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 </main>
 
                 {/* ── Sidebar ── */}
-                <aside className="exam-sidebar">
+                <aside className="exam-sidebar" data-limon="exam-navigator">
                     <h3 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>Questions</h3>
 
                     {/* Grouped by section so the navigator matches the shape of the
@@ -1420,7 +1585,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div><span className="legend-dot" /> Not Visited</div>
                     </div>
 
-                    <button className="btn btn-danger btn-lg sidebar-submit" onClick={() => setShowSubmitConfirm(true)} disabled={isGated}>
+                    <button className="btn btn-danger btn-lg sidebar-submit" data-limon="exam-submit" onClick={() => setShowSubmitConfirm(true)} disabled={isGated}>
                         Submit Exam
                     </button>
                 </aside>
@@ -1467,17 +1632,52 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Submit Confirmation Modal ── */}
+                {/* ── Submit Confirmation Modal ──
+                    "Once all questions are answered, the system should indicate
+                    this status clearly to the user." A bare "50 of 50" is a
+                    number a student has to do arithmetic on under time pressure,
+                    and it reads identically to "49 of 50" at a glance. The two
+                    cases are now visually different things: a green all-clear, or
+                    a warning that names how many are blank and offers a way back
+                    to the first of them. */}
                 {showSubmitConfirm && (
                     <div className="modal-overlay">
                         <div className="modal glass-card">
                             <h2>Submit Exam?</h2>
-                            <p>
-                                You have answered <strong>{answeredCount}</strong> of <strong>{questions.length}</strong> questions.
-                                {answeredCount < questions.length && (
-                                    <span style={{ color: 'var(--warning-400)' }}> ({questions.length - answeredCount} unanswered)</span>
-                                )}
-                            </p>
+                            {allAnswered ? (
+                                <div className="submit-status submit-status--complete" role="status">
+                                    <span className="submit-status__icon" aria-hidden="true">✓</span>
+                                    <div>
+                                        <strong>All {questions.length} questions answered.</strong>
+                                        <p>You have not left anything blank.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="submit-status submit-status--incomplete" role="status">
+                                    <span className="submit-status__icon" aria-hidden="true">!</span>
+                                    <div>
+                                        <strong>
+                                            {unansweredCount} question{unansweredCount === 1 ? '' : 's'} still blank
+                                        </strong>
+                                        <p>
+                                            You have answered {answeredCount} of {questions.length}. There is no
+                                            negative marking, so a guess is always better than a blank.
+                                        </p>
+                                        {firstUnansweredIndex !== -1 && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-secondary"
+                                                onClick={() => {
+                                                    setShowSubmitConfirm(false);
+                                                    goToQuestion(firstUnansweredIndex);
+                                                }}
+                                            >
+                                                Go to question {firstUnansweredIndex + 1}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>This action cannot be undone.</p>
                             <div className="modal-actions">
                                 <button className="btn btn-secondary" onClick={() => setShowSubmitConfirm(false)}>Go Back</button>

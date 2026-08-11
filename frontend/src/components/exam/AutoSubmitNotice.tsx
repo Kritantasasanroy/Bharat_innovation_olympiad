@@ -41,14 +41,12 @@ const WARNING_SECONDS = 5;
  */
 export default function AutoSubmitNotice({
     state,
-    maxViolations,
     pauseSeconds,
     onRetry,
     onContinue,
     onWarningElapsed,
 }: {
     state: AutoSubmitState;
-    maxViolations: number;
     pauseSeconds: number;
     onRetry: () => void;
     onContinue: () => void;
@@ -56,7 +54,6 @@ export default function AutoSubmitNotice({
     onWarningElapsed: () => void;
 }) {
     const copy = autoSubmitCopy(state.cause, {
-        maxViolations,
         pauseSeconds,
         violation: state.violation,
     });

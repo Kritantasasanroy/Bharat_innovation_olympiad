@@ -1,5 +1,6 @@
 'use client';
 
+import { EXAM_PAUSE_TIMEOUT_SEC } from '@/lib/constants';
 import type { ViolationKind } from '@/lib/examIntegrity';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -17,15 +18,19 @@ export interface LastViolation {
   kind: ViolationType;
   count: number;
   at: number;
-  /** True when this violation is the one that ended the paper. */
-  isFinal: boolean;
 }
 
 interface FullscreenMonitorOptions {
   onViolation?: (type: ViolationType, count: number) => void;
-  /** `cause` drives the on-screen explanation; `violation` names the rule, when there was one. */
-  onAutoSubmit?: (cause: 'max_violations' | 'paused_too_long', violation?: ViolationType) => void;
-  maxViolations?: number;
+  /**
+   * The paper has been paused too long and must be submitted.
+   *
+   * This is the *only* thing this hook can end an exam for. Reaching any
+   * particular violation count no longer does — see
+   * {@link VIOLATION_REVIEW_THRESHOLD}. `violation` names which of the three
+   * pause causes started the countdown, for the on-screen explanation.
+   */
+  onAutoSubmit?: (cause: 'paused_too_long', violation?: ViolationType) => void;
   pauseTimeoutSec?: number;
 }
 
@@ -96,8 +101,7 @@ function releaseViolationLock(): void {
 export function useFullscreenMonitor({
   onViolation,
   onAutoSubmit,
-  maxViolations = 3,
-  pauseTimeoutSec = 20,
+  pauseTimeoutSec = EXAM_PAUSE_TIMEOUT_SEC,
 }: FullscreenMonitorOptions) {
   const [violationCount, setViolationCount] = useState<number>(() => readStoredViolations());
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -164,7 +168,7 @@ export function useFullscreenMonitor({
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   };
 
-  const startTimer = () => {
+  const startTimer = (cause: ViolationType) => {
     clearTimer();
     // Published so the overlay can run a live countdown. The warning text used
     // to promise an auto-submit "within 20 seconds" with nothing on screen
@@ -173,7 +177,7 @@ export function useFullscreenMonitor({
     setPauseDeadline(Date.now() + pauseTimeoutSec * 1000);
     timerRef.current = setTimeout(() => {
       setPauseDeadline(null);
-      onAutoSubmitRef.current?.('paused_too_long');
+      onAutoSubmitRef.current?.('paused_too_long', cause);
     }, pauseTimeoutSec * 1000);
   };
 
@@ -194,36 +198,33 @@ export function useFullscreenMonitor({
     const count = violationCountRef.current;
     setViolationCount(count);
     writeStoredViolations(count);
-    setLastViolation({ kind: type, count, at: Date.now(), isFinal: count >= maxViolations });
+    setLastViolation({ kind: type, count, at: Date.now() });
     onViolationRef.current?.(type, count);
 
-    // Gate FIRST, in every case. On the final violation this used to return
-    // early without gating, which left the exam fully interactive while the
-    // auto-submit ran in the background — so a submit that failed looked
-    // exactly like nothing having happened, and the student carried on
-    // answering a paper that was supposed to be over.
+    // Gate, and start the pause countdown. Every violation this hook raises is
+    // one of the three pause causes — left fullscreen, switched tab, lost
+    // window focus — so every one of them is recoverable by coming back, and
+    // the countdown is the same in each case.
+    //
+    // There is deliberately no branch on the count here any more. Reaching a
+    // particular number of violations used to end the paper outright; it now
+    // only decides whether a human looks at the attempt afterwards.
     setIsGated(true);
     isGatedRef.current = true;
 
-    if (count >= maxViolations) {
-      // No pause timer here: this is terminal, not recoverable. The caller
-      // owns the submit and renders its own progress/failure state.
-      clearTimer();
-      setPauseDeadline(null);
-      onAutoSubmitRef.current?.('max_violations', type);
-      return;
-    }
-
-    startTimer();
+    startTimer(type);
   };
 
   /**
    * Report a violation from OUTSIDE the fullscreen/tab-switch/blur detectors
-   * above — used for face-related issues (sustained no-face, sustained
-   * looking-away). Adds to the SAME shared counter and triggers the SAME
-   * auto-submit-at-maxViolations behavior, but does NOT set `isGated` — face
-   * issues get a subtle popup (rendered by the caller), not the full
-   * fullscreen-recovery overlay, so the student can keep answering.
+   * above — face-related issues (sustained no-face, looking away, a mismatch,
+   * a second face) and screen-capture attempts.
+   *
+   * Adds to the same shared counter, but does not gate the paper and cannot end
+   * it. None of these is a "pause": the student is sitting there answering, and
+   * taking the exam away because the camera lost their face for a few seconds
+   * is precisely the failure mode that made proctoring feel punitive. They are
+   * recorded, shown, and left for the reviewer.
    */
   const reportExternalViolation = useCallback((type: ViolationType) => {
     if (suspendedRef.current) return;
@@ -231,13 +232,9 @@ export function useFullscreenMonitor({
     const count = violationCountRef.current;
     setViolationCount(count);
     writeStoredViolations(count);
-    setLastViolation({ kind: type, count, at: Date.now(), isFinal: count >= maxViolations });
+    setLastViolation({ kind: type, count, at: Date.now() });
     onViolationRef.current?.(type, count);
-
-    if (count >= maxViolations) {
-      onAutoSubmitRef.current?.('max_violations', type);
-    }
-  }, [maxViolations]);
+  }, []);
 
   const requestFullscreen = useCallback(async () => {
     setLastError(null);
@@ -359,7 +356,6 @@ export function useFullscreenMonitor({
     isGated,
     lastError,
     lastViolation,
-    maxViolations,
     pauseDeadline,
     requestFullscreen,
     reportExternalViolation,

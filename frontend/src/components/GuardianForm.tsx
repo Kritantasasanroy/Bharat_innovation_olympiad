@@ -349,7 +349,9 @@ export default function GuardianForm({
                         guardian of{studentName ? <> <strong>{studentName}</strong></> : ' this student'}, and
                         I consent to them sitting the Bharat Innovation Olympiad under AI-assisted
                         proctoring. I understand the webcam stays on for the exam, that face analysis
-                        runs in their own browser, and that no video is recorded or stored.
+                        runs in their own browser, that no video is ever recorded or stored, and
+                        that a still photo is saved only at the moment an exam violation is
+                        recorded, to be reviewed by a person alongside that paper.
                     </span>
                 </label>
 

@@ -3,6 +3,7 @@
 import { APP_NAME, CLASS_BANDS, COMPANY_NAME, SMS_OTP_ENABLED, TAGLINE, TERMS_VERSION } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
+import LimonTour from '@/components/limon/LimonTour';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -213,6 +214,14 @@ export default function RegisterPage() {
             setError('Please choose your school. Search for it, enter a school code, or add it.');
             return;
         }
+        // Section is required too. Results are reported to schools class by
+        // class, and a school-level report with a third of its rows missing a
+        // section cannot be split into classes at all — which is the thing the
+        // report is for.
+        if (!section.trim()) {
+            setError('Please enter your class section, exactly as your school writes it.');
+            return;
+        }
         setIsLoading(true);
         try {
             const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email);
@@ -262,7 +271,7 @@ export default function RegisterPage() {
             await register({
                 ...formData,
                 ...(school ? { schoolCode: school.code } : {}),
-                ...(section.trim() ? { section: section.trim() } : {}),
+                section: section.trim(),
                 // The version actually shown on the presence step, so a later
                 // revision is distinguishable from what was agreed to.
                 termsVersion: TERMS_VERSION,
@@ -309,6 +318,11 @@ export default function RegisterPage() {
 
     return (
         <div className="auth-page">
+            {/* Limon walks through registration, once, and only on the details
+                step — the later steps are OTP entry, a face scan and a payment
+                page, each of which is a single focused action that a tour would
+                only get in the way of. */}
+            <LimonTour tourId="register" ready={step === 'details'} />
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
                 <ThemeToggle />
             </div>
@@ -326,7 +340,7 @@ export default function RegisterPage() {
                 </div>
 
                 {/* Progress — six steps is enough that "am I nearly done?" needs answering. */}
-                <ol className="register-progress" aria-label="Registration progress">
+                <ol className="register-progress" aria-label="Registration progress" data-limon="register-steps">
                     {STEPS.map((s, i) => (
                         <li
                             key={s.id}
@@ -507,7 +521,7 @@ export default function RegisterPage() {
                             )}
                         </div>
 
-                        <div className="input-group">
+                        <div className="input-group" data-limon="register-class">
                             <label className="input-label" htmlFor="classBand">Class</label>
                             <select
                                 id="classBand" name="classBand" className="input-field"
@@ -524,12 +538,14 @@ export default function RegisterPage() {
                             </p>
                         </div>
 
+                        <div data-limon="register-school">
                         <SchoolPicker
                             value={school}
                             onChange={setSchool}
                             section={section}
                             onSectionChange={setSection}
                         />
+                        </div>
 
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
                             {isLoading ? 'Sending Code...' : 'Send Verification Code →'}

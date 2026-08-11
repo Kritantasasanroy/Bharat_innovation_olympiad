@@ -34,25 +34,39 @@ export default function Navbar() {
               >
                 Dashboard
               </a>
+              {/* Between Dashboard and Exams: the training sessions come
+                  before the paper in a student's actual year, and the tab order
+                  should read the way the season runs. */}
               <a
+                data-limon="nav-training"
+                className={`nav-link ${pathname?.startsWith('/training') ? 'active' : ''}`}
+                onClick={() => router.push('/training')}
+              >
+                Training
+              </a>
+              <a
+                data-limon="nav-exams"
                 className={`nav-link ${pathname?.startsWith('/exams') ? 'active' : ''}`}
                 onClick={() => router.push('/exams')}
               >
                 Exams
               </a>
               <a
+                data-limon="nav-results"
                 className={`nav-link ${pathname === '/results' ? 'active' : ''}`}
                 onClick={() => router.push('/results')}
               >
                 Results
               </a>
               <a
+                data-limon="nav-certificates"
                 className={`nav-link ${pathname?.startsWith('/certificates') ? 'active' : ''}`}
                 onClick={() => router.push('/certificates')}
               >
                 Certificates
               </a>
               <a
+                data-limon="nav-support"
                 className={`nav-link ${pathname?.startsWith('/support') ? 'active' : ''}`}
                 onClick={() => router.push('/support')}
               >

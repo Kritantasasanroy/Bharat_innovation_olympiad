@@ -26,11 +26,17 @@ const ALL_KINDS: ViolationKind[] = [
     'screen_capture',
 ];
 
+/**
+ * The only two ways a paper ends by itself.
+ *
+ * `max_violations` and `navigation` were removed deliberately: violations are a
+ * record for the reviewer and a reload is logged but survivable, so neither
+ * submits an exam. This list is the contract — a cause reappearing here means
+ * something has started ending papers again.
+ */
 const ALL_CAUSES: AutoSubmitCause[] = [
     'time_up',
-    'max_violations',
     'paused_too_long',
-    'navigation',
 ];
 
 describe('violationCopy', () => {
@@ -53,22 +59,35 @@ describe('violationCopy', () => {
 });
 
 describe('violationConsequence', () => {
-    it('warns explicitly when one violation remains', () => {
-        expect(violationConsequence(2, 3)).toContain('One more');
+    // The whole point of the rewrite: violations no longer end anything, so the
+    // copy must never imply a countdown to the paper being taken away.
+    it('never threatens the student with the exam ending', () => {
+        for (const count of [1, 2, 3, 4, 10]) {
+            const text = violationConsequence(count, 3).toLowerCase();
+            expect(text, `count ${count}`).not.toContain('one more');
+            expect(text, `count ${count}`).not.toContain('submitted automatically');
+            expect(text, `count ${count}`).not.toContain('final violation');
+        }
     });
 
-    it('states the paper is over on the final violation', () => {
-        expect(violationConsequence(3, 3)).toContain('final violation');
+    it('states the running count', () => {
+        expect(violationConsequence(1, 3)).toContain('1 violation');
+        expect(violationConsequence(2, 3)).toContain('2 violations');
     });
 
-    it('does not promise "one more" when two or more remain', () => {
-        expect(violationConsequence(1, 3)).not.toContain('One more');
+    it('reassures below the review threshold', () => {
+        expect(violationConsequence(1, 3)).toContain('keep going');
     });
 
-    // A count past the maximum can arrive if two violations land in the same
-    // tick; it must still read as terminal, not as negative headroom.
-    it('treats an overshoot as terminal', () => {
-        expect(violationConsequence(4, 3)).toContain('final violation');
+    it('says a person will review once the threshold is reached', () => {
+        expect(violationConsequence(3, 3)).toContain('review');
+    });
+
+    // Two violations can land in the same tick, so the count can overshoot the
+    // threshold; that must still read as "under review", not fall through to
+    // the reassuring branch.
+    it('treats an overshoot as reviewed', () => {
+        expect(violationConsequence(5, 3)).toContain('review');
     });
 });
 
@@ -118,18 +137,21 @@ describe('autoSubmitCopy', () => {
         }
     });
 
-    it('names the rule that ended the paper when one is known', () => {
-        const copy = autoSubmitCopy('max_violations', {
-            maxViolations: 3,
-            violation: 'tab_switch',
-        });
-        expect(copy.reason).toContain(violationCopy('tab_switch').title);
+    // Which of the three pause causes started the countdown changes what the
+    // student should do differently. Telling someone who alt-tabbed to a
+    // notification about a fullscreen rule they never broke is worse than
+    // saying nothing.
+    it('names the specific thing that paused the exam', () => {
+        expect(autoSubmitCopy('paused_too_long', { violation: 'tab_switch' }).reason)
+            .toContain('another tab');
+        expect(autoSubmitCopy('paused_too_long', { violation: 'window_blur' }).reason)
+            .toContain('another window');
+        expect(autoSubmitCopy('paused_too_long', { violation: 'exit_fullscreen' }).reason)
+            .toContain('fullscreen');
     });
 
-    it('still explains itself when the rule is not known', () => {
-        const copy = autoSubmitCopy('max_violations', { maxViolations: 3 });
-        expect(copy.reason).toContain('3');
-        expect(copy.reason).toBeTruthy();
+    it('falls back to the fullscreen wording when the cause is not known', () => {
+        expect(autoSubmitCopy('paused_too_long').reason).toContain('fullscreen');
     });
 
     it('uses the configured pause timeout rather than a hard-coded one', () => {

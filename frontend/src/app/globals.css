@@ -924,7 +924,7 @@ h4 {
   animation: violation-banner-in 0.25s ease-out;
 }
 
-.violation-banner--last-chance {
+.violation-banner--reviewed {
   border-color: rgba(239, 68, 68, 0.5);
   border-left-color: var(--danger-400);
 }
@@ -950,7 +950,7 @@ h4 {
   color: var(--warning-400);
 }
 
-.violation-banner--last-chance .violation-banner__title { color: var(--danger-400); }
+.violation-banner--reviewed .violation-banner__title { color: var(--danger-400); }
 
 .violation-banner__count {
   flex-shrink: 0;
@@ -2575,6 +2575,42 @@ h4 {
   justify-content: flex-end;
 }
 
+.school-add__intro {
+  margin: 0 0 var(--space-2);
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(125, 200, 50, 0.08);
+  border: 1px solid rgba(125, 200, 50, 0.25);
+}
+.school-add__intro strong { display: block; font-size: 0.88rem; margin-bottom: 0.2rem; }
+.school-add__intro span { font-size: 0.8rem; line-height: 1.55; color: var(--text-secondary); }
+
+.school-add-prompt {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.school-add-prompt__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary-400, #7dc832);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.input-required {
+  margin-left: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warning-400);
+}
+
 .school-dropdown {
   position: absolute;
   top: 100%;
@@ -3681,6 +3717,435 @@ textarea.form-control {
   padding: 0 0.2rem;
 }
 
+/* ── Training checklist ───────────────────────────────────────────────────── */
+.training-header { margin-bottom: var(--space-6); }
+.training-header h1 { margin: 0 0 0.4rem; }
+.training-header p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+.training-card { padding: var(--space-6); margin-bottom: var(--space-5); }
+.training-card h2 { margin: 0; font-size: 1.1rem; }
+
+.training-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.training-count {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.training-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+
+/* The whole row is the hit target, not just the box — a 16px checkbox is a
+   miserable thing to aim at on a school laptop trackpad. */
+.training-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.training-item:hover { border-color: rgba(125, 200, 50, 0.45); }
+
+.training-item.is-checked {
+  border-color: rgba(125, 200, 50, 0.55);
+  background: rgba(125, 200, 50, 0.08);
+}
+
+.training-item input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #7dc832;
+  cursor: pointer;
+}
+
+.training-item__label { font-size: 0.92rem; line-height: 1.5; }
+.training-item__label small {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.training-message {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.85rem;
+  border: 1px solid;
+}
+.training-message--success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: var(--success-400);
+}
+.training-message--error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--danger-400);
+}
+
+.training-card--note h2 { margin-bottom: var(--space-3); }
+
+/* ── Certificates: exams and trainings, separately ────────────────────────── */
+.cert-section { margin-bottom: var(--space-8); }
+.cert-section__head { margin-bottom: var(--space-5); }
+.cert-section__head h2 { margin: 0 0 0.3rem; font-size: 1.25rem; }
+.cert-section__head p { margin: 0; font-size: 0.9rem; line-height: 1.6; }
+
+.cert-training-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.cert-training-list li { display: flex; align-items: flex-start; gap: 0.7rem; }
+.cert-training-list strong { display: block; font-size: 0.92rem; }
+.cert-training-list small {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.cert-training-list__tick {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--success-400);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Limon: the guide avatar and his guided tours ─────────────────────────── */
+
+/* The hands pivot about the point where each meets the body, so a wave rotates
+   from the shoulder instead of sliding the whole leaf sideways. */
+.limon__hand { transform-box: fill-box; transform-origin: 100% 50%; }
+.limon__hand--right { transform-origin: 0% 50%; }
+
+.limon--happy .limon__hand--right,
+.limon--talking .limon__hand--right { animation: limon-wave 1.6s ease-in-out infinite; }
+
+.limon--celebrating .limon__hand--left { animation: limon-cheer-left 0.7s ease-in-out infinite alternate; }
+.limon--celebrating .limon__hand--right { animation: limon-cheer-right 0.7s ease-in-out infinite alternate; }
+
+.limon--searching .limon__hand--left { animation: limon-shade 2.2s ease-in-out infinite; }
+
+.limon__eyes { animation: limon-blink 5s infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+
+@keyframes limon-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-22deg); }
+}
+
+@keyframes limon-cheer-left {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(24deg); }
+}
+
+@keyframes limon-cheer-right {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-24deg); }
+}
+
+@keyframes limon-shade {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(-14deg); }
+}
+
+@keyframes limon-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.1); }
+}
+
+/* Everything above is decoration. Anyone who has asked not to be animated at
+   gets a still Limon, who works exactly as well. */
+@media (prefers-reduced-motion: reduce) {
+  .limon__hand,
+  .limon__eyes,
+  .limon-tour__avatar { animation: none !important; }
+}
+
+.limon-tour { position: fixed; inset: 0; z-index: 10000; }
+
+.limon-tour__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 15, 22, 0.62);
+  animation: limon-fade 0.25s ease;
+}
+
+/* One element, one giant ring shadow: the "hole" is the element's own box, so
+   it tracks the target rect exactly with no second geometry to keep in step. */
+.limon-tour__spotlight {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(8, 15, 22, 0.62), 0 0 0 3px #7dc832;
+  background: transparent;
+  pointer-events: none;
+  transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease;
+}
+
+.limon-tour__card {
+  position: absolute;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 1.1rem 1.2rem;
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-card, var(--bg-secondary));
+  border: 1px solid rgba(125, 200, 50, 0.4);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+  transition: top 0.28s ease, left 0.28s ease;
+}
+
+.limon-tour__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.limon-tour__head strong { font-size: 1rem; color: var(--text-primary); }
+
+.limon-tour__progress {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.limon-tour__body {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.limon-tour__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.limon-tour__nav { display: flex; gap: 0.5rem; }
+
+.limon-tour__skip {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Bottom-left, popping up from below the fold when the tour opens. */
+.limon-tour__avatar {
+  position: absolute;
+  left: var(--space-5, 20px);
+  bottom: 0;
+  pointer-events: none;
+  animation: limon-pop 0.55s cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+
+@keyframes limon-pop {
+  from { transform: translateY(120%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes limon-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* The tour card would otherwise sit under Limon on a short screen. */
+@media (max-height: 720px) {
+  .limon-tour__avatar { transform: scale(0.72); transform-origin: bottom left; }
+}
+
+/* ── Exam tutorial: the annotated screen diagram ──────────────────────────── */
+.exam-tutorial__toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.exam-tutorial__sub {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.exam-tutorial__chevron {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding-top: 0.35rem;
+}
+
+.exam-tutorial__body { margin-top: var(--space-4); }
+
+/* The diagram scrolls sideways on a narrow screen rather than shrinking into
+   illegibility — the numbered markers stop being readable well before the
+   layout stops being recognisable. */
+.exam-tutorial__figure {
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.exam-tutorial__svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+
+/* Every fill is a token, so the diagram follows the theme instead of being a
+   light-mode picture pasted into a dark page. */
+.tut-screen { fill: var(--bg-primary); stroke: var(--border-color); stroke-width: 1.5; }
+.tut-header { fill: var(--bg-secondary); }
+.tut-card { fill: var(--bg-card, var(--bg-secondary)); stroke: var(--border-subtle); stroke-width: 1; }
+.tut-text { fill: var(--text-secondary); opacity: 0.75; }
+.tut-text-dim { fill: var(--text-tertiary); opacity: 0.5; }
+.tut-chip { fill: var(--text-tertiary); opacity: 0.45; }
+.tut-chip-warn { fill: #f59e0b; opacity: 0.65; }
+.tut-chip-time { fill: #22c55e; opacity: 0.6; }
+.tut-cam { fill: var(--bg-primary); stroke: var(--border-color); stroke-width: 1; }
+.tut-option { fill: var(--bg-primary); stroke: var(--border-subtle); stroke-width: 1; }
+.tut-option-selected { fill: rgba(125, 200, 50, 0.16); stroke: #7dc832; stroke-width: 1.5; }
+.tut-radio { fill: none; stroke: var(--text-tertiary); stroke-width: 1.2; }
+.tut-radio-on { fill: #7dc832; }
+.tut-btn { fill: var(--bg-primary); stroke: var(--border-color); stroke-width: 1; }
+.tut-btn-flag { fill: rgba(245, 158, 11, 0.18); stroke: #f59e0b; stroke-width: 1; }
+.tut-btn-primary { fill: #7dc832; }
+.tut-btn-danger { fill: rgba(239, 68, 68, 0.75); }
+.tut-progress-track { fill: var(--border-subtle); }
+.tut-progress-fill { fill: #7dc832; }
+.tut-q { fill: var(--bg-primary); stroke: var(--border-subtle); stroke-width: 1; }
+.tut-q-answered { fill: rgba(34, 197, 94, 0.5); }
+.tut-q-flagged { fill: rgba(245, 158, 11, 0.55); }
+.tut-q-current { fill: none; stroke: #7dc832; stroke-width: 2; }
+
+.tutorial-marker__bg { fill: #1e293b; stroke: #7dc832; stroke-width: 1.5; }
+.tutorial-marker__text { fill: #ffffff; font-size: 10px; font-weight: 700; }
+
+.exam-tutorial__legend {
+  list-style: none;
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.exam-tutorial__legend li { display: flex; gap: 0.6rem; align-items: flex-start; }
+.exam-tutorial__legend strong { display: block; font-size: 0.88rem; }
+.exam-tutorial__legend p {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.exam-tutorial__num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1.5px solid #7dc832;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exam-tutorial__note {
+  margin-top: var(--space-4);
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.exam-tutorial__note--practice {
+  background: rgba(125, 200, 50, 0.09);
+  border-color: rgba(125, 200, 50, 0.3);
+}
+
+/* ── Submit confirmation: answered / not answered ─────────────────────────── */
+.submit-status {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid;
+  margin-top: 0.5rem;
+}
+
+.submit-status strong { display: block; font-size: 0.95rem; }
+.submit-status p { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary); }
+.submit-status .btn { margin-top: 0.6rem; }
+
+.submit-status__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.submit-status--complete {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+.submit-status--complete .submit-status__icon { background: var(--success-400); }
+.submit-status--complete strong { color: var(--success-400); }
+
+.submit-status--incomplete {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.submit-status--incomplete .submit-status__icon { background: var(--warning-400); }
+.submit-status--incomplete strong { color: var(--warning-400); }
+
 /* ── Mid-exam encouragement toast ─────────────────────────────────────────── */
 .mascot-toast {
   position: fixed;
@@ -3853,6 +4318,28 @@ textarea.form-control {
   line-height: 1.6;
   color: var(--text-secondary);
 }
+
+.submitted-violations {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.submitted-violations--clean {
+  background: rgba(34, 197, 94, 0.09);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.submitted-violations--clean strong { color: var(--success-400); }
+
+.submitted-violations--flagged {
+  background: rgba(245, 158, 11, 0.09);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.submitted-violations--flagged strong { color: var(--warning-400); }
 
 .submitted-steps { margin: 0; padding-left: 1.25rem; }
 .submitted-steps li { margin-bottom: 0.9rem; }

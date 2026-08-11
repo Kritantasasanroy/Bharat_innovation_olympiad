@@ -482,6 +482,39 @@ export function useFaceProctor({
         [],
     );
 
+    /**
+     * A still from the live camera, as a JPEG data URL, or null.
+     *
+     * Called only when a violation is being recorded — see
+     * `ProctorService.storeSnapshot`. Nothing captures on a timer, so a clean
+     * paper produces no images and the "no photo is stored" promise made at
+     * registration holds for every student who does not trip a rule.
+     *
+     * Deliberately small. 320px wide at quality 0.55 is ~15 KB, which is enough
+     * for a person to see who was in front of the camera and comfortably inside
+     * the API's 100 KB JSON body limit — a full-resolution frame would be
+     * rejected outright and the violation would lose its evidence.
+     */
+    const captureSnapshot = useCallback((): string | null => {
+        const video = videoElementRef.current;
+        if (!video || video.readyState < 2 || !video.videoWidth) return null;
+        try {
+            const width = 320;
+            const height = Math.round((video.videoHeight / video.videoWidth) * width) || 240;
+            const canvas = canvasRef.current ?? document.createElement('canvas');
+            canvasRef.current = canvas;
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.drawImage(video, 0, 0, width, height);
+            return canvas.toDataURL('image/jpeg', 0.55);
+        } catch {
+            // A tainted canvas or a torn-down stream. The violation still counts.
+            return null;
+        }
+    }, []);
+
     // Capture descriptor from the live video (used during enrollment)
     const captureDescriptor = useCallback(async (): Promise<number[] | null> => {
         const faceapi = faceApiRef.current;
@@ -515,5 +548,6 @@ export function useFaceProctor({
         stopProctoring,
         enrollFace,
         captureDescriptor,
+        captureSnapshot,
     };
 }
