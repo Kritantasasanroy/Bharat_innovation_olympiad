@@ -47,19 +47,56 @@ function readRect(target: string | undefined): Rect | null {
 }
 
 /**
+ * Limon's on-screen footprint, read from the CSS rather than duplicated here.
+ *
+ * He is between 150px and 384px wide depending on the viewport (see
+ * `--limon-size` in globals.css), and the card has to stay out of that corner.
+ * Hard-coding the number in two places is how they drift apart, so this measures
+ * the element that is actually on screen.
+ */
+function avatarFootprint(): { width: number; height: number } {
+    if (typeof document === 'undefined') return { width: 0, height: 0 };
+    const el = document.querySelector<HTMLElement>('.limon-tour__avatar');
+    if (!el) return { width: 0, height: 0 };
+    const r = el.getBoundingClientRect();
+    return { width: r.width, height: r.height };
+}
+
+/**
  * Where the card goes, given the target and the preferred side.
  *
  * Flips to the opposite side when the preferred one would put the card off
  * screen, then clamps into the viewport regardless — a card the student has to
  * scroll to read is worse than one slightly closer to its target than intended.
+ *
+ * Finally it steps around Limon. He sits bottom-left and is large on a desktop,
+ * so a card placed to the left of a low target would land underneath him and be
+ * half-unreadable.
  */
 function placeCard(rect: Rect | null, placement: TourStep['placement']): React.CSSProperties {
     if (typeof window === 'undefined') return {};
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
+    const avatar = avatarFootprint();
+    /** Nudges the card clear of Limon if the two would overlap. */
+    const dodgeAvatar = (pos: { top: number; left: number }) => {
+        if (avatar.width === 0) return pos;
+        const cardBottom = pos.top + 190;
+        const overlapsY = cardBottom > vh - avatar.height;
+        const overlapsX = pos.left < avatar.width + 24;
+        if (!overlapsY || !overlapsX) return pos;
+        // Prefer moving right; if there is no room, lift it above him instead.
+        const shifted = avatar.width + 32;
+        if (shifted + CARD_WIDTH <= vw - 16) return { ...pos, left: shifted };
+        return { ...pos, top: Math.max(16, vh - avatar.height - 190 - 16) };
+    };
+
     if (!rect) {
-        return { top: vh / 2 - 120, left: Math.max(16, vw / 2 - CARD_WIDTH / 2) };
+        return dodgeAvatar({
+            top: vh / 2 - 120,
+            left: Math.max(16, vw / 2 - CARD_WIDTH / 2),
+        });
     }
 
     const estHeight = 190;
@@ -88,10 +125,10 @@ function placeCard(rect: Rect | null, placement: TourStep['placement']): React.C
             if (top + estHeight > vh - 16) top = rect.top - estHeight - CARD_GAP;
     }
 
-    return {
+    return dodgeAvatar({
         top: Math.min(Math.max(16, top), Math.max(16, vh - estHeight - 16)),
         left: Math.min(Math.max(16, left), Math.max(16, vw - CARD_WIDTH - 16)),
-    };
+    });
 }
 
 export default function LimonTour({
@@ -111,6 +148,17 @@ export default function LimonTour({
     const [open, setOpen] = useState(false);
     const [steps, setSteps] = useState<TourStep[]>([]);
     const [rect, setRect] = useState<Rect | null>(null);
+    /**
+     * Flipped once after the tour paints.
+     *
+     * `placeCard` measures Limon's real on-screen size, and on the first render
+     * he does not exist yet — so the intro card, whose target is null, would
+     * compute its position against a zero-width avatar and never move out of his
+     * way. Nothing else forces a second render for it: the measuring effect sets
+     * `rect` to null, which it already is, so React bails out. This is the
+     * re-render.
+     */
+    const [measured, setMeasured] = useState(false);
     const startedRef = useRef(false);
 
     // Decide once, when the page says it is ready: has this student seen it, and
@@ -141,6 +189,7 @@ export default function LimonTour({
         if (!open) return;
         const measure = () => setRect(readRect(step?.target));
         measure();
+        if (!measured) setMeasured(true);
         // The target may be below the fold — bring it into view before the
         // spotlight lands on a rect the student cannot see.
         if (step?.target) {
@@ -160,7 +209,7 @@ export default function LimonTour({
         }
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, [open, index, step?.target]);
+    }, [open, index, step?.target, measured]);
 
     // Escape skips. Arrow keys move, because a tour with a Next button that
     // cannot be reached from the keyboard is not usable by everyone.
@@ -244,7 +293,11 @@ export default function LimonTour({
                 </div>
             </div>
 
-            {/* Limon himself, bottom-left, popping up when the tour opens. */}
+            {/* Limon himself, bottom-left, popping up when the tour opens.
+                The rendered size is CSS, not this prop: he is roughly four times
+                larger on a desktop than on a phone, and a fixed pixel size in
+                JSX cannot express that. The SVG scales cleanly to any of them,
+                so the prop is only a sensible intrinsic size. */}
             <div className="limon-tour__avatar">
                 <LimonAvatar mood={mood} size={128} />
             </div>

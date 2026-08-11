@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import AlumniCarousel from '@/components/landing/AlumniCarousel';
 import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
 import { TECH_REQUIREMENTS } from '@/lib/copy/onboarding';
@@ -269,86 +270,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-
-            {/* Guransh */}
-            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div className="lp-alumni-card__media">
-                <Image src="/assets/alumni-guransh.jpg" alt="Guransh Singh" fill sizes="280px" style={{ objectFit: 'cover' }} />
-                <span style={{ position: 'absolute', top: 14, left: 14, background: '#7dc832', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(125,200,50,0.4)' }}>National Champion &apos;26</span>
-              </div>
-              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Guransh Singh</h3>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#7dc832', marginBottom: 16 }}>From Young Innovator to National Champion</div>
-                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Golden Years</b></div>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>School</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>DAV Public School, Amritsar</b></div>
-                </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>He didn&apos;t stop after the contest. In 2026 he secured the 1st position nationally in Innopreneurs Junior Season 12, competing against thousands of young innovators.</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-                  {['Innovation Mindset', 'Problem Solving'].map(t => (
-                    <span key={t} className="lp-pill" style={{ background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)', color: '#7dc832', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
-                  ))}
-                </div>
-                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-                  <TrendingUp size={13} color="var(--text-tertiary)" />
-                  <b style={{ color: '#7dc832', fontWeight: 600, fontSize: 12.5 }}>Winner → Continued Innovator → National Champion Again</b>
-                </div>
-              </div>
-            </div>
-
-            {/* Falak */}
-            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div className="lp-alumni-card__media">
-                <Image src="/assets/alumni-falak.jpg" alt="Falak Arora" fill sizes="280px" style={{ objectFit: 'cover' }} />
-                <span style={{ position: 'absolute', top: 14, left: 14, background: '#d4a017', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1, boxShadow: '0 6px 18px rgba(212,160,23,0.4)' }}>Founder</span>
-              </div>
-              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Falak Arora</h3>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#ffcb05', marginBottom: 16 }}>Turning Sustainability into Entrepreneurship</div>
-                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Zedberrie</b></div>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Field</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Sustainable fashion</b></div>
-                </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>She built fashion accessories from textile waste, turning an environmental challenge into a real business, now pursuing global opportunities.</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-                  {['Sustainability', 'Circular Economy'].map(t => (
-                    <span key={t} className="lp-pill" style={{ background: 'rgba(255,203,5,0.08)', border: '1px solid rgba(255,203,5,0.2)', color: '#ffcb05', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
-                  ))}
-                </div>
-                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-                  <TrendingUp size={13} color="var(--text-tertiary)" />
-                  <b style={{ color: '#ffcb05', fontWeight: 600, fontSize: 12.5 }}>Student Innovator → Founder → Global Opportunities</b>
-                </div>
-              </div>
-            </div>
-
-            {/* Anay & Abeer */}
-            <div className="lp-alumni-card" style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 22, overflow: 'hidden' }}>
-              <div className="lp-alumni-card__media">
-                <Image src="/assets/alumni-anay-abeer.jpg" alt="Anay and Abeer Ramakrishnan" fill sizes="280px" style={{ objectFit: 'cover' }} />
-                <span style={{ position: 'absolute', top: 14, left: 14, background: '#3b6fe0', color: '#fff', fontWeight: 700, fontSize: 10.5, letterSpacing: '.7px', textTransform: 'uppercase', padding: '6px 12px', borderRadius: 999, zIndex: 1 }}>AI Pioneers</span>
-              </div>
-              <div style={{ flex: 1, padding: '28px 32px', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 3px' }}>Anay &amp; Abeer Ramakrishnan</h3>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#7baff5', marginBottom: 16 }}>From Child Innovators to AI Pioneers</div>
-                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Innovation</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Immvers</b></div>
-                  <div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>Field</div><b style={{ fontSize: 13.5, fontWeight: 600 }}>Immersive &amp; AI tech</b></div>
-                </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 560 }}>As kids the twins were already building technology. Immvers grew into a broader ecosystem at the intersection of AI, education and emerging technologies.</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-                  {['Artificial Intelligence', 'Deep Tech'].map(t => (
-                    <span key={t} className="lp-pill" style={{ background: 'rgba(59,111,224,0.12)', border: '1px solid rgba(59,111,224,0.25)', color: '#7baff5', fontSize: 11, fontWeight: 600, padding: '5px 11px', borderRadius: 999 }}>{t}</span>
-                  ))}
-                </div>
-                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-                  <TrendingUp size={13} color="var(--text-tertiary)" />
-                  <b style={{ color: '#7baff5', fontWeight: 600, fontSize: 12.5 }}>Young Innovators → Technology Builders → AI Innovators</b>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AlumniCarousel />
 
           <div className="lp-fade-up" style={{ textAlign: 'center', marginTop: 48 }}>
             <p style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are students. Tomorrow, they&apos;ll build the future of Bharat.</p>
