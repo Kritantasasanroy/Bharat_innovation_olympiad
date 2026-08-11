@@ -4118,6 +4118,81 @@ textarea.form-control {
 }
 
 /**
+ * "Need help?" — the permanent, visible offer of a guide.
+ *
+ * Bottom-**right**. The feedback tab owns the right edge at mid-height and Limon
+ * owns the bottom-left when a tour is running, so this is the one free corner
+ * where it collides with neither.
+ *
+ * It states the offer in words rather than being a bare "?" or a floating
+ * character: a question mark is a guess, and an avatar alone reads as
+ * decoration. The face is what connects the button to the Limon who appears.
+ */
+.limon-help {
+  position: fixed;
+  right: var(--space-5, 20px);
+  bottom: var(--space-5, 20px);
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.95rem 0.5rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 200, 50, 0.45);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.limon-help:hover {
+  transform: translateY(-2px);
+  border-color: #7dc832;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+}
+
+.limon-help__face {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(125, 200, 50, 0.12);
+  overflow: hidden;
+}
+/* The avatar is drawn taller than it is wide; the circle crops to the face. */
+.limon-help__face > svg { width: 30px; height: auto; margin-top: 5px; }
+
+.limon-help__label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.limon-help__label small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* Narrow screens: keep the face and the headline, drop the second line — and
+   lift it clear of the feedback tab, which sits on the same edge. */
+@media (max-width: 640px) {
+  .limon-help {
+    right: var(--space-3, 12px);
+    bottom: var(--space-3, 12px);
+    padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+  }
+  .limon-help__label small { display: none; }
+  .limon-help__label { font-size: 0.8rem; }
+}
+
+/**
  * Bottom-left, popping up from below the fold when the tour opens.
  *
  * ## Why the size is here and not on the component

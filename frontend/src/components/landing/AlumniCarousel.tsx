@@ -18,8 +18,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * wrong, in ways that are actively hostile rather than merely annoying:
  *
  *  - **It must stop when someone is reading it.** Hover pauses, and so does
- *    keyboard focus landing anywhere inside — otherwise a card slides away
+ *    keyboard focus landing on a *story* — otherwise a card slides away
  *    mid-sentence, and the reader has no idea which dot to press to get it back.
+ *    Focus on the dots and arrows deliberately does not pause: those are how you
+ *    drive it, and pausing on them meant one click to skip ahead stopped the
+ *    rotation for good, since a mouse leaving the region never blurs a button.
  *  - **It must stop when the tab is hidden.** Otherwise a visitor returns to a
  *    carousel that has cycled forty times and is showing something arbitrary.
  *  - **It must not move at all for anyone who has asked for reduced motion.**
@@ -114,14 +117,39 @@ const ALUMNI: Alumnus[] = [
 ];
 
 export default function AlumniCarousel() {
+    /**
+     * The slide on screen, counted **without wrapping**: 0, 1, 2, 3 — where 3 is
+     * the clone of slide 0 rendered at the end of the track.
+     *
+     * Wrapping the index with a modulo was the obvious implementation and it
+     * looked broken: going from the last story to the first set `translateX`
+     * from -200% to 0%, so the track visibly raced backwards past every card in
+     * between. Running one slide past the end onto a clone, then silently
+     * resetting to the real slide 0 with the transition switched off, is what
+     * makes the loop seamless — the student only ever sees forward motion.
+     */
     const [index, setIndex] = useState(0);
-    /** Any reason to hold still: hover, focus, hidden tab, reduced motion. */
-    const [paused, setPaused] = useState(false);
+    /** Off only for the invisible snap-back from the clone to the real slide. */
+    const [animate, setAnimate] = useState(true);
+    /** Any reason to hold still: hover, reading focus, hidden tab. */
+    const [hovered, setHovered] = useState(false);
+    const [readingFocus, setReadingFocus] = useState(false);
+    const [tabHidden, setTabHidden] = useState(false);
     const [reducedMotion, setReducedMotion] = useState(false);
     const touchStartX = useRef<number | null>(null);
 
+    const total = ALUMNI.length;
+    /** Which real story is showing — the clone at `total` is really story 0. */
+    const realIndex = index % total;
+
     const go = useCallback((next: number) => {
-        setIndex(((next % ALUMNI.length) + ALUMNI.length) % ALUMNI.length);
+        setAnimate(true);
+        setIndex(((next % total) + total) % total);
+    }, [total]);
+
+    const advance = useCallback(() => {
+        setAnimate(true);
+        setIndex((i) => i + 1);
     }, []);
 
     useEffect(() => {
@@ -135,16 +163,44 @@ export default function AlumniCarousel() {
     // A backgrounded tab must not keep cycling — otherwise coming back to the
     // page lands on whichever card the timer happened to stop on.
     useEffect(() => {
-        const onVisibility = () => setPaused(document.hidden);
+        const onVisibility = () => setTabHidden(document.hidden);
         document.addEventListener('visibilitychange', onVisibility);
         return () => document.removeEventListener('visibilitychange', onVisibility);
     }, []);
 
+    const paused = hovered || readingFocus || tabHidden;
+
     useEffect(() => {
         if (paused || reducedMotion) return;
-        const timer = setTimeout(() => go(index + 1), ROTATE_MS);
+        const timer = setTimeout(advance, ROTATE_MS);
         return () => clearTimeout(timer);
-    }, [index, paused, reducedMotion, go]);
+    }, [index, paused, reducedMotion, advance]);
+
+    /**
+     * The snap-back, once the slide onto the clone has finished animating.
+     *
+     * Timed rather than driven by `transitionend`, because a tab backgrounded
+     * mid-transition never fires that event and the carousel would be stranded
+     * on the clone forever — visually identical to slide 0, but unable to
+     * advance past it, which is the "it stopped rotating" bug wearing a
+     * disguise. 60ms of slack past the 550ms transition.
+     */
+    useEffect(() => {
+        if (index !== total) return;
+        const timer = setTimeout(() => {
+            setAnimate(false);
+            setIndex(0);
+        }, 610);
+        return () => clearTimeout(timer);
+    }, [index, total]);
+
+    // Re-enable the transition on the frame after the silent jump, so the reset
+    // itself is never animated but the next advance is.
+    useEffect(() => {
+        if (animate) return;
+        const raf = requestAnimationFrame(() => setAnimate(true));
+        return () => cancelAnimationFrame(raf);
+    }, [animate]);
 
     return (
         <div
@@ -152,33 +208,52 @@ export default function AlumniCarousel() {
             role="region"
             aria-roledescription="carousel"
             aria-label="Innovation alumni stories"
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
-            // Focus anywhere inside stops the rotation: a keyboard user tabbing
-            // through the links in a card must not have it slide away.
-            onFocusCapture={() => setPaused(true)}
-            onBlurCapture={() => setPaused(false)}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            /**
+             * Focus pauses rotation only when it lands on the *story*, not on
+             * the controls.
+             *
+             * Pausing on any descendant focus was what actually stopped the
+             * carousel dead: clicking a dot or an arrow focuses that button, so
+             * a single click to skip ahead left it paused indefinitely — a mouse
+             * leaving the region does not blur a button. The one case worth
+             * pausing for is a keyboard user reading a card, and that is what
+             * this narrows it to.
+             */
+            onFocusCapture={(e) => {
+                setReadingFocus(Boolean(
+                    (e.target as HTMLElement).closest('.lp-carousel__slide'),
+                ));
+            }}
+            onBlurCapture={() => setReadingFocus(false)}
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
             onTouchEnd={(e) => {
                 if (touchStartX.current === null) return;
                 const dx = e.changedTouches[0].clientX - touchStartX.current;
                 // 45px, so a vertical scroll that wanders sideways is not a swipe.
-                if (Math.abs(dx) > 45) go(index + (dx < 0 ? 1 : -1));
+                if (Math.abs(dx) > 45) go(realIndex + (dx < 0 ? 1 : -1));
                 touchStartX.current = null;
             }}
         >
             <div className="lp-carousel__viewport">
                 <div
                     className="lp-carousel__track"
-                    style={{ transform: `translateX(-${index * 100}%)` }}
+                    style={{
+                        transform: `translateX(-${index * 100}%)`,
+                        transition: animate ? undefined : 'none',
+                    }}
                 >
-                    {ALUMNI.map((a, i) => (
+                    {/* The trailing entry is a clone of the first story. It only
+                        exists so the loop can run forwards off the end and be
+                        reset invisibly — see the note on `index`. */}
+                    {[...ALUMNI, ALUMNI[0]].map((a, i) => (
                         <div
                             className="lp-carousel__slide"
-                            key={a.name}
+                            key={i === total ? `${a.name}-clone` : a.name}
                             role="group"
                             aria-roledescription="slide"
-                            aria-label={`${i + 1} of ${ALUMNI.length}: ${a.name}`}
+                            aria-label={`${(i % total) + 1} of ${total}: ${a.name}`}
                             // Off-screen slides are hidden from assistive tech and
                             // from the tab order — otherwise Tab walks into cards
                             // nobody can see, and focus lands somewhere invisible.
@@ -257,7 +332,7 @@ export default function AlumniCarousel() {
                 <button
                     type="button"
                     className="lp-carousel__arrow"
-                    onClick={() => go(index - 1)}
+                    onClick={() => go(realIndex - 1)}
                     aria-label="Previous story"
                 >
                     <ChevronLeft size={18} />
@@ -268,10 +343,10 @@ export default function AlumniCarousel() {
                         <button
                             key={a.name}
                             type="button"
-                            className={`lp-carousel__dot ${i === index ? 'is-active' : ''}`}
+                            className={`lp-carousel__dot ${i === realIndex ? 'is-active' : ''}`}
                             onClick={() => go(i)}
                             aria-label={`Show ${a.name}`}
-                            aria-current={i === index}
+                            aria-current={i === realIndex}
                         />
                     ))}
                 </div>
@@ -279,7 +354,7 @@ export default function AlumniCarousel() {
                 <button
                     type="button"
                     className="lp-carousel__arrow"
-                    onClick={() => go(index + 1)}
+                    onClick={() => advance()}
                     aria-label="Next story"
                 >
                     <ChevronRight size={18} />
@@ -289,7 +364,7 @@ export default function AlumniCarousel() {
             {/* Announced politely on change, so a screen-reader user is told the
                 slide moved instead of the whole region being re-read. */}
             <p className="sr-only" aria-live="polite">
-                {ALUMNI[index].name}, {ALUMNI[index].tagline}. Story {index + 1} of {ALUMNI.length}.
+                {ALUMNI[realIndex].name}, {ALUMNI[realIndex].tagline}. Story {realIndex + 1} of {total}.
             </p>
         </div>
     );

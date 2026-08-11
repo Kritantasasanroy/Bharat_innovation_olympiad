@@ -43,7 +43,17 @@ export interface Tour {
     outro?: string;
 }
 
-export type TourId = 'register' | 'dashboard' | 'exam';
+export type TourId =
+    | 'home'
+    | 'register'
+    | 'dashboard'
+    | 'training'
+    | 'exams'
+    | 'results'
+    | 'certificates'
+    | 'support'
+    | 'profile'
+    | 'exam';
 
 /**
  * Registration. Runs on `/register`, before anything has been filled in.
@@ -233,11 +243,204 @@ const EXAM_TOUR: Tour = {
     outro: "That is the lot. Have a go at these questions — nothing here counts. When you are comfortable, your real paper will feel like somewhere you have already been.",
 };
 
+/**
+ * The remaining screens.
+ *
+ * Deliberately short — two to four steps each. These are reached by pressing
+ * "Need help?", which means the student has a specific question right now, and
+ * the answer to it should not be the eighth step of a tour. The long ones are
+ * the two that run automatically (registration and the portal), where the
+ * student has no question yet and is being oriented.
+ *
+ * None of them targets anything conditional, so every step survives whatever
+ * state the page is in.
+ */
+const HOME_TOUR: Tour = {
+    id: 'home',
+    intro: "Hi, I'm Limon! I look after students during the Olympiad. Want a quick tour of this page?",
+    steps: [
+        {
+            title: 'What this is',
+            body: "The Bharat Innovation Olympiad, for Grades 6 to 12. It doesn't test what you've memorised — it looks at how you think, solve problems and come up with ideas.",
+            mood: 'talking',
+        },
+        {
+            title: 'It is taken from home',
+            body: "On your own laptop, in a slot you choose, with your camera on so we know it's really you. Scroll down and I explain exactly how that's kept fair.",
+            mood: 'talking',
+        },
+        {
+            title: 'These are real students',
+            body: 'The stories that rotate below are past participants and what they went on to build. They started where you are.',
+            mood: 'happy',
+        },
+        {
+            title: 'Ready?',
+            body: "Press Register to start. It takes about ten minutes and I'll walk you through every step of it.",
+            mood: 'celebrating',
+        },
+    ],
+};
+
+const TRAINING_TOUR: Tour = {
+    id: 'training',
+    intro: "This is where you record the training sessions you've been to.",
+    steps: [
+        {
+            title: 'Tick what you attended',
+            body: 'The orientation session and the five pillars the exam is built on. Tick the ones you took part in, then press Save. You can change it whenever you like.',
+            mood: 'talking',
+        },
+        {
+            title: 'It is your own answer',
+            body: "Nobody marks you present or absent. It doesn't affect your score or your rank — it's a record of what you took part in across the season.",
+            mood: 'talking',
+        },
+        {
+            title: 'Where it shows up',
+            body: 'Everything you tick appears on your Certificates page, in its own Trainings section, next to your exam certificates.',
+            mood: 'happy',
+        },
+    ],
+};
+
+const EXAMS_TOUR: Tour = {
+    id: 'exams',
+    intro: 'This is every paper open to you.',
+    steps: [
+        {
+            title: 'Start with the practice paper',
+            body: "It's free, you can take it as many times as you like, and it runs in exactly the same screen as the real exam — fullscreen, camera, timer and all.",
+            mood: 'talking',
+        },
+        {
+            title: 'Then book your slot',
+            body: 'Places in each sitting are limited, and once you confirm a slot it cannot be changed from your account. So pick a time you are certain about.',
+            mood: 'concerned',
+        },
+        {
+            title: 'Check your device early',
+            body: "Don't leave the camera and internet check until exam day. Run the practice paper on the device you actually plan to use.",
+            mood: 'talking',
+        },
+    ],
+};
+
+const RESULTS_TOUR: Tour = {
+    id: 'results',
+    intro: 'Your scores land here as soon as marking is released.',
+    steps: [
+        {
+            title: 'Provisional first',
+            body: "Your score appears as provisional. It's a real score, but it can still move while proctoring reviews and any grievances are settled.",
+            mood: 'talking',
+        },
+        {
+            title: 'Then the final report',
+            body: 'When the season closes you get your final score, your rank and percentile, a breakdown across the five pillars, and the answer key with an explanation for every question.',
+            mood: 'happy',
+        },
+        {
+            title: 'If something looks wrong',
+            body: 'A power cut during your paper, a score that does not look right — raise it from Support and a person will read it and reply.',
+            mood: 'concerned',
+        },
+    ],
+};
+
+const CERTIFICATES_TOUR: Tour = {
+    id: 'certificates',
+    intro: 'Two different things live on this page, so they are kept apart.',
+    steps: [
+        {
+            title: 'Olympiad Exams',
+            body: 'Certificates we issue once an exam’s results are released. Each carries a unique number, and anyone can check it is genuine from the public verify link.',
+            mood: 'talking',
+        },
+        {
+            title: 'Trainings',
+            body: "The sessions you ticked on the Training page. That's your own record, so it carries no score and no verification number — it is not an exam certificate.",
+            mood: 'talking',
+        },
+    ],
+};
+
+const SUPPORT_TOUR: Tour = {
+    id: 'support',
+    intro: 'This is how you reach a person.',
+    steps: [
+        {
+            title: 'What to raise here',
+            body: 'A wrong class on your account, something that went wrong during your paper, a slot you cannot make, a score you want looked at. Anything a page cannot fix by itself.',
+            mood: 'talking',
+        },
+        {
+            title: 'Have your roll number ready',
+            body: "It's on your dashboard and in your registration email. It's the fastest way for us to find you.",
+            mood: 'happy',
+        },
+    ],
+};
+
+const PROFILE_TOUR: Tour = {
+    id: 'profile',
+    intro: 'Your details, and the two that are deliberately locked.',
+    steps: [
+        {
+            title: 'What you can change',
+            body: 'Your name and your contact number. Changing your number needs a quick code, because it also signs you in.',
+            mood: 'talking',
+        },
+        {
+            title: 'What you cannot',
+            body: 'Your email, your school and your class. Your class decides which paper you sit and who you are ranked against, so it is final once set — raise a support ticket if it is wrong.',
+            mood: 'concerned',
+        },
+        {
+            title: 'Your face scan',
+            body: "It's how I recognise you in an exam. Stored as an encrypted set of numbers, not a photo. Re-do it here if you were in bad light the first time.",
+            mood: 'searching',
+        },
+    ],
+};
+
 export const TOURS: Record<TourId, Tour> = {
+    home: HOME_TOUR,
     register: REGISTER_TOUR,
     dashboard: DASHBOARD_TOUR,
+    training: TRAINING_TOUR,
+    exams: EXAMS_TOUR,
+    results: RESULTS_TOUR,
+    certificates: CERTIFICATES_TOUR,
+    support: SUPPORT_TOUR,
+    profile: PROFILE_TOUR,
     exam: EXAM_TOUR,
 };
+
+/**
+ * Which tour belongs to a URL.
+ *
+ * Longest-prefix wins, so `/exams/:id/instructions` does not match the `/exams`
+ * list tour. The exam player is deliberately absent: it mounts its own tour, and
+ * only for the trial run — see the note on {@link EXAM_TOUR}.
+ */
+export function tourForPath(pathname: string | null): TourId | null {
+    if (!pathname) return null;
+    if (/^\/exams\/[^/]+\/play/.test(pathname)) return null;
+    if (pathname === '/') return 'home';
+    const prefixes: [string, TourId][] = [
+        ['/register', 'register'],
+        ['/dashboard', 'dashboard'],
+        ['/training', 'training'],
+        ['/exams', 'exams'],
+        ['/results', 'results'],
+        ['/certificates', 'certificates'],
+        ['/support', 'support'],
+        ['/profile', 'profile'],
+    ];
+    const hit = prefixes.find(([p]) => pathname === p || pathname.startsWith(`${p}/`));
+    return hit ? hit[1] : null;
+}
 
 /** Where "has this student seen it?" is remembered. */
 export const tourStorageKey = (id: TourId) => `limon_tour_${id}`;

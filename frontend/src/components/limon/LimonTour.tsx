@@ -135,10 +135,23 @@ export default function LimonTour({
     tourId,
     /** Gate the tour on the page's data being ready — targets must exist first. */
     ready = true,
+    /**
+     * Bump this to open the tour on demand, whatever `localStorage` remembers.
+     *
+     * The "Need help?" button is the caller: pressing it must always work. A
+     * student who has already been shown a tour once and now has a question is
+     * the *most* likely person to press it, so "you have seen this" is precisely
+     * the wrong reason to refuse.
+     */
+    openSignal = 0,
+    /** False for a manual open — the button is the only entry point. */
+    auto = true,
     onFinish,
 }: {
     tourId: TourId;
     ready?: boolean;
+    openSignal?: number;
+    auto?: boolean;
     onFinish?: () => void;
 }) {
     const tour = TOURS[tourId];
@@ -161,20 +174,37 @@ export default function LimonTour({
     const [measured, setMeasured] = useState(false);
     const startedRef = useRef(false);
 
-    // Decide once, when the page says it is ready: has this student seen it, and
-    // which of the scripted steps actually have something to point at?
+    /**
+     * Open the tour: work out which steps have something to point at, and go.
+     *
+     * The filter is why this cannot be a plain `setOpen(true)`. Pages differ by
+     * whether the student has paid, has a school, has sat the trial, so the
+     * targets present are only knowable at the moment of opening — and a step
+     * pointing at nothing would strand them in front of an empty highlight.
+     */
+    const start = useCallback(() => {
+        setSteps(tour.steps.filter((s) => !s.target || readRect(s.target)));
+        setIndex(-1);
+        setOpen(true);
+    }, [tour.steps]);
+
+    // The automatic run: once per student, and only if they have not seen it.
     useEffect(() => {
-        if (!ready || startedRef.current) return;
+        if (!auto || !ready || startedRef.current) return;
         if (tourSeen(tourId)) return;
         startedRef.current = true;
         // A frame's grace so a just-rendered page has laid out — a target
         // measured mid-paint reports a zero rect and would be dropped.
-        const timer = setTimeout(() => {
-            setSteps(tour.steps.filter((s) => !s.target || readRect(s.target)));
-            setOpen(true);
-        }, 400);
+        const timer = setTimeout(start, 400);
         return () => clearTimeout(timer);
-    }, [ready, tourId, tour.steps]);
+    }, [auto, ready, tourId, start]);
+
+    // The manual run, from "Need help?". Ignores `tourSeen` entirely.
+    useEffect(() => {
+        if (openSignal <= 0) return;
+        startedRef.current = true;
+        start();
+    }, [openSignal, start]);
 
     const finish = useCallback(() => {
         markTourSeen(tourId);
