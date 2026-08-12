@@ -20,7 +20,23 @@ import { FormEvent, useEffect, useState } from 'react';
 
 export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian', 'Other'] as const;
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
-export const ID_DOC_TYPES = ['Aadhaar Card', 'School ID Card', 'Passport'] as const;
+
+/**
+ * Accepted ID documents, **in order of preference**.
+ *
+ * School ID comes first and is the default, and the order here is the order on
+ * screen. It is the right document for this purpose and the wrong default was
+ * doing real harm in both directions: a school ID proves the one thing the
+ * olympiad actually needs to check — that this student attends the school and
+ * class they registered under — which a passport does not show at all. And
+ * Aadhaar is a national identity number belonging to a minor; collecting one by
+ * default, when a card the school itself issued would do, is more of a child's
+ * data than the task requires.
+ *
+ * The other two stay, because a student between schools or without a card
+ * issued yet must still be able to register.
+ */
+export const ID_DOC_TYPES = ['School ID Card', 'Aadhaar Card', 'Passport'] as const;
 
 /** Mirrors `DOCUMENT_RULES.maxBytes` on the server, so the reject is instant. */
 const MAX_DOCUMENT_MB = 10;
@@ -39,10 +55,16 @@ export interface GuardianFormValues {
     state: string;
     gender: string;
     idDocumentType: string;
+    /** Front of the card. */
     idDocumentUrl: string;
+    /** Back of the card. Required, same as the front. */
+    idDocumentBackUrl: string;
     parentalConsent: boolean;
     dataConsent: boolean;
 }
+
+/** Which side of the ID an upload control is for. */
+type IdSide = 'front' | 'back';
 
 export const EMPTY_GUARDIAN: GuardianFormValues = {
     guardianFirstName: '',
@@ -54,8 +76,10 @@ export const EMPTY_GUARDIAN: GuardianFormValues = {
     gender: '',
     city: '',
     state: '',
-    idDocumentType: 'Aadhaar Card',
+    // The preferred document — see ID_DOC_TYPES.
+    idDocumentType: 'School ID Card',
     idDocumentUrl: '',
+    idDocumentBackUrl: '',
     parentalConsent: false,
     dataConsent: false,
 };
@@ -78,9 +102,17 @@ export default function GuardianForm({
 }) {
     const [values, setValues] = useState<GuardianFormValues>({ ...EMPTY_GUARDIAN, ...initial });
     const [localError, setLocalError] = useState('');
-    const [fileName, setFileName] = useState('');
-    const [uploading, setUploading] = useState(false);
-    const [uploadError, setUploadError] = useState('');
+    /**
+     * Upload state is per side.
+     *
+     * A single set of `fileName`/`uploading`/`uploadError` would have the two
+     * controls overwrite each other: picking the back would blank the "✓
+     * Uploaded" line under the front, which reads exactly like the front having
+     * been lost, and a parent would re-upload it.
+     */
+    const [fileName, setFileName] = useState<Record<IdSide, string>>({ front: '', back: '' });
+    const [uploading, setUploading] = useState<Record<IdSide, boolean>>({ front: false, back: false });
+    const [uploadError, setUploadError] = useState<Record<IdSide, string>>({ front: '', back: '' });
 
     // Re-seed if the parent component loads an existing profile after first paint.
     useEffect(() => {
@@ -106,35 +138,38 @@ export default function GuardianForm({
      * The file now goes to object storage over multipart and never enters the
      * JSON body at all.
      */
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = (side: IdSide) => async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const field: keyof GuardianFormValues =
+            side === 'front' ? 'idDocumentUrl' : 'idDocumentBackUrl';
+
         setLocalError('');
-        setUploadError('');
+        setUploadError((s) => ({ ...s, [side]: '' }));
 
         if (file.size > MAX_DOCUMENT_BYTES) {
-            setUploadError(describeOversizeFile(file.size, MAX_DOCUMENT_BYTES));
+            setUploadError((s) => ({ ...s, [side]: describeOversizeFile(file.size, MAX_DOCUMENT_BYTES) }));
             e.target.value = '';
             return;
         }
 
-        setFileName(file.name);
-        setUploading(true);
+        setFileName((s) => ({ ...s, [side]: file.name }));
+        setUploading((s) => ({ ...s, [side]: true }));
         try {
             const form = new FormData();
             form.append('file', file);
             // No explicit Content-Type: the browser has to set the multipart
             // boundary itself, and naming the header would strip it.
             const { data } = await api.post<{ url: string }>('/guardian/id-document', form);
-            set('idDocumentUrl', data.url);
+            set(field, data.url);
         } catch (err: any) {
-            setFileName('');
-            set('idDocumentUrl', '');
+            setFileName((s) => ({ ...s, [side]: '' }));
+            set(field, '');
             e.target.value = '';
-            setUploadError(describeError(err, 'upload that document'));
+            setUploadError((s) => ({ ...s, [side]: describeError(err, 'upload that document') }));
         } finally {
-            setUploading(false);
+            setUploading((s) => ({ ...s, [side]: false }));
         }
     };
 
@@ -156,12 +191,31 @@ export default function GuardianForm({
             setLocalError("Enter the parent or guardian's mobile number.");
             return;
         }
-        if (uploading) {
+        // Nothing on this form is optional any more. Checked one at a time, in
+        // the order the fields appear, so the message always names the first
+        // thing the parent needs to scroll back to rather than listing five.
+        if (!values.studentDob) {
+            setLocalError("Enter the student's date of birth.");
+            return;
+        }
+        if (!values.gender) {
+            setLocalError("Select the student's gender.");
+            return;
+        }
+        if (uploading.front || uploading.back) {
             setLocalError('Wait for the document to finish uploading.');
             return;
         }
         if (!values.idDocumentUrl) {
-            setLocalError("Upload the student's Aadhaar, School ID, or Passport document.");
+            setLocalError(
+                `Upload the front of the student's ${values.idDocumentType.toLowerCase()}.`,
+            );
+            return;
+        }
+        if (!values.idDocumentBackUrl) {
+            setLocalError(
+                `Upload the back of the student's ${values.idDocumentType.toLowerCase()} as well. Both sides are needed.`,
+            );
             return;
         }
         if (!bothConsents) {
@@ -243,12 +297,11 @@ export default function GuardianForm({
             </fieldset>
 
             <fieldset className="guardian-fieldset">
-                <legend>
-                    About the student <span className="guardian-optional">optional</span>
-                </legend>
+                <legend>About the student (Mandatory)</legend>
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    These help us report on who is taking part. Nothing here affects the
-                    student&apos;s exam, score or rank, and every field can be left blank.
+                    Both are required. Neither affects the student&apos;s score or rank — the date
+                    of birth has to match the ID you upload below, which is how we confirm the
+                    student is who they registered as.
                 </p>
 
                 <div className="form-row">
@@ -256,6 +309,7 @@ export default function GuardianForm({
                         <label className="input-label" htmlFor="studentDob">Date of birth</label>
                         <input
                             id="studentDob" className="input-field" type="date"
+                            required
                             max={new Date().toISOString().slice(0, 10)}
                             value={values.studentDob}
                             onChange={(e) => set('studentDob', e.target.value)}
@@ -265,10 +319,15 @@ export default function GuardianForm({
                         <label className="input-label" htmlFor="gender">Gender</label>
                         <select
                             id="gender" className="input-field"
+                            required
                             value={values.gender}
                             onChange={(e) => set('gender', e.target.value)}
                         >
-                            <option value="">Prefer not to say</option>
+                            {/* No blank default. "Prefer not to say" is a real
+                                answer and is in GENDERS; an empty option that
+                                looked identical to it just made the field
+                                skippable while appearing answered. */}
+                            <option value="" disabled>Select…</option>
                             {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
                         </select>
                     </div>
@@ -283,56 +342,83 @@ export default function GuardianForm({
 
             <fieldset className="guardian-fieldset">
                 <legend>Student Identity Document (Mandatory)</legend>
+                {/* The preference is stated, not merely implied by the order of
+                    a dropdown. A parent reaching for Aadhaar by habit needs a
+                    reason to reach for the school card instead, and "it is the
+                    one that proves the class you registered under" is that
+                    reason. */}
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    Upload a copy of the student&apos;s Aadhaar Card, School ID Card, or Passport for identity verification.
+                    <strong>Please use the student&apos;s school ID card if you have one.</strong>{' '}
+                    It is the document we prefer, because it shows the school and class the student
+                    registered under. If there is no school card, an Aadhaar card or passport is
+                    accepted instead.
                 </p>
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="idDocumentType">Document type</label>
-                        <select
-                            id="idDocumentType" className="input-field"
-                            value={values.idDocumentType}
-                            onChange={(e) => set('idDocumentType', e.target.value)}
-                        >
-                            {ID_DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-                    <div className="input-group">
-                        {/* The limit is in the label, not only in the error —
-                            a parent should know it before they pick a 12 MB
-                            photo, not after waiting for it to be refused. */}
-                        <label className="input-label" htmlFor="idDocumentFile">
-                            Upload document{' '}
-                            <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
-                                (JPG, PNG, HEIC or PDF · max {MAX_DOCUMENT_MB} MB)
-                            </span>
-                        </label>
-                        <input
-                            id="idDocumentFile" className="input-field" type="file"
-                            accept="image/*,application/pdf"
-                            onChange={handleFileUpload}
-                            disabled={uploading}
-                            style={{ padding: '0.4rem' }}
-                        />
-                        {uploading && (
-                            <p className="input-hint">Uploading {fileName}…</p>
-                        )}
-                        {!uploading && values.idDocumentUrl && fileName && (
-                            <p className="input-hint" style={{ color: '#22c55e', fontWeight: 500 }}>
-                                ✓ Uploaded: {fileName}
-                            </p>
-                        )}
-                        {uploadError && (
-                            <p className="input-hint" style={{ color: 'var(--danger-400)', fontWeight: 500 }}>
-                                {uploadError}
-                            </p>
-                        )}
-                        <p className="input-hint">
-                            A clear phone photo is fine, it does not need to be a scan. If yours is
-                            over {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
-                        </p>
-                    </div>
+                <p className="input-hint">
+                    <strong>Both sides are required.</strong> The back of a school card usually
+                    carries the class, section and the school&apos;s stamp, and the back of an
+                    Aadhaar card carries the address, so one side on its own is not enough to check.
+                </p>
+
+                <div className="input-group">
+                    <label className="input-label" htmlFor="idDocumentType">Document type</label>
+                    <select
+                        id="idDocumentType" className="input-field"
+                        value={values.idDocumentType}
+                        onChange={(e) => set('idDocumentType', e.target.value)}
+                    >
+                        {ID_DOC_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                                {t}
+                                {t === 'School ID Card' ? ' — preferred' : ''}
+                            </option>
+                        ))}
+                    </select>
                 </div>
+
+                <div className="form-row">
+                    {(['front', 'back'] as const).map((side) => {
+                        const url = side === 'front' ? values.idDocumentUrl : values.idDocumentBackUrl;
+                        return (
+                            <div className="input-group" key={side}>
+                                {/* The limit is in the label, not only in the
+                                    error — a parent should know it before they
+                                    pick a 12 MB photo, not after waiting for it
+                                    to be refused. */}
+                                <label className="input-label" htmlFor={`idDocument-${side}`}>
+                                    {side === 'front' ? 'Front of the card' : 'Back of the card'}{' '}
+                                    <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                                        (JPG, PNG, HEIC or PDF · max {MAX_DOCUMENT_MB} MB)
+                                    </span>
+                                </label>
+                                <input
+                                    id={`idDocument-${side}`} className="input-field" type="file"
+                                    accept="image/*,application/pdf"
+                                    onChange={handleFileUpload(side)}
+                                    disabled={uploading[side]}
+                                    style={{ padding: '0.4rem' }}
+                                />
+                                {uploading[side] && (
+                                    <p className="input-hint">Uploading {fileName[side]}…</p>
+                                )}
+                                {!uploading[side] && url && (
+                                    <p className="input-hint" style={{ color: '#22c55e', fontWeight: 500 }}>
+                                        ✓ Uploaded{fileName[side] ? `: ${fileName[side]}` : ''}
+                                    </p>
+                                )}
+                                {uploadError[side] && (
+                                    <p className="input-hint" style={{ color: 'var(--danger-400)', fontWeight: 500 }}>
+                                        {uploadError[side]}
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <p className="input-hint">
+                    A clear phone photo of each side is fine, it does not need to be a scan. If a
+                    photo is over {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
+                </p>
             </fieldset>
 
             <fieldset className="guardian-fieldset guardian-fieldset--consent">
@@ -381,7 +467,7 @@ export default function GuardianForm({
             <button
                 type="submit"
                 className="btn btn-primary btn-lg auth-submit"
-                disabled={busy || uploading || !bothConsents}
+                disabled={busy || uploading.front || uploading.back || !bothConsents}
             >
                 {busy ? 'Saving…' : submitLabel}
             </button>

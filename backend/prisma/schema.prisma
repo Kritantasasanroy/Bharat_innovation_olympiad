@@ -102,9 +102,16 @@ model GuardianProfile {
   gender            String?
   city              String?
   state             String?
-  // ── Student ID Document (Aadhaar / School ID / Passport) ──
+  // ── Student ID Document (School ID / Aadhaar / Passport) ──
   idDocumentType    String?
+  /// Front of the card. Nullable only because rows created before both sides
+  /// were collected still exist; new submissions require it.
   idDocumentUrl     String?
+  /// Back of the card. Required on new submissions for the same reason the
+  /// front is: a school ID's back carries the class, section and the school's
+  /// stamp, and an Aadhaar's carries the address — which is most of what makes
+  /// the document worth checking at all.
+  idDocumentBackUrl String?
   /// Explicit, separately-ticked consents. Both must be set for the row to be
   /// accepted — `GuardianService` rejects a partial submission rather than
   /// storing half a consent.

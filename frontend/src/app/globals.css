@@ -3880,6 +3880,56 @@ textarea.form-control {
   padding: 0 0.2rem;
 }
 
+/* ── Parent / guardian record on the dashboard ────────────────────────────── */
+.guardian-record { padding: var(--space-6); }
+
+.guardian-record__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem 1.5rem;
+  margin: 0 0 1.25rem;
+}
+
+.guardian-record__grid dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 0.2rem;
+}
+
+.guardian-record__grid dd {
+  margin: 0;
+  font-size: 0.92rem;
+  /* Long emails must wrap rather than widen the grid column. */
+  overflow-wrap: anywhere;
+}
+
+.guardian-record__docs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.guardian-record__docs-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-right: 0.2rem;
+}
+
+.guardian-record__missing {
+  font-size: 0.82rem;
+  color: var(--warning-400);
+  font-weight: 600;
+}
+
 /* ── Training checklist ───────────────────────────────────────────────────── */
 .training-header { margin-bottom: var(--space-6); }
 .training-header h1 { margin: 0 0 0.4rem; }

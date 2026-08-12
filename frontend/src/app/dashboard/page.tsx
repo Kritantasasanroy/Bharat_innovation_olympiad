@@ -25,6 +25,31 @@ interface ExamInstance {
     canStart: boolean;
 }
 
+/** A stored date, or an em dash. `en-IN` so it reads the way a parent writes it. */
+function formatDate(value: string | null): string {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Everything `/guardian/me` returns, minus the audit-only `ipAddress`. */
+interface GuardianProfile {
+    guardianFirstName: string;
+    guardianLastName: string;
+    relationship: string;
+    guardianEmail: string;
+    guardianPhone: string;
+    studentDob: string | null;
+    gender: string | null;
+    idDocumentType: string | null;
+    idDocumentUrl: string | null;
+    idDocumentBackUrl: string | null;
+    parentalConsentAt: string | null;
+    dataConsentAt: string | null;
+    consentVersion: string | null;
+}
+
 interface AvailableExam {
     id: string;
     title: string;
@@ -89,6 +114,16 @@ export default function StudentDashboard() {
 
     /** Parental consent — prompted, never a wall on the dashboard itself. */
     const [guardianComplete, setGuardianComplete] = useState<boolean | null>(null);
+    /**
+     * The whole guardian profile, shown back to the student.
+     *
+     * It was collected and then invisible: the only place any of it appeared was
+     * a partial read-only card on `/profile`. A parent who mistyped their own
+     * phone number, or picked the wrong relationship, or uploaded the wrong
+     * side of a card, had no way to notice — and this is the record that decides
+     * whether the student is allowed to sit the exam at all.
+     */
+    const [guardian, setGuardian] = useState<GuardianProfile | null>(null);
 
     useEffect(() => {
         api.get('/access-pass/me')
@@ -99,7 +134,10 @@ export default function StudentDashboard() {
             .catch(() => {});
 
         api.get('/guardian/me')
-            .then((r) => setGuardianComplete(Boolean(r.data.complete)))
+            .then((r) => {
+                setGuardianComplete(Boolean(r.data.complete));
+                setGuardian(r.data.profile ?? null);
+            })
             .catch(() => {});
     }, []);
 
@@ -316,6 +354,85 @@ export default function StudentDashboard() {
                                 )}
                             </div>
                         </section>
+
+                        {/* ── Parent / guardian record ──
+                            Everything the parent submitted, shown back.
+
+                            It was collected and then invisible: a mistyped
+                            phone number, the wrong relationship, or a photo of
+                            the wrong side of a card could sit unnoticed until it
+                            mattered. This is the record that decides whether the
+                            student may sit an exam at all, so the student and
+                            parent should be able to check it without having to
+                            re-open the form. */}
+                        {guardian && (
+                            <section className="dashboard-section">
+                                <h2>Parent / guardian details</h2>
+                                <div className="glass-card guardian-record">
+                                    <dl className="guardian-record__grid">
+                                        <div>
+                                            <dt>Name</dt>
+                                            <dd>{guardian.guardianFirstName} {guardian.guardianLastName}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Relationship</dt>
+                                            <dd>{guardian.relationship}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Email</dt>
+                                            <dd>{guardian.guardianEmail}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Mobile</dt>
+                                            <dd>{guardian.guardianPhone}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Student date of birth</dt>
+                                            <dd>{formatDate(guardian.studentDob)}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Student gender</dt>
+                                            <dd>{guardian.gender || '—'}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>ID document</dt>
+                                            <dd>{guardian.idDocumentType || '—'}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Consent given</dt>
+                                            <dd>{formatDate(guardian.parentalConsentAt)}</dd>
+                                        </div>
+                                    </dl>
+
+                                    {/* Links rather than inline images. This is a
+                                        minor's identity document: it should not
+                                        render on a dashboard that might be open
+                                        on a shared screen or a projector. */}
+                                    <div className="guardian-record__docs">
+                                        <span className="guardian-record__docs-label">Uploaded ID</span>
+                                        {guardian.idDocumentUrl ? (
+                                            <a href={guardian.idDocumentUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary">
+                                                View front ↗
+                                            </a>
+                                        ) : (
+                                            <span className="guardian-record__missing">Front not uploaded</span>
+                                        )}
+                                        {guardian.idDocumentBackUrl ? (
+                                            <a href={guardian.idDocumentBackUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary">
+                                                View back ↗
+                                            </a>
+                                        ) : (
+                                            <span className="guardian-record__missing">Back not uploaded</span>
+                                        )}
+                                    </div>
+
+                                    <p className="input-hint">
+                                        Something wrong here? <Link href="/guardian">Update the parent section</Link>.
+                                        Your consent date is not changed by an edit.
+                                    </p>
+                                </div>
+                            </section>
+                        )}
                     </>
                 )}
             </main>

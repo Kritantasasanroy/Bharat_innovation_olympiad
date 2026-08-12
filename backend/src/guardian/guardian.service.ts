@@ -61,18 +61,37 @@ export class GuardianService {
             );
         }
 
-        // The form calls the ID document mandatory, so the server has to say so
-        // too — a rule enforced only in the browser is not a rule, and identity
-        // proof is exactly the field someone would want to skip.
+        // The form calls every field on it mandatory, so the server has to say
+        // so too — a rule enforced only in the browser is not a rule, and these
+        // are exactly the fields someone would want to skip.
         //
-        // Checked on *submission* only, deliberately not inside
-        // `hasGuardianConsent`: adding it there would retroactively bar students
-        // who consented before the document existed from sitting their exam,
+        // All of these are checked on *submission* only, deliberately not inside
+        // `hasGuardianConsent`: adding them there would retroactively bar
+        // students who consented before a field existed from sitting their exam,
         // which punishes them for a change they had no part in.
+        if (!dto.studentDob) {
+            throw new BadRequestException("Enter the student's date of birth.");
+        }
+        if (!dto.gender) {
+            throw new BadRequestException("Select the student's gender.");
+        }
+        if (!dto.idDocumentType?.trim()) {
+            throw new BadRequestException('Choose which ID document you are uploading.');
+        }
+
+        // Both sides, and named separately in the error: "upload the document"
+        // when one of two is already attached tells a parent nothing about
+        // which half is missing.
         const idDocumentUrl = dto.idDocumentUrl?.trim();
         if (!idDocumentUrl) {
             throw new BadRequestException(
-                "Upload the student's ID document — an Aadhaar card, school ID or passport.",
+                "Upload the front of the student's ID — a school ID, Aadhaar card or passport.",
+            );
+        }
+        const idDocumentBackUrl = dto.idDocumentBackUrl?.trim();
+        if (!idDocumentBackUrl) {
+            throw new BadRequestException(
+                "Upload the back of the student's ID as well. Both sides are needed.",
             );
         }
 
@@ -106,6 +125,7 @@ export class GuardianService {
             state: dto.state?.trim() || null,
             idDocumentType: dto.idDocumentType ?? null,
             idDocumentUrl,
+            idDocumentBackUrl,
         };
 
         const profile = await this.prisma.guardianProfile.upsert({

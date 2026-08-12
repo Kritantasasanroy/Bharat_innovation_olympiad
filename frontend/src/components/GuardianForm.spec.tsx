@@ -10,10 +10,20 @@ vi.mock('@/lib/api', () => ({
     default: { post: vi.fn().mockResolvedValue({ data: { url: 'https://cdn.example/id.jpg' } }) },
 }));
 
-/** A document already on file, so consent tests aren't blocked by the upload. */
+/**
+ * A complete profile already on file, so the consent tests are not blocked by
+ * the fields that come before the consents.
+ *
+ * Every one of these is mandatory now — date of birth, gender and *both* sides
+ * of the ID — so a fixture missing any of them would stop at the first
+ * validation check and never reach the consent behaviour under test.
+ */
 const WITH_DOCUMENT = {
-    idDocumentType: 'Aadhaar Card',
+    studentDob: '2012-04-18',
+    gender: 'Female',
+    idDocumentType: 'School ID Card',
     idDocumentUrl: 'https://cdn.example/existing-id.jpg',
+    idDocumentBackUrl: 'https://cdn.example/existing-id-back.jpg',
 };
 
 /**
@@ -36,11 +46,28 @@ describe('GuardianForm', () => {
         });
     };
 
+    /** The two student details that are now mandatory alongside the ID. */
+    const fillStudent = () => {
+        fireEvent.change(screen.getByLabelText(/date of birth/i), {
+            target: { value: '2012-04-18' },
+        });
+        fireEvent.change(screen.getByLabelText(/gender/i), { target: { value: 'Female' } });
+    };
+
+    /** Uploads one side and waits for it to be acknowledged on screen. */
+    const upload = async (label: RegExp, filename: string) => {
+        const input = screen.getByLabelText(label);
+        const file = new File(['x'], filename, { type: 'image/jpeg' });
+        Object.defineProperty(file, 'size', { value: 2 * 1024 * 1024 });
+        fireEvent.change(input, { target: { files: [file] } });
+        await screen.findByText(new RegExp(`uploaded: ${filename}`, 'i'));
+    };
+
     const consents = () => screen.getAllByRole('checkbox');
 
     let onSubmit: ReturnType<typeof vi.fn>;
 
-    /** Renders the form; `initial` lets a test start with a document on file. */
+    /** Renders the form; `initial` lets a test start with fields already set. */
     const mount = (initial?: Record<string, string>) => {
         onSubmit = vi.fn();
         return render(
@@ -55,8 +82,15 @@ describe('GuardianForm', () => {
     };
 
     beforeEach(() => {
-        // Most cases are about the consent rules, so they start with the
-        // mandatory ID document already attached.
+        // The mock is module-scoped, so its call log survives between tests.
+        // Without this, "does not contact the server" passes or fails depending
+        // on whether an earlier test happened to upload something — which is
+        // exactly the kind of order-dependence that makes a suite untrustworthy.
+        // `mockClear` and not `resetAllMocks`: the resolved value is part of the
+        // fixture, not of any one test.
+        vi.mocked(api.post).mockClear();
+        // Most cases are about the consent rules, so they start with every
+        // mandatory field before the consents already filled in.
         mount(WITH_DOCUMENT);
     });
 
@@ -130,22 +164,73 @@ describe('GuardianForm', () => {
         expect(screen.getByText(/both boxes must be ticked/i)).toBeInTheDocument();
     });
 
+    // Nothing on this form is optional any more. Date of birth used to be, and
+    // it is the one the age band is derived from.
+    it('refuses to submit with the student details left blank', async () => {
+        cleanup();
+        mount({
+            idDocumentUrl: 'https://cdn.example/a.jpg',
+            idDocumentBackUrl: 'https://cdn.example/b.jpg',
+        } as never);
+        fill();
+        consents().forEach((box) => fireEvent.click(box));
+        fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
+
+        await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
+    });
+
     describe('the mandatory ID document', () => {
-        it('blocks submission when none has been uploaded', async () => {
+        // School ID is the document the olympiad actually wants: it is the only
+        // one of the three that shows the school and class a student registered
+        // under, and it avoids collecting a minor's Aadhaar by default.
+        it('offers the school ID first, and picks it by default', () => {
+            const select = screen.getByLabelText(/document type/i) as HTMLSelectElement;
+            expect(select.value).toBe('School ID Card');
+            expect(select.options[0].value).toBe('School ID Card');
+        });
+
+        // The preference and the two-sides rule have to be *stated*. A reordered
+        // dropdown alone does not tell a parent reaching for Aadhaar by habit
+        // why the school card is the better answer, and a missing back is the
+        // most likely reason a submission gets bounced.
+        it('says on screen which document is preferred, and that both sides are needed', () => {
+            expect(
+                screen.getByText(/school ID card if you have one/i),
+            ).toBeInTheDocument();
+            expect(screen.getByText(/both sides are required/i)).toBeInTheDocument();
+        });
+
+        it('blocks submission when neither side has been uploaded', async () => {
             cleanup();
-            mount(); // no document on file
+            mount(); // nothing on file
             fill();
+            fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
             await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
-            expect(await screen.findByText(/upload the student/i)).toBeInTheDocument();
+            expect(await screen.findByText(/upload the front/i)).toBeInTheDocument();
+        });
+
+        // The half-finished case, and the likelier one: the front is the side
+        // everyone remembers.
+        it('blocks submission when only the front has been uploaded', async () => {
+            cleanup();
+            mount();
+            fill();
+            fillStudent();
+            await upload(/front of the card/i, 'front.jpg');
+            consents().forEach((box) => fireEvent.click(box));
+            fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
+
+            await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
+            expect(await screen.findByText(/upload the back/i)).toBeInTheDocument();
         });
 
         it('rejects a file over the size limit without contacting the server', async () => {
             cleanup();
             mount();
-            const input = screen.getByLabelText(/upload document/i);
+            const input = screen.getByLabelText(/front of the card/i);
             const huge = new File(['x'], 'huge.jpg', { type: 'image/jpeg' });
             // 11 MB — over the 10 MB cap the server also enforces.
             Object.defineProperty(huge, 'size', { value: 11 * 1024 * 1024 });
@@ -158,25 +243,36 @@ describe('GuardianForm', () => {
             expect(api.post).not.toHaveBeenCalled();
         });
 
-        it('uploads an acceptable file and keeps only the returned URL', async () => {
+        it('uploads both sides and keeps only the returned URLs', async () => {
             cleanup();
             mount();
-            const input = screen.getByLabelText(/upload document/i);
-            const file = new File(['x'], 'aadhaar.jpg', { type: 'image/jpeg' });
-            Object.defineProperty(file, 'size', { value: 2 * 1024 * 1024 });
+            await upload(/front of the card/i, 'front.jpg');
+            await upload(/back of the card/i, 'back.jpg');
 
-            fireEvent.change(input, { target: { files: [file] } });
-
-            await waitFor(() => expect(api.post).toHaveBeenCalledWith('/guardian/id-document', expect.any(FormData)));
-            expect(await screen.findByText(/uploaded: aadhaar.jpg/i)).toBeInTheDocument();
+            expect(api.post).toHaveBeenCalledWith('/guardian/id-document', expect.any(FormData));
 
             fill();
+            fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
             await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-            // The URL, not megabytes of base64 — this is the 413 fix.
+            // URLs, not megabytes of base64 — this is the 413 fix.
             expect(onSubmit.mock.calls[0][0].idDocumentUrl).toBe('https://cdn.example/id.jpg');
+            expect(onSubmit.mock.calls[0][0].idDocumentBackUrl).toBe('https://cdn.example/id.jpg');
+        });
+
+        // Each side owns its upload state. Sharing one set of
+        // filename/uploading/error flags made picking the back blank the
+        // "✓ Uploaded" line under the front, which reads as the front being
+        // lost — and a parent would upload it again.
+        it('keeps each side’s confirmation independent', async () => {
+            cleanup();
+            mount();
+            await upload(/front of the card/i, 'front.jpg');
+            await upload(/back of the card/i, 'back.jpg');
+            expect(screen.getByText(/uploaded: front.jpg/i)).toBeInTheDocument();
+            expect(screen.getByText(/uploaded: back.jpg/i)).toBeInTheDocument();
         });
     });
 });

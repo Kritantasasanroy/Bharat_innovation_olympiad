@@ -19,8 +19,14 @@ describe('GuardianService', () => {
             relationship: 'Mother',
             guardianEmail: 'Meera.Sharma@Example.COM',
             guardianPhone: '98765 43210',
-            idDocumentType: 'Aadhaar Card',
+            // Every one of these is mandatory now, so a "valid" DTO has to carry
+            // them all — a fixture missing one would fail on that field rather
+            // than on whatever the test is actually about.
+            studentDob: '2012-04-18',
+            gender: 'Female',
+            idDocumentType: 'School ID Card',
             idDocumentUrl: 'https://cdn.example/id.jpg',
+            idDocumentBackUrl: 'https://cdn.example/id-back.jpg',
             parentalConsent: true,
             dataConsent: true,
             ...overrides,
@@ -66,13 +72,32 @@ describe('GuardianService', () => {
             expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
         });
 
-        it('stores the trimmed URL and the document type', async () => {
+        // The back carries the class, section and school stamp on a school card,
+        // and the address on an Aadhaar — most of what makes the document worth
+        // checking. A front-only submission is not a verified identity.
+        it.each([
+            ['missing', undefined],
+            ['blank', ''],
+            ['whitespace only', '   '],
+        ])('rejects a submission whose back-of-card URL is %s', async (_label, url) => {
             const { service, prisma } = serviceWith();
-            await service.submit(USER, valid({ idDocumentUrl: '  https://cdn.example/id.jpg  ' }));
+            await expect(
+                service.submit(USER, valid({ idDocumentBackUrl: url as string })),
+            ).rejects.toThrow(BadRequestException);
+            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
+        });
+
+        it('stores both trimmed URLs and the document type', async () => {
+            const { service, prisma } = serviceWith();
+            await service.submit(USER, valid({
+                idDocumentUrl: '  https://cdn.example/id.jpg  ',
+                idDocumentBackUrl: '  https://cdn.example/id-back.jpg  ',
+            }));
 
             const { create } = prisma.guardianProfile.upsert.mock.calls[0][0];
             expect(create.idDocumentUrl).toBe('https://cdn.example/id.jpg');
-            expect(create.idDocumentType).toBe('Aadhaar Card');
+            expect(create.idDocumentBackUrl).toBe('https://cdn.example/id-back.jpg');
+            expect(create.idDocumentType).toBe('School ID Card');
         });
 
         it('does not retroactively bar a student who consented before it existed', async () => {
@@ -165,10 +190,25 @@ describe('GuardianService', () => {
             expect(create.studentDob).toBeInstanceOf(Date);
         });
 
-        it('treats a missing date of birth as fine — it is optional', async () => {
+        // It used to be optional. It is not: the age band a student competes in
+        // is derived from it, and it is what the uploaded ID is checked against.
+        it.each([
+            ['missing', undefined],
+            ['blank', ''],
+        ])('rejects a submission whose date of birth is %s', async (_label, dob) => {
             const { service, prisma } = serviceWith();
-            await service.submit(USER, valid());
-            expect(prisma.guardianProfile.upsert.mock.calls[0][0].create.studentDob).toBeNull();
+            await expect(
+                service.submit(USER, valid({ studentDob: dob as string })),
+            ).rejects.toThrow(BadRequestException);
+            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
+        });
+
+        it('rejects a submission with no gender given', async () => {
+            const { service, prisma } = serviceWith();
+            await expect(
+                service.submit(USER, valid({ gender: undefined })),
+            ).rejects.toThrow(BadRequestException);
+            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
         });
 
         it('rejects a future date', async () => {
