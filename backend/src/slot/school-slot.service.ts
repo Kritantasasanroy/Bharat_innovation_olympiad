@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { BookingStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SlotService } from './slot.service';
 
 export type AllocationStatus =
     | 'ALLOCATED'
@@ -34,7 +35,10 @@ export interface ReassignSchoolResult {
  */
 @Injectable()
 export class SchoolSlotService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private slots: SlotService,
+    ) {}
 
     /**
      * Assigns (or edits) the slot a school's students use for an exam instance,
@@ -236,7 +240,7 @@ export class SchoolSlotService {
 
         const feeAmount = slot.examInstance.exam.feeAmount ?? 0;
 
-        return this.prisma.$transaction(async (tx) => {
+        const outcome = await this.prisma.$transaction(async (tx) => {
             // Atomic compare-and-increment (`UPDATE ... WHERE booked < capacity`)
             // as a single statement — a separate findUnique-then-update has a
             // read/write gap two concurrent requests can both pass through
@@ -257,10 +261,24 @@ export class SchoolSlotService {
             });
             return { status: 'ALLOCATED' as const, bookingId: booking.id };
         });
+
+        // After the commit, never inside it: a WATI timeout must not roll back a
+        // seat the student now holds. A no-ops for a PENDING (unpaid) booking —
+        // that student is messaged when their payment confirms.
+        if (outcome.status === 'ALLOCATED' && outcome.bookingId) {
+            await this.slots.notifyScheduleConfirmed(outcome.bookingId);
+        }
+        return outcome;
     }
 
-    /** Moves one student's booking to a different slot. Capacity-checked on the destination. */
-    async reassignBooking(bookingId: string, newSlotId: string) {
+    /**
+     * Moves one student's booking to a different slot. Capacity-checked on the
+     * destination.
+     *
+     * `notify` is false only for the bulk school move, which sends its own
+     * messages in the background afterwards — see `reassignSchool`.
+     */
+    async reassignBooking(bookingId: string, newSlotId: string, notify = true) {
         const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
         if (!booking) throw new NotFoundException('Booking not found');
         if (booking.status === BookingStatus.CANCELLED) {
@@ -271,7 +289,7 @@ export class SchoolSlotService {
         const destination = await this.prisma.examSlot.findUnique({ where: { id: newSlotId } });
         if (!destination) throw new NotFoundException('Destination slot not found');
 
-        return this.prisma.$transaction(async (tx) => {
+        const moved = await this.prisma.$transaction(async (tx) => {
             const claim = await tx.examSlot.updateMany({
                 where: { id: newSlotId, booked: { lt: destination.capacity } },
                 data: { booked: { increment: 1 } },
@@ -285,6 +303,14 @@ export class SchoolSlotService {
             });
             return tx.booking.update({ where: { id: bookingId }, data: { slotId: newSlotId } });
         });
+
+        // The one case where a student *must* be messaged a second time: their
+        // exam is now on a different date and the first message is now wrong.
+        // The schedule send is deduped on (booking, slot), so the new slot makes
+        // this a genuinely new message rather than a suppressed duplicate.
+        if (!notify) return moved;
+        await this.slots.notifyScheduleConfirmed(bookingId);
+        return moved;
     }
 
     /**
@@ -326,7 +352,10 @@ export class SchoolSlotService {
         const failed: { bookingId: string; reason: string }[] = [];
         for (const booking of bookings) {
             try {
-                await this.reassignBooking(booking.id, newSlotId);
+                // `notify: false` — messaging inline would make the admin wait on
+                // one WATI round-trip per student. The whole cohort is queued
+                // once, in the background, below.
+                await this.reassignBooking(booking.id, newSlotId, false);
                 succeeded.push(booking.id);
             } catch (err) {
                 failed.push({
@@ -342,6 +371,11 @@ export class SchoolSlotService {
             update: { slotId: newSlotId, assignedBy },
             create: { schoolId, examInstanceId, slotId: newSlotId, assignedBy },
         });
+
+        // Everyone who actually moved now has a wrong date in their inbox. Fired
+        // after the assignment is re-pointed and deliberately not awaited, so the
+        // admin's response does not wait on the cohort's messages.
+        this.slots.notifyScheduleConfirmedMany(succeeded);
 
         return { total: bookings.length, succeeded, failed };
     }

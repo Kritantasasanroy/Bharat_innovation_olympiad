@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * The rehearsal gate: a student sits the trial paper before *any* real paper,
@@ -45,7 +46,7 @@ describe('AttemptService — rehearsal gate covers practice exams', () => {
         // rehearsal gate; `attempt.guardian-gate.spec.ts` covers the refusal.
         const guardian: any = { hasGuardianConsent: jest.fn().mockResolvedValue(true) };
         const proctor: any = { flagForReviewIfRisky: jest.fn().mockResolvedValue('NOT_REQUIRED') };
-        return new AttemptService(prisma, {} as any, guardian, proctor);
+        return new AttemptService(prisma, {} as any, guardian, proctor, whatsAppStub());
     }
 
     it('reports the trial as required for a practice exam', async () => {

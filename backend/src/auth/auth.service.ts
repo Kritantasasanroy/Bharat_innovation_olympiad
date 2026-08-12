@@ -8,6 +8,23 @@ import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 import { PhoneOtpService } from './phone-otp.service';
 import { normalizePhone } from './phone.helpers';
 
+/**
+ * Normalise `rawPhone` into E.164 without throwing — used for `phoneRaw` where
+ * we want to persist whatever the student typed, best-effort, rather than
+ * failing registration over a mildly malformed number.
+ */
+function tryNormalizePhone(raw: string | undefined): string | undefined {
+    if (!raw?.trim()) return undefined;
+    try {
+        return normalizePhone(raw);
+    } catch {
+        // Strip obviously bad characters but keep the digits so at least an
+        // admin can see what was submitted.
+        const digits = raw.replace(/[^\d+]/g, '');
+        return digits || undefined;
+    }
+}
+
 @Injectable()
 export class AuthService {
     constructor(
@@ -151,6 +168,9 @@ export class AuthService {
                 existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
             this.assertSchoolResolved(existing.role, schoolId);
             const phone = await this.resolveVerifiedPhone(dto.phone, existing.id, dto.phoneCode);
+            // Store the raw number unconditionally so WhatsApp can reach the
+            // student even when they did not complete OTP verification.
+            const phoneRaw = tryNormalizePhone(dto.phone);
             const classBand = dto.classBand ?? existing.classBand;
             // An invited roster row may already carry a section the school set,
             // so the incoming value only has to satisfy this when there is
@@ -168,6 +188,9 @@ export class AuthService {
                     section,
                     activatedAt: new Date(),
                     ...(phone ? { phone } : {}),
+                    // Always update phoneRaw so a student who retypes a number
+                    // without completing OTP still has their number on record.
+                    ...(phoneRaw ? { phoneRaw } : {}),
                     ...(existing.referralCode ? {} : { referralCode: dto.referralCode ?? null }),
                     // Only stamp acceptance we were actually told about, and never
                     // overwrite an earlier acceptance with nothing.
@@ -203,11 +226,15 @@ export class AuthService {
         const section = this.normaliseSection(dto.section, schoolId);
         this.assertSectionResolved(dto.role, schoolId, section);
         const phone = await this.resolveVerifiedPhone(dto.phone, undefined, dto.phoneCode);
+        // Store the raw number unconditionally so WhatsApp can reach the
+        // student even when they did not complete OTP verification.
+        const phoneRaw = tryNormalizePhone(dto.phone);
 
         const user = await this.prisma.user.create({
             data: {
                 email,
                 phone,
+                phoneRaw,
                 firstName: dto.firstName,
                 lastName: dto.lastName,
                 role: dto.role || 'STUDENT',

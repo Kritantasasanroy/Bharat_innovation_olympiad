@@ -2,6 +2,17 @@ import { BookingStatus, Role } from '@prisma/client';
 import { SchoolSlotService } from './school-slot.service';
 
 /**
+ * `SchoolSlotService` now asks `SlotService` to send the `bio_schedule` WhatsApp
+ * after an allocation or a reassignment. It is best-effort and cannot fail the
+ * booking, so these tests only need it to exist and stay silent.
+ */
+const slotServiceStub = (): any => ({
+    notifyScheduleConfirmed: jest.fn().mockResolvedValue(undefined),
+    notifyScheduleConfirmedMany: jest.fn(),
+});
+
+
+/**
  * Hand-rolled in-memory fake of the slice of PrismaService this module
  * touches. Real capacity/uniqueness semantics are enforced (not just
  * canned return values) so the concurrency test below can actually
@@ -260,7 +271,7 @@ function createFakeDb() {
 describe('SchoolSlotService', () => {
     function setup() {
         const db = createFakeDb();
-        const service = new SchoolSlotService(db.prisma as any);
+        const service = new SchoolSlotService(db.prisma as any, slotServiceStub());
         return { db, service };
     }
 

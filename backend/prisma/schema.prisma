@@ -21,6 +21,11 @@ model User {
   /// their request rows. Unique because it doubles as a login identifier for
   /// phone-OTP sign-in, which resolves an account by this column alone.
   phone            String?           @unique
+  /// Student-supplied phone number stored at registration even if the OTP was
+  /// not completed. NOT unique and NOT a login identifier — it is only used for
+  /// WhatsApp notifications when the verified `phone` is absent. Normalised to
+  /// E.164 on write so the WhatsApp gateway can use it without conversion.
+  phoneRaw         String?
   /// The student's olympiad roll number, e.g. `BIO26-G8-00123` — season year,
   /// grade, then a per-(year, grade) sequence allocated from `Sequence`. Issued
   /// once, at registration, and never reissued: it is printed on the admit card
@@ -66,6 +71,7 @@ model User {
   trialCompletions TrialCompletion[]
   guardianProfile  GuardianProfile?
   trainingRecords  TrainingRecord[]
+  whatsappMessages WhatsAppMessage[]
 
   @@index([email])
   @@index([schoolId])
@@ -1196,4 +1202,60 @@ model SupportTicket {
   @@index([source])
   @@index([status])
   @@index([submitterId])
+}
+
+enum WhatsAppStatus {
+  /// Claimed by a sender but not yet answered for — a row left here means the
+  /// process died mid-send, which is the one case worth being able to see.
+  PENDING
+  /// WATI accepted it for delivery. Not proof it reached the handset: a number
+  /// that never opted in fails downstream, and WATI reports that only by webhook.
+  SENT
+  FAILED
+}
+
+/// Every WhatsApp template message this app sends, and the reason it is allowed
+/// to be sent only once.
+///
+/// ## Why a table rather than a log line
+///
+/// Two of the four sends fan out over an entire cohort (final results) or run on
+/// a timer that fires repeatedly (the day-before reminder). Without a durable
+/// record, a restart mid-fan-out re-messages everyone already contacted, and the
+/// reminder sweeper re-sends on every tick — thousands of duplicate WhatsApps to
+/// school students, which is both a support incident and the fastest way to have
+/// the WhatsApp number reported and rate-limited by Meta.
+///
+/// `dedupeKey` is what makes "once" precise, and it differs per template: the
+/// attempt id for a submission or a result, the booking id for a schedule, and
+/// the booking id plus the exam's IST date for a reminder (so a rescheduled
+/// student is legitimately reminded again about their new date).
+///
+/// The row is written **before** the send, not after: two workers racing on the
+/// same student must have one of them lose on the unique index rather than both
+/// discover afterwards that they each sent a message.
+model WhatsAppMessage {
+  id         String         @id @default(uuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The approved template's name, e.g. `bio_submission`. Not an enum: adding a
+  /// template must not require a migration, and Meta owns the real list.
+  template   String
+  /// What "already sent" means for this template — see the model comment.
+  dedupeKey  String
+  /// E.164, as it was at send time. Kept because a student may change their
+  /// number later and "where did this go?" must stay answerable.
+  phone      String
+  status     WhatsAppStatus @default(PENDING)
+  /// WATI's message id — the handle that finds this send in their dashboard.
+  providerId String?
+  /// The provider's rejection, already redacted. Null on success.
+  error      String?
+  createdAt  DateTime       @default(now())
+  sentAt     DateTime?
+
+  @@unique([template, dedupeKey])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }

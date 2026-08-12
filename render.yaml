@@ -84,6 +84,27 @@ services:
       - key: TWOFACTOR_SMS_TEMPLATE
         sync: false
 
+      # ── WhatsApp (WATI) ──────────────────────────────────────────────────
+      # Both are tenant-specific and must match — the endpoint carries the WATI
+      # tenant id in its path. Without them the app logs WhatsApp messages
+      # instead of sending them, and says so at boot.
+      #
+      # Only the four APPROVED templates are ever sent (bio_submission,
+      # bio_schedule, bio_result, bio_reminder). Confirm the account still has
+      # all four with GET /api/admin/whatsapp/health — a template renamed or
+      # deleted on the WATI side is invisible from the code.
+      - key: WATI_API_ENDPOINT
+        sync: false
+      - key: WATI_ACCESS_TOKEN
+        sync: false
+      # Kill switch for a live cohort. `false` stops every WhatsApp send and
+      # leaves email and SMS alone. Default on.
+      - key: WHATSAPP_ENABLED
+        sync: false
+      # The T-1 day exam reminder sweeper, which runs hourly in-process.
+      - key: WHATSAPP_REMINDERS_ENABLED
+        sync: false
+
       # ── Media storage ────────────────────────────────────────────────────
       # Cloudinary is what the code defaults to (see object-storage.service.ts).
       # A stale AWS_S3_BUCKET without these will 503 every media upload.

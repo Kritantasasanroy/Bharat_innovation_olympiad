@@ -5,6 +5,7 @@ import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
+import { WhatsAppService } from '../notification/whatsapp.service';
 import { ProctorService } from '../proctor/proctor.service';
 
 /**
@@ -142,6 +143,7 @@ export class AttemptService {
         private accessPassService: AccessPassService,
         private guardianService: GuardianService,
         private proctorService: ProctorService,
+        private whatsapp: WhatsAppService,
     ) { }
 
     // ── Seeded PRNG helpers ─────────────────────────────────────────────────
@@ -837,11 +839,55 @@ export class AttemptService {
         });
 
         await this.flagForReview(attemptId);
+        await this.notifySubmission(attemptId);
 
         return {
             ...updated,
             redirectUrl: attempt.examInstance.quitUrl || undefined,
         };
+    }
+
+    /**
+     * "Your submission was received" on WhatsApp (`bio_submission`).
+     *
+     * Fired from both endings — a student who ran out of time or was auto-
+     * submitted on a violation has still submitted a paper, and is the *most*
+     * likely to be unsure whether it counted. Deduped on the attempt, so the two
+     * paths cannot both message the same student.
+     *
+     * Never for a trial: a rehearsal paper is not a submission to the olympiad,
+     * and confirming one would be actively misleading. Best-effort throughout —
+     * the paper is submitted and scored either way.
+     */
+    private async notifySubmission(attemptId: string): Promise<void> {
+        try {
+            const attempt = await this.prisma.attempt.findUnique({
+                where: { id: attemptId },
+                select: {
+                    id: true,
+                    submittedAt: true,
+                    user: { select: { id: true, firstName: true, phone: true, phoneRaw: true } },
+                    examInstance: { select: { exam: { select: { id: true, isTrial: true } } } },
+                },
+            });
+            if (!attempt) return;
+            if (attempt.examInstance.exam.isTrial || isDemoExam(attempt.examInstance.exam.id)) {
+                return;
+            }
+
+            await this.whatsapp.sendSubmission({
+                userId: attempt.user.id,
+                phone: attempt.user.phone,
+                phoneRaw: attempt.user.phoneRaw,
+                firstName: attempt.user.firstName,
+                attemptId: attempt.id,
+                submittedAt: attempt.submittedAt ?? new Date(),
+            });
+        } catch (err) {
+            this.logger.error(
+                `Submission WhatsApp failed for attempt ${attemptId}: ${(err as Error).message}`,
+            );
+        }
     }
 
     /**
@@ -952,6 +998,8 @@ export class AttemptService {
                 totalScore,
             },
         });
+
+        await this.notifySubmission(attemptId);
     }
 
     async getResults(userId: string) {

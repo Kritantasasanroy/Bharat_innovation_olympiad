@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * The parental-consent gate on exam start.
@@ -69,7 +70,7 @@ describe('AttemptService — parental consent gate', () => {
         const proctor: any = { flagForReviewIfRisky: jest.fn().mockResolvedValue('NOT_REQUIRED') };
 
         return {
-            service: new AttemptService(prisma, accessPass, guardian, proctor),
+            service: new AttemptService(prisma, accessPass, guardian, proctor, whatsAppStub()),
             prisma,
             accessPass,
             guardian,

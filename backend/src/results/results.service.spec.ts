@@ -1,5 +1,6 @@
 import { AttemptStatus } from '@prisma/client';
 import { ResultsService } from './results.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * In-memory fake of the Prisma slice ResultsService touches. Rows really mutate,
@@ -120,20 +121,20 @@ function seedAttempts(db: ReturnType<typeof createFakeDb>, scores: number[]) {
 describe('ResultsService.normalize', () => {
     it('refuses when there are no submitted attempts', async () => {
         const db = createFakeDb();
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await expect(service.normalize('inst-1', 'admin')).rejects.toThrow(/No submitted attempts/i);
     });
 
     it('404s on an unknown instance', async () => {
         const db = createFakeDb();
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await expect(service.normalize('nope', 'admin')).rejects.toThrow(/not found/i);
     });
 
     it('writes normalizedScore, percentile and rank onto every attempt and stamps the instance', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50, 10]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
 
         const result = await service.normalize('inst-1', 'admin-1');
 
@@ -152,7 +153,7 @@ describe('ResultsService.normalize', () => {
     it('is idempotent — re-running recomputes cleanly (a late submission can be folded in)', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         // A late attempt arrives; normalize again.
@@ -175,7 +176,7 @@ describe('ResultsService.normalize', () => {
     it('refuses to normalize once results are released (it would rewrite published scores)', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
         await service.release('inst-1', 'admin', 'Checked.');
 
@@ -187,7 +188,7 @@ describe('ResultsService.release — the gate', () => {
     it('REFUSES to release results that have not been normalized', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
 
         await expect(service.release('inst-1', 'admin', 'Looks fine')).rejects.toThrow(
             /normaliz/i,
@@ -199,7 +200,7 @@ describe('ResultsService.release — the gate', () => {
     it('requires a written reason', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         await expect(service.release('inst-1', 'admin', '   ')).rejects.toThrow(/reason is required/i);
@@ -208,7 +209,7 @@ describe('ResultsService.release — the gate', () => {
     it('releases once normalized, flips the student-facing gate, and audits the actor + reason', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         await service.release('inst-1', 'admin-7', 'QC complete, ranks verified.');
@@ -226,7 +227,7 @@ describe('ResultsService.release — the gate', () => {
     it('cannot be released twice', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
         await service.release('inst-1', 'admin', 'Done.');
 
@@ -243,7 +244,7 @@ describe('ResultsService.release — the exam must be over (item 1)', () => {
             endsAt: new Date(Date.now() + 4 * HOUR_MS),
         });
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         db.instances[0].resultsNormalizedAt = new Date();
 
         await expect(service.release('inst-1', 'admin', 'Eager')).rejects.toThrow(
@@ -259,7 +260,7 @@ describe('ResultsService.release — the exam must be over (item 1)', () => {
             endsAt: new Date(Date.now() + HOUR_MS),
         });
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         db.instances[0].resultsNormalizedAt = new Date();
 
         await expect(service.release('inst-1', 'admin', 'Early')).rejects.toThrow(
@@ -273,7 +274,7 @@ describe('ResultsService.release — per audience (item 19)', () => {
     it('releasing to schools does NOT hand students their scores', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         await service.release('inst-1', 'admin', 'School QC first.', ['SCHOOLS']);
@@ -287,7 +288,7 @@ describe('ResultsService.release — per audience (item 19)', () => {
     it('adds a further audience later without re-releasing the ones already out', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         await service.release('inst-1', 'admin', 'Schools first.', ['SCHOOLS']);
@@ -308,7 +309,7 @@ describe('ResultsService.release — per audience (item 19)', () => {
     it('refuses when every requested audience already has the results', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
         await service.release('inst-1', 'admin', 'Out.', ['PARTNERS']);
 
@@ -320,7 +321,7 @@ describe('ResultsService.release — per audience (item 19)', () => {
     it('revoking from students closes the student result pages again', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
         await service.release('inst-1', 'admin', 'Out.', ['STUDENTS', 'SCHOOLS']);
         expect(db.exams[0].isResultReleased).toBe(true);
@@ -339,7 +340,7 @@ describe('ResultsService.getStatus', () => {
     it('reports canRelease only after normalization, and says why when it cannot', async () => {
         const db = createFakeDb();
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
 
         const before = await service.getStatus('inst-1');
         expect(before.canRelease).toBe(false);
@@ -359,7 +360,7 @@ describe('ResultsService.getStatus', () => {
             endsAt: new Date(Date.now() + 3_600_000),
         });
         seedAttempts(db, [90, 50]);
-        const service = new ResultsService(db.prisma, notifications);
+        const service = new ResultsService(db.prisma, notifications, whatsAppStub());
         await service.normalize('inst-1', 'admin');
 
         const status = await service.getStatus('inst-1');

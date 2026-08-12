@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { AccessPassStatus, BookingStatus } from '@prisma/client';
 import { NotificationService } from '../notification/notification.service';
+import { WhatsAppService } from '../notification/whatsapp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isDemoExam } from '../common/demo-exams';
 import { validateSlotWindow } from '../exam/exam-lifecycle';
@@ -20,6 +21,7 @@ export class SlotService {
     constructor(
         private prisma: PrismaService,
         private notifications: NotificationService,
+        private whatsapp: WhatsAppService,
     ) {}
 
     async createSlot(dto: CreateSlotDto) {
@@ -186,32 +188,122 @@ export class SlotService {
     }
 
     /**
-     * Best-effort slot confirmation email. Swallows its own failures — the seat is
-     * booked either way, and failing the booking over a mail problem would be a
-     * strictly worse outcome for the student.
+     * Best-effort slot confirmation on both channels. Swallows its own failures —
+     * the seat is booked either way, and failing the booking over a mail problem
+     * would be a strictly worse outcome for the student.
+     *
+     * The email carries the full detail (admit card, portal link, rules); the
+     * WhatsApp `bio_schedule` template carries the date and time and points at
+     * that email. They are sent independently on purpose: a student with no
+     * phone number on file still gets the mail, and a WATI outage must not cost
+     * anyone their confirmation.
      */
     private async sendSlotConfirmation(userId: string, booking: any): Promise<void> {
         try {
             const user = await this.prisma.user.findUnique({
                 where: { id: userId },
-                select: { email: true, firstName: true, rollNumber: true },
+                select: { email: true, firstName: true, rollNumber: true, phone: true, phoneRaw: true },
             });
-            if (!user?.email) return;
+            if (!user) return;
 
-            await this.notifications.sendSlotConfirmed(user.email, {
+            if (user.email) {
+                await this.notifications.sendSlotConfirmed(user.email, {
+                    firstName: user.firstName,
+                    examTitle: booking.slot.examInstance.exam.title,
+                    slotLabel: booking.slot.label,
+                    startsAt: booking.slot.startsAt,
+                    endsAt: booking.slot.endsAt,
+                    rollNumber: user.rollNumber,
+                    bookingId: booking.id,
+                });
+            }
+
+            await this.whatsapp.sendSchedule({
+                userId,
+                phone: user.phone,
+                phoneRaw: user.phoneRaw,
                 firstName: user.firstName,
-                examTitle: booking.slot.examInstance.exam.title,
-                slotLabel: booking.slot.label,
-                startsAt: booking.slot.startsAt,
-                endsAt: booking.slot.endsAt,
-                rollNumber: user.rollNumber,
                 bookingId: booking.id,
+                slotId: booking.slotId ?? booking.slot.id,
+                startsAt: booking.slot.startsAt,
             });
         } catch (err) {
             this.logger.error(
-                `Slot confirmation email failed for booking ${booking?.id}: ${(err as Error).message}`,
+                `Slot confirmation failed for booking ${booking?.id}: ${(err as Error).message}`,
             );
         }
+    }
+
+    /**
+     * Send the `bio_schedule` WhatsApp for an already-confirmed booking.
+     *
+     * The single entry point every *other* confirmation path calls — a paid
+     * booking confirmed by the Razorpay webhook or the browser callback, a
+     * school coordinator's bulk allocation, an admin reassignment. Those paths
+     * live in three different services and none of them sent anything, so a
+     * student who paid used to hear about their slot only by email.
+     *
+     * Safe to call from all of them, and safe to call twice: the send is deduped
+     * on `(booking, slot)`, which is what lets the webhook and the browser
+     * callback both fire for the same payment without messaging anyone twice.
+     * Best-effort and never throws — a confirmed seat must not be undone by a
+     * messaging failure.
+     */
+    async notifyScheduleConfirmed(bookingId: string): Promise<void> {
+        try {
+            const booking = await this.prisma.booking.findUnique({
+                where: { id: bookingId },
+                select: {
+                    id: true,
+                    slotId: true,
+                    status: true,
+                    slot: { select: { startsAt: true } },
+                    user: { select: { id: true, firstName: true, phone: true, phoneRaw: true } },
+                },
+            });
+            // Only a confirmed seat is a real appointment; telling a student with
+            // a pending (unpaid) booking their exam is scheduled would be wrong.
+            if (!booking || booking.status !== BookingStatus.CONFIRMED) return;
+
+            await this.whatsapp.sendSchedule({
+                userId: booking.user.id,
+                phone: booking.user.phone,
+                phoneRaw: booking.user.phoneRaw,
+                firstName: booking.user.firstName,
+                bookingId: booking.id,
+                slotId: booking.slotId,
+                startsAt: booking.slot.startsAt,
+            });
+        } catch (err) {
+            this.logger.error(
+                `Schedule WhatsApp failed for booking ${bookingId}: ${(err as Error).message}`,
+            );
+        }
+    }
+
+    /**
+     * The same message for a whole cohort — an admin moving a school to a new
+     * slot, or the auto-distribution that runs when an exam instance is created.
+     *
+     * **Not awaited by its callers, and sequential inside.** Both properties
+     * matter and for opposite reasons: a school of 200 students would otherwise
+     * make an admin wait on 200 round-trips to WATI (and time the request out),
+     * while firing all 200 at once would trip WATI's rate limit and lose most of
+     * them. So the caller returns immediately and this drains in the background,
+     * one at a time.
+     *
+     * Every individual send is already deduped and already swallows its own
+     * failures, so nothing here needs a retry — the day-before reminder is the
+     * backstop for anyone this misses.
+     */
+    notifyScheduleConfirmedMany(bookingIds: string[]): void {
+        if (!bookingIds.length) return;
+        void (async () => {
+            for (const id of bookingIds) {
+                await this.notifyScheduleConfirmed(id);
+            }
+            this.logger.log(`Schedule WhatsApp queued for ${bookingIds.length} booking(s).`);
+        })();
     }
 
     async cancelBooking(bookingId: string, userId: string) {

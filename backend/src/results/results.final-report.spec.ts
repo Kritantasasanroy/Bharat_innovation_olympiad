@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ResultsService } from './results.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * Stage two of the results release: the final report and the answer key.
@@ -47,7 +48,7 @@ describe('ResultsService — final report', () => {
         const notifications: any = {
             sendResultsPublished: jest.fn().mockResolvedValue(undefined),
         };
-        return { service: new ResultsService(prisma, notifications), prisma, notifications };
+        return { service: new ResultsService(prisma, notifications, whatsAppStub()), prisma, notifications };
     }
 
     describe('publishFinalReport', () => {

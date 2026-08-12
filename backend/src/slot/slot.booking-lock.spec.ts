@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { AccessPassStatus, BookingStatus } from '@prisma/client';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
 import { SlotService } from './slot.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * Booking a free slot now also sends the "your slot is confirmed" milestone
@@ -33,7 +34,7 @@ describe('SlotService.cancelBooking — confirmed slots are locked to the studen
             examSlot: { update: jest.fn().mockResolvedValue({}) },
             $transaction: jest.fn().mockResolvedValue([]),
         };
-        return { service: new SlotService(prisma, notifications), prisma };
+        return { service: new SlotService(prisma, notifications, whatsAppStub()), prisma };
     }
 
     const bookingWith = (status: BookingStatus, userId = OWNER) => ({
@@ -126,7 +127,7 @@ describe('SlotService.bookSlot — booking requires an active access pass', () =
                 }),
             ),
         };
-        return { service: new SlotService(prisma, notifications), prisma };
+        return { service: new SlotService(prisma, notifications, whatsAppStub()), prisma };
     }
 
     it('refuses to book a real exam without a pass, and takes no seat', async () => {

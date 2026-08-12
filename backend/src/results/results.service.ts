@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
 import { NotificationService } from '../notification/notification.service';
+import { WhatsAppService } from '../notification/whatsapp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { canReleaseResults } from '../exam/exam-lifecycle';
 import { normalizeScores } from './normalization';
@@ -59,6 +60,7 @@ export class ResultsService {
     constructor(
         private prisma: PrismaService,
         private notifications: NotificationService,
+        private whatsapp: WhatsAppService,
     ) {}
 
     /** Normalization + release state for one exam instance. */
@@ -479,18 +481,39 @@ export class ResultsService {
             const attempts = await this.prisma.attempt.findMany({
                 where: { examInstanceId, status: { in: SUBMITTED_STATUSES } },
                 select: {
-                    user: { select: { email: true, firstName: true } },
+                    id: true,
+                    percentile: true,
+                    rank: true,
+                    user: { select: { id: true, email: true, firstName: true, phone: true, phoneRaw: true } },
                     examInstance: { select: { exam: { select: { title: true } } } },
                 },
             });
 
             for (const attempt of attempts) {
-                if (!attempt.user?.email) continue;
-                await this.notifications.sendResultsPublished(
-                    attempt.user.email,
-                    attempt.user.firstName,
-                    attempt.examInstance.exam.title,
-                );
+                if (attempt.user?.email) {
+                    await this.notifications.sendResultsPublished(
+                        attempt.user.email,
+                        attempt.user.firstName,
+                        attempt.examInstance.exam.title,
+                    );
+                }
+
+                // The `bio_result` template *states* a percentile and a rank, so
+                // an attempt that has neither cannot be announced on WhatsApp —
+                // sending "Percentile null" is worse than sending nothing, and
+                // the email above still goes out. This is the normal state for
+                // an instance published before normalization has run.
+                if (attempt.percentile == null || attempt.rank == null) continue;
+
+                await this.whatsapp.sendResult({
+                    userId: attempt.user.id,
+                    phone: attempt.user.phone,
+                    phoneRaw: attempt.user.phoneRaw,
+                    firstName: attempt.user.firstName,
+                    attemptId: attempt.id,
+                    percentile: attempt.percentile,
+                    rank: attempt.rank,
+                });
             }
         } catch (err) {
             this.logger.error(

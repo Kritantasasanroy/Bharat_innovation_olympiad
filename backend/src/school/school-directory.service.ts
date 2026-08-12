@@ -20,6 +20,17 @@ export interface DirectoryEntry {
 
 const SEARCH_LIMIT = 25;
 
+/** How long search results are kept in the in-process cache (ms). */
+const CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+    results: DirectoryEntry[];
+    expiresAt: number;
+}
+
+/** Tiny in-process LRU-free cache keyed by normalised query string. */
+const searchCache = new Map<string, CacheEntry>();
+
 const toEntry = (s: {
     id: string;
     code: string;
@@ -61,6 +72,13 @@ export class SchoolDirectoryService {
      */
     async search(query?: string): Promise<DirectoryEntry[]> {
         const q = (query ?? '').trim();
+
+        // Fast path: serve from cache while the entry is fresh.
+        const cached = searchCache.get(q);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.results;
+        }
+
         const where: Prisma.SchoolWhereInput = q
             ? {
                   OR: [
@@ -85,7 +103,16 @@ export class SchoolDirectoryService {
                 onboardedAt: true,
             },
         });
-        return schools.map(toEntry);
+        const results = schools.map(toEntry);
+
+        // Evict stale entries first to prevent the map growing unbounded.
+        const now = Date.now();
+        for (const [key, entry] of searchCache) {
+            if (entry.expiresAt <= now) searchCache.delete(key);
+        }
+        searchCache.set(q, { results, expiresAt: now + CACHE_TTL_MS });
+
+        return results;
     }
 
     /**
@@ -108,6 +135,11 @@ export class SchoolDirectoryService {
         });
         if (!school) throw new NotFoundException('No school has that code.');
         return toEntry(school);
+    }
+
+    /** Invalidate cached results so a newly-added school appears immediately. */
+    private invalidateCache() {
+        searchCache.clear();
     }
 
     /**
@@ -168,7 +200,9 @@ export class SchoolDirectoryService {
                     onboardedAt: true,
                 },
             });
-            return toEntry(school);
+            const entry = toEntry(school);
+            this.invalidateCache();
+            return entry;
         } catch (error) {
             // Someone added the same school between our read and our write. Only
             // the (nameKey, pincode) index means that — a clash on `code` is a

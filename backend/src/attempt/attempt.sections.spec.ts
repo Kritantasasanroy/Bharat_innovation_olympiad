@@ -1,4 +1,5 @@
 import { AttemptService } from './attempt.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * The paper is sat one section at a time.
@@ -38,7 +39,7 @@ function buildSections() {
 /** `buildQuestionSet` is private; these tests exercise it directly on purpose. */
 function build(userId: string, sections = buildSections()) {
     // `buildQuestionSet` is pure — none of the injected services are touched.
-    const service = new AttemptService(null as any, null as any, null as any, null as any);
+    const service = new AttemptService(null as any, null as any, null as any, null as any, whatsAppStub());
     return (service as any).buildQuestionSet(sections, 'exam-1', userId, 30, 50, 20) as any[];
 }
 

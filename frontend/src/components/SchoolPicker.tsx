@@ -20,6 +20,11 @@ interface Props {
      */
     section?: string;
     onSectionChange?: (section: string) => void;
+    /**
+     * Pre-fetched list from the parent. Seeds the dropdown instantly so the
+     * student doesn't see a loading state the first time they focus the field.
+     */
+    initialResults?: DirectorySchool[];
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -51,14 +56,17 @@ const SECTION_MAX_LENGTH = 10;
  * to register. It appears only after a school is picked, so the two are never out
  * of step.
  */
-export default function SchoolPicker({ value, onChange, section, onSectionChange }: Props) {
+export default function SchoolPicker({ value, onChange, section, onSectionChange, initialResults }: Props) {
     const [mode, setMode] = useState<Mode>('search');
 
     // Search
     const [query, setQuery] = useState('');
-    const [results, setResults] = useState<DirectorySchool[]>([]);
+    const [results, setResults] = useState<DirectorySchool[]>(initialResults ?? []);
     const [searching, setSearching] = useState(false);
     const [open, setOpen] = useState(false);
+    // Track whether the pre-warmed list has been loaded so we skip the
+    // first empty-query fetch when the parent already supplied results.
+    const seededRef = useRef(!!initialResults?.length);
 
     // Code
     const [code, setCode] = useState('');
@@ -90,11 +98,16 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
     // never overwrite the results of a later, more specific query.
     useEffect(() => {
         if (mode !== 'search' || value) return;
+        // Skip the initial empty-query fetch when the parent pre-warmed us.
+        if (!query && seededRef.current) return;
         const controller = new AbortController();
         const timer = setTimeout(async () => {
             setSearching(true);
             try {
-                setResults(await searchSchools(query, controller.signal));
+                const found = await searchSchools(query, controller.signal);
+                setResults(found);
+                // Mark as seeded once we have results for the empty query.
+                if (!query) seededRef.current = true;
             } catch {
                 if (!controller.signal.aborted) setResults([]);
             } finally {

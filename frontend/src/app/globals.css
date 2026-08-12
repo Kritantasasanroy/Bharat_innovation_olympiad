@@ -4484,7 +4484,7 @@ textarea.form-control {
 .submit-status--incomplete .submit-status__icon { background: var(--warning-400); }
 .submit-status--incomplete strong { color: var(--warning-400); }
 
-/* ── Mid-exam encouragement toast ─────────────────────────────────────────── */
+/* ── Mid-exam timer-check toast ───────────────────────────────────────────── */
 .mascot-toast {
   position: fixed;
   right: var(--space-5);
@@ -4515,11 +4515,46 @@ textarea.form-control {
 .mascot-toast__avatar { font-size: 1.25rem; }
 
 .mascot-toast__name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.06em;
   color: var(--primary-400);
 }
+
+/* "Timer check" / "3 minutes left" — the point, before the sentence is read. */
+.mascot-toast__title {
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* ── The last-three-minutes warning ─────────────────────────────────────────
+   Amber rather than red, and it reuses the amber the submit panel already
+   uses for "questions still blank". Red in an exam reads as "you have done
+   something wrong"; this is a clock running down, not a fault. */
+.mascot-toast.is-warning {
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+.mascot-toast.is-warning .mascot-toast__name,
+.mascot-toast.is-warning .mascot-toast__title { color: var(--warning-400); }
+
+.mascot-toast__urgent {
+  margin: 0 0 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(245, 158, 11, 0.12);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.mascot-toast__urgent strong { color: var(--warning-400); }
 
 .mascot-toast__close {
   margin-left: auto;

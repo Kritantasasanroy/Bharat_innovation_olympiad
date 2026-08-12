@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * A paper must close on time even when the browser is gone.
@@ -54,7 +55,7 @@ describe('attempt expiry', () => {
             attemptItem: { upsert: jest.fn().mockResolvedValue({}) },
         };
 
-        const service = new AttemptService(prisma as any, {} as any, {} as any, {} as any);
+        const service = new AttemptService(prisma as any, {} as any, {} as any, {} as any, whatsAppStub());
         const autoSubmit = jest
             .spyOn(service, 'autoSubmit')
             .mockImplementation(async () => undefined as never);

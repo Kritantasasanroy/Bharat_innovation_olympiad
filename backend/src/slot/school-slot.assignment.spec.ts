@@ -3,6 +3,17 @@ import { BookingStatus, Role } from '@prisma/client';
 import { SchoolSlotService } from './school-slot.service';
 
 /**
+ * `SchoolSlotService` now asks `SlotService` to send the `bio_schedule` WhatsApp
+ * after an allocation or a reassignment. It is best-effort and cannot fail the
+ * booking, so these tests only need it to exist and stay silent.
+ */
+const slotServiceStub = (): any => ({
+    notifyScheduleConfirmed: jest.fn().mockResolvedValue(undefined),
+    notifyScheduleConfirmedMany: jest.fn(),
+});
+
+
+/**
  * The assign / reassign half of the school→slot flow (item 7).
  *
  * The bug these tests exist for: reassigning a school's students to a new slot
@@ -174,7 +185,7 @@ function createFakeDb() {
 
 const setup = () => {
     const db = createFakeDb();
-    return { ...db, service: new SchoolSlotService(db.prisma as never) };
+    return { ...db, service: new SchoolSlotService(db.prisma as never, slotServiceStub()) };
 };
 
 describe('setSchoolSlotAssignment — assigning a school to a slot', () => {

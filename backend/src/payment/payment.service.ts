@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SlotService } from '../slot/slot.service';
 import { AccessPassService } from './access-pass.service';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class PaymentService {
         private prisma: PrismaService,
         private partnerAdminApi: PartnerAdminApiClient,
         private accessPassService: AccessPassService,
+        private slots: SlotService,
     ) {
         this.razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID!,
@@ -116,6 +118,7 @@ export class PaymentService {
                 where: { id: bookingId },
                 data: { status: BookingStatus.CONFIRMED },
             });
+            await this.slots.notifyScheduleConfirmed(bookingId);
             return { alreadyPaid: true, amount: 0, booking };
         }
 
@@ -228,6 +231,9 @@ export class PaymentService {
                 where: { id: payment.booking.id },
                 data: { status: BookingStatus.CONFIRMED },
             });
+            // Deduped on (booking, slot), so the browser-callback path below can
+            // confirm the same payment without the student hearing about it twice.
+            await this.slots.notifyScheduleConfirmed(payment.booking.id);
         }
 
         // An access-pass order confirms the same way a booking does. This is
@@ -297,6 +303,7 @@ export class PaymentService {
                 where: { id: payment.booking.id },
                 data: { status: BookingStatus.CONFIRMED },
             });
+            await this.slots.notifyScheduleConfirmed(payment.booking.id);
         }
 
         if (payment) await this.creditReferral(payment.id);

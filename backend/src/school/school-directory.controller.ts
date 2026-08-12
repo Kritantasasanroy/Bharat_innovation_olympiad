@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query } from '@nestjs/common';
 import { AddSchoolDto } from './dto/school.dto';
 import { SchoolDirectoryService } from './school-directory.service';
 
@@ -13,6 +13,7 @@ export class SchoolDirectoryController {
 
     /** Search by name, city or pincode. No query lists onboarded schools first. */
     @Get()
+    @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
     search(@Query('q') q?: string) {
         return this.directory.search(q);
     }

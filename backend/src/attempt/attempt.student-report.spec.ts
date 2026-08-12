@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
 import { AttemptService } from './attempt.service';
+import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
  * The student's own attempt report, and the answer key it does or does not carry.
@@ -60,7 +61,7 @@ describe('AttemptService.getStudentReport', () => {
                 }),
             },
         };
-        return new AttemptService(prisma, null as any, null as any, null as any);
+        return new AttemptService(prisma, null as any, null as any, null as any, whatsAppStub());
     }
 
     /** Everything the client receives, flattened, so a leak anywhere is caught. */
@@ -154,7 +155,7 @@ describe('AttemptService.getStudentReport', () => {
     describe('ownership', () => {
         it('scopes the query to the caller and 404s otherwise', async () => {
             const prisma: any = { attempt: { findFirst: jest.fn().mockResolvedValue(null) } };
-            const service = new AttemptService(prisma, null as any, null as any, null as any);
+            const service = new AttemptService(prisma, null as any, null as any, null as any, whatsAppStub());
 
             await expect(service.getStudentReport(USER, ATTEMPT)).rejects.toThrow(NotFoundException);
             // The userId must be in the WHERE clause, not filtered afterwards —

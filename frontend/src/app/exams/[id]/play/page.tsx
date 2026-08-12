@@ -622,17 +622,17 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         lastViolation && lastViolation.at !== dismissedViolationAt ? lastViolation : null;
 
     /**
-     * Mid-exam encouragement at 20 and 40 minutes.
+     * Limon's timer checks — every 30% of the paper, plus a last-3-minutes warning.
      *
      * Elapsed time is derived from the **server** timer (`duration − remaining`)
      * rather than from `Date.now()` against the attempt's start: the timer is
      * server-authoritative, so this survives a clock skew, a page refresh and a
-     * dropped connection, and a student who reloads at minute 25 still gets the
-     * 20-minute cue they missed.
+     * dropped connection, and a student who reloads at 65% still gets the 60%
+     * check they missed.
      *
      * `timerReady` guards the first render. Before the socket's first tick,
      * `remaining` is 0, which would compute elapsed as the *whole* duration and
-     * fire both cues instantly on a paper the student has not started.
+     * fire every cue instantly on a paper the student has not started.
      */
     const durationSeconds = (exam?.durationMinutes ?? 0) * 60;
     const [timerReady, setTimerReady] = useState(false);
@@ -665,19 +665,27 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     const [activeCue, setActiveCue] = useState<MascotCue | null>(null);
 
     useEffect(() => {
-        // Never during the trial: a rehearsal is short and the point of it is the
-        // mechanics, not a pep talk. Never while the paper is paused/gated either —
-        // a toast behind the fullscreen overlay would be unreadable and unclosable.
-        if (!timerReady || isTrialRun || isGated || activeCue || durationSeconds <= 0) return;
+        // Never while the paper is paused/gated: a toast behind the fullscreen
+        // overlay would be unreadable and unclosable.
+        if (!timerReady || isGated || activeCue || durationSeconds <= 0) return;
 
         const elapsed = durationSeconds - remaining;
-        const cue = nextMascotCue(elapsed, firedCueIds);
+        const cue = nextMascotCue(elapsed, durationSeconds, firedCueIds);
         if (!cue) return;
+
+        // The trial gets the 3-minute warning but not the pep talks. A rehearsal
+        // is short and the point of it is the mechanics — and "your paper submits
+        // itself when the clock runs out" *is* mechanics, which is precisely the
+        // thing a student should meet for the first time in a rehearsal rather
+        // than in the real paper.
+        const suppressedByTrial = isTrialRun && cue.tone !== 'warning';
 
         // Mark fired even when suppressed, so a cue that is not worth showing on a
         // short paper is not re-evaluated on every tick for the rest of the exam.
         setFiredCueIds((prev) => new Set(prev).add(cue.id));
-        if (cueIsWorthShowing(cue, exam?.durationMinutes ?? 0)) setActiveCue(cue);
+        if (!suppressedByTrial && cueIsWorthShowing(cue, exam?.durationMinutes ?? 0)) {
+            setActiveCue(cue);
+        }
     }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, activeCue, firedCueIds, exam?.durationMinutes]);
 
     const dismissCue = useCallback(() => setActiveCue(null), []);
@@ -1075,7 +1083,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Mid-exam encouragement (20 / 40 min) ──
+                {/* ── Limon's timer checks (30 / 60 / 90%, then the 3-minute warning) ──
                     Rendered before the blocking overlays below so it can never sit
                     on top of the fullscreen gate or the auto-submit notice, both of
                     which are terminal and must not be obscured by a pep talk. */}
