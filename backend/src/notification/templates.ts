@@ -93,7 +93,7 @@ export function welcomeEmail(vars: {
      ])}
      <p style="margin:16px 0 0;font-weight:600;color:#111827;">What happens next</p>
      ${steps([
-         'Pick your exam slot — places in each sitting are limited, and once confirmed a slot cannot be changed.',
+         'Pick your exam schedule — places in each sitting are limited, and once confirmed a schedule cannot be changed.',
          'Take the free practice paper. It runs in exactly the same environment as the real exam, so nothing on the day is a surprise.',
          'Check your device ahead of time: a laptop, desktop or tablet with a working webcam, on Chrome or Edge, and at least 2 Mbps of internet.',
          'On exam day, sit somewhere quiet and well-lit with a plain background, and keep a school or photo ID nearby.',
@@ -122,14 +122,14 @@ export function slotConfirmedEmail(vars: {
 }): RenderedEmail {
     const when = formatSlot(vars.startsAt, vars.endsAt);
     return build(
-        `Your slot for ${vars.examTitle} is confirmed`,
-        'Your exam slot is confirmed',
+        `Your schedule for ${vars.examTitle} is confirmed`,
+        'Your exam schedule is confirmed',
         `<p style="margin:0 0 12px;">Hi ${vars.firstName}, your sitting is booked. Please be signed in and ready 15 minutes before it starts.</p>
      ${factTable([
          factRow('Exam', vars.examTitle),
          ...(vars.rollNumber ? [factRow('Roll number', vars.rollNumber)] : []),
          factRow('When', when),
-         ...(vars.slotLabel ? [factRow('Slot', vars.slotLabel)] : []),
+         ...(vars.slotLabel ? [factRow('Schedule', vars.slotLabel)] : []),
      ])}
      <p style="margin:16px 0 0;font-weight:600;color:#111827;">Before the day</p>
      ${steps([
@@ -138,7 +138,7 @@ export function slotConfirmedEmail(vars: {
          'Use Google Chrome or Microsoft Edge, updated to the latest version.',
          'Find a quiet, well-lit spot with a plain background behind you.',
      ])}
-     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This slot is confirmed and cannot be changed from your account. If you genuinely cannot make it, contact support as early as possible.</p>`,
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This schedule is confirmed and cannot be changed from your account. If you genuinely cannot make it, contact support as early as possible.</p>`,
         { label: 'View your admit card', url: `${vars.appUrl}/admit-card/${vars.bookingId}` },
     );
 }

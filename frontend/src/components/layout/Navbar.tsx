@@ -5,6 +5,18 @@ import { APP_NAME, TAGLINE } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
 
+/**
+ * Display label for the badge next to a signed-in user's name.
+ *
+ * `user.role` is the `Role` enum value ('STUDENT', 'ADMIN', …) and must stay
+ * that way — it is what every `allowedRoles` check compares against. This is
+ * only the on-screen word for it, so the badge can read "Ward" without
+ * renaming the role itself.
+ */
+const ROLE_LABEL: Partial<Record<string, string>> = {
+  STUDENT: 'Ward',
+};
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -116,7 +128,7 @@ export default function Navbar() {
                 <span className="user-name">
                   {user.firstName} {user.lastName}
                 </span>
-                <span className="user-role">{user.role}</span>
+                <span className="user-role">{ROLE_LABEL[user.role] ?? user.role}</span>
               </div>
               <button className="btn btn-sm btn-secondary" onClick={() => router.push('/profile')} style={{ marginRight: '0.5rem' }}>
                 Profile

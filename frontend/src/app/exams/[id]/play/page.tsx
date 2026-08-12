@@ -931,7 +931,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👨‍👩‍👧</div>
                     <h2 style={{ marginBottom: '1rem' }}>Parent consent needed first</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        Every participant is a school student, so a parent or guardian has to give
+                        Every participant is a school ward, so a parent or guardian has to give
                         consent before we can proctor an exam. It takes about two minutes and only
                         needs doing once.
                     </p>

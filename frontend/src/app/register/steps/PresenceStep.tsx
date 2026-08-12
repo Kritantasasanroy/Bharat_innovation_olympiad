@@ -82,7 +82,7 @@ export default function PresenceStep({
                         onChange={(e) => onAcknowledgedChange(e.target.checked)}
                     />
                     <span>
-                        <strong>The student is here with me now</strong>, and will do the face scan
+                        <strong>The ward is here with me now</strong>, and will do the face scan
                         themselves.
                     </span>
                 </label>
@@ -111,7 +111,7 @@ export default function PresenceStep({
                     />
                     <span>
                         I agree that the details entered here may be processed to run the Olympiad,
-                        registering the student, proctoring their exam, marking, ranking and issuing
+                        registering the ward, proctoring their exam, marking, ranking and issuing
                         certificates. A parent or guardian confirms this again later in the form.
                     </span>
                 </label>

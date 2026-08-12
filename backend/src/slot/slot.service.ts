@@ -109,10 +109,10 @@ export class SlotService {
             where: { id: slotId },
             include: { examInstance: { include: { exam: true } } },
         });
-        if (!slot) throw new NotFoundException('Slot not found');
+        if (!slot) throw new NotFoundException('Schedule not found');
 
         const now = new Date();
-        if (now > slot.endsAt) throw new BadRequestException('Slot has already ended');
+        if (now > slot.endsAt) throw new BadRequestException('Schedule has already ended');
 
         // Picking a sitting comes *after* paying. A confirmed booking can no
         // longer be changed by the student (see cancelBooking), so letting an
@@ -150,7 +150,7 @@ export class SlotService {
         const result = await this.prisma.$transaction(async (tx) => {
             const fresh = await tx.examSlot.findUnique({ where: { id: slotId } });
             if (!fresh || fresh.booked >= fresh.capacity) {
-                throw new ConflictException('Slot is full');
+                throw new ConflictException('Schedule is full');
             }
             await tx.examSlot.update({
                 where: { id: slotId },
@@ -229,7 +229,7 @@ export class SlotService {
         // real commitment rather than a placeholder they can swap at will.
         if (booking.status === BookingStatus.CONFIRMED) {
             throw new BadRequestException(
-                'Your slot is confirmed and can no longer be changed. Contact support if you need it moved.',
+                'Your schedule is confirmed and can no longer be changed. Contact support if you need it moved.',
             );
         }
 

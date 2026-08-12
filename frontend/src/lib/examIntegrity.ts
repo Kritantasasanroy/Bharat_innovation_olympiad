@@ -75,7 +75,7 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
         icon: '⚠️',
         title: 'The face on camera did not match your profile',
         what: 'The face in frame did not match the photo you enrolled when you registered.',
-        fix: 'Only the registered student may sit this paper. Make sure it is you in frame, well lit.',
+        fix: 'Only the registered ward may sit this paper. Make sure it is you in frame, well lit.',
     },
     multiple_faces: {
         icon: '👥',

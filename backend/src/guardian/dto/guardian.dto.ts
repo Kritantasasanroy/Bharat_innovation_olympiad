@@ -9,8 +9,15 @@ import {
     MaxLength,
 } from 'class-validator';
 
-/** Kept open-ended — an unusual family arrangement must still be representable. */
-export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian', 'Other'] as const;
+/**
+ * Deliberately closed, not "…and Other" — mirrors `GuardianForm.RELATIONSHIPS`
+ * on the frontend. The person consenting must actually be one of the three the
+ * law recognises as able to give parental consent for a minor; an open "Other"
+ * let anyone with no real standing (an uncle, an elder sibling) tick the box.
+ * `@IsIn` below is what makes this a real server-side rule and not merely a
+ * dropdown the browser happens to offer.
+ */
+export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian'] as const;
 
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
 

@@ -229,8 +229,8 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
                 Your results are grouped by school, so your teachers can see how your class did.
-                Every student needs one. <strong>Most students should just search by name</strong> —
-                a school code is only for students whose school handed them one.
+                Every ward needs one. <strong>Most wards should just search by name</strong> —
+                a school code is only for wards whose school handed them one.
             </p>
 
             <div className="school-tabs">

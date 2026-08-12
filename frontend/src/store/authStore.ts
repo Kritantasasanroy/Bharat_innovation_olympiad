@@ -13,9 +13,6 @@ interface AuthState {
     loginWithPhone: (phone: string, code: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
-    /** No `classBand`: a student's class is final once set, and the server
-     *  refuses to change it. Support corrects a genuine mistake via admin. */
-    updateProfile: (data: { firstName: string; lastName: string; phone?: string; phoneCode?: string }) => Promise<void>;
     setUser: (user: User | null) => void;
 }
 
@@ -94,11 +91,6 @@ export const useAuthStore = create<AuthState>((set) => ({
             localStorage.removeItem('accessToken');
             set({ user: null, isAuthenticated: false, isLoading: false });
         }
-    },
-
-    updateProfile: async (profileData) => {
-        const { data } = await api.put<User>('/auth/me', profileData);
-        set({ user: data });
     },
 
     setUser: (user) => set({ user, isAuthenticated: !!user }),

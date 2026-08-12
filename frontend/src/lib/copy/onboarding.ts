@@ -34,8 +34,8 @@ export const TECH_REQUIREMENTS = [
 export const PRESENCE_POINTS = [
     {
         icon: '🪪',
-        title: 'The student must be at the keyboard',
-        body: 'Registration ends with a face scan that identifies the student in every exam. If someone else\'s face is enrolled, the student will be flagged during their paper and may be disqualified.',
+        title: 'The ward must be at the keyboard',
+        body: 'Registration ends with a face scan that identifies the ward in every exam. If someone else\'s face is enrolled, the ward will be flagged during their paper and may be disqualified.',
     },
     {
         icon: '📷',
@@ -49,7 +49,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '👨‍👩‍👧',
         title: 'A parent or guardian is needed too',
-        body: 'One section of the form is for a parent or guardian, including their consent. The student cannot sit an exam until it is completed.',
+        body: 'One section of the form is for a parent or guardian, including their consent. The ward cannot sit an exam until it is completed.',
     },
     {
         icon: '⏱️',
@@ -61,8 +61,8 @@ export const PRESENCE_POINTS = [
 /** What happens after registration — the acclimatisation steps. */
 export const NEXT_STEPS = [
     {
-        title: 'Choose your exam slot',
-        body: 'Places in each sitting are limited. Once you confirm a slot it cannot be changed from your account, so pick a time you are certain about.',
+        title: 'Choose your exam schedule',
+        body: 'Places in each sitting are limited. Once you confirm a schedule it cannot be changed from your account, so pick a time you are certain about.',
     },
     {
         title: 'Take the practice paper',
@@ -74,7 +74,7 @@ export const NEXT_STEPS = [
     },
     {
         title: 'On the day',
-        body: 'Sit somewhere quiet and well-lit with a plain wall behind you, keep a school or photo ID nearby, and be signed in fifteen minutes before your slot opens.',
+        body: 'Sit somewhere quiet and well-lit with a plain wall behind you, keep a school or photo ID nearby, and be signed in fifteen minutes before your schedule opens.',
     },
 ] as const;
 

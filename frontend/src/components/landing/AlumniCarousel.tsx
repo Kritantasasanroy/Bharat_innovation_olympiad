@@ -95,7 +95,7 @@ const ALUMNI: Alumnus[] = [
         ],
         body: 'She built fashion accessories from textile waste, turning an environmental challenge into a real business, now pursuing global opportunities.',
         pills: ['Sustainability', 'Circular Economy'],
-        journey: 'Student Innovator → Founder → Global Opportunities',
+        journey: 'Ward Innovator → Founder → Global Opportunities',
     },
     {
         name: 'Anay & Abeer Ramakrishnan',

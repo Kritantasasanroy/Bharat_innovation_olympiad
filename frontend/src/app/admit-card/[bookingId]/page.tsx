@@ -84,7 +84,7 @@ export default function AdmitCardPage() {
                                         <td>{card.exam.title}</td>
                                     </tr>
                                     <tr>
-                                        <th>Slot</th>
+                                        <th>Schedule</th>
                                         <td>
                                             {card.slot.label ? `${card.slot.label}: ` : ''}
                                             {new Date(card.slot.startsAt).toLocaleString()} to{' '}

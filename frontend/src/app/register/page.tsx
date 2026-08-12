@@ -58,7 +58,7 @@ const STEPS: { id: Step; label: string }[] = [
 
 const SUBTITLES: Record<Step, string> = {
     presence: 'Please read this before you begin',
-    details: 'Create your student account',
+    details: 'Create your ward account',
     verify: 'Verify your email',
     face: 'Enrol your face',
     guardian: 'Parent or guardian details',
@@ -387,7 +387,7 @@ export default function RegisterPage() {
                     <div className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor, no photo is saved.
-                            This step cannot be skipped, and <strong>the student must do it themselves</strong>.
+                            This step cannot be skipped, and <strong>the ward must do it themselves</strong>.
                         </p>
 
                         {faceMsg && (

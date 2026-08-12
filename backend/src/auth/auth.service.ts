@@ -139,7 +139,7 @@ export class AuthService {
             // with none of the second child's details saved anywhere.
             if (existing.activatedAt) {
                 throw new ConflictException(
-                    'Students must have unique email IDs for registration. One email can only be used for one student.',
+                    'Wards must have unique email IDs for registration. One email can only be used for one ward.',
                 );
             }
 

@@ -18,7 +18,14 @@ import { FormEvent, useEffect, useState } from 'react';
  * submission with either unticked, so this mirrors the rule rather than owning it.
  */
 
-export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian', 'Other'] as const;
+/**
+ * Deliberately closed, not "…and Other" — the person consenting must actually
+ * be one of the three the law recognises as able to give parental consent for
+ * a minor. An open "Other" invited a relative with no standing to do so (an
+ * uncle, an elder sibling) to tick the box, which is not a valid consent at
+ * all if it is ever challenged.
+ */
+export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian'] as const;
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
 
 /**
@@ -195,11 +202,11 @@ export default function GuardianForm({
         // the order the fields appear, so the message always names the first
         // thing the parent needs to scroll back to rather than listing five.
         if (!values.studentDob) {
-            setLocalError("Enter the student's date of birth.");
+            setLocalError("Enter the ward's date of birth.");
             return;
         }
         if (!values.gender) {
-            setLocalError("Select the student's gender.");
+            setLocalError("Select the ward's gender.");
             return;
         }
         if (uploading.front || uploading.back) {
@@ -208,18 +215,18 @@ export default function GuardianForm({
         }
         if (!values.idDocumentUrl) {
             setLocalError(
-                `Upload the front of the student's ${values.idDocumentType.toLowerCase()}.`,
+                `Upload the front of the ward's ${values.idDocumentType.toLowerCase()}.`,
             );
             return;
         }
         if (!values.idDocumentBackUrl) {
             setLocalError(
-                `Upload the back of the student's ${values.idDocumentType.toLowerCase()} as well. Both sides are needed.`,
+                `Upload the back of the ward's ${values.idDocumentType.toLowerCase()} as well. Both sides are needed.`,
             );
             return;
         }
         if (!bothConsents) {
-            setLocalError('Both consents are required before the student can sit an exam.');
+            setLocalError('Both consents are required before the ward can sit an exam.');
             return;
         }
         await onSubmit(values);
@@ -233,7 +240,7 @@ export default function GuardianForm({
 
             <p className="guardian-form__lede">
                 This section is for a parent or legal guardian. It is required before
-                {studentName ? ` ${studentName}` : ' the student'} can sit an exam.
+                {studentName ? ` ${studentName}` : ' the ward'} can sit an exam.
             </p>
 
             <fieldset className="guardian-fieldset">
@@ -261,7 +268,7 @@ export default function GuardianForm({
                 </div>
 
                 <div className="input-group">
-                    <label className="input-label" htmlFor="relationship">Relationship to the student</label>
+                    <label className="input-label" htmlFor="relationship">Relationship to the ward</label>
                     <select
                         id="relationship" className="input-field"
                         value={values.relationship}
@@ -292,16 +299,16 @@ export default function GuardianForm({
                     </div>
                 </div>
                 <p className="input-hint">
-                    We use these to reach you about the student&apos;s exam, not for marketing.
+                    We use these to reach you about the ward&apos;s exam, not for marketing.
                 </p>
             </fieldset>
 
             <fieldset className="guardian-fieldset">
-                <legend>About the student (Mandatory)</legend>
+                <legend>About the ward (Mandatory)</legend>
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    Both are required. Neither affects the student&apos;s score or rank — the date
+                    Both are required. Neither affects the ward&apos;s score or rank — the date
                     of birth has to match the ID you upload below, which is how we confirm the
-                    student is who they registered as.
+                    ward is who they registered as.
                 </p>
 
                 <div className="form-row">
@@ -341,15 +348,15 @@ export default function GuardianForm({
             </fieldset>
 
             <fieldset className="guardian-fieldset">
-                <legend>Student Identity Document (Mandatory)</legend>
+                <legend>Ward Identity Document (Mandatory)</legend>
                 {/* The preference is stated, not merely implied by the order of
                     a dropdown. A parent reaching for Aadhaar by habit needs a
                     reason to reach for the school card instead, and "it is the
                     one that proves the class you registered under" is that
                     reason. */}
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    <strong>Please use the student&apos;s school ID card if you have one.</strong>{' '}
-                    It is the document we prefer, because it shows the school and class the student
+                    <strong>Please use the ward&apos;s school ID card if you have one.</strong>{' '}
+                    It is the document we prefer, because it shows the school and class the ward
                     registered under. If there is no school card, an Aadhaar card or passport is
                     accepted instead.
                 </p>
@@ -432,7 +439,7 @@ export default function GuardianForm({
                     />
                     <span>
                         <strong>I consent to my child taking part.</strong> I am the parent or legal
-                        guardian of{studentName ? <> <strong>{studentName}</strong></> : ' this student'}, and
+                        guardian of{studentName ? <> <strong>{studentName}</strong></> : ' this ward'}, and
                         I consent to them sitting the Bharat Innovation Olympiad under AI-assisted
                         proctoring. I understand the webcam stays on for the exam, that face analysis
                         runs in their own browser, that no video is ever recorded or stored, and
@@ -459,7 +466,7 @@ export default function GuardianForm({
 
                 {!bothConsents && (
                     <p className="input-hint">
-                        Both boxes must be ticked. Without them the student cannot start an exam.
+                        Both boxes must be ticked. Without them the ward cannot start an exam.
                     </p>
                 )}
             </fieldset>

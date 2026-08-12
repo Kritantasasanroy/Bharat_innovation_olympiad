@@ -14,7 +14,10 @@ export const metadata: Metadata = {
     description:
         'Discover your potential beyond academics by developing the mindset, skills and awareness ' +
         'to innovate, solve real-world problems and confidently shape the future of India and the world. ' +
-        'For students in Grades 6–12, by Lemon Ideas.',
+        'For wards in Grades 6–12, by Lemon Ideas.',
+    // Left as literal search terms families actually type into Google, rather
+    // than renamed to match the in-app "ward" terminology — nobody searches
+    // "olympiad for wards", and nothing here is ever rendered on a page.
     keywords: [
         'olympiad', 'innovation', 'future ready', 'entrepreneurship', 'STEM',
         'exam', 'India', 'students', 'Lemon Ideas', 'Viksit Bharat',

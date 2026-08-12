@@ -87,7 +87,7 @@ const REGISTER_TOUR: Tour = {
             // when the tour starts, and the student would never hear about it.
             target: 'register-school',
             title: 'Find your school, then your section',
-            body: "Just type the school's name. Only use a school code if your school actually gave you one — most students don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
+            body: "Just type the school's name. Only use a school code if your school actually gave you one — most wards don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
             mood: 'talking',
             placement: 'top',
         },
@@ -142,7 +142,7 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'nav-exams',
             title: 'Exams',
-            body: 'The full list, with slots and instructions. This is where you book your sitting once you have paid.',
+            body: 'The full list, with schedules and instructions. This is where you book your sitting once you have paid.',
             mood: 'talking',
             placement: 'bottom',
         },
@@ -257,7 +257,7 @@ const EXAM_TOUR: Tour = {
  */
 const HOME_TOUR: Tour = {
     id: 'home',
-    intro: "Hi, I'm Limon! I look after students during the Olympiad. Want a quick tour of this page?",
+    intro: "Hi, I'm Limon! I look after wards during the Olympiad. Want a quick tour of this page?",
     steps: [
         {
             title: 'What this is',
@@ -266,11 +266,11 @@ const HOME_TOUR: Tour = {
         },
         {
             title: 'It is taken from home',
-            body: "On your own laptop, in a slot you choose, with your camera on so we know it's really you. Scroll down and I explain exactly how that's kept fair.",
+            body: "On your own laptop, on a schedule you choose, with your camera on so we know it's really you. Scroll down and I explain exactly how that's kept fair.",
             mood: 'talking',
         },
         {
-            title: 'These are real students',
+            title: 'These are real wards',
             body: 'The stories that rotate below are past participants and what they went on to build. They started where you are.',
             mood: 'happy',
         },
@@ -314,8 +314,8 @@ const EXAMS_TOUR: Tour = {
             mood: 'talking',
         },
         {
-            title: 'Then book your slot',
-            body: 'Places in each sitting are limited, and once you confirm a slot it cannot be changed from your account. So pick a time you are certain about.',
+            title: 'Then book your schedule',
+            body: 'Places in each sitting are limited, and once you confirm a schedule it cannot be changed from your account. So pick a time you are certain about.',
             mood: 'concerned',
         },
         {
@@ -371,7 +371,7 @@ const SUPPORT_TOUR: Tour = {
     steps: [
         {
             title: 'What to raise here',
-            body: 'A wrong class on your account, something that went wrong during your paper, a slot you cannot make, a score you want looked at. Anything a page cannot fix by itself.',
+            body: 'A wrong class on your account, something that went wrong during your paper, a schedule you cannot make, a score you want looked at. Anything a page cannot fix by itself.',
             mood: 'talking',
         },
         {

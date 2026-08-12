@@ -5,9 +5,8 @@ import Navbar from '@/components/layout/Navbar';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
-import { isValidPhone, normalizePhone, phoneOtp } from '@/lib/auth-client';
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /** What `GET /guardian/me` returns — see `GuardianService.status`. */
 interface GuardianStatus {
@@ -43,21 +42,7 @@ function GuardianRow({ label, value }: { label: string; value: React.ReactNode }
 }
 
 export default function ProfilePage() {
-    const { user, updateProfile } = useAuthStore();
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
-    const [phone, setPhone] = useState('');
-
-    const [isLoading, setIsLoading] = useState(false);
-    const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
-
-    // Phone change requires an SMS code — the number doubles as a login
-    // identifier, so an unverified change could hand the account to whoever owns
-    // the typed-in number.
-    const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-    const [phoneOtpCode, setPhoneOtpCode] = useState('');
-    const [phoneBusy, setPhoneBusy] = useState(false);
-    const [phoneMsg, setPhoneMsg] = useState<{ text: string; type: 'error' | 'info' } | null>(null);
+    const { user } = useAuthStore();
 
     // Face enrollment state
     const [enrollmentStatus, setEnrollmentStatus] = useState<'unknown' | 'enrolled' | 'not_enrolled'>('unknown');
@@ -74,14 +59,6 @@ export default function ProfilePage() {
         captureDescriptor,
         enrollFace,
     } = useFaceProctor({ attemptId: 'enrollment', disabled: false });
-
-    useEffect(() => {
-        if (user) {
-            setFirstName(user.firstName || '');
-            setLastName(user.lastName || '');
-            setPhone(user.phone || '');
-        }
-    }, [user]);
 
     // Check enrollment status on mount
     useEffect(() => {
@@ -138,72 +115,6 @@ export default function ProfilePage() {
         }
     };
 
-    const currentPhone = user?.phone ?? '';
-    const phoneIsNew = phone.trim() !== '' && normalizePhone(phone) !== currentPhone;
-
-    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = 'sms') => {
-        setPhoneMsg(null);
-        if (!isValidPhone(phone)) {
-            setPhoneMsg({ text: 'Enter a valid mobile number.', type: 'error' });
-            return;
-        }
-        setPhoneBusy(true);
-        try {
-            const { error } = await phoneOtp.sendOtp(phone, channel);
-            if (error) {
-                setPhoneMsg({ text: error.message || 'Could not send the code.', type: 'error' });
-            } else {
-                setPhoneOtpSent(true);
-                setPhoneMsg({
-                    text: channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.',
-                    type: 'info',
-                });
-            }
-        } catch {
-            setPhoneMsg({ text: 'Network error. Please try again.', type: 'error' });
-        } finally {
-            setPhoneBusy(false);
-        }
-    };
-
-    const handleSubmit = async (e: FormEvent) => {
-        e.preventDefault();
-        setMessage(null);
-
-        // A changed number must carry its SMS code, or the save is rejected with
-        // the same opaque error the user reported having no way to satisfy.
-        if (phoneIsNew && phoneOtpCode.length !== 6) {
-            setMessage({ text: 'Enter the 6-digit code sent to your new number.', type: 'error' });
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            await updateProfile({
-                firstName,
-                lastName,
-                phone,
-                ...(phoneIsNew ? { phoneCode: phoneOtpCode } : {}),
-            });
-            setPhoneOtpSent(false);
-            setPhoneOtpCode('');
-            setPhoneMsg(null);
-            setMessage({ text: 'Profile updated successfully!', type: 'success' });
-            
-            // Clear message after 3 seconds
-            setTimeout(() => {
-                setMessage(null);
-            }, 3000);
-        } catch (error: any) {
-            setMessage({ 
-                text: error.response?.data?.message || 'Failed to update profile. Please try again.', 
-                type: 'error' 
-            });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     if (!user) return null;
 
     return (
@@ -212,33 +123,30 @@ export default function ProfilePage() {
             <main className="container page-content animate-fade-in">
                 <div className="page-header">
                     <h1>My Profile</h1>
-                    <p className="text-secondary">View and update your personal details.</p>
+                    <p className="text-secondary">Your registered details. None of this can be edited here.</p>
                 </div>
 
+                {/**
+                 * Every field on this card is locked.
+                 *
+                 * "None of the details should be editable" — name and phone used to
+                 * have their own edit-and-save form, including a full SMS-verified
+                 * phone-change flow. That is gone: this is now a read-only mirror of
+                 * the account, exactly like the Email, School and Class rows already
+                 * were. A wrong name or a number that needs updating goes through
+                 * support instead, the same route already used for a wrong class —
+                 * one consistent way to correct any registered detail, not two.
+                 */}
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
-                    {message && (
-                        <div style={{ 
-                            padding: '1rem', 
-                            marginBottom: '1.5rem', 
-                            borderRadius: '8px', 
-                            backgroundColor: message.type === 'success' ? 'var(--success-500)' : 'var(--danger-500)',
-                            color: 'white',
-                            textAlign: 'center',
-                            fontWeight: '500'
-                        }}>
-                            {message.text}
-                        </div>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        
                         <div className="input-group">
                             <label className="input-label">Email Address</label>
-                            <input 
-                                type="email" 
-                                className="input-field" 
-                                value={user.email} 
-                                disabled 
+                            <input
+                                type="email"
+                                className="input-field"
+                                value={user.email}
+                                disabled
                                 style={{ opacity: 0.7, cursor: 'not-allowed' }}
                             />
                             <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>Email address cannot be changed.</small>
@@ -246,11 +154,11 @@ export default function ProfilePage() {
 
                         <div className="input-group">
                             <label className="input-label">School</label>
-                            <input 
-                                type="text" 
-                                className="input-field" 
-                                value={user.school?.name || 'No school assigned'} 
-                                disabled 
+                            <input
+                                type="text"
+                                className="input-field"
+                                value={user.school?.name || 'No school assigned'}
+                                disabled
                                 style={{ opacity: 0.7, cursor: 'not-allowed' }}
                             />
                             <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>School assignment cannot be changed.</small>
@@ -259,99 +167,43 @@ export default function ProfilePage() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="input-group">
                                 <label className="input-label">First Name</label>
-                                <input 
-                                    type="text" 
-                                    className="input-field" 
-                                    value={firstName} 
-                                    onChange={(e) => setFirstName(e.target.value)}
-                                    required 
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    value={user.firstName}
+                                    disabled
+                                    style={{ opacity: 0.7, cursor: 'not-allowed' }}
                                 />
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Last Name</label>
-                                <input 
-                                    type="text" 
-                                    className="input-field" 
-                                    value={lastName} 
-                                    onChange={(e) => setLastName(e.target.value)}
-                                    required 
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    value={user.lastName}
+                                    disabled
+                                    style={{ opacity: 0.7, cursor: 'not-allowed' }}
                                 />
                             </div>
                         </div>
+                        <small className="text-muted" style={{ marginTop: '-1rem', display: 'block' }}>
+                            Your name cannot be changed here. If it is misspelt,{' '}
+                            <Link href="/support">raise a support ticket</Link>.
+                        </small>
 
                         <div className="input-group">
                             <label className="input-label">Contact number</label>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <input
-                                    type="tel"
-                                    inputMode="tel"
-                                    className="input-field"
-                                    value={phone}
-                                    onChange={(e) => {
-                                        setPhone(e.target.value);
-                                        setPhoneOtpSent(false);
-                                        setPhoneOtpCode('');
-                                        setPhoneMsg(null);
-                                    }}
-                                    placeholder="e.g. 9812345678"
-                                    style={{ flex: 1 }}
-                                />
-                                {phoneIsNew && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        onClick={() => handleSendPhoneOtp('sms')}
-                                        disabled={phoneBusy || !isValidPhone(phone)}
-                                        style={{ whiteSpace: 'nowrap' }}
-                                    >
-                                        {phoneBusy ? 'Sending…' : phoneOtpSent ? 'Resend SMS' : 'Send code'}
-                                    </button>
-                                )}
-                            </div>
-
-                            {phoneIsNew && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleSendPhoneOtp('voice')}
-                                    disabled={phoneBusy || !isValidPhone(phone)}
-                                    className="btn"
-                                    style={{
-                                        marginTop: '0.4rem',
-                                        background: 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        fontSize: '0.85rem',
-                                        padding: '0.3rem 0',
-                                        textAlign: 'left',
-                                    }}
-                                >
-                                    📞 Get the code by call instead
-                                </button>
-                            )}
-
-                            {phoneIsNew && phoneOtpSent && (
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    className="input-field"
-                                    placeholder="6-digit code from SMS"
-                                    maxLength={6}
-                                    value={phoneOtpCode}
-                                    onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
-                                />
-                            )}
-
-                            {phoneMsg ? (
-                                <small style={{ marginTop: '0.25rem', display: 'block', color: phoneMsg.type === 'error' ? 'var(--danger-500)' : 'var(--text-secondary)' }}>
-                                    {phoneMsg.text}
-                                </small>
-                            ) : (
-                                <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
-                                    {phoneIsNew
-                                        ? 'Changing your number needs a quick SMS verification.'
-                                        : 'Used to reach you about your exam slot and results.'}
-                                </small>
-                            )}
+                            <input
+                                type="tel"
+                                className="input-field"
+                                value={user.phone || 'Not provided'}
+                                disabled
+                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                            />
+                            <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
+                                Used to reach you about your exam schedule and results. To add or change
+                                it, <Link href="/support">raise a support ticket</Link>.
+                            </small>
                         </div>
 
                         {/* Class is final once set — it decides which paper is
@@ -377,22 +229,7 @@ export default function ProfilePage() {
                                 correct it before your exam.
                             </small>
                         </div>
-
-                        <button
-                            type="submit"
-                            className="btn btn-primary"
-                            style={{ marginTop: '1rem' }}
-                            disabled={
-                                isLoading ||
-                                (phoneIsNew && phoneOtpCode.length !== 6) ||
-                                (firstName === user.firstName &&
-                                    lastName === user.lastName &&
-                                    phone === (user.phone ?? ''))
-                            }
-                        >
-                            {isLoading ? 'Saving...' : 'Save Changes'}
-                        </button>
-                    </form>
+                    </div>
                 </div>
                 {/* Parent / guardian — registration part 2, read-only */}
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>

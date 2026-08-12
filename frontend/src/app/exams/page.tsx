@@ -88,10 +88,10 @@ const timeOnly = (iso: string) =>
 const PHASE_UI: Record<Phase, { pill: string; tone: string; cta: string }> = {
     DRAFT: { pill: 'Unavailable', tone: 'muted', cta: 'Unavailable' },
     SCHEDULED: { pill: 'Scheduled', tone: 'info', cta: 'Not open yet' },
-    NEEDS_SLOT: { pill: 'Choose your slot', tone: 'warn', cta: 'Choose your exam slot' },
-    SLOT_UPCOMING: { pill: 'Your slot is coming up', tone: 'info', cta: 'Waiting for your slot' },
+    NEEDS_SLOT: { pill: 'Choose your schedule', tone: 'warn', cta: 'Choose your exam schedule' },
+    SLOT_UPCOMING: { pill: 'Your schedule is coming up', tone: 'info', cta: 'Waiting for your schedule' },
     OPEN: { pill: 'Open now', tone: 'success', cta: 'Start Exam' },
-    SLOT_MISSED: { pill: 'Slot missed', tone: 'danger', cta: 'Slot has passed' },
+    SLOT_MISSED: { pill: 'Schedule missed', tone: 'danger', cta: 'Schedule has passed' },
     ENDED: { pill: 'Closed', tone: 'muted', cta: 'Exam closed' },
 };
 
@@ -293,7 +293,7 @@ function ExamCard({
             {slot ? (
                 <div className={`slot-card ${startable ? 'slot-card-live' : ''}`}>
                     <div className="slot-card-head">
-                        <span className="meta-label">Your slot</span>
+                        <span className="meta-label">Your schedule</span>
                         {slot.label && <strong>{slot.label}</strong>}
                     </div>
                     <div className="slot-card-time">
@@ -301,7 +301,7 @@ function ExamCard({
                     </div>
                     {slot.bookingStatus === 'PENDING' ? (
                         <p className="slot-note slot-note-warn">
-                            Your booking is not confirmed yet. Complete payment to secure this slot.
+                            Your booking is not confirmed yet. Complete payment to secure this schedule.
                         </p>
                     ) : (
                         <p className="slot-note slot-note-muted">
@@ -316,7 +316,7 @@ function ExamCard({
                         <p className="slot-note slot-note-warn">
                             {mustPayFirst
                                 ? 'Unlock your exams first, then choose the date and time that suits you.'
-                                : 'You have not picked a sitting yet. Choose the date and time that suits you, places in each slot are limited. Once confirmed, your slot cannot be changed.'}
+                                : 'You have not picked a sitting yet. Choose the date and time that suits you, places on each schedule are limited. Once confirmed, your schedule cannot be changed.'}
                         </p>
                     </div>
                 )
@@ -343,7 +343,7 @@ function ExamCard({
                     {isCompleted
                         ? '✓ Completed'
                         : mustPayFirst
-                          ? '🔒 Unlock to pick your slot'
+                          ? '🔒 Unlock to pick your schedule'
                           : ui.cta}
                 </button>
             </div>

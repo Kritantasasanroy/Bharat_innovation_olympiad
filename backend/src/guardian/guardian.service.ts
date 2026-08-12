@@ -57,7 +57,7 @@ export class GuardianService {
         // one would leave a row that *looks* complete to the exam gate.
         if (!dto.parentalConsent || !dto.dataConsent) {
             throw new BadRequestException(
-                'Both parental consent and consent to data processing are required before the student can sit an exam.',
+                'Both parental consent and consent to data processing are required before the ward can sit an exam.',
             );
         }
 
@@ -70,10 +70,10 @@ export class GuardianService {
         // students who consented before a field existed from sitting their exam,
         // which punishes them for a change they had no part in.
         if (!dto.studentDob) {
-            throw new BadRequestException("Enter the student's date of birth.");
+            throw new BadRequestException("Enter the ward's date of birth.");
         }
         if (!dto.gender) {
-            throw new BadRequestException("Select the student's gender.");
+            throw new BadRequestException("Select the ward's gender.");
         }
         if (!dto.idDocumentType?.trim()) {
             throw new BadRequestException('Choose which ID document you are uploading.');
@@ -85,13 +85,13 @@ export class GuardianService {
         const idDocumentUrl = dto.idDocumentUrl?.trim();
         if (!idDocumentUrl) {
             throw new BadRequestException(
-                "Upload the front of the student's ID — a school ID, Aadhaar card or passport.",
+                "Upload the front of the ward's ID — a school ID, Aadhaar card or passport.",
             );
         }
         const idDocumentBackUrl = dto.idDocumentBackUrl?.trim();
         if (!idDocumentBackUrl) {
             throw new BadRequestException(
-                "Upload the back of the student's ID as well. Both sides are needed.",
+                "Upload the back of the ward's ID as well. Both sides are needed.",
             );
         }
 
@@ -161,7 +161,7 @@ export class GuardianService {
         let sent = profile;
         if (this.notifications) {
             const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
-            const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Student';
+            const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Ward';
             const guardianName = `${profile.guardianFirstName} ${profile.guardianLastName}`.trim();
 
             const delivered = await this.notifications.sendParentApprovalEmail(

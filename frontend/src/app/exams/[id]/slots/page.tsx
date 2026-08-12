@@ -150,7 +150,7 @@ function SlotCard({
                         color: 'var(--text-tertiary)',
                         fontStyle: 'italic',
                     }}>
-                        Slot locked, contact support to change
+                        Schedule locked, contact support to change
                     </div>
                 ) : (
                     <button
@@ -158,9 +158,9 @@ function SlotCard({
                         disabled={isFull || locked || loading !== null}
                         onClick={() => onBook(slot.id)}
                         style={{ padding: '0.4rem 1.2rem', fontSize: '0.88rem' }}
-                        title={locked ? 'Complete your payment to book a slot' : undefined}
+                        title={locked ? 'Complete your payment to book a schedule' : undefined}
                     >
-                        {loading === slot.id ? 'Booking...' : isFull ? 'Full' : 'Book Slot'}
+                        {loading === slot.id ? 'Booking...' : isFull ? 'Full' : 'Book Schedule'}
                     </button>
                 )}
             </div>
@@ -194,7 +194,7 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                 const pass = passRes.data;
                 if (pass) setLocked(pass.requiredForExam !== false && !pass.isActive);
             } catch (e: any) {
-                setError(e.response?.data?.message || 'Failed to load slots');
+                setError(e.response?.data?.message || 'Failed to load schedules');
             } finally {
                 setPageLoading(false);
             }
@@ -269,11 +269,11 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                         ← Back
                     </button>
                     <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-                        Choose Your Exam Slot
+                        Choose Your Exam Schedule
                     </h1>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{examTitle}</p>
                     <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
-                        Pick the sitting that suits you. Once confirmed it becomes your assigned slot
+                        Pick the sitting that suits you. Once confirmed it becomes your assigned schedule
                         and cannot be changed, contact support if you need it moved.
                     </p>
                 </div>
@@ -298,14 +298,14 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                     }}>
                         <div>
                             <div style={{ fontWeight: 600, color: existingBooking.status === 'CONFIRMED' ? 'var(--success-400)' : 'var(--warning-400)', marginBottom: '0.2rem' }}>
-                                {existingBooking.status === 'CONFIRMED' ? '✓ Slot Confirmed' : '⏳ Payment Pending'}
+                                {existingBooking.status === 'CONFIRMED' ? '✓ Schedule Confirmed' : '⏳ Payment Pending'}
                             </div>
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                                 {formatDateTime(existingBooking.slot.startsAt)}
                             </div>
                             {existingBooking.status === 'CONFIRMED' && (
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: '0.3rem' }}>
-                                    This slot is locked, contact support if you need it changed.
+                                    This schedule is locked, contact support if you need it changed.
                                 </div>
                             )}
                         </div>
@@ -333,7 +333,7 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                                 🔒 Unlock your exams first
                             </div>
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                Slots can be booked once your one-time payment is complete.
+                                Schedules can be booked once your one-time payment is complete.
                             </div>
                         </div>
                         <button
@@ -370,8 +370,8 @@ export default function SlotsPage({ params }: { params: Promise<{ id: string }> 
                         color: 'var(--text-secondary)',
                     }}>
                         <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📅</div>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>No slots available</div>
-                        <div style={{ fontSize: '0.9rem' }}>Exam slots haven't been scheduled yet. Check back soon.</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>No schedules available</div>
+                        <div style={{ fontSize: '0.9rem' }}>Exam schedules haven't been set yet. Check back soon.</div>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

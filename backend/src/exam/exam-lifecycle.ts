@@ -90,11 +90,11 @@ export function startRefusalReason(phase: ExamPhase): string | null {
         case 'SCHEDULED':
             return 'This exam has not opened yet.';
         case 'NEEDS_SLOT':
-            return 'You need a confirmed slot booking to start this exam.';
+            return 'You need a confirmed schedule booking to start this exam.';
         case 'SLOT_UPCOMING':
-            return 'Your slot has not opened yet. You can start once it begins.';
+            return 'Your schedule has not opened yet. You can start once it begins.';
         case 'SLOT_MISSED':
-            return 'Your booked slot has passed.';
+            return 'Your booked schedule has passed.';
         case 'ENDED':
             return 'This exam window has closed.';
         case 'OPEN':

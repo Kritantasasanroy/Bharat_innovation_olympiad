@@ -26,12 +26,12 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
                     not you go on to sit an exam.
                 </li>
                 <li>
-                    <strong>Non-transferable.</strong> It cannot be moved to another student, another
+                    <strong>Non-transferable.</strong> It cannot be moved to another ward, another
                     account, or a later season.
                 </li>
                 <li>
-                    <strong>Your slot is separate, and final.</strong> After paying you choose a
-                    sitting for each exam. Once confirmed, a slot cannot be changed from your
+                    <strong>Your schedule is separate, and final.</strong> After paying you choose a
+                    sitting for each exam. Once confirmed, a schedule cannot be changed from your
                     account.
                 </li>
                 {!compact && (

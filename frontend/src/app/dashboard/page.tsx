@@ -84,10 +84,10 @@ interface ResultSummary {
 const PHASE_LABEL: Record<Phase, string> = {
     DRAFT: 'Unavailable',
     SCHEDULED: 'Not open yet',
-    NEEDS_SLOT: 'Slot needed',
-    SLOT_UPCOMING: 'Your slot is coming up',
+    NEEDS_SLOT: 'Schedule needed',
+    SLOT_UPCOMING: 'Your schedule is coming up',
     OPEN: 'Open now',
-    SLOT_MISSED: 'Slot missed',
+    SLOT_MISSED: 'Schedule missed',
     ENDED: 'Closed',
 };
 
@@ -185,7 +185,7 @@ export default function StudentDashboard() {
                         <p className="dashboard-subtitle">
                             Class {user?.classBand}
                             {user?.section ? `-${user.section}` : ''} •{' '}
-                            {user?.school?.name || 'Independent Student'}
+                            {user?.school?.name || 'Independent Ward'}
                         </p>
                     </div>
                     {/* The roll number is what support asks for, so it belongs
@@ -387,11 +387,11 @@ export default function StudentDashboard() {
                                             <dd>{guardian.guardianPhone}</dd>
                                         </div>
                                         <div>
-                                            <dt>Student date of birth</dt>
+                                            <dt>Ward date of birth</dt>
                                             <dd>{formatDate(guardian.studentDob)}</dd>
                                         </div>
                                         <div>
-                                            <dt>Student gender</dt>
+                                            <dt>Ward gender</dt>
                                             <dd>{guardian.gender || '—'}</dd>
                                         </div>
                                         <div>
