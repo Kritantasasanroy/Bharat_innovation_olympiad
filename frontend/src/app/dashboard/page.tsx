@@ -5,9 +5,11 @@ import LimonTour from '@/components/limon/LimonTour';
 import Navbar from '@/components/layout/Navbar';
 import PaymentTerms from '@/components/PaymentTerms';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import api from '@/lib/api';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import DashboardMobile from './DashboardMobile';
 
 type Phase =
     | 'DRAFT'
@@ -25,16 +27,16 @@ interface ExamInstance {
     canStart: boolean;
 }
 
-/** A stored date, or an em dash. `en-IN` so it reads the way a parent writes it. */
-function formatDate(value: string | null): string {
-    if (!value) return '—';
+/** A stored date, or a placeholder. `en-IN` so it reads the way a parent writes it. */
+export function formatDate(value: string | null): string {
+    if (!value) return '-';
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '—';
+    if (Number.isNaN(d.getTime())) return '-';
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** Everything `/guardian/me` returns, minus the audit-only `ipAddress`. */
-interface GuardianProfile {
+export interface GuardianProfile {
     guardianFirstName: string;
     guardianLastName: string;
     relationship: string;
@@ -50,7 +52,7 @@ interface GuardianProfile {
     consentVersion: string | null;
 }
 
-interface AvailableExam {
+export interface AvailableExam {
     id: string;
     title: string;
     durationMinutes: number;
@@ -61,7 +63,7 @@ interface AvailableExam {
     instances?: ExamInstance[];
 }
 
-interface ResultSummary {
+export interface ResultSummary {
     id: string;
     examTitle: string;
     score: number;
@@ -81,7 +83,7 @@ interface ResultSummary {
 }
 
 /** What the non-startable phases say on the dashboard, in the student's words. */
-const PHASE_LABEL: Record<Phase, string> = {
+export const PHASE_LABEL: Record<Phase, string> = {
     DRAFT: 'Unavailable',
     SCHEDULED: 'Not open yet',
     NEEDS_SLOT: 'Schedule needed',
@@ -170,6 +172,8 @@ export default function StudentDashboard() {
         fetchData();
     }, []);
 
+    const isMobile = useIsMobile();
+
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <Navbar />
@@ -178,6 +182,18 @@ export default function StudentDashboard() {
                 at things that are not on the page while it is still a spinner,
                 and a step whose target is missing is dropped for good. */}
             <LimonTour tourId="dashboard" ready={!loading} />
+            {isMobile ? (
+                <DashboardMobile
+                    user={user}
+                    exams={exams}
+                    recentResults={recentResults}
+                    stats={stats}
+                    loading={loading}
+                    hasPass={hasPass}
+                    guardianComplete={guardianComplete}
+                    guardian={guardian}
+                />
+            ) : (
             <main className="container dashboard animate-fade-in">
                 <div className="dashboard-header">
                     <div>
@@ -217,13 +233,13 @@ export default function StudentDashboard() {
                 )}
 
                 {hasPass === false ? (
-                    /* ── Locked: one payment unlocks the dashboard and every exam ── */
+                    /* Locked: one payment unlocks the dashboard and every exam for the season */
                     <div className="glass-card dashboard-locked">
                         <div className="dashboard-locked__icon" aria-hidden="true">🔒</div>
                         <h2>Your registration isn&apos;t finished yet</h2>
                         <p className="dashboard-locked__lede">
                             One payment completes your registration and unlocks every Olympiad exam on
-                            this account. Until then there is nothing here to start.
+                            this account for the current season. Until then there is nothing here to start.
                         </p>
                         <PaymentTerms compact />
                         <Link href="/unlock" className="btn btn-primary btn-lg">
@@ -392,11 +408,11 @@ export default function StudentDashboard() {
                                         </div>
                                         <div>
                                             <dt>Ward gender</dt>
-                                            <dd>{guardian.gender || '—'}</dd>
+                                            <dd>{guardian.gender || '-'}</dd>
                                         </div>
                                         <div>
                                             <dt>ID document</dt>
-                                            <dd>{guardian.idDocumentType || '—'}</dd>
+                                            <dd>{guardian.idDocumentType || '-'}</dd>
                                         </div>
                                         <div>
                                             <dt>Consent given</dt>
@@ -436,6 +452,7 @@ export default function StudentDashboard() {
                     </>
                 )}
             </main>
+            )}
         </AuthGuard>
     );
 }

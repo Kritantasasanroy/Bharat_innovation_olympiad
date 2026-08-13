@@ -64,6 +64,7 @@ export default function AdmitCardPage() {
                                 </div>
                             </div>
 
+                            <div className="table-responsive">
                             <table className="data-table">
                                 <tbody>
                                     <tr>
@@ -105,6 +106,7 @@ export default function AdmitCardPage() {
                                     )}
                                 </tbody>
                             </table>
+                            </div>
 
                             <h3 style={{ marginTop: 'var(--space-6)' }}>Instructions</h3>
                             <ol className="text-muted" style={{ paddingLeft: '1.2rem', lineHeight: 1.9 }}>

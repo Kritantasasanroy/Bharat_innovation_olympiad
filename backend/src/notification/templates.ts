@@ -189,7 +189,7 @@ export function accessPassActivatedEmail(vars: {
         'Your exam access is unlocked',
         'Payment confirmed',
         `<p style="margin:0 0 12px;">Hi ${vars.firstName}, we've received your payment of <strong>₹${rupees}</strong>.</p>
-     <p style="margin:0 0 12px;">Every olympiad exam is now unlocked on your account. This is a one-time payment — there is nothing further to pay.</p>
+     <p style="margin:0 0 12px;">Every olympiad exam is now unlocked on your account for the current season. This is a one-time payment for the season, there is nothing further to pay.</p>
      <p style="margin:0;">Keep this email as your receipt.</p>`,
         { label: 'Browse exams', url: `${vars.appUrl}/exams` },
     );

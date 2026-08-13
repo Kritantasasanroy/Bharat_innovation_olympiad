@@ -306,7 +306,7 @@ export default function GuardianForm({
             <fieldset className="guardian-fieldset">
                 <legend>About the ward (Mandatory)</legend>
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    Both are required. Neither affects the ward&apos;s score or rank — the date
+                    Both are required. Neither affects the ward&apos;s score or rank. The date
                     of birth has to match the ID you upload below, which is how we confirm the
                     ward is who they registered as.
                 </p>
@@ -376,7 +376,7 @@ export default function GuardianForm({
                         {ID_DOC_TYPES.map((t) => (
                             <option key={t} value={t}>
                                 {t}
-                                {t === 'School ID Card' ? ' — preferred' : ''}
+                                {t === 'School ID Card' ? ' (preferred)' : ''}
                             </option>
                         ))}
                     </select>

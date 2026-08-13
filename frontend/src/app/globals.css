@@ -3194,6 +3194,20 @@ textarea.form-control {
   font-weight: 600;
 }
 
+/* Phone width: six labels wrapping to two lines each eats the whole card
+   before the form even starts, so only the current step names itself and
+   the rest are just dots on a line — still six, still in order. The auth
+   card also switches to top-aligned so a six-step form scrolls naturally
+   instead of opening centred with its first field off the top of the
+   screen. */
+@media (max-width: 640px) {
+  .auth-page { align-items: flex-start; padding: var(--space-4); padding-top: var(--space-6); }
+  .auth-container { padding: var(--space-6) var(--space-4); }
+  .register-progress__label { display: none; }
+  .register-progress__step.is-current .register-progress__label { display: block; }
+  .register-progress__dot { width: 22px; height: 22px; font-size: 0.66rem; }
+}
+
 /* ── Presence gate ───────────────────────────────────────────────────────── */
 .presence-points {
   display: flex;
@@ -5159,3 +5173,446 @@ textarea.form-control {
    defect, and the easiest to regress. */
 html,
 body { max-width: 100%; overflow-x: hidden; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE SCREENS
+   ═══════════════════════════════════════════════════════════════════════════
+   Dedicated screens mounted by `useIsMobile()` below the 768px breakpoint —
+   `mob-*` is a namespace kept deliberately separate from every desktop class
+   above so nothing here can ever affect the desktop render. Desktop pages
+   never render these components and never load these class names. */
+
+.mob-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.6rem 0.9rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mob-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  cursor: pointer;
+}
+.mob-topbar__logo { height: 26px; width: auto; flex-shrink: 0; }
+.mob-topbar__name {
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.mob-topbar__avatar {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--gradient-brand);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mob-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.35);
+}
+.mob-sheet {
+  position: fixed;
+  top: calc(0.6rem + 34px + 0.6rem + 8px);
+  right: 12px;
+  width: min(280px, calc(100vw - 24px));
+  padding: 0.9rem;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  animation: mobSheetIn 0.16s ease both;
+}
+@keyframes mobSheetIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mob-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mob-sheet__user { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.mob-sheet__avatar { cursor: default; }
+.mob-sheet__username { font-size: 0.88rem; font-weight: 600; }
+.mob-sheet__userrole { font-size: 0.7rem; color: var(--text-muted); text-transform: capitalize; }
+.mob-sheet__close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0.35rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mob-sheet__close:hover { background: var(--bg-elevated); }
+.mob-sheet__links { display: flex; flex-direction: column; gap: 0.2rem; }
+.mob-sheet__link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-height: 44px;
+}
+.mob-sheet__link:hover { background: var(--bg-elevated); }
+.mob-sheet__link--static { justify-content: space-between; cursor: default; }
+.mob-sheet__link--static:hover { background: transparent; }
+.mob-sheet__link--danger { color: var(--danger-400); }
+
+.mob-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-top: 1px solid var(--border-subtle);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.mob-tabbar__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 54px;
+  padding: 0.4rem 0.2rem;
+  color: var(--text-tertiary);
+  font-size: 0.63rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mob-tabbar__item span { white-space: nowrap; }
+.mob-tabbar__item.active { color: var(--primary-400); }
+
+/* Compensates for `.mob-tabbar` being fixed (out of document flow) so it
+   never sits on top of a page's own last element. */
+body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom, 0)); }
+body.has-mobile-tabbar .limon-help {
+  bottom: calc(54px + env(safe-area-inset-bottom, 0) + 14px);
+}
+
+/* Mobile page shell: the padding/max-width every `mob-*` screen composes
+   inside of, mirroring the desktop `.container`/`.page-content` rhythm at
+   phone width. */
+.mob-page {
+  padding: 0.9rem 0.9rem 1.5rem;
+  max-width: 100%;
+}
+.mob-page__title { font-size: 1.3rem; font-weight: 800; margin: 0 0 0.2rem; }
+.mob-page__subtitle { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1.1rem; }
+.mob-section { margin-bottom: 1.4rem; }
+.mob-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.mob-section__head h2 { font-size: 1rem; font-weight: 700; margin: 0; }
+.mob-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 1rem;
+  margin-bottom: 0.7rem;
+}
+.mob-card:last-child { margin-bottom: 0; }
+.mob-stat-row { display: flex; gap: 0.6rem; }
+.mob-stat-row .mob-card { flex: 1; margin-bottom: 0; text-align: center; padding: 0.8rem 0.5rem; }
+.mob-stat-row .mob-card__value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.mob-stat-row .mob-card__label { font-size: 0.68rem; color: var(--text-secondary); margin-top: 2px; }
+.mob-empty {
+  text-align: center;
+  padding: 2.2rem 1rem;
+  color: var(--text-secondary);
+}
+.mob-empty__icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+/* ── Mobile landing page ── */
+.mob-lp { font-family: var(--font-sans); color: var(--text-primary); min-height: 100vh; }
+.mob-lp-nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.7rem 1rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mob-lp-nav__actions { display: flex; align-items: center; gap: 0.4rem; }
+.mob-lp-nav__burger {
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: 10px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.mob-lp-menu {
+  position: sticky; top: 53px; z-index: 39;
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.9rem 1rem 1.1rem;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mob-lp-menu a:not(.btn) {
+  padding: 0.5rem 0.1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.mob-lp-hero { padding: 1.6rem 1rem 1.8rem; text-align: center; background: var(--bg-secondary); }
+.mob-lp-badge {
+  display: inline-flex; align-items: center;
+  background: rgba(125,200,50,0.1); border: 1px solid rgba(125,200,50,0.25);
+  color: #7dc832; font-weight: 600; font-size: 0.66rem; letter-spacing: 0.03em;
+  padding: 0.4rem 0.75rem; border-radius: 999px; margin-bottom: 1rem;
+}
+.mob-lp-hero__title {
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.85rem; line-height: 1.15;
+  letter-spacing: -0.6px; margin: 0 0 0.7rem;
+}
+.mob-lp-hero__accent {
+  background: linear-gradient(135deg,#7dc832,#ffcb05);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.mob-lp-hero__sub { font-size: 0.9rem; line-height: 1.55; color: var(--text-secondary); margin: 0 0 1.3rem; }
+.mob-lp-stats {
+  display: flex; justify-content: space-around;
+  padding-top: 1.1rem; margin-top: 0.2rem; border-top: 1px solid var(--border-subtle);
+}
+.mob-lp-stats div { display: flex; flex-direction: column; }
+.mob-lp-stats strong {
+  font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.15rem;
+  background: var(--gradient-brand); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.mob-lp-stats span { font-size: 0.62rem; color: var(--text-secondary); margin-top: 2px; }
+
+.mob-lp-section { padding: 1.8rem 1rem; }
+.mob-lp-section:nth-of-type(even) { background: var(--bg-secondary); }
+.mob-lp-section__title {
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.35rem;
+  letter-spacing: -0.4px; margin: 0 0 0.35rem; text-align: center;
+}
+.mob-lp-section__sub { font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin: 0 0 1.2rem; }
+
+.mob-lp-trust { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+.mob-lp-trust__card { display: flex; gap: 0.7rem; align-items: flex-start; }
+.mob-lp-trust__card strong { display: block; font-size: 0.88rem; margin-bottom: 0.2rem; }
+.mob-lp-trust__card p { font-size: 0.78rem; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+.mob-lp-tech { font-size: 0.85rem; }
+.mob-lp-tech summary { cursor: pointer; font-weight: 600; padding: 0.4rem 0; }
+.mob-lp-tech dl { margin: 0.5rem 0 0; }
+.mob-lp-tech dl > div { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid var(--border-subtle); font-size: 0.78rem; }
+.mob-lp-tech dt { color: var(--text-secondary); }
+.mob-lp-tech dd { margin: 0; font-weight: 600; text-align: right; }
+
+.mob-lp-compare { display: flex; gap: 0.6rem; }
+.mob-lp-compare__col { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 14px; padding: 0.9rem 0.7rem; }
+.mob-lp-compare__col--yes { background: rgba(125,200,50,0.05); border-color: rgba(125,200,50,0.3); }
+.mob-lp-compare__label { display: block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 0.7rem; }
+.mob-lp-compare__row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; padding: 0.3rem 0; color: var(--text-secondary); }
+.mob-lp-compare__row--yes { color: var(--text-primary); }
+.mob-lp-compare__row--no svg { color: var(--danger-400); flex-shrink: 0; }
+.mob-lp-compare__row--yes svg { color: #7dc832; flex-shrink: 0; }
+
+.mob-lp-dim { display: flex; gap: 0.8rem; align-items: flex-start; }
+.mob-lp-dim__num {
+  font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 0.9rem; color: #7dc832;
+  flex-shrink: 0; width: 30px;
+}
+.mob-lp-dim strong { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; }
+.mob-lp-dim p { font-size: 0.78rem; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+
+.mob-lp-benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.mob-lp-benefit { text-align: left; }
+.mob-lp-benefit__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px; margin-bottom: 0.6rem;
+}
+.mob-lp-benefit strong { display: block; font-size: 0.82rem; margin-bottom: 0.25rem; }
+.mob-lp-benefit p { font-size: 0.72rem; color: var(--text-secondary); margin: 0; line-height: 1.45; }
+
+.mob-lp-journey { display: flex; flex-direction: column; }
+.mob-lp-journey__row { display: flex; gap: 0.8rem; position: relative; padding-bottom: 1.3rem; }
+.mob-lp-journey__row:last-child { padding-bottom: 0; }
+.mob-lp-journey__dot {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(125,200,50,0.15); display: flex; align-items: center; justify-content: center;
+  z-index: 1;
+}
+.mob-lp-journey__body strong { display: block; font-size: 0.88rem; }
+.mob-lp-journey__body p { font-size: 0.76rem; color: var(--text-secondary); margin: 2px 0 0; }
+.mob-lp-journey__line { position: absolute; left: 17px; top: 36px; bottom: 0; width: 2px; background: var(--border-default); }
+
+.mob-lp-cta {
+  background: linear-gradient(135deg,#1a3a0a,#0e2206);
+  padding: 2.2rem 1rem; text-align: center;
+}
+.mob-lp-cta h2 { color: #fff; font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.3rem; margin: 0 0 1rem; letter-spacing: -0.3px; }
+
+.mob-lp-footer { padding: 1.8rem 1rem 2.2rem; text-align: center; background: var(--bg-secondary); }
+.mob-lp-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem 1rem; margin: 1.1rem 0; }
+.mob-lp-footer nav a { font-size: 0.78rem; color: var(--text-secondary); }
+.mob-lp-footer__legal { font-size: 0.68rem; color: var(--text-tertiary); }
+
+/* ── Mobile auth screens (login, register) ── */
+.mob-auth {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+.mob-auth__top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.8rem 1rem;
+}
+.mob-auth__back { font-size: 0.85rem; color: var(--text-tertiary); }
+.mob-auth__body { flex: 1; padding: 0.5rem 1.25rem 1.5rem; display: flex; flex-direction: column; }
+.mob-auth__logo { height: 52px; width: auto; display: block; margin: 0 auto 0.5rem; }
+.mob-auth__tagline {
+  text-align: center; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-tertiary); margin: 0 0 1rem;
+}
+.mob-auth__title { text-align: center; font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.4rem; margin: 0 0 0.4rem; }
+.mob-auth__subtitle { text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1.3rem; }
+.mob-auth__success {
+  background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3);
+  color: #16a34a; border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 1rem; font-size: 0.85rem;
+}
+.mob-auth__form { display: flex; flex-direction: column; gap: 1rem; }
+.mob-auth__input { min-height: 48px; font-size: 1rem; }
+.mob-auth__otp {
+  min-height: 56px; font-size: 1.6rem; font-weight: 700; text-align: center; letter-spacing: 0.5rem;
+}
+.mob-auth__submit { min-height: 50px; width: 100%; justify-content: center; margin-top: 0.2rem; }
+.mob-auth__row { display: flex; justify-content: space-between; margin-top: 0.4rem; }
+.mob-auth__link { background: transparent; border: none; color: var(--color-primary); font-size: 0.85rem; padding: 0.5rem; cursor: pointer; }
+.mob-auth__hint { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 0.5rem; }
+.mob-auth__footer {
+  text-align: center; padding: 1rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0));
+  font-size: 0.85rem; color: var(--text-secondary);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ── Mobile dashboard ── */
+.mob-dash-roll {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.85rem; color: var(--text-secondary);
+}
+.mob-dash-roll strong { color: var(--text-primary); font-family: monospace; font-size: 0.9rem; }
+.mob-dash-notice { border-left: 3px solid var(--warning-400, #fbc50b); }
+.mob-dash-notice strong { display: block; font-size: 0.9rem; margin-bottom: 0.3rem; }
+.mob-dash-notice p { font-size: 0.8rem; color: var(--text-secondary); margin: 0; }
+.mob-dash-locked { text-align: center; }
+.mob-dash-locked__icon { font-size: 2.2rem; margin-bottom: 0.5rem; }
+.mob-dash-locked h2 { font-size: 1.1rem; margin: 0 0 0.5rem; }
+.mob-dash-locked p { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.8rem; }
+.mob-exam-card h3 { font-size: 0.95rem; margin: 0 0 0.4rem; }
+.mob-exam-card__meta { display: flex; gap: 0.8rem; font-size: 0.75rem; color: var(--text-secondary); flex-wrap: wrap; }
+.mob-guardian-record__row {
+  display: flex; justify-content: space-between; gap: 0.6rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.82rem;
+}
+.mob-guardian-record__row:last-of-type { border-bottom: none; }
+.mob-guardian-record__row span { color: var(--text-secondary); }
+.mob-guardian-record__row strong { text-align: right; font-weight: 600; }
+
+/* ── Mobile exam cards (exams list) ── */
+.mob-exam2__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.4rem; }
+.mob-exam2__head h3 { font-size: 0.95rem; margin: 0; flex: 1; }
+.mob-exam2__desc { font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 0.6rem; line-height: 1.4; }
+.mob-exam2__meta { display: flex; gap: 0.8rem; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.6rem; flex-wrap: wrap; }
+.mob-exam2__slot {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: var(--bg-elevated); border-radius: 10px; padding: 0.6rem 0.7rem;
+  font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.3rem;
+}
+.mob-exam2__slot strong { color: var(--text-primary); font-size: 0.82rem; }
+.mob-exam2__warn { font-size: 0.76rem; color: var(--warning-400, #b58900); margin: 0.3rem 0 0; }
+
+/* ── Mobile unlock / payment screen ── */
+.mob-unlock { display: flex; align-items: flex-start; justify-content: center; padding-top: 1.5rem; }
+.mob-unlock__card { width: 100%; max-width: 480px; }
+.mob-unlock__card h1 { font-size: 1.3rem; margin: 0 0 0.5rem; }
+.mob-unlock__check { font-size: 2.6rem; line-height: 1; margin-bottom: 0.5rem; color: #16a34a; }
+.mob-unlock__lede { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 1.1rem; }
+.mob-unlock__price {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  padding: 1rem; border-radius: 12px; margin-bottom: 1.1rem;
+  background: var(--bg-tertiary, rgba(127,127,127,0.1));
+}
+.mob-unlock__amount { font-size: 1.9rem; font-weight: 800; }
+.mob-unlock__price span:last-child { font-size: 0.78rem; color: var(--text-secondary); }
+.mob-unlock__benefits { list-style: none; padding: 0; margin: 0 0 1.1rem; }
+.mob-unlock__benefits li { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; color: var(--text-secondary); font-size: 0.85rem; }
+.mob-unlock__benefits li span { color: #16a34a; font-weight: 700; flex-shrink: 0; }
+.mob-unlock__note {
+  padding: 0.8rem 0.9rem; border-radius: 10px; margin-bottom: 1.1rem;
+  background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.3);
+  font-size: 0.82rem; color: var(--text-secondary);
+}
+.mob-unlock__note strong { color: var(--text-primary); }
+
+/* ── Results page: phone polish ──
+   The card grid already auto-fits to one column below ~640px (minmax(320px,
+   1fr)) and the radar chart is already a ResponsiveContainer, so this page
+   does not get a forked mobile screen — a radar chart is a radar chart at
+   any width. These rules just tighten the spacing that was tuned for a
+   desktop card. */
+@media (max-width: 640px) {
+  .result-card { padding: 1.1rem !important; }
+  .result-score-ring { width: 120px !important; height: 120px !important; }
+  .result-stats { gap: 1rem !important; }
+  .result-header h2 { font-size: 1.15rem; }
+}

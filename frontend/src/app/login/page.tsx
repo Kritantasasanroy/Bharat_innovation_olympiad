@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
 import { FormEvent, useState } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import LoginMobile from './LoginMobile';
 
 type Step = 'identifier' | 'otp';
 type Method = 'email' | 'phone';
@@ -134,6 +136,29 @@ export default function LoginPage() {
         setError('');
         setSuccess('');
     };
+
+    // Separate mobile screen. Phone sign-in is disabled on desktop too (see
+    // the TEMPORARILY DISABLED note below), so the mobile screen only ever
+    // needs the email path — all state/handlers stay owned here.
+    const isMobile = useIsMobile();
+    if (isMobile) {
+        return (
+            <LoginMobile
+                step={step}
+                email={email}
+                setEmail={setEmail}
+                otp={otp}
+                setOtp={setOtp}
+                error={error}
+                success={success}
+                isLoading={isLoading}
+                handleSendOtp={handleSendOtp}
+                handleVerifyOtp={handleVerifyOtp}
+                handleResendOtp={handleResendOtp}
+                goBackToIdentifier={() => { setStep('identifier'); setOtp(''); setError(''); setSuccess(''); }}
+            />
+        );
+    }
 
     return (
         <div className="auth-page">

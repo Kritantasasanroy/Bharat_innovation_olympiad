@@ -87,7 +87,7 @@ const REGISTER_TOUR: Tour = {
             // when the tour starts, and the student would never hear about it.
             target: 'register-school',
             title: 'Find your school, then your section',
-            body: "Just type the school's name. Only use a school code if your school actually gave you one — most wards don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
+            body: "Just type the school's name. Only use a school code if your school actually gave you one. Most wards don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
             mood: 'talking',
             placement: 'top',
         },
@@ -97,7 +97,7 @@ const REGISTER_TOUR: Tour = {
             mood: 'concerned',
         },
     ],
-    outro: "That's everything. Fill it in at your own pace — I'll be on your dashboard when you're done.",
+    outro: "That's everything. Fill it in at your own pace, I'll be on your dashboard when you're done.",
 };
 
 /**
@@ -109,7 +109,7 @@ const REGISTER_TOUR: Tour = {
  */
 const DASHBOARD_TOUR: Tour = {
     id: 'dashboard',
-    intro: "Welcome in! I'm Limon. Let me show you around — it's quick, and then you'll know where everything lives.",
+    intro: "Welcome in! I'm Limon. Let me show you around, it's quick, and then you'll know where everything lives.",
     steps: [
         {
             target: 'dashboard-roll',
@@ -128,7 +128,7 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'dashboard-exams',
             title: 'Your exams',
-            body: "Everything you can sit. Start with the free practice paper — it runs in exactly the same screen as the real thing, and you can retake it as often as you like.",
+            body: "Everything you can sit. Start with the free practice paper: it runs in exactly the same screen as the real thing, and you can retake it as often as you like.",
             mood: 'talking',
             placement: 'top',
         },
@@ -163,7 +163,7 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'nav-support',
             title: 'Support',
-            body: "If anything goes wrong — a power cut during your exam, a wrong class, a score that looks off — tell us here and a person will answer.",
+            body: "If anything goes wrong (a power cut during your exam, a wrong class, a score that looks off), tell us here and a person will answer.",
             mood: 'happy',
             placement: 'bottom',
         },
@@ -181,12 +181,12 @@ const DASHBOARD_TOUR: Tour = {
  */
 const EXAM_TOUR: Tour = {
     id: 'exam',
-    intro: "This is the real exam screen — same buttons, same timer, same camera. Nothing here is scored, so let me show you what each part does.",
+    intro: "This is the real exam screen: same buttons, same timer, same camera. Nothing here is scored, so let me show you what each part does.",
     steps: [
         {
             target: 'exam-question',
             title: 'The question',
-            body: 'Click an answer to pick it. It saves the instant you click — there is nothing to press to save, and no way to lose an answer.',
+            body: 'Click an answer to pick it. It saves the instant you click: there is nothing to press to save, and no way to lose an answer.',
             mood: 'talking',
             placement: 'right',
         },
@@ -221,7 +221,7 @@ const EXAM_TOUR: Tour = {
         {
             target: 'exam-violations',
             title: 'This number',
-            body: "Things I have to record: leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam — a person just reads it afterwards. Hover the little i for the full list.",
+            body: "Things I have to record: leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam. A person just reads it afterwards. Hover the little i for the full list.",
             mood: 'concerned',
             placement: 'bottom',
         },
@@ -240,7 +240,7 @@ const EXAM_TOUR: Tour = {
             placement: 'left',
         },
     ],
-    outro: "That is the lot. Have a go at these questions — nothing here counts. When you are comfortable, your real paper will feel like somewhere you have already been.",
+    outro: "That is the lot. Have a go at these questions, nothing here counts. When you are comfortable, your real paper will feel like somewhere you have already been.",
 };
 
 /**
@@ -261,7 +261,7 @@ const HOME_TOUR: Tour = {
     steps: [
         {
             title: 'What this is',
-            body: "The Bharat Innovation Olympiad, for Grades 6 to 12. It doesn't test what you've memorised — it looks at how you think, solve problems and come up with ideas.",
+            body: "The Bharat Innovation Olympiad, for Grades 6 to 12. It doesn't test what you've memorised. It looks at how you think, solve problems and come up with ideas.",
             mood: 'talking',
         },
         {
@@ -293,7 +293,7 @@ const TRAINING_TOUR: Tour = {
         },
         {
             title: 'It is your own answer',
-            body: "Nobody marks you present or absent. It doesn't affect your score or your rank — it's a record of what you took part in across the season.",
+            body: "Nobody marks you present or absent. It doesn't affect your score or your rank, it's a record of what you took part in across the season.",
             mood: 'talking',
         },
         {
@@ -310,7 +310,7 @@ const EXAMS_TOUR: Tour = {
     steps: [
         {
             title: 'Start with the practice paper',
-            body: "It's free, you can take it as many times as you like, and it runs in exactly the same screen as the real exam — fullscreen, camera, timer and all.",
+            body: "It's free, you can take it as many times as you like, and it runs in exactly the same screen as the real exam: fullscreen, camera, timer and all.",
             mood: 'talking',
         },
         {
@@ -342,7 +342,7 @@ const RESULTS_TOUR: Tour = {
         },
         {
             title: 'If something looks wrong',
-            body: 'A power cut during your paper, a score that does not look right — raise it from Support and a person will read it and reply.',
+            body: 'A power cut during your paper, a score that does not look right: raise it from Support and a person will read it and reply.',
             mood: 'concerned',
         },
     ],
@@ -359,7 +359,7 @@ const CERTIFICATES_TOUR: Tour = {
         },
         {
             title: 'Trainings',
-            body: "The sessions you ticked on the Training page. That's your own record, so it carries no score and no verification number — it is not an exam certificate.",
+            body: "The sessions you ticked on the Training page. That's your own record, so it carries no score and no verification number. It is not an exam certificate.",
             mood: 'talking',
         },
     ],
@@ -393,7 +393,7 @@ const PROFILE_TOUR: Tour = {
         },
         {
             title: 'What you cannot',
-            body: 'Your email, your school and your class. Your class decides which paper you sit and who you are ranked against, so it is final once set — raise a support ticket if it is wrong.',
+            body: 'Your email, your school and your class. Your class decides which paper you sit and who you are ranked against, so it is final once set. Raise a support ticket if it is wrong.',
             mood: 'concerned',
         },
         {

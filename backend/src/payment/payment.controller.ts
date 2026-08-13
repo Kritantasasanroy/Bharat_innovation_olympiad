@@ -67,7 +67,7 @@ export class PaymentController {
         return this.paymentService.validateCoupon(code);
     }
 
-    // ── Access pass (one-off platform fee, unlocks every exam) ────────────────
+    // Access pass (one-off platform fee, unlocks every exam for the season)
 
     @Get('access-pass/me')
     @UseGuards(JwtAuthGuard)

@@ -235,7 +235,7 @@ export default function PaymentStep({
         <div className="auth-form">
             <div className="pay-amount">
                 <span className="pay-amount__value">₹{rupees}</span>
-                <span className="pay-amount__note">one-time · unlocks every exam</span>
+                <span className="pay-amount__note">one-time · unlocks this season&apos;s exams</span>
             </div>
 
             <PaymentTerms />

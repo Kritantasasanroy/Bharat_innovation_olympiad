@@ -1,8 +1,12 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import AlumniCarousel from '@/components/landing/AlumniCarousel';
+import MobileLanding from '@/components/landing/MobileLanding';
 import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { TECH_REQUIREMENTS } from '@/lib/copy/onboarding';
 import {
   Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
@@ -12,6 +16,12 @@ import {
 } from 'lucide-react';
 
 export default function LandingPage() {
+  // Separate mobile screen: the desktop hero/gallery below is tuned for a
+  // 1200px canvas with hand-placed inline styles and does not reflow into
+  // something worth reading on a phone. Desktop JSX beneath is untouched.
+  const isMobile = useIsMobile();
+  if (isMobile) return <MobileLanding />;
+
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', minHeight: '100vh' }}>
       {/* Captures a partner's `?ref=CODE` on first touch (PRD-046 attribution). */}

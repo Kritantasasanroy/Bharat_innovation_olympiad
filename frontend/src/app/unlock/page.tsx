@@ -5,6 +5,8 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import UnlockMobile from './UnlockMobile';
 
 interface AccessPass {
     status: 'PENDING' | 'ACTIVE' | 'REVOKED' | null;
@@ -23,7 +25,7 @@ const MAX_POLLS = 45;
 const POLL_MS = 4000;
 
 const BENEFITS = [
-    'Sit every published olympiad exam, no per-exam fee',
+    'Sit every published olympiad exam this season, no per-exam fee',
     'Unlimited practice attempts on the practice paper',
     'Full score reports and rank breakdown after each exam',
     'Downloadable certificates for every exam you complete',
@@ -111,6 +113,26 @@ export default function UnlockPage() {
         maximumFractionDigits: 2,
     });
 
+    const isMobile = useIsMobile();
+    if (isMobile) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <UnlockMobile
+                    loading={loading}
+                    pass={pass}
+                    waiting={waiting}
+                    checking={checking}
+                    error={error}
+                    rupees={rupees}
+                    userEmail={user?.email}
+                    benefits={BENEFITS}
+                    onPay={handlePay}
+                    onCheckNow={handleCheckNow}
+                />
+            </AuthGuard>
+        );
+    }
+
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
             <div style={{ maxWidth: '640px', margin: '0 auto', padding: 'var(--space-6, 1.5rem)' }}>
@@ -123,7 +145,7 @@ export default function UnlockPage() {
                         <div style={{ fontSize: '3rem', lineHeight: 1, marginBottom: '0.75rem' }}>✓</div>
                         <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Your exams are unlocked</h1>
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                            You have full access to every olympiad exam. There is nothing more to pay.
+                            You have full access to every olympiad exam this season. There is nothing more to pay.
                         </p>
                         <Link href="/exams" className="btn btn-primary btn-lg">
                             Browse Exams →
@@ -131,10 +153,10 @@ export default function UnlockPage() {
                     </div>
                 ) : (
                     <div className="glass-card" style={{ padding: '2rem' }}>
-                        <h1 style={{ fontSize: '1.6rem', marginBottom: '0.35rem' }}>Unlock all exams</h1>
+                        <h1 style={{ fontSize: '1.6rem', marginBottom: '0.35rem' }}>Unlock this season&apos;s exams</h1>
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                            A single payment gives you access to every Bharat Innovation Olympiad exam,
-                            now and in the future.
+                            A single payment gives you access to every Bharat Innovation Olympiad exam
+                            for the current season.
                         </p>
 
                         <div
@@ -145,7 +167,7 @@ export default function UnlockPage() {
                             }}
                         >
                             <span style={{ fontSize: '2.25rem', fontWeight: 700 }}>₹{rupees}</span>
-                            <span style={{ color: 'var(--text-secondary)' }}>one-time · no renewal</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>one-time · valid for this season</span>
                         </div>
 
                         <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem' }}>

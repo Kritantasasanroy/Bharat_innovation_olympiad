@@ -6,6 +6,8 @@ import PayToUnlockBanner from '@/components/PayToUnlockBanner';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import ExamsMobile from './ExamsMobile';
 
 /**
  * The student's exam list.
@@ -132,6 +134,16 @@ export default function StudentExamsPage() {
         }, 30_000);
         return () => clearInterval(id);
     }, []);
+
+    const isMobile = useIsMobile();
+    if (isMobile) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <Navbar />
+                <ExamsMobile exams={exams} loading={loading} hasPass={hasPass} />
+            </AuthGuard>
+        );
+    }
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>

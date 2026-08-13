@@ -94,6 +94,7 @@ export default function VerifyCertificatePage() {
                             </div>
                         </div>
 
+                        <div className="table-responsive">
                         <table className="data-table">
                             <tbody>
                                 <tr>
@@ -132,6 +133,7 @@ export default function VerifyCertificatePage() {
                                 </tr>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 )}
 

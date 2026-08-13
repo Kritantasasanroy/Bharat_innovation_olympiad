@@ -107,7 +107,7 @@ const CUE_COPY: Record<MascotCueId, { title: string; encouragement: string }> = 
     'pct-60': {
         title: 'Timer check',
         encouragement:
-            'Two thirds of the way through. Great effort so far — remember an unanswered question costs the same as a wrong one, so attempt everything.',
+            'Two thirds of the way through. Great effort so far, remember an unanswered question costs the same as a wrong one, so attempt everything.',
     },
     'pct-90': {
         title: 'Timer check',

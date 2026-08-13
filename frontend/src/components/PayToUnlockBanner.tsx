@@ -53,7 +53,7 @@ export default function PayToUnlockBanner() {
                 <div>
                     <strong style={{ display: 'block' }}>Your exams are locked</strong>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        One ₹{rupees} payment unlocks every olympiad exam. The practice paper stays free.
+                        One ₹{rupees} payment unlocks every olympiad exam for the current season. The practice paper stays free.
                     </span>
                 </div>
             </div>

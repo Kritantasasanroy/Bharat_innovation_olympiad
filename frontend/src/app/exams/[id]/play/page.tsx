@@ -914,10 +914,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <h2 style={{ marginBottom: '1rem' }}>Exam Access Locked</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         Your exam access pass is not active yet. One payment unlocks every olympiad
-                        exam, the practice paper stays free.
+                        exam for the current season, the practice paper stays free.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/unlock'}>
-                        Unlock All Exams
+                        Unlock Exams
                     </button>
                 </div>
             </div>

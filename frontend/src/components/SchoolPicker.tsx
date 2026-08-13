@@ -242,7 +242,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
                 Your results are grouped by school, so your teachers can see how your class did.
-                Every ward needs one. <strong>Most wards should just search by name</strong> —
+                Every ward needs one. <strong>Most wards should just search by name</strong>:
                 a school code is only for wards whose school handed them one.
             </p>
 
@@ -423,7 +423,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         >
                             Add your school
                         </button>{' '}
-                        — it takes the name and a pincode.
+                        (it takes the name and a pincode).
                     </p>
                 </>
             )}

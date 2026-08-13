@@ -1,9 +1,11 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { APP_NAME, TAGLINE } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
+import MobileNav from '@/components/layout/MobileNav';
 
 /**
  * Display label for the badge next to a signed-in user's name.
@@ -21,10 +23,16 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const isMobile = useIsMobile();
   const handleLogout = () => {
     logout();
     router.push('/login');
   };
+
+  // Separate mobile screen: a top bar + bottom tab bar instead of this row of
+  // six links, which has no room to exist below ~900px. Desktop render is
+  // untouched below.
+  if (isMobile) return <MobileNav />;
 
   return (
     <nav className="navbar">

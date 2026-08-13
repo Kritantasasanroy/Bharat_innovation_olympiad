@@ -672,11 +672,11 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         >
                             <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.05rem' }}>🔒 Exam access locked</h3>
                             <p style={{ color: 'var(--text-secondary)', margin: '0 0 1rem', fontSize: '0.92rem' }}>
-                                One payment unlocks every olympiad exam. You only pay once, the free
-                                practice paper stays available either way.
+                                One payment unlocks every olympiad exam for the current season. You only
+                                pay once per season, the free practice paper stays available either way.
                             </p>
                             <button className="btn btn-primary" onClick={() => router.push('/unlock')}>
-                                Unlock All Exams
+                                Unlock Exams
                             </button>
                         </div>
                     )}

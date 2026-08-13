@@ -164,7 +164,7 @@ export default function ProfilePage() {
                             <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>School assignment cannot be changed.</small>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="form-row">
                             <div className="input-group">
                                 <label className="input-label">First Name</label>
                                 <input
