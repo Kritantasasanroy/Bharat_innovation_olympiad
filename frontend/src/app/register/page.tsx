@@ -7,7 +7,7 @@ import LimonTour from '@/components/limon/LimonTour';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { emailOtp, isValidPhone, phoneOtp } from '@/lib/auth-client';
+import { emailOtp, isValidPhone } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import { describeCameraError, describeError } from '@/lib/errors';
 import SchoolPicker from '@/components/SchoolPicker';
@@ -103,46 +103,8 @@ export default function RegisterPage() {
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [dataConsent, setDataConsent] = useState(false);
 
-    // Optional mobile number, proven by an SMS code submitted with the form.
-    // number is submitted — an unverified one would let a student claim someone
-    // else's number and lock the real owner out of registering it.
+    // Mobile number stored for WhatsApp notifications.
     const [phone, setPhone] = useState('');
-    const [phoneOtpCode, setPhoneOtpCode] = useState('');
-    const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-    const [phoneBusy, setPhoneBusy] = useState(false);
-    const [phoneMsg, setPhoneMsg] = useState('');
-
-    /**
-     * Registration used to be SMS-only, so a student whose network drops the
-     * SMS could not create an account at all — the voice fallback existed on
-     * the login page and nowhere else. Both channels are offered here now.
-     */
-    const handleSendPhoneOtp = async (channel: 'sms' | 'voice' = SMS_OTP_ENABLED ? 'sms' : 'voice') => {
-        setPhoneMsg('');
-        if (!isValidPhone(phone)) {
-            setPhoneMsg('Enter a valid mobile number.');
-            return;
-        }
-        setPhoneBusy(true);
-        try {
-            const { error: otpError } = await phoneOtp.sendOtp(phone, channel);
-            if (otpError) {
-                setPhoneMsg(
-                    otpError.message ||
-                        (channel === 'voice'
-                            ? 'Could not place the call.'
-                            : 'Could not send the code. Try “Get the code by call instead”.'),
-                );
-            } else {
-                setPhoneOtpSent(true);
-                setPhoneMsg(channel === 'voice' ? 'Calling you now with the code…' : 'Code sent by SMS.');
-            }
-        } catch (err) {
-            setPhoneMsg(describeError(err, 'send the code to your phone'));
-        } finally {
-            setPhoneBusy(false);
-        }
-    };
 
     // No inline verify step: the code is submitted with the form and checked
     // server-side at /auth/sync. Verifying here would consume the single-use
@@ -299,10 +261,7 @@ export default function RegisterPage() {
                 // revision is distinguishable from what was agreed to.
                 termsVersion: TERMS_VERSION,
                 ...(referralCode ? { referralCode } : {}),
-                // Both, or neither — the backend rejects a phone without a code.
-                ...(phone.trim() && phoneOtpCode.length === 6
-                    ? { phone, phoneCode: phoneOtpCode }
-                    : {}),
+                phone: phone.trim(),
             });
             clearReferralCode();
             setSuccess('');
@@ -484,65 +443,14 @@ export default function RegisterPage() {
                             <label className="input-label" htmlFor="phone">
                                 Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(required: we send exam updates here on WhatsApp)</span>
                             </label>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <input
-                                    id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
-                                    className="input-field" placeholder="+91 98765 43210"
-                                    value={phone}
-                                    onChange={(e) => { setPhone(e.target.value); setPhoneOtpSent(false); setPhoneMsg(''); }}
-                                    required
-                                    suppressHydrationWarning
-                                />
-                                <button
-                                    type="button" className="btn"
-                                    onClick={() => handleSendPhoneOtp(SMS_OTP_ENABLED ? 'sms' : 'voice')}
-                                    disabled={phoneBusy || !phone.trim()}
-                                    style={{ whiteSpace: 'nowrap', background: 'var(--bg-tertiary, rgba(127,127,127,0.15))', color: 'var(--text-primary)' }}
-                                >
-                                    {phoneOtpSent ? 'Resend' : SMS_OTP_ENABLED ? 'Send code' : 'Call me'}
-                                </button>
-                            </div>
-
-                            {/* SMS is temporarily down (SMS_OTP_ENABLED) — the button
-                                above already calls in that case, so a second "call me"
-                                link here would just repeat it. With SMS on, the call
-                                route stays offered as a fallback: the SMS route can be
-                                blocked by the carrier with no signal to us, so it is
-                                offered up front rather than only after a failure. */}
-                            {SMS_OTP_ENABLED && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleSendPhoneOtp('voice')}
-                                    disabled={phoneBusy || !phone.trim()}
-                                    style={{
-                                        marginTop: '0.5rem', background: 'none', border: 'none', padding: 0,
-                                        color: 'var(--text-secondary)', fontSize: '0.85rem',
-                                        textDecoration: 'underline', cursor: phone.trim() ? 'pointer' : 'not-allowed',
-                                    }}
-                                >
-                                    📞 Get the code by call instead
-                                </button>
-                            )}
-                            {!SMS_OTP_ENABLED && (
-                                <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                                    📞 SMS codes are temporarily unavailable, we&apos;ll call you with your code instead.
-                                </p>
-                            )}
-
-                            {phoneOtpSent && (
-                                <input
-                                    type="text" inputMode="numeric" className="input-field"
-                                    placeholder="6-digit code" maxLength={6} value={phoneOtpCode}
-                                    onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    style={{ letterSpacing: '0.25rem', marginTop: '0.5rem' }}
-                                />
-                            )}
-
-                            {phoneMsg && (
-                                <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    {phoneMsg}
-                                </p>
-                            )}
+                            <input
+                                id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
+                                className="input-field" placeholder="+91 98765 43210"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                required
+                                suppressHydrationWarning
+                            />
                         </div>
 
                         <div className="input-group" data-limon="register-class">

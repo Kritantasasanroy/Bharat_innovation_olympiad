@@ -55,33 +55,30 @@ export class AuthService {
     }
 
     /**
-     * A verified phone can only back one account, so reject a number already
-     * held by someone else before writing — the unique index would otherwise
-     * surface as an opaque 500 at the end of registration.
+     * Resolve and normalize phone number. Phone OTP verification is disabled;
+     * the mobile number is stored directly. If the unique `phone` column is already held
+     * by another account, return undefined for `phone` so registration doesn't fail,
+     * while `phoneRaw` continues to store the number for WhatsApp notifications.
      */
     private async resolveVerifiedPhone(
         rawPhone: string | undefined,
         currentUserId?: string,
-        otpCode?: string,
     ): Promise<string | undefined> {
         if (!rawPhone?.trim()) return undefined;
 
-        // Ownership is proven server-side, always. Storing a client-supplied
-        // number unchecked would let someone claim a stranger's number and
-        // then sign in as them by phone OTP.
-        if (!otpCode?.trim()) {
-            throw new BadRequestException('Verify your mobile number with the code we sent you.');
+        let phone: string;
+        try {
+            phone = normalizePhone(rawPhone);
+        } catch {
+            return undefined;
         }
-        const phone = await this.phoneOtpService.verifyOtp(rawPhone, otpCode);
 
         const holder = await this.prisma.user.findUnique({
             where: { phone },
             select: { id: true },
         });
         if (holder && holder.id !== currentUserId) {
-            throw new BadRequestException(
-                'That phone number is already registered to another account. Sign in with it instead.',
-            );
+            return undefined;
         }
         return phone;
     }
@@ -167,7 +164,7 @@ export class AuthService {
             const schoolId =
                 existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
             this.assertSchoolResolved(existing.role, schoolId);
-            const phone = await this.resolveVerifiedPhone(dto.phone, existing.id, dto.phoneCode);
+            const phone = await this.resolveVerifiedPhone(dto.phone, existing.id);
             // Store the raw number unconditionally so WhatsApp can reach the
             // student even when they did not complete OTP verification.
             const phoneRaw = tryNormalizePhone(dto.phone);
@@ -225,7 +222,7 @@ export class AuthService {
         this.assertSchoolResolved(dto.role, schoolId);
         const section = this.normaliseSection(dto.section, schoolId);
         this.assertSectionResolved(dto.role, schoolId, section);
-        const phone = await this.resolveVerifiedPhone(dto.phone, undefined, dto.phoneCode);
+        const phone = await this.resolveVerifiedPhone(dto.phone, undefined);
         // Store the raw number unconditionally so WhatsApp can reach the
         // student even when they did not complete OTP verification.
         const phoneRaw = tryNormalizePhone(dto.phone);
@@ -414,11 +411,14 @@ export class AuthService {
                     select: { phone: true },
                 });
                 if (current?.phone === incoming) {
-                    // Unchanged — no re-verification, nothing to write.
+                    // Unchanged — nothing to write.
                     phoneUpdate = {};
                 } else {
+                    const phone = await this.resolveVerifiedPhone(dto.phone, userId);
+                    const phoneRaw = tryNormalizePhone(dto.phone);
                     phoneUpdate = {
-                        phone: await this.resolveVerifiedPhone(dto.phone, userId, dto.phoneCode),
+                        phone,
+                        ...(phoneRaw ? { phoneRaw } : {}),
                     };
                 }
             }
