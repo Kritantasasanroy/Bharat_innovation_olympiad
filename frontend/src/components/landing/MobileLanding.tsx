@@ -37,8 +37,8 @@ const JOURNEY = [
 ];
 
 const TRUST = [
-    { Icon: Target, title: 'Fairness', body: 'Every ward sits the same paper under the same conditions, on a server-run timer.' },
-    { Icon: BadgeCheck, title: 'Authenticity', body: 'A face scan at registration confirms the registered ward sat the paper.' },
+    { Icon: Target, title: 'Fairness', body: 'Every participant sits the same paper under the same conditions, on a server-run timer.' },
+    { Icon: BadgeCheck, title: 'Authenticity', body: 'A face scan at registration confirms the registered participant sat the paper.' },
     { Icon: ScrollText, title: 'Credibility', body: 'Flagged papers are reviewed by a person, with written reasons, before anything is concluded.' },
     { Icon: Users, title: 'Child-friendly', body: "No warnings pile up mid-exam and no video is ever recorded." },
 ];
@@ -78,7 +78,7 @@ export default function MobileLanding() {
                         <Rocket size={16} /> Register Now
                     </Link>
                     <Link href="/login" className="btn btn-secondary" onClick={() => setMenuOpen(false)} style={{ width: '100%', justifyContent: 'center' }}>
-                        Ward Login
+                        Participant Login
                     </Link>
                     <Link href="/terms" onClick={() => setMenuOpen(false)}>Terms &amp; Conditions</Link>
                     <Link href="/support" onClick={() => setMenuOpen(false)}>Support</Link>
@@ -134,7 +134,7 @@ export default function MobileLanding() {
             </section>
 
             <section className="mob-lp-section">
-                <h2 className="mob-lp-section__title">Real Wards. Real Ideas. Real Impact.</h2>
+                <h2 className="mob-lp-section__title">Real Participants. Real Ideas. Real Impact.</h2>
                 <AlumniCarousel />
             </section>
 
@@ -211,7 +211,7 @@ export default function MobileLanding() {
                     <Link href="/terms">Terms &amp; Conditions</Link>
                     <Link href="/support">Support</Link>
                     <Link href="/register">Register</Link>
-                    <Link href="/login">Ward login</Link>
+                    <Link href="/login">Participant login</Link>
                     <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">Lemon Ideas ↗</a>
                     <a href="https://innopreneurs.in" target="_blank" rel="noopener noreferrer">Innopreneurs ↗</a>
                 </nav>

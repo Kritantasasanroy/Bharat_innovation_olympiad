@@ -47,19 +47,21 @@ function readRect(target: string | undefined): Rect | null {
 }
 
 /**
- * Limon's on-screen footprint, read from the CSS rather than duplicated here.
+ * Limon's on-screen rect, read from the DOM rather than duplicated here.
  *
  * He is between 150px and 384px wide depending on the viewport (see
- * `--limon-size` in globals.css), and the card has to stay out of that corner.
- * Hard-coding the number in two places is how they drift apart, so this measures
- * the element that is actually on screen.
+ * `--limon-size` in globals.css) and sits top-left on a phone, bottom-left on
+ * tablet and desktop (also in the CSS). Measuring the real element, corner
+ * and all, is what lets `dodgeAvatar` avoid him correctly at either position
+ * without a second place that has to know which corner he is in this week.
  */
-function avatarFootprint(): { width: number; height: number } {
-    if (typeof document === 'undefined') return { width: 0, height: 0 };
+function avatarRect(): Rect | null {
+    if (typeof document === 'undefined') return null;
     const el = document.querySelector<HTMLElement>('.limon-tour__avatar');
-    if (!el) return { width: 0, height: 0 };
+    if (!el) return null;
     const r = el.getBoundingClientRect();
-    return { width: r.width, height: r.height };
+    if (r.width === 0 && r.height === 0) return null;
+    return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
 
 /**
@@ -69,27 +71,37 @@ function avatarFootprint(): { width: number; height: number } {
  * screen, then clamps into the viewport regardless — a card the student has to
  * scroll to read is worse than one slightly closer to its target than intended.
  *
- * Finally it steps around Limon. He sits bottom-left and is large on a desktop,
- * so a card placed to the left of a low target would land underneath him and be
- * half-unreadable.
+ * Finally it steps around Limon, wherever he actually is — top-left on a
+ * phone, bottom-left on tablet and desktop (see `.limon-tour__avatar` in
+ * globals.css) — by measuring his real rect rather than assuming a corner.
  */
 function placeCard(rect: Rect | null, placement: TourStep['placement']): React.CSSProperties {
     if (typeof window === 'undefined') return {};
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const estHeight = 190;
 
-    const avatar = avatarFootprint();
-    /** Nudges the card clear of Limon if the two would overlap. */
+    const avatar = avatarRect();
+    /**
+     * Nudges the card clear of Limon if the two rects overlap: right of him
+     * first, then below, then above — whichever the viewport has room for.
+     */
     const dodgeAvatar = (pos: { top: number; left: number }) => {
-        if (avatar.width === 0) return pos;
-        const cardBottom = pos.top + 190;
-        const overlapsY = cardBottom > vh - avatar.height;
-        const overlapsX = pos.left < avatar.width + 24;
-        if (!overlapsY || !overlapsX) return pos;
-        // Prefer moving right; if there is no room, lift it above him instead.
-        const shifted = avatar.width + 32;
-        if (shifted + CARD_WIDTH <= vw - 16) return { ...pos, left: shifted };
-        return { ...pos, top: Math.max(16, vh - avatar.height - 190 - 16) };
+        if (!avatar) return pos;
+        const cardRight = pos.left + CARD_WIDTH;
+        const cardBottom = pos.top + estHeight;
+        const avatarRight = avatar.left + avatar.width;
+        const avatarBottom = avatar.top + avatar.height;
+        const overlaps =
+            pos.left < avatarRight && cardRight > avatar.left &&
+            pos.top < avatarBottom && cardBottom > avatar.top;
+        if (!overlaps) return pos;
+
+        const shiftedLeft = avatarRight + 16;
+        if (shiftedLeft + CARD_WIDTH <= vw - 16) return { ...pos, left: shiftedLeft };
+        const belowTop = avatarBottom + 16;
+        if (belowTop + estHeight <= vh - 16) return { ...pos, top: belowTop };
+        return { ...pos, top: Math.max(16, avatar.top - estHeight - 16) };
     };
 
     if (!rect) {
@@ -99,7 +111,6 @@ function placeCard(rect: Rect | null, placement: TourStep['placement']): React.C
         });
     }
 
-    const estHeight = 190;
     let top: number;
     let left: number;
 

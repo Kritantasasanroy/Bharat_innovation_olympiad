@@ -26,7 +26,7 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
                     not you go on to sit an exam.
                 </li>
                 <li>
-                    <strong>Non-transferable.</strong> It cannot be moved to another ward, another
+                    <strong>Non-transferable.</strong> It cannot be moved to another participant, another
                     account, or a later season.
                 </li>
                 <li>

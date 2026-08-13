@@ -87,7 +87,7 @@ const REGISTER_TOUR: Tour = {
             // when the tour starts, and the student would never hear about it.
             target: 'register-school',
             title: 'Find your school, then your section',
-            body: "Just type the school's name. Only use a school code if your school actually gave you one. Most wards don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
+            body: "Just type the school's name. Only use a school code if your school actually gave you one. Most participants don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
             mood: 'talking',
             placement: 'top',
         },
@@ -257,7 +257,7 @@ const EXAM_TOUR: Tour = {
  */
 const HOME_TOUR: Tour = {
     id: 'home',
-    intro: "Hi, I'm Limon! I look after wards during the Olympiad. Want a quick tour of this page?",
+    intro: "Hi, I'm Limon! I look after participants during the Olympiad. Want a quick tour of this page?",
     steps: [
         {
             title: 'What this is',
@@ -270,7 +270,7 @@ const HOME_TOUR: Tour = {
             mood: 'talking',
         },
         {
-            title: 'These are real wards',
+            title: 'These are real participants',
             body: 'The stories that rotate below are past participants and what they went on to build. They started where you are.',
             mood: 'happy',
         },

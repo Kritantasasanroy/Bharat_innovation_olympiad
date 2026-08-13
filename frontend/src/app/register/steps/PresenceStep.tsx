@@ -111,7 +111,7 @@ export default function PresenceStep({
                     />
                     <span>
                         I agree that the details entered here may be processed to run the Olympiad,
-                        registering the ward, proctoring their exam, marking, ranking and issuing
+                        registering the participant, proctoring their exam, marking, ranking and issuing
                         certificates. A parent or guardian confirms this again later in the form.
                     </span>
                 </label>

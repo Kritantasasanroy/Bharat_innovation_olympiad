@@ -33,7 +33,7 @@ export default function DashboardMobile({
         <main className="mob-page">
             <div className="mob-page__title">Welcome back, {user?.firstName}! 👋</div>
             <p className="mob-page__subtitle">
-                Class {user?.classBand}{user?.section ? `-${user.section}` : ''} · {user?.school?.name || 'Independent Ward'}
+                Class {user?.classBand}{user?.section ? `-${user.section}` : ''} · {user?.school?.name || 'Independent Participant'}
             </p>
 
             {user?.rollNumber && (

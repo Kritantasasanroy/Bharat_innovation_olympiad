@@ -46,7 +46,7 @@ export default function LandingPage() {
               color: 'var(--text-primary)', fontWeight: 600, fontSize: 14,
               padding: '9px 20px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 7,
             }}>
-              Ward Login
+              Participant Login
             </Link>
             <Link href="/register" className="lp-btn-primary" style={{
               background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
@@ -151,7 +151,7 @@ export default function LandingPage() {
             background: 'var(--bg-card)', border: '1px solid var(--border-default)',
             borderRadius: 24, padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.3px', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 20 }}>The Ward Journey</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.3px', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 20 }}>The Participant Journey</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {([
                 { Icon: Trophy,    title: 'Innovation Olympiad', sub: 'Take the national assessment',  bg: 'rgba(125,200,50,0.12)',  col: '#7dc832' },
@@ -207,7 +207,7 @@ export default function LandingPage() {
             <h2>A fair, authentic and credible online assessment</h2>
             <p>
               Taken from home, judged like a hall exam. Here is exactly how we make an
-              online olympiad something a school, a parent and a ward can all trust.
+              online olympiad something a school, a parent and a participant can all trust.
             </p>
           </div>
 
@@ -216,12 +216,12 @@ export default function LandingPage() {
               {
                 Icon: Target,
                 title: 'Fairness',
-                body: 'Every ward sits the same paper under the same conditions, on their booked schedule, on a server-run timer that does not stop if their internet does.',
+                body: 'Every participant sits the same paper under the same conditions, on their booked schedule, on a server-run timer that does not stop if their internet does.',
               },
               {
                 Icon: BadgeCheck,
                 title: 'Authenticity',
-                body: 'A face scan taken at registration confirms the registered ward is the one sitting the paper, so a rank belongs to the person who earned it.',
+                body: 'A face scan taken at registration confirms the registered participant is the one sitting the paper, so a rank belongs to the person who earned it.',
               },
               {
                 Icon: ScrollText,
@@ -231,7 +231,7 @@ export default function LandingPage() {
               {
                 Icon: Users,
                 title: 'Child-friendly',
-                body: 'No warnings pile up mid-exam and no video is ever recorded. Analysis runs inside the ward’s own browser, only the events leave the device.',
+                body: 'No warnings pile up mid-exam and no video is ever recorded. Analysis runs inside the participant’s own browser, only the events leave the device.',
               },
             ] as const).map(({ Icon, title, body }) => (
               <div key={title} className="lp-trust__card">
@@ -273,7 +273,7 @@ export default function LandingPage() {
               <Star size={10} fill="#ffcb05" color="#ffcb05" /> Innovation Alumni · Where Are They Now
             </div>
             <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 38, margin: '0 0 14px', letterSpacing: -0.8, lineHeight: 1.1 }}>
-              Real Wards. Real Ideas. Real Impact.
+              Real Participants. Real Ideas. Real Impact.
             </h2>
             <p style={{ fontSize: 16, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 600, lineHeight: 1.65 }}>
               Every one of them began with a single spark of curiosity, right where you are now.
@@ -283,7 +283,7 @@ export default function LandingPage() {
           <AlumniCarousel />
 
           <div className="lp-fade-up" style={{ textAlign: 'center', marginTop: 48 }}>
-            <p style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are wards. Tomorrow, they&apos;ll build the future of Bharat.</p>
+            <p style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are participants. Tomorrow, they&apos;ll build the future of Bharat.</p>
             <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '0 0 26px' }}>Your innovation journey could be next · Powered by Lemon Ideas · Connected to Innopreneurs Junior</p>
             <Link href="/register" className="lp-btn-primary" style={{
               background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
@@ -301,7 +301,7 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
           <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>Why This Olympiad Is Different</h2>
-          <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 520 }}>We don&apos;t test what wards memorise. We measure how they think, create and solve.</p>
+          <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 520 }}>We don&apos;t test what participants memorise. We measure how they think, create and solve.</p>
 
           <div className="lp-compare-grid">
             <div style={{ padding: '34px 30px', textAlign: 'left' }}>
@@ -344,7 +344,7 @@ export default function LandingPage() {
               <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no question paper.</b>{' '}
               The Bharat Innovation Olympiad reflects this belief by moving beyond conventional
               examinations that reward memorisation. Instead, it assesses curiosity, creativity,
-              adaptability and real-world thinking, preparing wards not just for the next exam,
+              adaptability and real-world thinking, preparing participants not just for the next exam,
               but for the next decade.
             </p>
             <p style={{ margin: 0 }}>
@@ -357,7 +357,7 @@ export default function LandingPage() {
             <p style={{ margin: 0 }}>
               Built on the foundation of <b style={{ color: 'var(--text-primary)' }}>Innopreneurs</b>,
               Lemon Ideas&apos; flagship innovation and entrepreneurship movement, it is far more than
-              another Olympiad, it is the beginning of a lifelong innovation ecosystem. Wards from
+              another Olympiad, it is the beginning of a lifelong innovation ecosystem. Participants from
               Grades 6 to 12 assess themselves across five future-focused dimensions through a balanced
               mix of knowledge-based, situational and future-oriented questions.
             </p>
@@ -382,7 +382,7 @@ export default function LandingPage() {
             The Five Dimensions
           </h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 560, textAlign: 'center' }}>
-            Every ward is assessed across five future-focused dimensions, the same five sections
+            Every participant is assessed across five future-focused dimensions, the same five sections
             that make up the paper.
           </p>
 
@@ -396,7 +396,7 @@ export default function LandingPage() {
               {
                 n: '02',
                 title: 'Problem Solving & Innovation',
-                body: 'Innovation begins with understanding problems that matter. Wards observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation, drawing on design thinking, adaptability and evidence-based reasoning.',
+                body: 'Innovation begins with understanding problems that matter. Participants observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation, drawing on design thinking, adaptability and evidence-based reasoning.',
               },
               {
                 n: '03',
@@ -406,12 +406,12 @@ export default function LandingPage() {
               {
                 n: '04',
                 title: 'Future Readiness & Global Awareness',
-                body: 'Preparing for the future demands adaptability, lifelong learning and global awareness. This dimension develops an understanding of future careers, sustainability, climate action and well-being, and inspires wards to contribute towards Viksit Bharat 2047.',
+                body: 'Preparing for the future demands adaptability, lifelong learning and global awareness. This dimension develops an understanding of future careers, sustainability, climate action and well-being, and inspires participants to contribute towards Viksit Bharat 2047.',
               },
               {
                 n: '05',
                 title: 'Financial Readiness',
-                body: 'Financial literacy is an essential life skill. Wards learn money management, saving, investing, budgeting and responsible financial decision-making, alongside digital banking, UPI, financial safety, cyber awareness and the global economy.',
+                body: 'Financial literacy is an essential life skill. Participants learn money management, saving, investing, budgeting and responsible financial decision-making, alongside digital banking, UPI, financial safety, cyber awareness and the global economy.',
               },
             ].map((d) => (
               <div key={d.n} className="lp-dimension-card lp-fade-up">
@@ -482,7 +482,7 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Ward Receives</h2>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Participant Receives</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score: a complete innovation identity.</p>
           </div>
           <div className="lp-grid-3">
@@ -520,8 +520,8 @@ export default function LandingPage() {
             }}>
               <Award size={12} /> Proven Legacy · Powered by Innopreneurs Junior
             </div>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Wards. Real Ideas. Real Impact.</h2>
-            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 640, lineHeight: 1.65 }}>For over four years, Innopreneurs Junior has helped school wards across India identify problems, build solutions and present their ideas on a national stage.</p>
+            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Participants. Real Ideas. Real Impact.</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 640, lineHeight: 1.65 }}>For over four years, Innopreneurs Junior has helped school participants across India identify problems, build solutions and present their ideas on a national stage.</p>
           </div>
           <div className="lp-gallery-grid">
             <div className="lp-gallery-cell" style={{ gridColumn: 'span 7', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 308 }}>
@@ -533,7 +533,7 @@ export default function LandingPage() {
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px 14px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 1 }}>Winners felicitated on the main stage</div>
             </div>
             <div className="lp-gallery-cell" style={{ gridColumn: 'span 4', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 232 }}>
-              <Image src="/assets/hof-pitch-duo.jpg" alt="Wards pitching their innovation" fill sizes="(max-width: 900px) 100vw, 380px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
+              <Image src="/assets/hof-pitch-duo.jpg" alt="Participants pitching their innovation" fill sizes="(max-width: 900px) 100vw, 380px" className="lp-gallery-img" style={{ objectFit: 'cover' }} />
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 12px', background: 'linear-gradient(transparent,rgba(0,0,0,0.85))', color: '#fff', fontSize: 12.5, fontWeight: 600, zIndex: 1 }}>Pitching to a national jury</div>
             </div>
             <div className="lp-gallery-cell" style={{ gridColumn: 'span 4', position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid var(--border-default)', height: 232 }}>
@@ -577,7 +577,7 @@ export default function LandingPage() {
             <Link href="/terms">Terms &amp; Conditions</Link>
             <Link href="/support">Support</Link>
             <Link href="/register">Register</Link>
-            <Link href="/login">Ward login</Link>
+            <Link href="/login">Participant login</Link>
             <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">
               Lemon Ideas ↗
             </a>

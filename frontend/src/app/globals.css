@@ -4244,32 +4244,82 @@ textarea.form-control {
   color: var(--text-tertiary);
 }
 
-/* Phone (same breakpoint `useIsMobile` and every `mob-*` screen uses, so this
-   lines up with tablet staying on the desktop layout below): the bottom-right
-   pill sat under the mobile bottom tab bar and the feedback tab's edge, and
-   was effectively invisible. Phone gets a small round face-only button
-   top-left, clear of both the bottom tab bar and the sticky top bar's own
-   left-aligned logo. Tablet and desktop are untouched — they still get the
-   full "Need help?" pill bottom-right, styled above. */
-@media (max-width: 768px) {
-  .limon-help {
-    top: 64px;
-    left: var(--space-3, 12px);
-    right: auto;
-    bottom: auto;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    justify-content: center;
-    border-radius: 50%;
-  }
-  .limon-help__label { display: none; }
-  .limon-help__face { width: 100%; height: 100%; }
-  .limon-help__face > svg { width: 26px; margin-top: 3px; }
+/**
+ * The phone-only round badge (`useIsMobile`, same 768px breakpoint as the
+ * rest of the mobile screens — `LimonHelp.tsx` renders this instead of the
+ * pill above, not a CSS transform of it). Bottom-right, lifted clear of the
+ * mobile bottom tab bar the same way `.limon-help` used to need lifting.
+ */
+.limon-help-circle {
+  position: fixed;
+  right: var(--space-3, 12px);
+  bottom: calc(54px + env(safe-area-inset-bottom, 0) + 14px);
+  z-index: 900;
+  width: 82px;
+  height: 82px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.28));
+  animation: limonHelpCircleIn 0.4s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+.limon-help-circle:active { transform: scale(0.95); }
+
+.limon-help-circle__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.limon-help-circle__bg {
+  fill: var(--bg-card);
+  stroke: rgba(125, 200, 50, 0.55);
+  stroke-width: 1.5;
+}
+.limon-help-circle__text {
+  fill: #7dc832;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.limon-help-circle__face {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(125, 200, 50, 0.14);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.limon-help-circle__face > svg { width: 30px; height: auto; margin-top: 3px; }
+
+@keyframes limonHelpCircleIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .limon-help-circle { animation: none; }
 }
 
 /**
- * Bottom-left, popping up from below the fold when the tour opens.
+ * Top-left on phone, popping down from above; bottom-left on tablet and
+ * desktop, popping up from below.
+ *
+ * `.limon-tour` sits inside a full-viewport backdrop at z-index 10000, above
+ * every page chrome (the sticky top bar, the mobile bottom tab bar) — so
+ * unlike the "Need help?" button, this one never has to dodge them, only the
+ * tour card itself, which `placeCard`'s `dodgeAvatar` handles by measuring
+ * wherever this actually renders rather than assuming a corner.
  *
  * ## Why the size is here and not on the component
  *
@@ -4287,10 +4337,10 @@ textarea.form-control {
   --limon-size: min(150px, 38vw);
   position: absolute;
   left: var(--space-4, 16px);
-  bottom: 0;
+  top: var(--space-4, 16px);
   width: var(--limon-size);
   pointer-events: none;
-  animation: limon-pop 0.55s cubic-bezier(0.22, 1.4, 0.36, 1);
+  animation: limon-pop-top 0.55s cubic-bezier(0.22, 1.4, 0.36, 1);
 }
 
 /* The SVG carries its own width/height attributes, so it has to be told to
@@ -4302,7 +4352,13 @@ textarea.form-control {
 }
 
 @media (min-width: 768px) {
-  .limon-tour__avatar { --limon-size: min(260px, 34vh); left: var(--space-5, 20px); }
+  .limon-tour__avatar {
+    --limon-size: min(260px, 34vh);
+    left: var(--space-5, 20px);
+    top: auto;
+    bottom: 0;
+    animation-name: limon-pop;
+  }
 }
 
 /*
@@ -4322,18 +4378,15 @@ textarea.form-control {
   .limon-tour__avatar { --limon-size: min(384px, 46vh); }
 }
 
-/*
- * On a phone in portrait he is decoration competing with the thing he is
- * pointing at, and the spotlight plus the card already fill the screen.
- * Hiding him there is not a downgrade — the tour still works, and the copy is
- * still written in his voice.
- */
-@media (max-width: 560px) and (max-height: 640px) {
-  .limon-tour__avatar { display: none; }
-}
-
 @keyframes limon-pop {
   from { transform: translateY(120%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* Phone: he now pops down from the top edge, not up from the bottom, so the
+   entrance direction matches where he actually lands. */
+@keyframes limon-pop-top {
+  from { transform: translateY(-120%); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
 

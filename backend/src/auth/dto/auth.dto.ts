@@ -3,6 +3,7 @@ import {
     IsEnum,
     IsIn,
     IsInt,
+    IsNotEmpty,
     IsOptional,
     IsString,
     Max,
@@ -16,12 +17,16 @@ export class SyncUserDto {
     email: string;  // ← email now comes in the body (no JwtAuthGuard needed)
 
     /**
-     * Optional mobile number. Stored only when `phoneCode` proves ownership —
-     * see `AuthService.syncUser`.
+     * Mandatory mobile number. Every WhatsApp notification (submission,
+     * schedule, result, reminder — see `WhatsAppService`) is sent to this
+     * number. It is stored as `phoneRaw` the moment it is typed regardless of
+     * whether `phoneCode` (SMS OTP) is ever completed — see
+     * `AuthService.syncUser` — so collection does not depend on SMS delivery,
+     * which has its own, separate reliability problems.
      */
     @IsString()
-    @IsOptional()
-    phone?: string;
+    @IsNotEmpty({ message: 'A mobile number is required.' })
+    phone: string;
 
     /** The SMS code for `phone`. Required whenever `phone` is supplied. */
     @IsString()

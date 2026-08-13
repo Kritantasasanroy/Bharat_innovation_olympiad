@@ -201,7 +201,7 @@ export default function StudentDashboard() {
                         <p className="dashboard-subtitle">
                             Class {user?.classBand}
                             {user?.section ? `-${user.section}` : ''} •{' '}
-                            {user?.school?.name || 'Independent Ward'}
+                            {user?.school?.name || 'Independent Participant'}
                         </p>
                     </div>
                     {/* The roll number is what support asks for, so it belongs

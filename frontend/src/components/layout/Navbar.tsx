@@ -12,11 +12,11 @@ import MobileNav from '@/components/layout/MobileNav';
  *
  * `user.role` is the `Role` enum value ('STUDENT', 'ADMIN', …) and must stay
  * that way — it is what every `allowedRoles` check compares against. This is
- * only the on-screen word for it, so the badge can read "Ward" without
+ * only the on-screen word for it, so the badge can read "Participant" without
  * renaming the role itself.
  */
 const ROLE_LABEL: Partial<Record<string, string>> = {
-  STUDENT: 'Ward',
+  STUDENT: 'Participant',
 };
 
 export default function Navbar() {

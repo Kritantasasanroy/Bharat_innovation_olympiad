@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 const ROLE_LABEL: Partial<Record<string, string>> = {
-    STUDENT: 'Ward',
+    STUDENT: 'Participant',
 };
 
 /** The five items that fit a thumb-width bottom bar without crowding it. */

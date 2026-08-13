@@ -59,7 +59,7 @@ const STEPS: { id: Step; label: string }[] = [
 
 const SUBTITLES: Record<Step, string> = {
     presence: 'Please read this before you begin',
-    details: 'Create your ward account',
+    details: 'Create your participant account',
     verify: 'Verify your email',
     face: 'Enrol your face',
     guardian: 'Parent or guardian details',
@@ -220,6 +220,15 @@ export default function RegisterPage() {
         }
         if (!formData.email.trim()) {
             setError('Please enter your email address.');
+            return;
+        }
+        // Mandatory even though its OTP verification is optional: this is the
+        // number every WhatsApp notification (submission, schedule, result,
+        // reminder) is sent to, stored as `phoneRaw` the moment it's typed —
+        // see `AuthService.syncUser`. A ward with no number on file gets no
+        // WhatsApp message at all, only email.
+        if (!isValidPhone(phone)) {
+            setError('Please enter a valid mobile number.');
             return;
         }
         // School is required — checked here as well as server-side so the student
@@ -401,7 +410,7 @@ export default function RegisterPage() {
                     <div className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor, no photo is saved.
-                            This step cannot be skipped, and <strong>the ward must do it themselves</strong>.
+                            This step cannot be skipped, and <strong>the participant must do it themselves</strong>.
                         </p>
 
                         {faceMsg && (
@@ -473,7 +482,7 @@ export default function RegisterPage() {
 
                         <div className="input-group">
                             <label className="input-label" htmlFor="phone">
-                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional, lets you sign in by OTP)</span>
+                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(required: we send exam updates here on WhatsApp)</span>
                             </label>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <input
@@ -481,6 +490,7 @@ export default function RegisterPage() {
                                     className="input-field" placeholder="+91 98765 43210"
                                     value={phone}
                                     onChange={(e) => { setPhone(e.target.value); setPhoneOtpSent(false); setPhoneMsg(''); }}
+                                    required
                                     suppressHydrationWarning
                                 />
                                 <button
