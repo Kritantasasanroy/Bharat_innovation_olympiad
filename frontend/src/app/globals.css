@@ -4244,16 +4244,28 @@ textarea.form-control {
   color: var(--text-tertiary);
 }
 
-/* Narrow screens: keep the face and the headline, drop the second line — and
-   lift it clear of the feedback tab, which sits on the same edge. */
-@media (max-width: 640px) {
+/* Phone (same breakpoint `useIsMobile` and every `mob-*` screen uses, so this
+   lines up with tablet staying on the desktop layout below): the bottom-right
+   pill sat under the mobile bottom tab bar and the feedback tab's edge, and
+   was effectively invisible. Phone gets a small round face-only button
+   top-left, clear of both the bottom tab bar and the sticky top bar's own
+   left-aligned logo. Tablet and desktop are untouched — they still get the
+   full "Need help?" pill bottom-right, styled above. */
+@media (max-width: 768px) {
   .limon-help {
-    right: var(--space-3, 12px);
-    bottom: var(--space-3, 12px);
-    padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+    top: 64px;
+    left: var(--space-3, 12px);
+    right: auto;
+    bottom: auto;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
   }
-  .limon-help__label small { display: none; }
-  .limon-help__label { font-size: 0.8rem; }
+  .limon-help__label { display: none; }
+  .limon-help__face { width: 100%; height: 100%; }
+  .limon-help__face > svg { width: 26px; margin-top: 3px; }
 }
 
 /**
@@ -5328,9 +5340,6 @@ body { max-width: 100%; overflow-x: hidden; }
 /* Compensates for `.mob-tabbar` being fixed (out of document flow) so it
    never sits on top of a page's own last element. */
 body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom, 0)); }
-body.has-mobile-tabbar .limon-help {
-  bottom: calc(54px + env(safe-area-inset-bottom, 0) + 14px);
-}
 
 /* Mobile page shell: the padding/max-width every `mob-*` screen composes
    inside of, mirroring the desktop `.container`/`.page-content` rhythm at
