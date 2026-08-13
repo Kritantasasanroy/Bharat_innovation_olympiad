@@ -184,15 +184,7 @@ export default function RegisterPage() {
             setError('Please enter your email address.');
             return;
         }
-        // Mandatory even though its OTP verification is optional: this is the
-        // number every WhatsApp notification (submission, schedule, result,
-        // reminder) is sent to, stored as `phoneRaw` the moment it's typed —
-        // see `AuthService.syncUser`. A ward with no number on file gets no
-        // WhatsApp message at all, only email.
-        if (!isValidPhone(phone)) {
-            setError('Please enter a valid mobile number.');
-            return;
-        }
+
         // School is required — checked here as well as server-side so the student
         // is told before an OTP is spent rather than after.
         if (!school) {
@@ -441,14 +433,13 @@ export default function RegisterPage() {
 
                         <div className="input-group">
                             <label className="input-label" htmlFor="phone">
-                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(required: we send exam updates here on WhatsApp)</span>
+                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(for WhatsApp exam updates)</span>
                             </label>
                             <input
                                 id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
                                 className="input-field" placeholder="+91 98765 43210"
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value)}
-                                required
                                 suppressHydrationWarning
                             />
                         </div>

@@ -25,8 +25,8 @@ export class SyncUserDto {
      * which has its own, separate reliability problems.
      */
     @IsString()
-    @IsNotEmpty({ message: 'A mobile number is required.' })
-    phone: string;
+    @IsOptional()
+    phone?: string;
 
     /** The SMS code for `phone`. Required whenever `phone` is supplied. */
     @IsString()
