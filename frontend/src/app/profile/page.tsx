@@ -86,7 +86,12 @@ export default function ProfilePage() {
         setEnrollMsg({ text: 'Loading face detection models…', type: 'info' });
         setCameraActive(true);
         try {
-            await startEnrollmentCamera();
+            const stream = await startEnrollmentCamera();
+            if (!stream) {
+                setCameraActive(false);
+                setEnrollMsg({ text: 'Could not access camera. Please allow camera permissions and try again.', type: 'error' });
+                return;
+            }
             setEnrollMsg({ text: 'Position your face in the frame and click Capture.', type: 'info' });
         } catch {
             setCameraActive(false);
@@ -97,21 +102,25 @@ export default function ProfilePage() {
     const handleCapture = async () => {
         setEnrolling(true);
         setEnrollMsg({ text: 'Capturing…', type: 'info' });
-        const descriptor = await captureDescriptor();
-        if (!descriptor) {
+        try {
+            const descriptor = await captureDescriptor();
+            if (!descriptor) {
+                setEnrollMsg({ text: 'No face detected. Ensure your face is clearly visible and try again.', type: 'error' });
+                return;
+            }
+            const ok = await enrollFace(descriptor);
+            stopProctoring();
+            setCameraActive(false);
+            if (ok) {
+                setEnrollmentStatus('enrolled');
+                setEnrollMsg({ text: 'Face enrolled successfully! You are ready for AI-proctored exams.', type: 'success' });
+            } else {
+                setEnrollMsg({ text: 'Enrollment failed. Please try again.', type: 'error' });
+            }
+        } catch {
+            setEnrollMsg({ text: 'Enrollment error. Please try again.', type: 'error' });
+        } finally {
             setEnrolling(false);
-            setEnrollMsg({ text: 'No face detected. Ensure your face is clearly visible and try again.', type: 'error' });
-            return;
-        }
-        const ok = await enrollFace(descriptor);
-        stopProctoring();
-        setCameraActive(false);
-        setEnrolling(false);
-        if (ok) {
-            setEnrollmentStatus('enrolled');
-            setEnrollMsg({ text: 'Face enrolled successfully! You are ready for AI-proctored exams.', type: 'success' });
-        } else {
-            setEnrollMsg({ text: 'Enrollment failed. Please try again.', type: 'error' });
         }
     };
 

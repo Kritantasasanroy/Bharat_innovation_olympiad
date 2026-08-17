@@ -128,7 +128,12 @@ export default function RegisterPage() {
         setFaceMsg('Loading face detection models…');
         setFaceCameraOn(true);
         try {
-            await startEnrollmentCamera();
+            const stream = await startEnrollmentCamera();
+            if (!stream) {
+                setFaceCameraOn(false);
+                setFaceMsg('Camera unavailable. Make sure a webcam is connected and permission is granted.');
+                return;
+            }
             setFaceMsg('Position your face in the frame and click Capture.');
         } catch (err) {
             setFaceCameraOn(false);
@@ -139,24 +144,28 @@ export default function RegisterPage() {
     const handleCaptureFace = async () => {
         setFaceCapturing(true);
         setFaceMsg('Capturing…');
-        const descriptor = await captureDescriptor();
-        if (!descriptor) {
+        try {
+            const descriptor = await captureDescriptor();
+            if (!descriptor) {
+                setFaceMsg(
+                    "We couldn't see a face in the picture. Sit facing the camera in good light, with nothing covering your face, then capture again.",
+                );
+                return;
+            }
+            const ok = await enrollFace(descriptor);
+            if (ok) {
+                stopProctoring();
+                // Face enrolled — proceed to payment, then parent consent follows.
+                setStep('payment');
+            } else {
+                setFaceMsg(
+                    "We couldn't save your face scan. Make sure your whole face is lit and in frame, then capture again.",
+                );
+            }
+        } catch (err) {
+            setFaceMsg(describeError(err, 'capture your face scan'));
+        } finally {
             setFaceCapturing(false);
-            setFaceMsg(
-                "We couldn't see a face in the picture. Sit facing the camera in good light, with nothing covering your face, then capture again.",
-            );
-            return;
-        }
-        const ok = await enrollFace(descriptor);
-        stopProctoring();
-        setFaceCapturing(false);
-        if (ok) {
-            // Face enrolled — proceed to payment, then parent consent follows.
-            setStep('payment');
-        } else {
-            setFaceMsg(
-                "We couldn't save your face scan. Make sure your whole face is lit and in frame, then capture again.",
-            );
         }
     };
 
@@ -384,7 +393,7 @@ export default function RegisterPage() {
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
                             {!faceCameraOn ? (
                                 <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={handleStartFaceCapture}>
                                     Enable Camera & Enroll Face
@@ -399,6 +408,23 @@ export default function RegisterPage() {
                                     {faceCapturing ? 'Saving…' : modelsLoaded ? 'Capture & Continue' : loadingProgress || 'Loading models…'}
                                 </button>
                             )}
+
+                            <button
+                                type="button"
+                                className="btn"
+                                onClick={() => { stopProctoring(); setStep('payment'); }}
+                                style={{
+                                    background: 'transparent',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '0.85rem',
+                                    textDecoration: 'underline',
+                                    border: 'none',
+                                    padding: '0.25rem',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Skip for now (Enroll face later from a device with camera)
+                            </button>
                         </div>
                     </div>
                 ) : step === 'details' ? (

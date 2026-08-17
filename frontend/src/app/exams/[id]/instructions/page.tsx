@@ -301,19 +301,23 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const handleCaptureFace = async () => {
         setFaceCapturing(true);
         setFaceMsg('Capturing…');
-        const descriptor = await captureDescriptor();
-        if (!descriptor) {
+        try {
+            const descriptor = await captureDescriptor();
+            if (!descriptor) {
+                setFaceMsg('No face detected. Ensure your face is clearly visible and try again.');
+                return;
+            }
+            const ok = await enrollFace(descriptor);
+            if (ok) {
+                setFaceEnrollStatus('enrolled');
+                setFaceMsg('Face enrolled successfully!');
+            } else {
+                setFaceMsg('Enrollment failed. Please try again.');
+            }
+        } catch {
+            setFaceMsg('Enrollment error. Please try again.');
+        } finally {
             setFaceCapturing(false);
-            setFaceMsg('No face detected. Ensure your face is clearly visible and try again.');
-            return;
-        }
-        const ok = await enrollFace(descriptor);
-        setFaceCapturing(false);
-        if (ok) {
-            setFaceEnrollStatus('enrolled');
-            setFaceMsg('Face enrolled successfully!');
-        } else {
-            setFaceMsg('Enrollment failed. Please try again.');
         }
     };
 

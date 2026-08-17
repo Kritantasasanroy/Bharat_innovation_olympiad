@@ -415,9 +415,9 @@ export function useFaceProctor({
 
     // One-off camera + model load for the enrollment UI — no periodic detection
     // loop and no attemptId dependency, unlike startProctoring() (used during exams).
-    const startEnrollmentCamera = useCallback(async () => {
+    const startEnrollmentCamera = useCallback(async (): Promise<MediaStream | null> => {
         await loadModels();
-        await startCamera();
+        return await startCamera();
     }, [loadModels, startCamera]);
 
     /**
@@ -519,18 +519,27 @@ export function useFaceProctor({
     const captureDescriptor = useCallback(async (): Promise<number[] | null> => {
         const faceapi = faceApiRef.current;
         const video = videoElementRef.current;
-        if (!faceapi || !video) return null;
+        if (!faceapi || !video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+            return null;
+        }
 
-        const detection = await faceapi
-            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
-                inputSize: DETECTOR_INPUT_SIZE,
-                scoreThreshold: DETECTOR_SCORE_THRESHOLD,
-            }))
-            .withFaceLandmarks(true)
-            .withFaceDescriptor();
+        try {
+            const detectionPromise = faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                    inputSize: DETECTOR_INPUT_SIZE,
+                    scoreThreshold: DETECTOR_SCORE_THRESHOLD,
+                }))
+                .withFaceLandmarks(true)
+                .withFaceDescriptor();
 
-        if (!detection) return null;
-        return Array.from(detection.descriptor);
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
+            const detection = await Promise.race([detectionPromise, timeoutPromise]);
+
+            if (!detection) return null;
+            return Array.from(detection.descriptor);
+        } catch {
+            return null;
+        }
     }, []);
 
     useEffect(() => {
