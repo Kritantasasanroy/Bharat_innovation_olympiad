@@ -251,3 +251,220 @@ export function parentApprovalEmail(vars: {
         { label: 'Review & Confirm Approval', url: vars.approvalLink },
     );
 }
+
+// ── Partner lifecycle ────────────────────────────────────────────────────
+//
+// A partner's own login is email + password (chosen at apply time); the
+// access token is a second, staff-issued path. Both are worth surfacing by
+// mail, because today the only handover mechanism is a human copying a card.
+
+export function partnerApplicationReceivedEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+}): RenderedEmail {
+    return build(
+        "We've received your partner application",
+        `Thanks, ${vars.contactPerson}`,
+        `<p style="margin:0 0 12px;">We've received <strong>${vars.orgName}</strong>'s application for Bharat Innovation Olympiad partner access.</p>
+     <p style="margin:0;">Our team reviews every application by hand. We'll email you as soon as a decision is made — there's nothing further to do right now.</p>`,
+    );
+}
+
+export function partnerApprovedEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO partner access is approved',
+        `Welcome aboard, ${vars.contactPerson}`,
+        `<p style="margin:0 0 12px;"><strong>${vars.orgName}</strong> is now an approved Bharat Innovation Olympiad partner.</p>
+     <p style="margin:0 0 12px;">Sign in with the email and password you chose when applying, or with the access token below.</p>
+     ${factTable([factRow('Access token', vars.accessToken)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">Keep this token private — anyone who has it can sign in as your organisation. Contact us if it ever needs to be rotated.</p>`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}
+
+export function partnerRejectedEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    reason: string;
+}): RenderedEmail {
+    return build(
+        'Update on your BIO partner application',
+        `Hi ${vars.contactPerson}`,
+        `<p style="margin:0 0 12px;">We've reviewed <strong>${vars.orgName}</strong>'s application for partner access, and are not able to approve it at this time.</p>
+     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+     <p style="margin:0;color:#6b7280;font-size:14px;">If you believe this is a mistake or your circumstances have changed, you're welcome to get in touch or reapply.</p>`,
+    );
+}
+
+export function partnerRevokedEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    reason: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO partner access has been revoked',
+        `Hi ${vars.contactPerson}`,
+        `<p style="margin:0 0 12px;"><strong>${vars.orgName}</strong>'s Bharat Innovation Olympiad partner portal access has been revoked, effective immediately.</p>
+     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+     <p style="margin:0;color:#6b7280;font-size:14px;">Your existing access token no longer works. Contact us if you have questions about this decision.</p>`,
+    );
+}
+
+export function partnerAccessTokenRotatedEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO partner access token has been renewed',
+        `Hi ${vars.contactPerson}`,
+        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${vars.orgName}</strong>. Your previous token no longer works.</p>
+     ${factTable([factRow('New access token', vars.accessToken)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">If you didn't request this, contact us right away.</p>`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}
+
+/** Re-sent on request, not framed as a fresh decision. */
+export function partnerAccessResentEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO partner access details',
+        `Hi ${vars.contactPerson}`,
+        `<p style="margin:0;">As requested, here are ${vars.orgName}'s current Bharat Innovation Olympiad partner portal access details.</p>
+     ${factTable([factRow('Access token', vars.accessToken)])}`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}
+
+/** Notifies the onboarding partner when a school it submitted is decided. Never sent for a self-applied school. */
+export function partnerSchoolStatusChangedEmail(vars: {
+    contactPerson: string;
+    schoolName: string;
+    status: 'APPROVED' | 'REJECTED';
+    portalUrl: string;
+}): RenderedEmail {
+    const approved = vars.status === 'APPROVED';
+    return build(
+        approved ? `${vars.schoolName} is now approved` : `Update on ${vars.schoolName}'s application`,
+        `Hi ${vars.contactPerson}`,
+        approved
+            ? `<p style="margin:0;">The school you onboarded, <strong>${vars.schoolName}</strong>, has been approved. Its coordinator has been sent their own access details, and it now appears in your Schools list.</p>`
+            : `<p style="margin:0;">The school you onboarded, <strong>${vars.schoolName}</strong>, was not approved this time. You're welcome to onboard it again once its details are corrected.</p>`,
+        approved ? { label: 'View your schools', url: `${vars.portalUrl}/dashboard/schools` } : undefined,
+    );
+}
+
+// ── School lifecycle ─────────────────────────────────────────────────────
+//
+// A school has no password: the access token issued on approval is the only
+// credential a coordinator ever gets, so — unlike the partner mails above —
+// this one is not optional context, it's the only way in.
+
+export function schoolApplicationReceivedEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+}): RenderedEmail {
+    return build(
+        "We've received your school's application",
+        `Thanks, ${vars.coordinatorName}`,
+        `<p style="margin:0 0 12px;">We've received <strong>${vars.schoolName}</strong>'s application for Bharat Innovation Olympiad school portal access.</p>
+     <p style="margin:0;">Our team reviews every application by hand. We'll email you as soon as a decision is made, with your access token if approved.</p>`,
+    );
+}
+
+export function schoolApprovedEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    schoolCode: string | null;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO school portal access is ready',
+        `Welcome, ${vars.coordinatorName}`,
+        `<p style="margin:0 0 12px;"><strong>${vars.schoolName}</strong> is now approved on the Bharat Innovation Olympiad. Your access token below is the only credential you need — there is no separate password.</p>
+     ${factTable([
+         ...(vars.schoolCode ? [factRow('School code', vars.schoolCode)] : []),
+         factRow('Access token', vars.accessToken),
+     ])}
+     <p style="margin:16px 0 0;font-weight:600;color:#111827;">What happens next</p>
+     ${steps([
+         'Sign in with the access token above.',
+         'Add your students to the roster — they claim their own account by registering with the same email.',
+         'Pick an exam slot; your whole school sits together in it.',
+     ])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">Keep this token private — anyone who has it can sign in as your school. Contact us if it ever needs to be rotated.</p>`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}
+
+export function schoolRejectedEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    reason: string;
+}): RenderedEmail {
+    return build(
+        "Update on your school's BIO application",
+        `Hi ${vars.coordinatorName}`,
+        `<p style="margin:0 0 12px;">We've reviewed <strong>${vars.schoolName}</strong>'s application for school portal access, and are not able to approve it at this time.</p>
+     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+     <p style="margin:0;color:#6b7280;font-size:14px;">If you believe this is a mistake or your circumstances have changed, you're welcome to get in touch or reapply.</p>`,
+    );
+}
+
+export function schoolRevokedEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    reason: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO school portal access has been revoked',
+        `Hi ${vars.coordinatorName}`,
+        `<p style="margin:0 0 12px;"><strong>${vars.schoolName}</strong>'s Bharat Innovation Olympiad school portal access has been revoked, effective immediately.</p>
+     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+     <p style="margin:0;color:#6b7280;font-size:14px;">Your existing access token no longer works, and coordinator sign-in has been disabled. Contact us if you have questions about this decision.</p>`,
+    );
+}
+
+export function schoolAccessTokenRotatedEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO school access token has been renewed',
+        `Hi ${vars.coordinatorName}`,
+        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${vars.schoolName}</strong>. Your previous token no longer works.</p>
+     ${factTable([factRow('New access token', vars.accessToken)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">If you didn't request this, contact us right away.</p>`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}
+
+/** Re-sent on request, not framed as a fresh decision. */
+export function schoolAccessResentEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    accessToken: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO school access details',
+        `Hi ${vars.coordinatorName}`,
+        `<p style="margin:0;">As requested, here are ${vars.schoolName}'s current Bharat Innovation Olympiad school portal access details.</p>
+     ${factTable([factRow('Access token', vars.accessToken)])}`,
+        { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
+    );
+}

@@ -58,4 +58,12 @@ export class SchoolController {
     rotate(@Param('id') id: string, @CurrentUser('id') adminId: string) {
         return this.schoolService.rotateToken(id, adminId);
     }
+
+    /** ADMIN — re-send the current access details, e.g. "they said they never got the email". */
+    @Post('admin/school-requests/:id/resend')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    resend(@Param('id') id: string, @CurrentUser('id') adminId: string) {
+        return this.schoolService.resendAccess(id, adminId);
+    }
 }

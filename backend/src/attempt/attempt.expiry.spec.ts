@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
+import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
@@ -55,7 +56,14 @@ describe('attempt expiry', () => {
             attemptItem: { upsert: jest.fn().mockResolvedValue({}) },
         };
 
-        const service = new AttemptService(prisma as any, {} as any, {} as any, {} as any, whatsAppStub());
+        const service = new AttemptService(
+            prisma as any,
+            {} as any,
+            {} as any,
+            {} as any,
+            whatsAppStub(),
+            notificationServiceStub(),
+        );
         const autoSubmit = jest
             .spyOn(service, 'autoSubmit')
             .mockImplementation(async () => undefined as never);

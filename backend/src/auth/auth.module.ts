@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { getJwtSecret } from '../common/jwt-secret';
 import { PartnerModule } from '../partner/partner.module';
 import { SlotModule } from '../slot/slot.module';
 import { UserModule } from '../user/user.module';
@@ -13,7 +14,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     imports: [
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({
-            secret: process.env.JWT_SECRET || 'dev-jwt-secret',
+            secret: getJwtSecret(),
             signOptions: { expiresIn: '15m' },
         }),
         SlotModule,

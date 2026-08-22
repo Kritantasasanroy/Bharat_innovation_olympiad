@@ -89,6 +89,16 @@ interface Card {
     phone?: string;
 }
 
+interface DecisionResponse {
+    id: string;
+    status: Status;
+    partnerId?: string | null;
+    schoolId?: string | null;
+    emailSent: boolean;
+}
+
+type EmailNotice = { type: 'success' | 'warn'; message: string } | null;
+
 const STATUS_CLASS: Record<Status, string> = {
     PENDING: 'badge badge-warning',
     APPROVED: 'badge badge-success',
@@ -201,6 +211,7 @@ export default function AccessPage() {
     const [schools, setSchools] = useState<SchoolRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [emailNotice, setEmailNotice] = useState<EmailNotice>(null);
 
     const [kindFilter, setKindFilter] = useState<'ALL' | Kind>('ALL');
     const [statusFilter, setStatusFilter] = useState<'ALL' | Status>('ALL');
@@ -299,12 +310,30 @@ export default function AccessPage() {
         if (!pending || !reason.trim()) return;
         setSubmitting(true);
         setError(null);
+        setEmailNotice(null);
         const { row, decision } = pending;
         try {
-            await api.patch(`${basePath(row.kind)}/${row.id}`, { decision, reason: reason.trim() });
+            const { data } = await api.patch<DecisionResponse>(`${basePath(row.kind)}/${row.id}`, {
+                decision,
+                reason: reason.trim(),
+            });
             setPending(null);
             setReason('');
             await load();
+
+            const action = decision === 'APPROVED' ? 'approved' : decision === 'REJECTED' ? 'rejected' : 'revoked';
+            if (data.emailSent) {
+                setEmailNotice({
+                    type: 'success',
+                    message: `${row.title} was ${action}. A notification email was sent to ${row.email}.`,
+                });
+            } else {
+                setEmailNotice({
+                    type: 'warn',
+                    message: `${row.title} was ${action}, but the notification email could not be sent. Check the email provider configuration.`,
+                });
+            }
+
             // A fresh approval is exactly when staff need the token to hand over.
             if (decision === 'APPROVED') await openCard(row.kind, row.id);
         } catch {
@@ -321,11 +350,27 @@ export default function AccessPage() {
     async function rotate() {
         if (!card) return;
         setCardBusy(true);
+        setEmailNotice(null);
         try {
-            const { data } = await api.post<Card>(`${basePath(card.kind)}/${card.id}/rotate-token`);
-            setCard(data);
+            const { data } = await api.post<Card & { emailSent: boolean }>(
+                `${basePath(card.kind)}/${card.id}/rotate-token`,
+            );
+            const { emailSent, ...cardData } = data;
+            setCard(cardData as Card);
             setRevealed(true);
             await load();
+
+            if (emailSent) {
+                setEmailNotice({
+                    type: 'success',
+                    message: `A new access token was issued and emailed to ${cardData.email ?? cardData.coordinatorEmail ?? 'the contact'}.`,
+                });
+            } else {
+                setEmailNotice({
+                    type: 'warn',
+                    message: 'Token rotated, but the notification email could not be sent. Copy the token and hand it over manually.',
+                });
+            }
         } catch {
             setError('Could not rotate the token.');
         } finally {
@@ -338,6 +383,31 @@ export default function AccessPage() {
         setCopied(what);
         setTimeout(() => setCopied(null), 1800);
     }
+
+    async function resendEmail(kind: Kind, id: string, to: string) {
+        setCardBusy(true);
+        setEmailNotice(null);
+        try {
+            const { data } = await api.post<{ emailSent: boolean }>(`${basePath(kind)}/${id}/resend`);
+            if (data.emailSent) {
+                setEmailNotice({
+                    type: 'success',
+                    message: `Access details resent to ${to}.`,
+                });
+            } else {
+                setEmailNotice({
+                    type: 'warn',
+                    message: 'Could not resend the access email. Copy the token from the card and send it manually.',
+                });
+            }
+        } catch {
+            setError('Could not resend the access email.');
+        } finally {
+            setCardBusy(false);
+        }
+    }
+
+    const resend = (row: Row) => resendEmail(row.kind, row.id, row.email);
 
     return (
         <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
@@ -380,6 +450,12 @@ export default function AccessPage() {
                 </div>
 
                 {error && <div className="form-error">{error}</div>}
+
+                {emailNotice && (
+                    <div className={emailNotice.type === 'success' ? 'form-success' : 'form-warn'}>
+                        {emailNotice.message}
+                    </div>
+                )}
 
                 <div className="glass-card table-responsive">
                     {loading ? (
@@ -442,12 +518,24 @@ export default function AccessPage() {
                                         <td style={{ textAlign: 'right' }}>
                                             <div className="row-actions">
                                                 {row.tokenIssuedAt && (
-                                                    <button
-                                                        className="btn btn-sm btn-secondary"
-                                                        onClick={() => void openCard(row.kind, row.id)}
-                                                    >
-                                                        View card
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            onClick={() => void openCard(row.kind, row.id)}
+                                                        >
+                                                            View card
+                                                        </button>
+                                                        {row.status === 'APPROVED' && (
+                                                            <button
+                                                                className="btn btn-sm btn-secondary"
+                                                                title="Resend access details by email"
+                                                                onClick={() => void resend(row)}
+                                                                disabled={cardBusy}
+                                                            >
+                                                                Resend email
+                                                            </button>
+                                                        )}
+                                                    </>
                                                 )}
                                                 {actionsFor(row.status).map((decision) => (
                                                     <button
@@ -670,6 +758,15 @@ export default function AccessPage() {
                                     onClick={() => void copy('card', cardAsText(card))}
                                 >
                                     {copied === 'card' ? 'Copied' : 'Copy full card'}
+                                </button>
+                                <button
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() =>
+                                        resendEmail(card.kind, card.id, card.email ?? card.coordinatorEmail ?? '')
+                                    }
+                                    disabled={cardBusy}
+                                >
+                                    Resend email
                                 </button>
                                 <button className="btn btn-sm btn-danger" onClick={rotate} disabled={cardBusy}>
                                     {cardBusy ? 'Working…' : 'Rotate'}

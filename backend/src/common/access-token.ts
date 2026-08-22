@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { getJwtSecret } from './jwt-secret';
 
 /**
  * Access tokens are the credential an approved school or partner uses to sign
@@ -115,7 +116,7 @@ const IV_BYTES = 12;
  * the digest is independent) and staff must rotate the token to re-issue a card.
  */
 function key(): Buffer {
-    const secret = process.env.ACCESS_TOKEN_KEY || process.env.JWT_SECRET || 'dev-jwt-secret';
+    const secret = process.env.ACCESS_TOKEN_KEY || getJwtSecret();
     return crypto.scryptSync(secret, 'bio-access-token-v1', 32);
 }
 

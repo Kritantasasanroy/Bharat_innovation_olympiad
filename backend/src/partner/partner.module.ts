@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { getJwtSecret } from '../common/jwt-secret';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ResultsModule } from '../results/results.module';
 import { SchoolModule } from '../school/school.module';
@@ -21,7 +22,7 @@ import { PartnerService } from './partner.service';
         // Partner result downloads reuse the admin export builder, scoped to the
         // partner's own schools and gated on the PARTNERS release audience.
         ResultsModule,
-        JwtModule.register({ secret: process.env.JWT_SECRET || 'dev-jwt-secret' }),
+        JwtModule.register({ secret: getJwtSecret() }),
     ],
     controllers: [PartnerController, PartnerSchoolController, PartnerPortalController],
     providers: [

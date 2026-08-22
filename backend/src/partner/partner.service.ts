@@ -14,6 +14,7 @@ import {
     openAccessToken,
     sealAccessToken,
 } from '../common/access-token';
+import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartnerAdminApiClient } from './admin-api.client';
 import { ApplyPartnerDto, DecidePartnerDto, PartnerLoginDto } from './dto/partner.dto';
@@ -44,6 +45,7 @@ export class PartnerService {
         private prisma: PrismaService,
         private jwt: JwtService,
         private adminApi: PartnerAdminApiClient,
+        private notifications: NotificationService,
     ) {}
 
     /** PUBLIC self-service application — no token, and no engine round-trip. */
@@ -65,6 +67,12 @@ export class PartnerService {
                 status: 'PENDING',
             },
         });
+
+        await this.notifications.sendPartnerApplicationReceived(
+            request.email,
+            request.contactPerson,
+            request.orgName,
+        );
 
         return { status: request.status, email: request.email, orgName: request.orgName };
     }
@@ -217,7 +225,37 @@ export class PartnerService {
             },
         });
 
-        return { id: updated.id, status: updated.status, partnerId: updated.partnerId };
+        // A partner's own inbox is the only place they will learn about this
+        // decision — there is no in-app notification, so a failed send here
+        // means they simply never find out. `emailSent` lets the admin queue
+        // show that plainly instead of assuming the mail went out.
+        let emailSent = false;
+        if (dto.decision === 'APPROVED') {
+            // Re-approving after a revoke issues no new token; the existing
+            // sealed one is still what the partner needs to see.
+            const token = plaintext ?? openAccessToken(updated.accessTokenSealed);
+            if (token) {
+                emailSent = await this.notifications.sendPartnerApproved(updated.email, {
+                    contactPerson: updated.contactPerson,
+                    orgName: updated.orgName,
+                    accessToken: token,
+                });
+            }
+        } else if (dto.decision === 'REJECTED') {
+            emailSent = await this.notifications.sendPartnerRejected(updated.email, {
+                contactPerson: updated.contactPerson,
+                orgName: updated.orgName,
+                reason: dto.reason,
+            });
+        } else {
+            emailSent = await this.notifications.sendPartnerRevoked(updated.email, {
+                contactPerson: updated.contactPerson,
+                orgName: updated.orgName,
+                reason: dto.reason,
+            });
+        }
+
+        return { id: updated.id, status: updated.status, partnerId: updated.partnerId, emailSent };
     }
 
     /**
@@ -275,7 +313,46 @@ export class PartnerService {
             },
         });
 
-        return this.card(id);
+        const emailSent = await this.notifications.sendPartnerTokenRotated(request.email, {
+            contactPerson: request.contactPerson,
+            orgName: request.orgName,
+            accessToken: plaintext,
+        });
+
+        return { ...(await this.card(id)), emailSent };
+    }
+
+    /**
+     * ADMIN — re-send the partner's current access details, unprompted by any
+     * new decision. For when a partner says the original mail never arrived.
+     */
+    async resendAccess(id: string, adminId: string) {
+        const request = await this.prisma.partnerRequest.findUnique({ where: { id } });
+        if (!request) throw new NotFoundException('Partner request not found.');
+        if (request.status !== 'APPROVED') {
+            throw new ForbiddenException('Only an approved partner has access details to resend.');
+        }
+        const token = openAccessToken(request.accessTokenSealed);
+        if (!token) {
+            throw new ForbiddenException('No access token on file — rotate one instead of resending.');
+        }
+
+        const emailSent = await this.notifications.sendPartnerAccessResent(request.email, {
+            contactPerson: request.contactPerson,
+            orgName: request.orgName,
+            accessToken: token,
+        });
+
+        await this.prisma.auditLog.create({
+            data: {
+                userId: adminId,
+                action: 'partner.access.resent',
+                resource: 'partner-request',
+                details: { partnerRequestId: id, emailSent },
+            },
+        });
+
+        return { emailSent };
     }
 
     // ── Partner self-service profile (item 14) ───────────────────────────────
@@ -350,5 +427,36 @@ export class PartnerService {
         });
 
         return this.profile(partnerId);
+    }
+
+    // ── Admin visibility into the partner engine ─────────────────────────────
+    //
+    // admin-frontend previously had no view of anything the admin-api engine
+    // (PRD-046) tracks for a partner — campaigns, funnel, commission
+    // statements, payouts — even though staff could approve the partner that
+    // owns all of it. These proxy the engine so the browser only ever talks to
+    // this backend, reusing the retry/staff-token logic already in
+    // `PartnerAdminApiClient` instead of duplicating it client-side.
+
+    /** One fetch for a partner's whole engine workspace: identity, campaigns, funnel, statements, payouts. */
+    async engineSnapshot(partnerId: string) {
+        const [partner, campaigns, funnel, statements, payouts] = await Promise.all([
+            this.adminApi.getPartner(partnerId),
+            this.adminApi.listCampaigns(partnerId),
+            this.adminApi.getFunnel(partnerId),
+            this.adminApi.listStatements(partnerId),
+            this.adminApi.listPayouts(partnerId),
+        ]);
+        return { partner, campaigns, funnel, statements, payouts };
+    }
+
+    /** ADMIN — close out a commission period for a partner on their behalf. */
+    generateStatement(partnerId: string, period: string) {
+        return this.adminApi.generateStatement(partnerId, period);
+    }
+
+    /** ADMIN/FINANCE — advance a payout: PENDING -> SIGNED_OFF -> RELEASED. */
+    updatePayoutStatus(payoutId: string, status: 'SIGNED_OFF' | 'RELEASED', approver?: string, reason?: string) {
+        return this.adminApi.updatePayoutStatus(payoutId, status, approver, reason);
     }
 }

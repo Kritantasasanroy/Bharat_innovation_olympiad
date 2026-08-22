@@ -1,4 +1,5 @@
 import { AttemptService } from './attempt.service';
+import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
 
 /**
@@ -39,7 +40,14 @@ function buildSections() {
 /** `buildQuestionSet` is private; these tests exercise it directly on purpose. */
 function build(userId: string, sections = buildSections()) {
     // `buildQuestionSet` is pure — none of the injected services are touched.
-    const service = new AttemptService(null as any, null as any, null as any, null as any, whatsAppStub());
+    const service = new AttemptService(
+        null as any,
+        null as any,
+        null as any,
+        null as any,
+        whatsAppStub(),
+        notificationServiceStub(),
+    );
     return (service as any).buildQuestionSet(sections, 'exam-1', userId, 30, 50, 20) as any[];
 }
 

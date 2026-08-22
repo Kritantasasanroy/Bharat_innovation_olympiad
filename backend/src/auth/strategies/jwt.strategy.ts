@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { passportJwtSecret } from 'jwks-rsa';
+import { getJwtSecret } from '../../common/jwt-secret';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface JwtPayload {
@@ -26,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
                     );
                     // Admin tokens are HS256 (signed with local secret)
                     if (header.alg === 'HS256') {
-                        return done(null, process.env.JWT_SECRET || 'dev-jwt-secret');
+                        return done(null, getJwtSecret());
                     }
                     // Neon Auth tokens are RS256 — use JWKS
                     passportJwtSecret({

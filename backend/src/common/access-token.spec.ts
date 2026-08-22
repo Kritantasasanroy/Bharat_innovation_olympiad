@@ -9,6 +9,9 @@ import {
     sealAccessToken,
 } from './access-token';
 
+// Seal/open tests need a deterministic key; they never touch live credentials.
+process.env.ACCESS_TOKEN_KEY = process.env.ACCESS_TOKEN_KEY || 'unit-test-access-token-key';
+
 describe('generateAccessToken', () => {
     it('emits the documented shape for each kind', () => {
         expect(generateAccessToken('SCHOOL')).toMatch(accessTokenPattern('SCHOOL'));

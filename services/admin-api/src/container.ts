@@ -105,6 +105,7 @@ export function buildContainer(adapters: PartnerAdapters): PartnerContainer {
 		}),
 		payoutService: new PayoutService({
 			payouts: adapters.payouts,
+			partners: adapters.partners,
 			clock: adapters.clock,
 			events: adapters.events,
 			audit: adapters.audit,

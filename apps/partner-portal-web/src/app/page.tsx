@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -28,11 +29,24 @@ export default function HomePage() {
 			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
 				<ThemeToggle />
 			</div>
+			<div style={{ textAlign: "center", marginBottom: "2rem" }}>
+				<Image
+					src="/bio-logo.png"
+					alt="Bharat Innovation Olympiad"
+					width={211}
+					height={64}
+					style={{ height: "64px", width: "auto", objectFit: "contain" }}
+				/>
+				<p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+					by Lemon Ideas · Become Future Ready
+				</p>
+			</div>
 			<div className="page-header">
 				<h1>BIO Partner Portal</h1>
 				<p>
-					Apply as a channel partner, run referral campaigns for institutions and students, and
-					track conversions, commission statements, and payouts — all self-service.
+					Apply as a channel partner for the Bharat Innovation Olympiad, an initiative by Lemon
+					Ideas. Run referral campaigns, track conversions, and earn payouts — all self-service.
+					Become Future Ready.
 				</p>
 			</div>
 

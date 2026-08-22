@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
@@ -40,6 +41,15 @@ export default function LoginPage() {
 		<main className="page">
 			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
 				<ThemeToggle />
+			</div>
+			<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+				<Image
+					src="/bio-logo.png"
+					alt="Bharat Innovation Olympiad"
+					width={160}
+					height={48}
+					style={{ height: "48px", width: "auto", objectFit: "contain" }}
+				/>
 			</div>
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>

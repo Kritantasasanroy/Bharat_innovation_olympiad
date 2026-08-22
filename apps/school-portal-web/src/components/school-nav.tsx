@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,6 +20,19 @@ export function SchoolNav() {
 	return (
 		<nav className="dashboard-nav">
 			<Link href="/dashboard" className="dashboard-nav__brand">
+				<Image
+					src="/bio-logo.png"
+					alt="Bharat Innovation Olympiad"
+					width={160}
+					height={40}
+					style={{
+						height: "40px",
+						width: "auto",
+						objectFit: "contain",
+						display: "block",
+						marginBottom: "0.75rem",
+					}}
+				/>
 				<span className="dashboard-nav__brand-text">Bharat Innovation Olympiad</span>
 				<span className="dashboard-nav__brand-sub">School Portal</span>
 			</Link>

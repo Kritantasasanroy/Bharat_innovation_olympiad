@@ -15,7 +15,9 @@ import {
     randomCode,
     sealAccessToken,
 } from '../common/access-token';
+import { NotificationService } from '../notification/notification.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
+import { PartnerDirectoryService } from '../partner/partner-directory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
@@ -36,6 +38,8 @@ export class SchoolService {
         private prisma: PrismaService,
         private jwt: JwtService,
         private adminApi: PartnerAdminApiClient,
+        private notifications: NotificationService,
+        private partnerDirectory: PartnerDirectoryService,
     ) {}
 
     /**
@@ -94,6 +98,12 @@ export class SchoolService {
                 submittedViaReferralCode: partnerId && referralCode ? referralCode : null,
             },
         });
+
+        await this.notifications.sendSchoolApplicationReceived(
+            request.coordinatorEmail,
+            request.coordinatorName,
+            request.schoolName,
+        );
 
         return {
             status: request.status,
@@ -319,7 +329,56 @@ export class SchoolService {
             return updated;
         });
 
-        return { id: result.id, status: result.status, schoolId: result.schoolId };
+        // A school has no password — this mail (or the resend button on the
+        // access queue) is the only way a coordinator ever learns their token.
+        let emailSent = false;
+        if (dto.decision === 'APPROVED') {
+            // Re-approving after a revoke issues no new token; the existing
+            // sealed one is still what the coordinator needs to see.
+            const token = plaintext ?? openAccessToken(result.accessTokenSealed);
+            const school = result.schoolId
+                ? await this.prisma.school.findUnique({
+                      where: { id: result.schoolId },
+                      select: { code: true },
+                  })
+                : null;
+            if (token) {
+                emailSent = await this.notifications.sendSchoolApproved(result.coordinatorEmail, {
+                    coordinatorName: result.coordinatorName,
+                    schoolName: result.schoolName,
+                    schoolCode: school?.code ?? null,
+                    accessToken: token,
+                });
+            }
+        } else if (dto.decision === 'REJECTED') {
+            emailSent = await this.notifications.sendSchoolRejected(result.coordinatorEmail, {
+                coordinatorName: result.coordinatorName,
+                schoolName: result.schoolName,
+                reason: dto.reason,
+            });
+        } else {
+            emailSent = await this.notifications.sendSchoolRevoked(result.coordinatorEmail, {
+                coordinatorName: result.coordinatorName,
+                schoolName: result.schoolName,
+                reason: dto.reason,
+            });
+        }
+
+        // The partner that onboarded this school learns its status changed the
+        // same way the coordinator does — by mail, not by polling its dashboard.
+        if (
+            result.submittedByPartnerId &&
+            (dto.decision === 'APPROVED' || dto.decision === 'REJECTED')
+        ) {
+            const partner = await this.partnerDirectory.detailsFor(result.submittedByPartnerId, false);
+            await this.notifications.sendPartnerSchoolStatusChanged(partner.email, {
+                contactPerson: partner.contactPerson,
+                schoolName: result.schoolName,
+                status: dto.decision,
+            });
+        }
+
+        return { id: result.id, status: result.status, schoolId: result.schoolId, emailSent };
     }
 
     /**
@@ -386,6 +445,45 @@ export class SchoolService {
             },
         });
 
-        return this.card(id);
+        const emailSent = await this.notifications.sendSchoolTokenRotated(request.coordinatorEmail, {
+            coordinatorName: request.coordinatorName,
+            schoolName: request.schoolName,
+            accessToken: plaintext,
+        });
+
+        return { ...(await this.card(id)), emailSent };
+    }
+
+    /**
+     * ADMIN — re-send the school's current access details, unprompted by any
+     * new decision. For when a coordinator says the original mail never arrived.
+     */
+    async resendAccess(id: string, adminId: string) {
+        const request = await this.prisma.schoolRequest.findUnique({ where: { id } });
+        if (!request) throw new NotFoundException('School request not found.');
+        if (request.status !== 'APPROVED') {
+            throw new ForbiddenException('Only an approved school has access details to resend.');
+        }
+        const token = openAccessToken(request.accessTokenSealed);
+        if (!token) {
+            throw new ForbiddenException('No access token on file — rotate one instead of resending.');
+        }
+
+        const emailSent = await this.notifications.sendSchoolAccessResent(request.coordinatorEmail, {
+            coordinatorName: request.coordinatorName,
+            schoolName: request.schoolName,
+            accessToken: token,
+        });
+
+        await this.prisma.auditLog.create({
+            data: {
+                userId: adminId,
+                action: 'school.access.resent',
+                resource: 'school-request',
+                details: { schoolRequestId: id, emailSent },
+            },
+        });
+
+        return { emailSent };
     }
 }

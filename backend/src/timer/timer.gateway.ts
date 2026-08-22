@@ -9,6 +9,7 @@ import {
     WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { getJwtSecret } from '../common/jwt-secret';
 import { TimerService } from './timer.service';
 
 @WebSocketGateway({
@@ -38,7 +39,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
             }
 
             const payload = this.jwtService.verify(token, {
-                secret: process.env.JWT_SECRET || 'dev-jwt-secret',
+                secret: getJwtSecret(),
             });
 
             client.data.userId = payload.sub;

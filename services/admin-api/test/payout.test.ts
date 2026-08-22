@@ -4,7 +4,7 @@ import type { buildApp } from "../src/app";
 import type { CommissionStatement, PayoutLedgerEntry } from "../src/core/domain/partner-models";
 import { buildTestHarness, jsonRequest } from "./support/build-test-app";
 import { parseCsv } from "./support/csv";
-import { bearer } from "./support/jwt";
+import { bearer, signTestJwt } from "./support/jwt";
 import { createApprovedPartnerWithCampaign, staffToken } from "./support/scenarios";
 
 function ok<T>(response: unknown): asserts response is ApiSuccessResponse<T> {
@@ -122,5 +122,39 @@ describe("payout ledger (PRD-046)", () => {
 			body: { status: "SIGNED_OFF", approver: "x" },
 		});
 		expect(unauth.status).toBe(401);
+	});
+
+	it("lists a partner's payout ledger entries, scoped by ownership (admin visibility)", async () => {
+		const { app } = buildTestHarness();
+		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
+			orgName: "Payout List Co",
+		});
+		const finance = staffToken("FINANCE");
+		const { statementId } = await issueStatementAndFindPayoutId(
+			app,
+			partnerId,
+			campaignId,
+			ownerToken,
+			finance,
+		);
+
+		const asOwner = await jsonRequest(app, "GET", `/partners/${partnerId}/payouts`, {
+			headers: bearer(ownerToken),
+		});
+		expect(asOwner.status).toBe(200);
+		const ownerBody = (await asOwner.json()) as ApiSuccessResponse<PayoutLedgerEntry[]>;
+		ok(ownerBody);
+		expect(ownerBody.data.some((entry) => entry.statementId === statementId)).toBe(true);
+
+		const asStaff = await jsonRequest(app, "GET", `/partners/${partnerId}/payouts`, {
+			headers: bearer(staffToken("SUPER_ADMIN")),
+		});
+		expect(asStaff.status).toBe(200);
+
+		const stranger = signTestJwt({ sub: "someone-else", role: "PARTNER" });
+		const forbidden = await jsonRequest(app, "GET", `/partners/${partnerId}/payouts`, {
+			headers: bearer(stranger),
+		});
+		expect(forbidden.status).toBe(403);
 	});
 });

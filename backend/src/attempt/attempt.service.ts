@@ -5,6 +5,7 @@ import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
+import { NotificationService } from '../notification/notification.service';
 import { WhatsAppService } from '../notification/whatsapp.service';
 import { ProctorService } from '../proctor/proctor.service';
 
@@ -144,6 +145,7 @@ export class AttemptService {
         private guardianService: GuardianService,
         private proctorService: ProctorService,
         private whatsapp: WhatsAppService,
+        private notifications: NotificationService,
     ) { }
 
     // ── Seeded PRNG helpers ─────────────────────────────────────────────────
@@ -848,7 +850,7 @@ export class AttemptService {
     }
 
     /**
-     * "Your submission was received" on WhatsApp (`bio_submission`).
+     * "Your submission was received" on WhatsApp (`bio_submission`) and email.
      *
      * Fired from both endings — a student who ran out of time or was auto-
      * submitted on a violation has still submitted a paper, and is the *most*
@@ -866,8 +868,8 @@ export class AttemptService {
                 select: {
                     id: true,
                     submittedAt: true,
-                    user: { select: { id: true, firstName: true, phone: true, phoneRaw: true } },
-                    examInstance: { select: { exam: { select: { id: true, isTrial: true } } } },
+                    user: { select: { id: true, firstName: true, email: true, phone: true, phoneRaw: true } },
+                    examInstance: { select: { exam: { select: { id: true, title: true, isTrial: true } } } },
                 },
             });
             if (!attempt) return;
@@ -883,9 +885,15 @@ export class AttemptService {
                 attemptId: attempt.id,
                 submittedAt: attempt.submittedAt ?? new Date(),
             });
+
+            await this.notifications.sendExamSubmitted(
+                attempt.user.email,
+                attempt.user.firstName,
+                attempt.examInstance.exam.title,
+            );
         } catch (err) {
             this.logger.error(
-                `Submission WhatsApp failed for attempt ${attemptId}: ${(err as Error).message}`,
+                `Submission notification failed for attempt ${attemptId}: ${(err as Error).message}`,
             );
         }
     }

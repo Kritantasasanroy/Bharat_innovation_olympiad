@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   Bharat Innovation Olympiad — Partner Portal
+   Bharat Innovation Olympiad — School Portal
    Shares the BIO design system used by the student & admin portals:
    premium dark theme with Lemon Ideas yellow & green accents.
    The partner portal's own class names (.card, .button, .stat-tile,
@@ -613,8 +613,11 @@ textarea:focus-visible {
 	*,
 	*::before,
 	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: accessibility - must override all animations for reduced-motion users */
 		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: accessibility - must override all animations for reduced-motion users */
 		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: accessibility - must override all animations for reduced-motion users */
 		transition-duration: 0.01ms !important;
 	}
 }
@@ -1003,4 +1006,21 @@ h2,
 .stat-tile__value {
 	font-family: var(--font-stat);
 	letter-spacing: -0.01em;
+}
+
+/* ── Missing status / notice utilities (used in pages) ── */
+.badge--neutral {
+	background: var(--bg-elevated);
+	color: var(--text-secondary);
+}
+.notice--positive,
+.notice--success {
+	border-color: rgba(34, 197, 94, 0.3);
+	background: rgba(34, 197, 94, 0.08);
+	color: var(--success-400);
+}
+.notice--warn {
+	border-color: rgba(245, 158, 11, 0.3);
+	background: rgba(245, 158, 11, 0.08);
+	color: var(--warning-400);
 }

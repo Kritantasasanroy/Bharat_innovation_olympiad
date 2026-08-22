@@ -5,10 +5,14 @@ import type { UpdatePayoutStatusInput } from "../ports/in/partner.port";
 import type { AuditSink } from "../ports/out/audit-sink.port";
 import type { PartnerEventPublisher } from "../ports/out/partner-event-publisher.port";
 import type { Clock } from "../ports/out/partner-gateways.port";
-import type { PayoutLedgerRepository } from "../ports/out/partner-repositories.port";
+import type {
+	PartnerRepository,
+	PayoutLedgerRepository,
+} from "../ports/out/partner-repositories.port";
 
 export interface PayoutServiceDeps {
 	readonly payouts: PayoutLedgerRepository;
+	readonly partners: PartnerRepository;
 	readonly clock: Clock;
 	readonly events: PartnerEventPublisher;
 	readonly audit: AuditSink;
@@ -98,5 +102,12 @@ export class PayoutService {
 		});
 
 		return updated;
+	}
+
+	/** Every payout ledger entry for a partner, newest statement first. */
+	async listForPartner(partnerId: string): Promise<readonly PayoutLedgerEntry[]> {
+		const partner = await this.deps.partners.findById(partnerId);
+		if (!partner) throw new NotFoundError("Partner", partnerId);
+		return this.deps.payouts.findByPartnerId(partnerId);
 	}
 }

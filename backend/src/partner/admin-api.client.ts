@@ -28,6 +28,68 @@ export interface AdminApiCampaign {
     referralCode: string;
     linkToken: string;
     status: string;
+    caps: { maxConversions?: number } | null;
+    createdAt: string;
+}
+
+export interface AdminApiPartner {
+    id: string;
+    orgName: string;
+    contactPerson: string;
+    email: string;
+    phone: string;
+    commissionRatePct: number;
+    status: string;
+    createdAt: string;
+}
+
+export interface AdminApiCampaignFunnel {
+    campaignId: string;
+    campaignName: string;
+    signups: number;
+    registrations: number;
+    paid: number;
+}
+
+export interface AdminApiFunnel {
+    partnerId: string;
+    signups: number;
+    registrations: number;
+    paid: number;
+    byCampaign: AdminApiCampaignFunnel[];
+}
+
+export interface AdminApiCommissionLineItem {
+    attributionId: string;
+    campaignId: string;
+    studentId: string;
+    registrationId: string;
+    amountPaise: number;
+    commissionRatePct: number;
+    commissionPaise: number;
+}
+
+export interface AdminApiStatement {
+    id: string;
+    partnerId: string;
+    period: string;
+    version: number;
+    lineItems: AdminApiCommissionLineItem[];
+    totalPaise: number;
+    status: string;
+    issuedAt: string;
+}
+
+export interface AdminApiPayout {
+    id: string;
+    partnerId: string;
+    statementId: string;
+    amountPaise: number;
+    status: 'PENDING' | 'SIGNED_OFF' | 'RELEASED';
+    financeSignOffApprover: string | null;
+    financeSignOffAt: string | null;
+    reason: string | null;
+    createdAt: string;
 }
 
 export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
@@ -153,6 +215,66 @@ export class PartnerAdminApiClient {
             `/partners/${encodeURIComponent(partnerId)}/access`,
             { method: 'PATCH', body: JSON.stringify({ status, reason }) },
         );
+    }
+
+    // ── Engine visibility for admin (staff-initiated, so the "patient" retry
+    // policy applies — an admin looking at a partner's workspace page is
+    // actively waiting, and a cold engine is worth a ~60s wait rather than an
+    // empty screen). Every call here is staff-scoped: `assertOwnsPartner` lets
+    // any recognised admin role act on behalf of any partner. ───────────────
+
+    /** The engine's own Partner row — commission rate, status, identity. */
+    getPartner(partnerId: string): Promise<AdminApiPartner> {
+        return this.call<AdminApiPartner>(`/partners/${encodeURIComponent(partnerId)}`, {
+            method: 'GET',
+        });
+    }
+
+    listCampaigns(partnerId: string): Promise<AdminApiCampaign[]> {
+        return this.call<AdminApiCampaign[]>(
+            `/partners/${encodeURIComponent(partnerId)}/campaigns`,
+            { method: 'GET' },
+        );
+    }
+
+    getFunnel(partnerId: string): Promise<AdminApiFunnel> {
+        return this.call<AdminApiFunnel>(`/partners/${encodeURIComponent(partnerId)}/funnel`, {
+            method: 'GET',
+        });
+    }
+
+    listStatements(partnerId: string): Promise<AdminApiStatement[]> {
+        return this.call<AdminApiStatement[]>(
+            `/partners/${encodeURIComponent(partnerId)}/statements`,
+            { method: 'GET' },
+        );
+    }
+
+    /** Staff can trigger a statement for a partner too, e.g. to close out a period on their behalf. */
+    generateStatement(partnerId: string, period: string): Promise<AdminApiStatement> {
+        return this.call<AdminApiStatement>(
+            `/partners/${encodeURIComponent(partnerId)}/statements`,
+            { method: 'POST', body: JSON.stringify({ period }) },
+        );
+    }
+
+    listPayouts(partnerId: string): Promise<AdminApiPayout[]> {
+        return this.call<AdminApiPayout[]>(`/partners/${encodeURIComponent(partnerId)}/payouts`, {
+            method: 'GET',
+        });
+    }
+
+    /** `SIGNED_OFF` needs `approver`; `RELEASED` is blocked until sign-off is on file (finance-only route). */
+    updatePayoutStatus(
+        payoutId: string,
+        status: 'SIGNED_OFF' | 'RELEASED',
+        approver?: string,
+        reason?: string,
+    ): Promise<AdminApiPayout> {
+        return this.call<AdminApiPayout>(`/payouts/${encodeURIComponent(payoutId)}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, approver, reason }),
+        });
     }
 
     // ── Referral attribution ────────────────────────────────────────────────

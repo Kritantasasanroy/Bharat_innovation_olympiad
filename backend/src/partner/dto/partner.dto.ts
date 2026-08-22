@@ -4,6 +4,7 @@ import {
     IsNotEmpty,
     IsOptional,
     IsString,
+    Matches,
     MinLength,
     ValidateIf,
 } from 'class-validator';
@@ -78,4 +79,26 @@ export class UpdatePartnerProfileDto {
     @IsString()
     @IsNotEmpty()
     phone?: string;
+}
+
+/** ADMIN — close out a commission period for a partner (engine proxy). */
+export class GenerateStatementDto {
+    @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'period must be in "YYYY-MM" form, e.g. 2026-06.' })
+    period: string;
+}
+
+/** ADMIN/FINANCE — advance a payout ledger entry (engine proxy). */
+export class UpdatePayoutStatusDto {
+    @IsIn(['SIGNED_OFF', 'RELEASED'])
+    status: 'SIGNED_OFF' | 'RELEASED';
+
+    /** Required by the engine when signing off; who approved the payout. */
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    approver?: string;
+
+    @IsOptional()
+    @IsString()
+    reason?: string;
 }

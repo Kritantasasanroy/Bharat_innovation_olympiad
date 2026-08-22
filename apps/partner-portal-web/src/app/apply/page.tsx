@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
@@ -45,6 +46,15 @@ export default function ApplyPage() {
 	if (submitted) {
 		return (
 			<main className="page">
+				<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+					<Image
+						src="/bio-logo.png"
+						alt="Bharat Innovation Olympiad"
+						width={160}
+						height={48}
+						style={{ height: "48px", width: "auto", objectFit: "contain" }}
+					/>
+				</div>
 				<div className="card" style={{ maxWidth: 560 }}>
 					<h2>Your request is under review</h2>
 					<p className="muted">
@@ -68,6 +78,15 @@ export default function ApplyPage() {
 		<main className="page">
 			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
 				<ThemeToggle />
+			</div>
+			<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+				<Image
+					src="/bio-logo.png"
+					alt="Bharat Innovation Olympiad"
+					width={160}
+					height={48}
+					style={{ height: "48px", width: "auto", objectFit: "contain" }}
+				/>
 			</div>
 			<div className="page-header">
 				<h1>Request partner access</h1>

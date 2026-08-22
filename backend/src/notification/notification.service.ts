@@ -9,7 +9,20 @@ import {
     accessPassActivatedEmail,
     adminBroadcastEmail,
     examSubmittedEmail,
+    partnerAccessResentEmail,
+    partnerAccessTokenRotatedEmail,
+    partnerApplicationReceivedEmail,
+    partnerApprovedEmail,
+    partnerRejectedEmail,
+    partnerRevokedEmail,
+    partnerSchoolStatusChangedEmail,
     resultsPublishedEmail,
+    schoolAccessResentEmail,
+    schoolAccessTokenRotatedEmail,
+    schoolApplicationReceivedEmail,
+    schoolApprovedEmail,
+    schoolRejectedEmail,
+    schoolRevokedEmail,
     slotConfirmedEmail,
     welcomeEmail,
     parentApprovalEmail,
@@ -179,6 +192,20 @@ export class NotificationService implements OnModuleInit {
         return process.env.FRONTEND_URL?.replace(/\/$/, '') || 'http://localhost:3000';
     }
 
+    private get partnerPortalUrl(): string {
+        return (
+            process.env.PARTNER_PORTAL_URL?.replace(/\/$/, '') ||
+            'https://bio-partner-portal.vercel.app'
+        );
+    }
+
+    private get schoolPortalUrl(): string {
+        return (
+            process.env.SCHOOL_PORTAL_URL?.replace(/\/$/, '') ||
+            'https://bio-school-portal.vercel.app'
+        );
+    }
+
     /**
      * Send and swallow failures.
      *
@@ -264,6 +291,125 @@ export class NotificationService implements OnModuleInit {
             to,
             parentApprovalEmail({ guardianName, studentName, approvalLink }),
         );
+    }
+
+    // ── Partner lifecycle ──────────────────────────────────────────────────
+    // Applying, approval, rejection, revocation and token rotation previously
+    // sent nothing — staff hand-copied a card into an email or WhatsApp. These
+    // replace that manual step; every one returns whether it actually sent, so
+    // the admin access queue can show a real "email sent" confirmation instead
+    // of assuming one went out.
+
+    async sendPartnerApplicationReceived(to: string, contactPerson: string, orgName: string): Promise<boolean> {
+        return this.deliver(to, partnerApplicationReceivedEmail({ contactPerson, orgName }));
+    }
+
+    async sendPartnerApproved(
+        to: string,
+        vars: { contactPerson: string; orgName: string; accessToken: string },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            partnerApprovedEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
+        );
+    }
+
+    async sendPartnerRejected(
+        to: string,
+        vars: { contactPerson: string; orgName: string; reason: string },
+    ): Promise<boolean> {
+        return this.deliver(to, partnerRejectedEmail(vars));
+    }
+
+    async sendPartnerRevoked(
+        to: string,
+        vars: { contactPerson: string; orgName: string; reason: string },
+    ): Promise<boolean> {
+        return this.deliver(to, partnerRevokedEmail(vars));
+    }
+
+    async sendPartnerTokenRotated(
+        to: string,
+        vars: { contactPerson: string; orgName: string; accessToken: string },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            partnerAccessTokenRotatedEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
+        );
+    }
+
+    /** Same details as an approval mail, framed as a resend rather than a new decision. */
+    async sendPartnerAccessResent(
+        to: string,
+        vars: { contactPerson: string; orgName: string; accessToken: string },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            partnerAccessResentEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
+        );
+    }
+
+    /** Tells the onboarding partner what happened to a school it submitted. */
+    async sendPartnerSchoolStatusChanged(
+        to: string,
+        vars: { contactPerson: string; schoolName: string; status: 'APPROVED' | 'REJECTED' },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            partnerSchoolStatusChangedEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
+        );
+    }
+
+    // ── School lifecycle ───────────────────────────────────────────────────
+    // A school has no password — the access token in the approval/rotation/
+    // resend mails below is the only way a coordinator ever signs in.
+
+    async sendSchoolApplicationReceived(to: string, coordinatorName: string, schoolName: string): Promise<boolean> {
+        return this.deliver(to, schoolApplicationReceivedEmail({ coordinatorName, schoolName }));
+    }
+
+    async sendSchoolApproved(
+        to: string,
+        vars: {
+            coordinatorName: string;
+            schoolName: string;
+            schoolCode: string | null;
+            accessToken: string;
+        },
+    ): Promise<boolean> {
+        return this.deliver(to, schoolApprovedEmail({ ...vars, portalUrl: this.schoolPortalUrl }));
+    }
+
+    async sendSchoolRejected(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string; reason: string },
+    ): Promise<boolean> {
+        return this.deliver(to, schoolRejectedEmail(vars));
+    }
+
+    async sendSchoolRevoked(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string; reason: string },
+    ): Promise<boolean> {
+        return this.deliver(to, schoolRevokedEmail(vars));
+    }
+
+    async sendSchoolTokenRotated(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string; accessToken: string },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            schoolAccessTokenRotatedEmail({ ...vars, portalUrl: this.schoolPortalUrl }),
+        );
+    }
+
+    /** Same details as an approval mail, framed as a resend rather than a new decision. */
+    async sendSchoolAccessResent(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string; accessToken: string },
+    ): Promise<boolean> {
+        return this.deliver(to, schoolAccessResentEmail({ ...vars, portalUrl: this.schoolPortalUrl }));
     }
 
     /**

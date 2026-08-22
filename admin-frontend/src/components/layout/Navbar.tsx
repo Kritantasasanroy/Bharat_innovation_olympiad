@@ -65,6 +65,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
             { label: 'Payments', href: '/payments' },
             // Partners and schools share one review queue.
             { label: 'Access requests', href: '/access' },
+            { label: 'Partner workspace', href: '/partners' },
         ],
     },
 ];

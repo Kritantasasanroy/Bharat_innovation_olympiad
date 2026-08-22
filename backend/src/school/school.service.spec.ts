@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { generateAccessToken } from '../common/access-token';
+import { notificationServiceStub } from '../notification/notification.stub';
 import { schoolNameKey } from './school-directory.helpers';
 import { SchoolService } from './school.service';
 
@@ -112,9 +113,33 @@ function createFakeAdminApi(resolve: (code: string) => Promise<string | null> = 
     return { resolvePartnerIdByReferralCode: jest.fn(resolve) } as any;
 }
 
+/** Fake `PartnerDirectoryService` — only exercised when a decided school has `submittedByPartnerId`. */
+function createFakePartnerDirectory() {
+    return {
+        detailsFor: jest.fn().mockResolvedValue({
+            partnerId: 'partner-42',
+            orgName: 'Fake Partner Org',
+            contactPerson: 'Partner Contact',
+            email: 'partner@example.com',
+            phone: '+910000000000',
+            portalUrl: 'https://bio-partner-portal.example',
+            isDefault: false,
+            label: 'Fake Partner Org',
+        }),
+    } as any;
+}
+
 function setup(adminApi = createFakeAdminApi()) {
     const db = createFakeDb();
-    return { ...db, adminApi, service: new SchoolService(db.prisma, jwt, adminApi) };
+    const notifications = notificationServiceStub();
+    const partnerDirectory = createFakePartnerDirectory();
+    return {
+        ...db,
+        adminApi,
+        notifications,
+        partnerDirectory,
+        service: new SchoolService(db.prisma, jwt, adminApi, notifications, partnerDirectory),
+    };
 }
 
 /**

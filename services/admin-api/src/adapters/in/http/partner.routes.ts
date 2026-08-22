@@ -84,11 +84,7 @@ export const partnerRoutes = (container: PartnerContainer) =>
 			},
 			{
 				body: t.Object({
-					status: t.Union([
-						t.Literal("APPROVED"),
-						t.Literal("REJECTED"),
-						t.Literal("REVOKED"),
-					]),
+					status: t.Union([t.Literal("APPROVED"), t.Literal("REJECTED"), t.Literal("REVOKED")]),
 					reason: t.String(),
 				}),
 			},
@@ -116,6 +112,12 @@ export const partnerRoutes = (container: PartnerContainer) =>
 			const user = requireAuth(auth);
 			assertOwnsPartner(user, params.id);
 			const data = await container.commissionService.list(params.id);
+			return { success: true, data };
+		})
+		.get("/partners/:id/payouts", async ({ params, auth }) => {
+			const user = requireAuth(auth);
+			assertOwnsPartner(user, params.id);
+			const data = await container.payoutService.listForPartner(params.id);
 			return { success: true, data };
 		})
 		.get("/partners/:id/institutions", async ({ params, auth }) => {
