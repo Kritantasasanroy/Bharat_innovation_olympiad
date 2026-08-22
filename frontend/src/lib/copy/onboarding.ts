@@ -34,7 +34,7 @@ export const TECH_REQUIREMENTS = [
 export const PRESENCE_POINTS = [
     {
         icon: '🧑‍💻',
-        title: 'The participant must be at the keyboard',
+        title: 'The participant must be present',
         body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their paper and may be disqualified.',
     },
     {
