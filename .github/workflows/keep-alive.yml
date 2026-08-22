@@ -1,8 +1,16 @@
 name: Keep Render backend warm
 
+# Pings all three Render free-tier services (backend, bio-portal-api,
+# bio-admin-api) every 10 minutes, comfortably under the 15-min idle
+# spin-down. Previously this only pinged `olympiad-backend`, so
+# bio-portal-api and bio-admin-api — which back the partner and school
+# portals and the admin partner-approval flow — were never kept warm and
+# fell asleep after 15 minutes of no traffic. The first request after that
+# hits a ~30-50s cold start, which is what "portal is down" / "can't
+# approve a partner" actually was.
+
 on:
   schedule:
-    # Every 10 minutes — comfortably under Render free tier's 15-min idle spin-down
     - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
@@ -10,7 +18,15 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend health endpoint
+      - name: Ping olympiad-backend
         run: |
-          curl -sf -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" \
-            https://olympiad-backend-wsvn.onrender.com/api/proctor/health
+          curl -sf -o /dev/null -w "olympiad-backend: HTTP %{http_code} in %{time_total}s\n" \
+            https://olympiad-backend-iqzn.onrender.com/api/proctor/health
+      - name: Ping bio-portal-api
+        run: |
+          curl -sf -o /dev/null -w "bio-portal-api: HTTP %{http_code} in %{time_total}s\n" \
+            https://bio-portal-api-yq4h.onrender.com/health/live
+      - name: Ping bio-admin-api
+        run: |
+          curl -sf -o /dev/null -w "bio-admin-api: HTTP %{http_code} in %{time_total}s\n" \
+            https://bio-admin-api-x09d.onrender.com/health/live
