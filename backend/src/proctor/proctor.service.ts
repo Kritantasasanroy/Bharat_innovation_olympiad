@@ -48,6 +48,18 @@ export class ProctorService {
      * corroboration.
      */
     private async storeSnapshot(dataUrl: string): Promise<string | null> {
+        return this.uploadDataUrl(dataUrl, 'proctor', 'bio/proctor-snapshots');
+    }
+
+    /**
+     * Decodes a `data:image/...;base64,...` still and uploads it, or returns
+     * null on anything malformed, oversized, or that fails to upload. Shared by
+     * violation snapshots and the face-enrollment photo — same shape of input
+     * (a `captureSnapshot()` data URL from the browser canvas), different folder.
+     * Never throws: a snapshot that fails to upload must not lose the record it
+     * was attached to (a violation event, or the enrollment itself).
+     */
+    private async uploadDataUrl(dataUrl: string, prefix: string, folder: string): Promise<string | null> {
         try {
             const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i.exec(dataUrl.trim());
             if (!match) return null;
@@ -58,26 +70,44 @@ export class ProctorService {
             if (buffer.byteLength > 512 * 1024) return null;
             const { url } = await this.storage.uploadImageBuffer(
                 buffer,
-                `proctor-${Date.now()}.jpg`,
+                `${prefix}-${Date.now()}.jpg`,
                 contentType,
-                'bio/proctor-snapshots',
+                folder,
             );
             return url;
         } catch (error) {
-            this.logger.warn(`[Snapshot] upload failed: ${(error as Error).message}`);
+            this.logger.warn(`[${prefix}] upload failed: ${(error as Error).message}`);
             return null;
         }
     }
 
     // ── Face Enrollment ──
 
-    async enrollFace(userId: string, descriptor: number[]): Promise<void> {
+    /**
+     * Stores the enrollment descriptor and, when supplied, the still it was
+     * captured alongside — the photo later printed on the certificate.
+     *
+     * Disclosed in the guardian consent form (`GuardianForm.tsx`) and the
+     * registration face-scan step: unlike a violation snapshot, this one photo
+     * is not conditional on anything going wrong, it is taken once, on purpose,
+     * because the certificate needs it. A photo upload failure never blocks
+     * enrollment — the descriptor is what identity verification actually runs
+     * on, so a lost photo costs the certificate a picture, not the exam.
+     */
+    async enrollFace(userId: string, descriptor: number[], photo?: string | null): Promise<void> {
         const buffer = Buffer.from(new Float32Array(descriptor).buffer);
+        const facePhotoUrl = photo ? await this.uploadDataUrl(photo, 'enroll', 'bio/face-enrollment') : null;
+
         await this.prisma.user.update({
             where: { id: userId },
-            data: { faceEmbedding: buffer },
+            data: {
+                faceEmbedding: buffer,
+                ...(facePhotoUrl ? { facePhotoUrl } : {}),
+            },
         });
-        this.logger.log(`[Enroll] userId=${userId} descriptor(${descriptor.length}d) stored`);
+        this.logger.log(
+            `[Enroll] userId=${userId} descriptor(${descriptor.length}d) stored, photo=${facePhotoUrl ? 'yes' : 'no'}`,
+        );
     }
 
     async getEnrollmentStatus(userId: string): Promise<{ enrolled: boolean }> {

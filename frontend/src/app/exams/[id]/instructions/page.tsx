@@ -214,6 +214,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         loadingProgress: faceLoadingProgress,
         startEnrollmentCamera,
         captureDescriptor,
+        captureSnapshot,
         enrollFace,
     } = useFaceProctor({ attemptId: 'device-check', disabled: false });
 
@@ -307,7 +308,10 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                 setFaceMsg('No face detected. Ensure your face is clearly visible and try again.');
                 return;
             }
-            const ok = await enrollFace(descriptor);
+            // Captured from the same live frame the descriptor came from — this
+            // is the one photo of the student the certificate ever shows.
+            const photo = captureSnapshot();
+            const ok = await enrollFace(descriptor, photo);
             if (ok) {
                 setFaceEnrollStatus('enrolled');
                 setFaceMsg('Face enrolled successfully!');
@@ -560,7 +564,8 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <p style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 'var(--space-3)' }}>
                             Face analysis runs inside your own browser and no video is ever recorded
                             or stored. Only the events above are sent, along with one still photo
-                            taken at the moment a violation is recorded — never at any other time.
+                            taken at the moment a violation is recorded. The only other photo ever
+                            kept is the one taken once at registration, for your certificate.
                         </p>
                     </div>
 
@@ -635,7 +640,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <div className="glass-card instructions-card">
                             <h2>🪪 Face ID Enrollment</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
-                                This is a proctored exam, you must enroll your face before you can start. Your face is stored as an encrypted numeric descriptor, not a photo.
+                                This is a proctored exam, you must enroll your face before you can start. Your face is stored as an encrypted numeric descriptor used to verify you during the exam, and this one photo is kept and printed on your certificate.
                             </p>
 
                             {faceEnrollStatus === 'checking' ? (

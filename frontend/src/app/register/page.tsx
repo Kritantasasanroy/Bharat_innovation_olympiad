@@ -121,6 +121,7 @@ export default function RegisterPage() {
         startEnrollmentCamera,
         stopProctoring,
         captureDescriptor,
+        captureSnapshot,
         enrollFace,
     } = useFaceProctor({ attemptId: 'enrollment', disabled: false });
 
@@ -152,7 +153,10 @@ export default function RegisterPage() {
                 );
                 return;
             }
-            const ok = await enrollFace(descriptor);
+            // Captured from the same live frame the descriptor came from — this
+            // is the one photo of the student the certificate ever shows.
+            const photo = captureSnapshot();
+            const ok = await enrollFace(descriptor, photo);
             if (ok) {
                 stopProctoring();
                 // Face enrolled — proceed to payment, then parent consent follows.
@@ -369,8 +373,9 @@ export default function RegisterPage() {
                 ) : step === 'face' ? (
                     <div className="auth-form">
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
-                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor, no photo is saved.
-                            This step cannot be skipped, and <strong>the participant must do it themselves</strong>.
+                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor used to verify
+                            you during the exam, and this one photo is kept and printed on your certificate. This step cannot be skipped, and{' '}
+                            <strong>the participant must do it themselves</strong>.
                         </p>
 
                         {faceMsg && (

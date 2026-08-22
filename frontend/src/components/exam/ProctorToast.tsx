@@ -29,7 +29,7 @@ export interface ProctorToastData {
     durationMs?: number;
 }
 
-const DEFAULT_DURATION_MS = 6000;
+const DEFAULT_DURATION_MS = 4500;
 
 export default function ProctorToast({
     data,

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { violationConsequence, violationCopy, type ViolationKind } from '@/lib/examIntegrity';
 
 /**
@@ -16,10 +17,13 @@ import { violationConsequence, violationCopy, type ViolationKind } from '@/lib/e
  * no longer keeps. Past the review threshold it says the true consequence
  * instead: a person will read this.
  *
- * Not auto-dismissed. The one before it disappeared on a timer, which meant a
- * student who was mid-question when it fired never saw it at all and had no way
- * to get it back.
+ * Auto-dismisses after {@link AUTO_DISMISS_MS}, keyed on `kind`+`count` so a
+ * fresh violation restarts the timer and is never swallowed by one already in
+ * flight. Still closable by hand for a student who wants it gone sooner; the
+ * violation itself stays recorded either way, this only controls the banner.
  */
+const AUTO_DISMISS_MS = 4500;
+
 export default function ViolationBanner({
     kind,
     count,
@@ -34,6 +38,12 @@ export default function ViolationBanner({
 }) {
     const copy = violationCopy(kind);
     const willBeReviewed = count >= threshold;
+
+    useEffect(() => {
+        const timer = setTimeout(onDismiss, AUTO_DISMISS_MS);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on kind+count so a new episode restarts the timer
+    }, [kind, count]);
 
     return (
         <div

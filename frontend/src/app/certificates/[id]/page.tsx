@@ -15,7 +15,7 @@ interface Certificate {
     rank: number | null;
     issuedAt: string;
     revokedAt: string | null;
-    user: { firstName: string; lastName: string };
+    user: { firstName: string; lastName: string; facePhotoUrl: string | null };
     examInstance: { exam: { title: string } };
 }
 
@@ -77,6 +77,16 @@ export default function CertificatePage() {
                                 <p className="certificate-eyebrow">{COMPANY_NAME} presents</p>
                                 <h1 className="certificate-title">{APP_NAME}</h1>
                                 <p className="certificate-sub">Certificate of Participation &amp; Merit</p>
+
+                                {certificate.user.facePhotoUrl && (
+                                    // eslint-disable-next-line @next/next/no-img-element -- a remote
+                                    // Cloudinary URL, not a local asset next/image can optimise
+                                    <img
+                                        src={certificate.user.facePhotoUrl}
+                                        alt=""
+                                        className="certificate-photo"
+                                    />
+                                )}
 
                                 <p className="certificate-awarded">This is to certify that</p>
                                 <p className="certificate-name">
@@ -158,6 +168,15 @@ export default function CertificatePage() {
                     text-transform: uppercase;
                     font-size: 0.75rem;
                     margin-top: 0.25rem;
+                }
+                .certificate-photo {
+                    width: 88px;
+                    height: 88px;
+                    object-fit: cover;
+                    border-radius: 50%;
+                    border: 3px solid #ffcb05;
+                    margin: 1rem auto 0;
+                    display: block;
                 }
                 .certificate-awarded {
                     color: #444;

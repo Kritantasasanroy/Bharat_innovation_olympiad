@@ -469,11 +469,17 @@ export function useFaceProctor({
         }
     }, [setWebcamStream]);
 
-    // Enroll a face descriptor — call this from the enrollment UI
+    /**
+     * Enroll a face descriptor, and optionally the photo it was captured
+     * alongside (from {@link captureSnapshot}) — call this from the enrollment
+     * UI. The photo becomes `User.facePhotoUrl`, printed on the certificate;
+     * see `ProctorService.enrollFace` for why this one capture is disclosed and
+     * unconditional, unlike a violation snapshot.
+     */
     const enrollFace = useCallback(
-        async (descriptor: number[]): Promise<boolean> => {
+        async (descriptor: number[], photo?: string | null): Promise<boolean> => {
             try {
-                await api.post('/proctor/enroll', { descriptor });
+                await api.post('/proctor/enroll', { descriptor, ...(photo ? { photo } : {}) });
                 return true;
             } catch {
                 return false;
@@ -485,10 +491,11 @@ export function useFaceProctor({
     /**
      * A still from the live camera, as a JPEG data URL, or null.
      *
-     * Called only when a violation is being recorded — see
-     * `ProctorService.storeSnapshot`. Nothing captures on a timer, so a clean
-     * paper produces no images and the "no photo is stored" promise made at
-     * registration holds for every student who does not trip a rule.
+     * Two callers: a violation being recorded (see `ProctorService.storeSnapshot`)
+     * and face enrollment (see `enrollFace` above), the one deliberate, disclosed
+     * exception to "no photo is stored" — every other capture during proctoring
+     * stays conditional on a violation, so a clean paper still produces no images
+     * beyond the one taken once, on purpose, at enrollment.
      *
      * Deliberately small. 320px wide at quality 0.55 is ~15 KB, which is enough
      * for a person to see who was in front of the camera and comfortably inside

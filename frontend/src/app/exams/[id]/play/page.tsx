@@ -607,7 +607,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         lastFaceToastAtRef.current = now;
         // The timestamp is part of the key so a toast shown after a cooldown is
         // a genuinely new one to ProctorToast and restarts its own dismiss timer.
-        setFaceToast({ ...issue, key: `${issue.key}-${now}`, durationMs: 7000 });
+        setFaceToast({ ...issue, key: `${issue.key}-${now}`, durationMs: 4500 });
     }, [
         isMultiFace, noFaceSince, mismatchSince, awaySince,
         isTrialRun, isGated, autoSubmit, FACE_TOAST_COOLDOWN_MS,
@@ -717,7 +717,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             icon: '📸',
             title: 'Photo taken',
             message: 'A photo was taken because a violation was recorded just now. It is kept with your paper for the review team, and it is the only time a picture of you is stored.',
-            durationMs: 7000,
+            durationMs: 4500,
         });
     }, [photoCapturedAt]);
 
@@ -738,7 +738,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 icon: '🖱️',
                 title: 'Still there?',
                 message: `Nothing has moved on your screen for ${idleSeconds} seconds. Your timer is still running, so carry on when you are ready.`,
-                durationMs: 6000,
+                durationMs: 4500,
             });
             void api.post('/proctor/events', {
                 attemptId,

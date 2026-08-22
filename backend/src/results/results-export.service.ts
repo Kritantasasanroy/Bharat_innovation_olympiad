@@ -17,6 +17,7 @@ export interface ResultRow {
     normalizedScore: number | null;
     percentile: number | null;
     rank: number | null;
+    startedAt: Date | null;
     submittedAt: Date | null;
 }
 
@@ -115,6 +116,7 @@ export class ResultsExportService {
             normalizedScore: a.normalizedScore,
             percentile: a.percentile,
             rank: a.rank,
+            startedAt: a.startedAt,
             submittedAt: a.submittedAt,
         }));
     }
@@ -163,7 +165,9 @@ export class ResultsExportService {
             { header: 'Out of', key: 'maxScore', width: 10 },
             { header: 'Normalized', key: 'normalizedScore', width: 12 },
             { header: 'Percentile', key: 'percentile', width: 12 },
+            { header: 'Started at', key: 'startedAt', width: 22 },
             { header: 'Submitted at', key: 'submittedAt', width: 22 },
+            { header: 'Time taken', key: 'timeTaken', width: 14 },
         ];
 
         sheet.getRow(1).font = { bold: true };
@@ -180,7 +184,9 @@ export class ResultsExportService {
                 // writing the raw float would show 63.99999999999999 in Excel.
                 normalizedScore: round2(row.normalizedScore),
                 percentile: round2(row.percentile),
+                startedAt: row.startedAt ? row.startedAt.toISOString() : '',
                 submittedAt: row.submittedAt ? row.submittedAt.toISOString() : '',
+                timeTaken: formatTimeTaken(row.startedAt, row.submittedAt),
             });
         }
 
@@ -206,3 +212,12 @@ export class ResultsExportService {
 
 const round2 = (n: number | null): number | null =>
     n === null ? null : Math.round(n * 100) / 100;
+
+/** `mm:ss` between start and submission, or '' if either timestamp is missing. */
+function formatTimeTaken(startedAt: Date | null, submittedAt: Date | null): string {
+    if (!startedAt || !submittedAt) return '';
+    const totalSeconds = Math.max(0, Math.round((submittedAt.getTime() - startedAt.getTime()) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}

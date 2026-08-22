@@ -161,12 +161,20 @@ export class CertificateService {
         });
     }
 
-    /** One certificate, ownership-checked — backs the printable certificate page. */
+    /**
+     * One certificate, ownership-checked — backs the printable certificate page.
+     *
+     * Includes `facePhotoUrl`, the still captured alongside the face-enrollment
+     * descriptor (see `ProctorService.enrollFace`). Only exposed here — this
+     * read is ownership-checked — and deliberately not from the public
+     * `verify()` endpoint below, which anyone can call by certificate number
+     * alone with no auth.
+     */
     async getForUser(userId: string, id: string) {
         const certificate = await this.prisma.certificate.findUnique({
             where: { id },
             include: {
-                user: { select: { firstName: true, lastName: true } },
+                user: { select: { firstName: true, lastName: true, facePhotoUrl: true } },
                 examInstance: { include: { exam: { select: { title: true } } } },
             },
         });

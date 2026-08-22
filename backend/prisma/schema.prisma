@@ -43,6 +43,12 @@ model User {
   termsAcceptedAt  DateTime?
   termsVersion     String?
   faceEmbedding    Bytes?
+  /// The still captured alongside the enrollment descriptor, printed on the
+  /// certificate. Set only by `ProctorService.enrollFace` — never editable by
+  /// the student directly, unlike `profileImageUrl`, since a self-service photo
+  /// would defeat the point of a certificate photo being the one taken at
+  /// identity enrollment.
+  facePhotoUrl     String?
   profileImageUrl  String?
   isActive         Boolean           @default(true)
   /// Partner campaign referral code the student arrived with (`?ref=CODE`).

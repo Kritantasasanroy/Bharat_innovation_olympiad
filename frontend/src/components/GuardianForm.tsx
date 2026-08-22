@@ -444,7 +444,9 @@ export default function GuardianForm({
                         proctoring. I understand the webcam stays on for the exam, that face analysis
                         runs in their own browser, that no video is ever recorded or stored, and
                         that a still photo is saved only at the moment an exam violation is
-                        recorded, to be reviewed by a person alongside that paper.
+                        recorded, to be reviewed by a person alongside that paper. Separately, one
+                        photo is captured once at registration, alongside the face scan, and is kept
+                        and printed on their certificate.
                     </span>
                 </label>
 
@@ -458,9 +460,10 @@ export default function GuardianForm({
                         <strong>I consent to their personal data being processed.</strong> As required
                         by the Digital Personal Data Protection Act, 2023 for a child&apos;s data, I
                         consent to the collection and use of the details on this form, my child&apos;s
-                        face template and their exam records, for running the Olympiad: identifying
-                        them, proctoring, marking, ranking, certificates, and contacting us about it.
-                        I understand I can withdraw this consent at any time.
+                        face template, the photo captured at registration, and their exam records, for
+                        running the Olympiad: identifying them, proctoring, marking, ranking,
+                        certificates, and contacting us about it. I understand I can withdraw this
+                        consent at any time.
                     </span>
                 </label>
 

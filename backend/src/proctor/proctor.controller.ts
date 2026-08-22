@@ -38,18 +38,22 @@ export class ProctorController {
     // ── Face Enrollment (student) ──
 
     /**
-     * Store a student's 128-D face descriptor (from face-api.js faceRecognitionNet).
+     * Store a student's 128-D face descriptor (from face-api.js faceRecognitionNet),
+     * and the still it was captured alongside.
      * Called once during profile setup or before the first exam.
-     * Descriptor is stored as binary in User.faceEmbedding.
+     * Descriptor is stored as binary in User.faceEmbedding; the photo is
+     * uploaded and its URL stored in User.facePhotoUrl — see
+     * `ProctorService.enrollFace` for why this one photo is not conditional on
+     * a violation, unlike every other capture during proctoring.
      */
     @Post('enroll')
     @UseGuards(JwtAuthGuard)
     @HttpCode(200)
     async enrollFace(
-        @Body() body: { descriptor: number[] },
+        @Body() body: { descriptor: number[]; photo?: string },
         @CurrentUser('id') userId: string,
     ) {
-        await this.proctorService.enrollFace(userId, body.descriptor);
+        await this.proctorService.enrollFace(userId, body.descriptor, body.photo);
         return { enrolled: true };
     }
 

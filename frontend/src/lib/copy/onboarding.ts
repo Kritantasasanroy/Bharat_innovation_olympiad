@@ -33,23 +33,28 @@ export const TECH_REQUIREMENTS = [
  */
 export const PRESENCE_POINTS = [
     {
-        icon: '🪪',
+        icon: '🧑‍💻',
         title: 'The participant must be at the keyboard',
         body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their paper and may be disqualified.',
     },
     {
         icon: '📷',
         title: 'The camera will be switched on',
-        // Precise about the one case where a picture *is* kept. The old wording
+        // Precise about the two cases where a picture *is* kept. The old wording
         // said no picture is ever saved, which stopped being true the moment
         // violations started capturing a frame — and a privacy promise that is
         // quietly false is worse than one that is narrower than you would like.
-        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers, not as a photo. During an exam a photo is saved only if a violation is recorded, and it is kept with that paper for the review team.',
+        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers used to verify the participant during their exam, and this one photo is kept and printed on their certificate. During an exam a further photo is saved only if a violation is recorded, and it is kept with that paper for the review team.',
     },
     {
         icon: '👨‍👩‍👧',
         title: 'A parent or guardian is needed too',
         body: 'One section of the form is for a parent or guardian, including their consent. The participant cannot sit an exam until it is completed.',
+    },
+    {
+        icon: '🪪',
+        title: 'Keep a school or photo ID card handy',
+        body: 'You will need it to fill in your school and class details accurately, and to have ready on exam day for verification.',
     },
     {
         icon: '⏱️',
