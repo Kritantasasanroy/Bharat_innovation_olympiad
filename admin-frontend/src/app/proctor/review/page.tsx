@@ -47,6 +47,20 @@ function riskColor(score: number): string {
     return 'var(--success-400)';
 }
 
+function groupEvents(events: ProctorEvent[]): EventGroup[] {
+    const sorted = [...events].sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp));
+    const groups: EventGroup[] = [];
+    for (const ev of sorted) {
+        const last = groups[groups.length - 1];
+        if (last && last.type === ev.type && last.severity === ev.severity) {
+            last.events.push(ev);
+        } else {
+            groups.push({ key: `${ev.type}-${ev.severity}-${groups.length}`, type: ev.type, severity: ev.severity, events: [ev] });
+        }
+    }
+    return groups;
+}
+
 interface QueueRow {
     attemptId: string;
     status: string;
@@ -69,6 +83,20 @@ interface QueueRow {
     eventCounts: Record<string, number>;
 }
 
+interface ProctorEvent {
+    id: string;
+    timestamp: string;
+    type: string;
+    severity: number;
+}
+
+interface EventGroup {
+    key: string;
+    type: string;
+    severity: number;
+    events: ProctorEvent[];
+}
+
 export default function ProctorReviewPage() {
     const [rows, setRows] = useState<QueueRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -82,6 +110,7 @@ export default function ProctorReviewPage() {
     const [notes, setNotes] = useState('');
     const [saving, setSaving] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -254,7 +283,7 @@ export default function ProctorReviewPage() {
                 {/* ── One case, with its evidence ── */}
                 {openId && (
                     <div className="modal-overlay" onClick={() => !saving && setOpenId(null)}>
-                        <div className="modal-content" style={{ maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-content modal-content--wide" onClick={(e) => e.stopPropagation()}>
                             <h2>Review attempt</h2>
 
                             {evidenceLoading && <p className="text-muted">Loading the evidence…</p>}
@@ -281,13 +310,49 @@ export default function ProctorReviewPage() {
                                         {(evidence.events ?? []).length === 0 && (
                                             <p className="text-muted">No events were recorded for this attempt.</p>
                                         )}
-                                        {(evidence.events ?? []).map((ev: any) => {
-                                            const meta = EVENT_LABELS[ev.type] ?? { label: ev.type, color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' };
+                                        {groupEvents((evidence.events ?? []) as ProctorEvent[]).map((group) => {
+                                            const meta = EVENT_LABELS[group.type] ?? { label: group.type, color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' };
+                                            const isExpanded = expandedGroups.has(group.key);
+                                            if (group.events.length === 1) {
+                                                const ev = group.events[0];
+                                                return (
+                                                    <div key={group.key} className="review-timeline__row">
+                                                        <time>{new Date(ev.timestamp).toLocaleTimeString()}</time>
+                                                        <span style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+                                                        <small>severity {ev.severity}</small>
+                                                    </div>
+                                                );
+                                            }
+                                            const first = group.events[0];
+                                            const last = group.events[group.events.length - 1];
+                                            const sameMinute = new Date(first.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) ===
+                                                new Date(last.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                             return (
-                                                <div key={ev.id} className="review-timeline__row">
-                                                    <time>{new Date(ev.timestamp).toLocaleTimeString()}</time>
-                                                    <span style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
-                                                    <small>severity {ev.severity}</small>
+                                                <div key={group.key} className="review-timeline__group">
+                                                    <div
+                                                        className="review-timeline__group-summary"
+                                                        onClick={() => {
+                                                            const next = new Set(expandedGroups);
+                                                            if (next.has(group.key)) next.delete(group.key);
+                                                            else next.add(group.key);
+                                                            setExpandedGroups(next);
+                                                        }}
+                                                    >
+                                                        <time>
+                                                            {new Date(first.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            {sameMinute ? '' : ` – ${new Date(last.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                                        </time>
+                                                        <span style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+                                                        <small>{group.events.length} events · severity {group.severity}</small>
+                                                        <span style={{ color: 'var(--text-tertiary)', fontSize: '0.7rem' }}>{isExpanded ? '▲' : '▼'}</span>
+                                                    </div>
+                                                    {isExpanded && (
+                                                        <div className="review-timeline__group-details">
+                                                            {group.events.map((ev) => (
+                                                                <time key={ev.id}>{new Date(ev.timestamp).toLocaleTimeString()}</time>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })}
@@ -306,11 +371,17 @@ export default function ProctorReviewPage() {
                                     <textarea
                                         id="reviewNotes"
                                         className="form-control"
-                                        rows={4}
+                                        rows={5}
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
                                         placeholder="What the evidence shows, and what you concluded from it. Recorded permanently and shown if the student appeals."
                                     />
+                                    <p className="input-hint" style={{ marginTop: 'var(--space-2)' }}>
+                                        Disqualifying removes this attempt from the rankings, certificates and
+                                        exports. It cannot be done once the final report for this exam is
+                                        published — revoke the report first.{' '}
+                                        <Link href={`/analytics/attempt/${openId}`}>See the score report →</Link>
+                                    </p>
 
                                     {actionError && <div className="form-error" style={{ marginTop: 'var(--space-3)' }}>{actionError}</div>}
 
@@ -319,19 +390,12 @@ export default function ProctorReviewPage() {
                                             Cancel
                                         </button>
                                         <button className="btn btn-secondary" onClick={() => void decide('CLEARED')} disabled={saving || !notes.trim()}>
-                                            {saving ? 'Saving…' : '✓ Clear — no action'}
+                                            {saving ? 'Saving…' : 'Clear — no action'}
                                         </button>
                                         <button className="btn btn-danger" onClick={() => void decide('DISQUALIFIED')} disabled={saving || !notes.trim()}>
-                                            {saving ? 'Saving…' : '⚖ Disqualify'}
+                                            {saving ? 'Saving…' : 'Disqualify'}
                                         </button>
                                     </div>
-
-                                    <p className="input-hint" style={{ marginTop: 'var(--space-3)' }}>
-                                        Disqualifying removes this attempt from the rankings, certificates and
-                                        exports. It cannot be done once the final report for this exam is
-                                        published — revoke the report first.{' '}
-                                        <Link href={`/analytics/attempt/${openId}`}>See the score report →</Link>
-                                    </p>
                                 </>
                             )}
                         </div>
