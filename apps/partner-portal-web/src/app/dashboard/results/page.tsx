@@ -8,6 +8,7 @@ import {
 	partnerPortalApi,
 } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
+import { downloadCsv } from "../../../lib/csv";
 import { usePoll } from "../../../lib/use-poll";
 
 /**
@@ -85,6 +86,37 @@ export default function PartnerResultsPage() {
 		}
 	}
 
+	function exportCsv() {
+		if (!current || !rows) return;
+		downloadCsv(
+			`bio-partner-results-${current.examTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`,
+			[
+				"Rank",
+				"Student",
+				"Email",
+				"School",
+				"School Code",
+				"Class",
+				"Score",
+				"Max",
+				"Normalized",
+				"Percentile",
+			],
+			rows.map((r) => [
+				r.rank ?? "—",
+				r.studentName,
+				r.email,
+				r.schoolName,
+				r.schoolCode,
+				r.classBand ?? "—",
+				r.rawScore ?? "—",
+				r.maxScore ?? "—",
+				r.normalizedScore ?? "—",
+				r.percentile ?? "—",
+			]),
+		);
+	}
+
 	if (!token) return null;
 
 	return (
@@ -99,9 +131,19 @@ export default function PartnerResultsPage() {
 						</p>
 					</div>
 					{current && (
-						<button type="button" className="button" disabled={downloading} onClick={download}>
-							{downloading ? "Building…" : "⬇ Download Excel"}
-						</button>
+						<div className="row" style={{ gap: "0.5rem" }}>
+							<button
+								type="button"
+								className="button button--secondary"
+								disabled={!rows || rows.length === 0}
+								onClick={exportCsv}
+							>
+								Download CSV
+							</button>
+							<button type="button" className="button" disabled={downloading} onClick={download}>
+								{downloading ? "Building…" : "Download Excel"}
+							</button>
+						</div>
 					)}
 				</div>
 			</div>

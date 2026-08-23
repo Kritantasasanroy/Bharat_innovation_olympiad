@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
 	{ href: "/dashboard", label: "Overview" },
+	{ href: "/dashboard/announcements", label: "Announcements" },
 	{ href: "/dashboard/schools", label: "Schools" },
 	// Every student across the partner's schools, and their released results.
 	{ href: "/dashboard/students", label: "Students" },

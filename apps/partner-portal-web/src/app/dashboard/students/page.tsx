@@ -8,6 +8,7 @@ import {
 	partnerPortalApi,
 } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
+import { downloadCsv } from "../../../lib/csv";
 import { usePoll } from "../../../lib/use-poll";
 
 /**
@@ -73,14 +74,42 @@ export default function PartnerStudentsPage() {
 
 	if (!token) return null;
 
+	function exportCsv() {
+		downloadCsv(
+			"bio-partner-students.csv",
+			["Name", "Email", "Phone", "School", "School Code", "Class", "Status"],
+			rows.map((s) => [
+				s.name,
+				s.email,
+				s.phone ?? "—",
+				s.schoolName,
+				s.schoolCode ?? "—",
+				s.classBand ?? "—",
+				s.status,
+			]),
+		);
+	}
+
 	return (
 		<main>
 			<div className="page-header">
-				<h1>Students</h1>
-				<p className="muted">
-					Every student across the schools assigned to you. Registration and payment status update
-					as they progress.
-				</p>
+				<div className="row-between">
+					<div>
+						<h1>Students</h1>
+						<p className="muted">
+							Every student across the schools assigned to you. Registration and payment status
+							update as they progress.
+						</p>
+					</div>
+					<button
+						type="button"
+						className="button button--secondary button--small"
+						onClick={exportCsv}
+						disabled={rows.length === 0}
+					>
+						Download CSV
+					</button>
+				</div>
 			</div>
 
 			{error && <div className="notice notice--error">{error}</div>}

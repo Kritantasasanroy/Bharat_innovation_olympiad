@@ -275,11 +275,13 @@ export interface PartnerSchool {
 	readonly id: string;
 	readonly schoolName: string;
 	readonly board: string;
+	readonly udiseCode: string | null;
 	readonly city: string;
 	readonly state: string;
 	readonly pincode: string;
 	readonly coordinatorName: string;
 	readonly coordinatorEmail: string;
+	readonly coordinatorPhone: string | null;
 	readonly status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
 	readonly emailVerifiedAt: string | null;
 	/** The campaign code the school arrived on, or null for a direct onboard. */
@@ -306,6 +308,15 @@ export interface SupportTicketInput {
 	readonly message: string;
 }
 
+export interface Announcement {
+	readonly id: string;
+	readonly title: string;
+	readonly body: string;
+	readonly audience: "PARTNER" | "SCHOOL" | "ALL";
+	readonly publishedAt: string;
+	readonly expiresAt: string | null;
+}
+
 /**
  * Partner support tickets — raised against the **backend** (persisted, visible
  * to admin), replacing the old portal-api in-memory store that reached no one.
@@ -315,6 +326,11 @@ export const partnerSupportApi = {
 		backendRequest<SupportTicket>("/partner/support", input, { token }),
 	list: (token: string) =>
 		backendRequest<SupportTicket[]>("/partner/support", undefined, { token }),
+};
+
+export const partnerAnnouncementApi = {
+	list: (token: string) =>
+		backendRequest<Announcement[]>("/partner/announcements", undefined, { token }),
 };
 
 /**

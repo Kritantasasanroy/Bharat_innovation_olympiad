@@ -36,11 +36,13 @@ export class PartnerSchoolController {
                 id: true,
                 schoolName: true,
                 board: true,
+                udiseCode: true,
                 city: true,
                 state: true,
                 pincode: true,
                 coordinatorName: true,
                 coordinatorEmail: true,
+                coordinatorPhone: true,
                 status: true,
                 // Which campaign drove this school (null for a direct onboard),
                 // so the partner portal can count schools per campaign.

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AdminManagementModule } from './admin-management/admin-management.module';
+import { AnnouncementModule } from './announcement/announcement.module';
 import { AttemptModule } from './attempt/attempt.module';
 import { AuthModule } from './auth/auth.module';
 import { CertificateModule } from './certificate/certificate.module';
@@ -55,6 +56,8 @@ import { UserModule } from './user/user.module';
         AdminManagementModule,
         // Partner/school support tickets, visible to admin.
         SupportModule,
+        // Admin announcements visible to partner and school portals.
+        AnnouncementModule,
     ],
     controllers: [HealthController],
 })

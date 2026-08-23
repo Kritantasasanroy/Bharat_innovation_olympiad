@@ -9,6 +9,7 @@ import {
 	type RegisterStudentsResult,
 } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
+import { downloadCsv } from "../../../lib/csv";
 import { useResource } from "../../../lib/use-resource";
 
 type Filter = "ALL" | "INVITED" | "PARTICIPATING";
@@ -129,6 +130,14 @@ export default function StudentsPage() {
 
 	const validCount = parsed?.filter((r) => r.valid).length ?? 0;
 	const invalidCount = (parsed?.length ?? 0) - validCount;
+
+	function exportCsv() {
+		downloadCsv(
+			"bio-students.csv",
+			["Name", "Class", "Email", "Status", "Score"],
+			visible.map((s) => [s.name, s.classBand, s.email, s.status, s.score ?? "—"]),
+		);
+	}
 
 	return (
 		<main>
@@ -263,12 +272,22 @@ export default function StudentsPage() {
 			<div className="card">
 				<div className="section-title">
 					<h2>Roster ({visible.length})</h2>
-					<input
-						placeholder="Search name or email…"
-						value={query}
-						onChange={(e) => setQuery(e.target.value)}
-						style={{ maxWidth: 260 }}
-					/>
+					<div className="row" style={{ gap: "0.5rem" }}>
+						<input
+							placeholder="Search name or email…"
+							value={query}
+							onChange={(e) => setQuery(e.target.value)}
+							style={{ maxWidth: 220 }}
+						/>
+						<button
+							type="button"
+							className="button button--secondary button--small"
+							onClick={exportCsv}
+							disabled={visible.length === 0}
+						>
+							Download CSV
+						</button>
+					</div>
 				</div>
 				<div className="inline" style={{ marginBottom: "1rem" }}>
 					{(["ALL", "INVITED", "PARTICIPATING"] as Filter[]).map((f) => (

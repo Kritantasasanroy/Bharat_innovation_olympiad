@@ -207,6 +207,15 @@ export interface SupportTicket {
 	readonly createdAt: string;
 }
 
+export interface Announcement {
+	readonly id: string;
+	readonly title: string;
+	readonly body: string;
+	readonly audience: "PARTNER" | "SCHOOL" | "ALL";
+	readonly publishedAt: string;
+	readonly expiresAt: string | null;
+}
+
 async function authedPatch<T>(path: string, token: string, body: unknown): Promise<T> {
 	let response: Response;
 	try {
@@ -285,6 +294,9 @@ export const portalApi = {
 	listSupport: (token: string) => authed<SupportTicket[]>("/school/support", token),
 	createSupport: (token: string, input: { category: string; subject: string; message: string }) =>
 		authedPost<SupportTicket>("/school/support", token, input),
+
+	/** Admin announcements visible to this audience. */
+	announcements: (token: string) => authed<Announcement[]>("/school/portal/announcements", token),
 };
 
 /** What a coordinator may change about their school. Name/pincode/code are staff-only. */

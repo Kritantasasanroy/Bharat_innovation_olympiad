@@ -56,6 +56,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
             { label: 'Review queue', href: '/proctor/review' },
             { label: 'Student grievances', href: '/grievances' },
             { label: 'Support tickets', href: '/support' },
+            { label: 'Announcements', href: '/announcements' },
             { label: 'Refunds', href: '/refunds' },
         ],
     },

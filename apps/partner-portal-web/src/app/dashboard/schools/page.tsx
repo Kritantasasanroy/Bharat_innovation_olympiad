@@ -8,6 +8,7 @@ import {
 	partnerSchoolApi,
 } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
+import { downloadCsv } from "../../../lib/csv";
 import { usePoll } from "../../../lib/use-poll";
 
 const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
@@ -47,6 +48,38 @@ export default function PartnerSchoolsPage() {
 
 	// Auto-refresh so an admin's approval/rejection shows without a manual reload.
 	usePoll(load);
+
+	function exportCsv() {
+		downloadCsv(
+			"bio-partner-schools.csv",
+			[
+				"School",
+				"Board",
+				"UDISE",
+				"City",
+				"State",
+				"Pincode",
+				"Coordinator",
+				"Email",
+				"Phone",
+				"Code",
+				"Status",
+			],
+			(schools ?? []).map((s) => [
+				s.schoolName,
+				s.board,
+				s.udiseCode ?? "—",
+				s.city,
+				s.state,
+				s.pincode,
+				s.coordinatorName,
+				s.coordinatorEmail,
+				s.coordinatorPhone ?? "—",
+				s.schoolCode ?? "—",
+				s.status,
+			]),
+		);
+	}
 
 	// City and state from the pincode, so they match what a student later sees.
 	useEffect(() => {
@@ -201,7 +234,17 @@ export default function PartnerSchoolsPage() {
 			</div>
 
 			<div className="card">
-				<h2>Schools you&apos;ve brought in</h2>
+				<div className="section-title">
+					<h2>Schools you&apos;ve brought in</h2>
+					<button
+						type="button"
+						className="button button--secondary button--small"
+						onClick={exportCsv}
+						disabled={!schools || schools.length === 0}
+					>
+						Download CSV
+					</button>
+				</div>
 				{schools && schools.length > 0 ? (
 					<div className="table-wrap">
 						<table>

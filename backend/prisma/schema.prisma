@@ -1224,6 +1224,30 @@ model SupportTicket {
   @@index([submitterId])
 }
 
+enum AnnouncementAudience {
+  PARTNER
+  SCHOOL
+  ALL
+}
+
+model Announcement {
+  id          String              @id @default(uuid())
+  title       String
+  body        String
+  audience    AnnouncementAudience
+  /// Scheduled/visible start time. Posts with a future publishedAt are drafted.
+  publishedAt DateTime
+  /// Soft-expiry: null means visible indefinitely.
+  expiresAt   DateTime?
+  active      Boolean             @default(true)
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([audience])
+  @@index([active, publishedAt])
+}
+
 enum WhatsAppStatus {
   /// Claimed by a sender but not yet answered for — a row left here means the
   /// process died mid-send, which is the one case worth being able to see.
