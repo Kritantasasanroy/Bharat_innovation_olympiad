@@ -1,5 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import {
+    ResendEmailVerificationDto,
+    VerifyEmailDto,
+} from '../common/dto/email-verification.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -27,6 +31,26 @@ export class PartnerController {
     @Post('partner/login')
     login(@Body() dto: PartnerLoginDto) {
         return this.partnerService.login(dto);
+    }
+
+    /** PUBLIC — confirm the contact email before staff review. */
+    @Post('partner/verify-email')
+    verifyEmail(@Body() dto: VerifyEmailDto) {
+        return this.partnerService.verifyEmail(dto.token);
+    }
+
+    /** PUBLIC — resend without revealing whether an address has an application. */
+    @Post('partner/resend-verification')
+    resendVerification(@Body() dto: ResendEmailVerificationDto) {
+        return this.partnerService.resendVerification(dto.email);
+    }
+
+    /** ADMIN — resend a pending application's email-verification link. */
+    @Post('admin/partner-requests/:id/resend-verification')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    resendVerificationForAdmin(@Param('id') id: string, @CurrentUser('id') adminId: string) {
+        return this.partnerService.resendVerificationForAdmin(id, adminId);
     }
 
     /** ADMIN — partner review queue for the admin Access Management page. */

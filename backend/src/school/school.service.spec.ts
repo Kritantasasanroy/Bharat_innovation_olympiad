@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { generateAccessToken } from '../common/access-token';
 import { notificationServiceStub } from '../notification/notification.stub';
+import type { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
 import { SchoolService } from './school.service';
 
@@ -13,86 +14,266 @@ import { SchoolService } from './school.service';
  * `findUnique` matches on every key in `where`, which is how the unique indexes
  * on `coordinatorEmail` and `accessTokenHash` behave.
  */
+type StoreArgs = {
+    where?: Record<string, unknown>;
+    data?: Record<string, unknown>;
+    include?: Record<string, unknown>;
+    select?: Record<string, unknown>;
+    orderBy?: unknown;
+};
+
+type SchoolRow = {
+    id: string;
+    name: string;
+    nameKey: string;
+    code: string;
+    city: string;
+    state: string;
+    pincode: string;
+    board: string | null | undefined;
+    udiseCode: string | null | undefined;
+    partnerId: string | null | undefined;
+    onboardedAt: Date | null | undefined;
+};
+
+type SchoolRequestRow = {
+    id: string;
+    schoolName: string;
+    board: string;
+    udiseCode: string | null;
+    pincode: string;
+    city: string;
+    state: string;
+    coordinatorName: string;
+    coordinatorEmail: string;
+    coordinatorPhone: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    emailVerifiedAt: Date | null;
+    emailVerificationTokenHash: string | null;
+    emailVerificationTokenExpiresAt: Date | null;
+    emailVerificationSentAt: Date | null;
+    emailVerificationTokenUsedAt: Date | null;
+    submittedByPartnerId: string | null;
+    submittedViaReferralCode: string | null;
+    schoolId: string | null;
+    coordinatorUserId: string | null;
+    accessTokenHash: string | null;
+    accessTokenSealed: string | null;
+    tokenIssuedAt: Date | null;
+    tokenLastUsedAt: Date | null;
+    decisionReason: string | null;
+    decidedBy: string | null;
+    decidedAt: Date | null;
+    createdAt: Date;
+    school?: SchoolRow | null;
+};
+
+type UserRow = {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    schoolId: string | null | undefined;
+    isActive: boolean;
+};
+
+type AuditRow = Record<string, unknown>;
+
+type FakePrisma = {
+    schoolRequest: {
+        findUnique(args: StoreArgs): Promise<SchoolRequestRow | null>;
+        findMany(args?: StoreArgs): Promise<readonly SchoolRequestRow[]>;
+        create(args: StoreArgs): Promise<SchoolRequestRow>;
+        update(args: StoreArgs): Promise<SchoolRequestRow>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
+    };
+    school: {
+        findUnique(args: StoreArgs): Promise<SchoolRow | null>;
+        create(args: StoreArgs): Promise<SchoolRow>;
+        update(args: StoreArgs): Promise<SchoolRow>;
+    };
+    user: {
+        findUnique(args: StoreArgs): Promise<UserRow | null>;
+        create(args: StoreArgs): Promise<UserRow>;
+        update(args: StoreArgs): Promise<UserRow>;
+    };
+    auditLog: { create(args: StoreArgs): Promise<unknown> };
+    $transaction<T>(callback: (tx: FakePrisma) => Promise<T>): Promise<T>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date);
+}
+
+function stringValue(data: Record<string, unknown>, key: string): string {
+    const value = data[key];
+    return typeof value === 'string' ? value : '';
+}
+
+function nullableStringValue(data: Record<string, unknown>, key: string): string | null {
+    const value = data[key];
+    return typeof value === 'string' ? value : null;
+}
+
+function dateValue(data: Record<string, unknown>, key: string): Date | null {
+    const value = data[key];
+    return value instanceof Date ? value : null;
+}
+
+function statusValue(data: Record<string, unknown>): SchoolRequestRow['status'] {
+    const value = data.status;
+    if (value === 'APPROVED' || value === 'REJECTED' || value === 'REVOKED') return value;
+    return 'PENDING';
+}
+
+function booleanValue(data: Record<string, unknown>, key: string, fallback: boolean): boolean {
+    return typeof data[key] === 'boolean' ? data[key] : fallback;
+}
+
 function createFakeDb() {
     let seq = 0;
     const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
-    const schoolRequests: any[] = [];
-    const schools: any[] = [];
-    const users: any[] = [];
-    const auditLogs: any[] = [];
+    const schoolRequests: SchoolRequestRow[] = [];
+    const schools: SchoolRow[] = [];
+    const users: UserRow[] = [];
+    const auditLogs: AuditRow[] = [];
 
-    /**
-     * Matches every key in `where`. A composite-unique lookup arrives as a
-     * single nested key (`{ nameKey_pincode: { nameKey, pincode } }`), which is
-     * how Prisma names `@@unique([nameKey, pincode])` — flatten it.
-     */
-    const match = (row: any, where: any) =>
-        Object.entries(where).every(([key, value]) =>
-            value && typeof value === 'object' && !(value instanceof Date)
-                ? Object.entries(value).every(([k, v]) => row[k] === v)
-                : row[key] === value,
-        );
+    const match = (row: Record<string, unknown>, where: Record<string, unknown> = {}) =>
+        Object.entries(where).every(([key, value]) => {
+            if (isRecord(value)) {
+                return Object.entries(value).every(([nestedKey, nestedValue]) => row[nestedKey] === nestedValue);
+            }
+            return row[key] === value;
+        });
 
-    const hydrate = (row: any, include?: any) =>
+    const hydrate = (row: SchoolRequestRow | null, include?: Record<string, unknown>) =>
         row && include?.school
-            ? { ...row, school: schools.find((s) => s.id === row.schoolId) ?? null }
+            ? { ...row, school: schools.find((school) => school.id === row.schoolId) ?? null }
             : row;
 
-    const prisma: any = {
+    const prisma: FakePrisma = {
         schoolRequest: {
-            findUnique: async ({ where, include }: any) =>
-                hydrate(schoolRequests.find((r) => match(r, where)) ?? null, include),
+            findUnique: async ({ where, include }: StoreArgs) =>
+                hydrate(schoolRequests.find((row) => match(row, where)) ?? null, include),
             findMany: async () => [...schoolRequests],
-            create: async ({ data }: any) => {
-                const row = { id: nextId('req'), schoolId: null, coordinatorUserId: null, ...data };
+            create: async ({ data = {} }: StoreArgs) => {
+                const row: SchoolRequestRow = {
+                    id: nextId('req'),
+                    schoolName: stringValue(data, 'schoolName'),
+                    board: stringValue(data, 'board'),
+                    udiseCode: nullableStringValue(data, 'udiseCode'),
+                    pincode: stringValue(data, 'pincode'),
+                    city: stringValue(data, 'city'),
+                    state: stringValue(data, 'state'),
+                    coordinatorName: stringValue(data, 'coordinatorName'),
+                    coordinatorEmail: stringValue(data, 'coordinatorEmail'),
+                    coordinatorPhone: stringValue(data, 'coordinatorPhone'),
+                    status: statusValue(data),
+                    emailVerifiedAt: dateValue(data, 'emailVerifiedAt'),
+                    emailVerificationTokenHash: nullableStringValue(data, 'emailVerificationTokenHash'),
+                    emailVerificationTokenExpiresAt: dateValue(data, 'emailVerificationTokenExpiresAt'),
+                    emailVerificationSentAt: dateValue(data, 'emailVerificationSentAt'),
+                    emailVerificationTokenUsedAt: dateValue(data, 'emailVerificationTokenUsedAt'),
+                    submittedByPartnerId: nullableStringValue(data, 'submittedByPartnerId'),
+                    submittedViaReferralCode: nullableStringValue(data, 'submittedViaReferralCode'),
+                    schoolId: nullableStringValue(data, 'schoolId'),
+                    coordinatorUserId: nullableStringValue(data, 'coordinatorUserId'),
+                    accessTokenHash: nullableStringValue(data, 'accessTokenHash'),
+                    accessTokenSealed: nullableStringValue(data, 'accessTokenSealed'),
+                    tokenIssuedAt: dateValue(data, 'tokenIssuedAt'),
+                    tokenLastUsedAt: dateValue(data, 'tokenLastUsedAt'),
+                    decisionReason: nullableStringValue(data, 'decisionReason'),
+                    decidedBy: nullableStringValue(data, 'decidedBy'),
+                    decidedAt: dateValue(data, 'decidedAt'),
+                    createdAt: dateValue(data, 'createdAt') ?? new Date(),
+                };
                 schoolRequests.push(row);
                 return row;
             },
-            update: async ({ where, data }: any) => {
-                const row = schoolRequests.find((r) => match(r, where));
+            update: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = schoolRequests.find((candidate) => match(candidate, where));
+                if (!row) throw new Error('test fixture row not found');
                 Object.assign(row, data);
                 return row;
             },
+            updateMany: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = schoolRequests.find((candidate) => match(candidate, where));
+                if (!row) return { count: 0 };
+                Object.assign(row, data);
+                return { count: 1 };
+            },
         },
         school: {
-            findUnique: async ({ where }: any) => schools.find((s) => match(s, where)) ?? null,
-            create: async ({ data }: any) => {
-                const row = { id: nextId('school'), ...data };
+            findUnique: async ({ where = {} }: StoreArgs) =>
+                schools.find((school) => match(school, where)) ?? null,
+            create: async ({ data = {} }: StoreArgs) => {
+                const row: SchoolRow = {
+                    id: nextId('school'),
+                    name: stringValue(data, 'name'),
+                    nameKey: stringValue(data, 'nameKey'),
+                    code: stringValue(data, 'code'),
+                    city: stringValue(data, 'city'),
+                    state: stringValue(data, 'state'),
+                    pincode: stringValue(data, 'pincode'),
+                    board: nullableStringValue(data, 'board'),
+                    udiseCode: nullableStringValue(data, 'udiseCode'),
+                    partnerId: nullableStringValue(data, 'partnerId'),
+                    onboardedAt: dateValue(data, 'onboardedAt'),
+                };
                 schools.push(row);
                 return row;
             },
-            update: async ({ where, data }: any) => {
-                const row = schools.find((s) => match(s, where));
+            update: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = schools.find((school) => match(school, where));
+                if (!row) throw new Error('test fixture school not found');
                 Object.assign(row, data);
                 return row;
             },
         },
         user: {
-            findUnique: async ({ where }: any) => users.find((u) => match(u, where)) ?? null,
-            create: async ({ data }: any) => {
-                const row = { id: nextId('user'), ...data };
+            findUnique: async ({ where = {} }: StoreArgs) => users.find((user) => match(user, where)) ?? null,
+            create: async ({ data = {} }: StoreArgs) => {
+                const row: UserRow = {
+                    id: nextId('user'),
+                    email: stringValue(data, 'email'),
+                    firstName: stringValue(data, 'firstName'),
+                    lastName: stringValue(data, 'lastName'),
+                    role: stringValue(data, 'role'),
+                    schoolId: nullableStringValue(data, 'schoolId'),
+                    isActive: booleanValue(data, 'isActive', true),
+                };
                 users.push(row);
                 return row;
             },
-            update: async ({ where, data }: any) => {
-                const row = users.find((u) => match(u, where));
+            update: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = users.find((user) => match(user, where));
+                if (!row) throw new Error('test fixture user not found');
                 Object.assign(row, data);
                 return row;
             },
         },
-        auditLog: { create: async ({ data }: any) => auditLogs.push(data) },
-        $transaction: async (fn: any) => fn(prisma),
+        auditLog: {
+            create: async ({ data = {} }: StoreArgs) => {
+                auditLogs.push(data);
+                return data;
+            },
+        },
+        $transaction: async <T>(callback: (tx: FakePrisma) => Promise<T>) => callback(prisma),
     };
 
     return { prisma, schoolRequests, schools, users, auditLogs };
 }
 
-const jwt: any = { sign: (payload: any) => `jwt.${Buffer.from(JSON.stringify(payload)).toString('base64url')}` };
+type JwtDouble = { sign(payload: Record<string, unknown>, options?: Record<string, unknown>): string };
+const jwt: JwtDouble = {
+    sign: (payload) => `jwt.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`,
+};
 
-const decode = (token: string) => JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+const decode = (token: string) => JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString());
 
-const APPLICATION = {
+const APPLICATION: ApplySchoolDto = {
     schoolName: 'Delhi Public School, Sector 12',
     board: 'CBSE',
     udiseCode: '07010100112',
@@ -109,27 +290,33 @@ const APPLICATION = {
  * one returns null for an unknown/inactive code and never throws. Tests can
  * override the resolver per case.
  */
-function createFakeAdminApi(resolve: (code: string) => Promise<string | null> = async () => null) {
-    return { resolvePartnerIdByReferralCode: jest.fn(resolve) } as any;
+type FakeAdminApi = {
+    resolvePartnerIdByReferralCode(code: string): Promise<string | null>;
+};
+
+function createFakeAdminApi(
+    resolve: (code: string) => Promise<string | null> = async () => null,
+): FakeAdminApi {
+    return { resolvePartnerIdByReferralCode: jest.fn(resolve) };
 }
 
-/** Fake `PartnerDirectoryService` — only exercised when a decided school has `submittedByPartnerId`. */
-function createFakePartnerDirectory() {
+type FakePartnerDirectory = {
+    detailsFor(
+        partnerId: string,
+        isDefault: boolean,
+    ): Promise<{ email: string; contactPerson: string }>;
+};
+
+function createFakePartnerDirectory(): FakePartnerDirectory {
     return {
-        detailsFor: jest.fn().mockResolvedValue({
-            partnerId: 'partner-42',
-            orgName: 'Fake Partner Org',
-            contactPerson: 'Partner Contact',
+        detailsFor: jest.fn(async (_partnerId: string, _isDefault: boolean) => ({
             email: 'partner@example.com',
-            phone: '+910000000000',
-            portalUrl: 'https://bio-partner-portal.example',
-            isDefault: false,
-            label: 'Fake Partner Org',
-        }),
-    } as any;
+            contactPerson: 'Partner Contact',
+        })),
+    };
 }
 
-function setup(adminApi = createFakeAdminApi()) {
+function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
     const db = createFakeDb();
     const notifications = notificationServiceStub();
     const partnerDirectory = createFakePartnerDirectory();
@@ -149,8 +336,8 @@ function setup(adminApi = createFakeAdminApi()) {
  * the same row (which would quietly defeat the one-token-one-school test).
  */
 async function approved(service: SchoolService, overrides: Partial<typeof APPLICATION> = {}) {
-    const application = { ...APPLICATION, ...overrides };
-    await service.apply(application as any);
+    const application: ApplySchoolDto = { ...APPLICATION, ...overrides };
+    await service.apply(application);
 
     const requests = await service.list();
     const request = requests.find(
@@ -158,18 +345,20 @@ async function approved(service: SchoolService, overrides: Partial<typeof APPLIC
     );
     if (!request) throw new Error('test setup: applied request not found');
 
-    await service.decide(request.id, { decision: 'APPROVED', reason: 'Verified' } as any, 'admin-1');
+    request.emailVerifiedAt = new Date();
+    await service.decide(request.id, { decision: 'APPROVED', reason: 'Verified' }, 'admin-1');
     const card = await service.card(request.id);
-    return { requestId: request.id, token: card.accessToken as string, card };
+    if (!card.accessToken) throw new Error('test setup: access token missing');
+    return { requestId: request.id, token: card.accessToken, card };
 }
 
 describe('apply', () => {
     it('records a PENDING request and nothing else', async () => {
         const { service, schoolRequests, schools, users } = setup();
 
-        const result = await service.apply(APPLICATION as any);
+        const result = await service.apply(APPLICATION);
 
-        expect(result.status).toBe('PENDING');
+        expect(result.status).toBe('EMAIL_VERIFICATION_REQUIRED');
         expect(schoolRequests).toHaveLength(1);
         // Approval is what provisions these; applying must not.
         expect(schools).toHaveLength(0);
@@ -178,10 +367,10 @@ describe('apply', () => {
 
     it('lower-cases the coordinator email so a re-apply is caught', async () => {
         const { service } = setup();
-        await service.apply(APPLICATION as any);
+        await service.apply(APPLICATION);
 
         await expect(
-            service.apply({ ...APPLICATION, coordinatorEmail: 'anita.rao@dps.example' } as any),
+            service.apply({ ...APPLICATION, coordinatorEmail: 'anita.rao@dps.example' }),
         ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -191,7 +380,47 @@ describe('apply', () => {
             data: { email: 'anita.rao@dps.example', role: 'STUDENT', firstName: 'A', lastName: 'R' },
         });
 
-        await expect(service.apply(APPLICATION as any)).rejects.toBeInstanceOf(ConflictException);
+        await expect(service.apply(APPLICATION)).rejects.toBeInstanceOf(ConflictException);
+    });
+});
+
+describe('email verification', () => {
+    it('keeps a school out of the approval flow until its email is verified', async () => {
+        const { service, schoolRequests, notifications } = setup();
+
+        const result = await service.apply(APPLICATION);
+        const request = schoolRequests[0];
+        const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
+
+        expect(result.status).toBe('EMAIL_VERIFICATION_REQUIRED');
+        expect(request.emailVerifiedAt).toBeNull();
+        expect(request.emailVerificationTokenHash).not.toBe(token);
+        await expect(
+            service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1'),
+        ).rejects.toThrow('Confirm the coordinator email');
+    });
+
+    it('verifies once, sends the review notification, and makes replay idempotent', async () => {
+        const { service, schoolRequests, notifications } = setup();
+        await service.apply(APPLICATION);
+        const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
+
+        const first = await service.verifyEmail(token);
+        const second = await service.verifyEmail(token);
+
+        expect(first.status).toBe('PENDING');
+        expect(second.status).toBe('ALREADY_VERIFIED');
+        expect(schoolRequests[0].emailVerifiedAt).toBeInstanceOf(Date);
+        expect(notifications.sendSchoolApplicationReceived).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects an expired verification token', async () => {
+        const { service, schoolRequests, notifications } = setup();
+        await service.apply(APPLICATION);
+        schoolRequests[0].emailVerificationTokenExpiresAt = new Date(Date.now() - 1);
+        const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
+
+        await expect(service.verifyEmail(token)).rejects.toThrow('invalid or has expired');
     });
 });
 
@@ -233,7 +462,7 @@ describe('decide — approval', () => {
         const { service, schools, users } = setup();
         const { requestId, token } = await approved(service);
 
-        await service.decide(requestId, { decision: 'APPROVED', reason: 'again' } as any, 'admin-1');
+        await service.decide(requestId, { decision: 'APPROVED', reason: 'again' }, 'admin-1');
 
         expect(schools).toHaveLength(1);
         expect(users).toHaveLength(1);
@@ -268,14 +497,14 @@ describe('decide — approval', () => {
 
     it('records the partner that onboarded the school', async () => {
         const { service, schoolRequests } = setup();
-        await service.apply(APPLICATION as any, 'partner-42');
+        await service.apply(APPLICATION, 'partner-42');
 
         expect(schoolRequests[0].submittedByPartnerId).toBe('partner-42');
     });
 
     it('leaves submittedByPartnerId null on a self-application', async () => {
         const { service, schoolRequests } = setup();
-        await service.apply(APPLICATION as any);
+        await service.apply(APPLICATION);
 
         expect(schoolRequests[0].submittedByPartnerId).toBeNull();
     });
@@ -286,7 +515,7 @@ describe('decide — approval', () => {
         );
         const { service, schoolRequests } = setup(adminApi);
 
-        await service.apply({ ...APPLICATION, referralCode: 'ref_good' } as any);
+        await service.apply({ ...APPLICATION, referralCode: 'ref_good' });
 
         expect(adminApi.resolvePartnerIdByReferralCode).toHaveBeenCalledWith('ref_good');
         expect(schoolRequests[0].submittedByPartnerId).toBe('partner-from-campaign');
@@ -297,9 +526,9 @@ describe('decide — approval', () => {
         // The resolver returns null for an unknown/inactive code; apply must succeed.
         const { service, schoolRequests } = setup(createFakeAdminApi(async () => null));
 
-        const result = await service.apply({ ...APPLICATION, referralCode: 'ref_bad' } as any);
+        const result = await service.apply({ ...APPLICATION, referralCode: 'ref_bad' });
 
-        expect(result.status).toBe('PENDING');
+        expect(result.status).toBe('EMAIL_VERIFICATION_REQUIRED');
         expect(schoolRequests[0].submittedByPartnerId).toBeNull();
         expect(schoolRequests[0].submittedViaReferralCode).toBeNull();
     });
@@ -309,7 +538,7 @@ describe('decide — approval', () => {
         const { service, schoolRequests } = setup(adminApi);
 
         // The authenticated /partner/schools path passes submittedByPartnerId.
-        await service.apply({ ...APPLICATION, referralCode: 'ref_good' } as any, 'direct-partner');
+        await service.apply({ ...APPLICATION, referralCode: 'ref_good' }, 'direct-partner');
 
         expect(adminApi.resolvePartnerIdByReferralCode).not.toHaveBeenCalled();
         expect(schoolRequests[0].submittedByPartnerId).toBe('direct-partner');
@@ -317,10 +546,10 @@ describe('decide — approval', () => {
 
     it('rejecting an unprovisioned request creates no school or user', async () => {
         const { service, schools, users } = setup();
-        await service.apply(APPLICATION as any);
+        await service.apply(APPLICATION);
         const [request] = await service.list();
 
-        await service.decide(request.id, { decision: 'REJECTED', reason: 'Duplicate' } as any, 'a');
+        await service.decide(request.id, { decision: 'REJECTED', reason: 'Duplicate' }, 'a');
 
         expect(schools).toHaveLength(0);
         expect(users).toHaveLength(0);
@@ -332,7 +561,7 @@ describe('login', () => {
         const { service, schools, users } = setup();
         const { token } = await approved(service);
 
-        const result = await service.login({ accessToken: token } as any);
+        const result = await service.login({ accessToken: token });
 
         expect(result.school.id).toBe(schools[0].id);
         expect(decode(result.accessToken)).toMatchObject({
@@ -347,7 +576,7 @@ describe('login', () => {
         const { token } = await approved(service);
 
         await expect(
-            service.login({ accessToken: `  ${token.toLowerCase()} ` } as any),
+            service.login({ accessToken: `  ${token.toLowerCase()} ` }),
         ).resolves.toBeDefined();
     });
 
@@ -362,8 +591,8 @@ describe('login', () => {
         expect(a.token).not.toBe(b.token);
         expect(schools).toHaveLength(2);
 
-        const asA = await service.login({ accessToken: a.token } as any);
-        const asB = await service.login({ accessToken: b.token } as any);
+        const asA = await service.login({ accessToken: a.token });
+        const asB = await service.login({ accessToken: b.token });
 
         expect(asA.school.id).not.toBe(asB.school.id);
         expect(asA.school.name).toBe('Delhi Public School, Sector 12');
@@ -375,26 +604,26 @@ describe('login', () => {
         await approved(service);
 
         await expect(
-            service.login({ accessToken: generateAccessToken('SCHOOL') } as any),
+            service.login({ accessToken: generateAccessToken('SCHOOL') }),
         ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
     it('refuses a partner token, and a JWT', async () => {
         const { service } = setup();
         await expect(
-            service.login({ accessToken: generateAccessToken('PARTNER') } as any),
+            service.login({ accessToken: generateAccessToken('PARTNER') }),
         ).rejects.toBeInstanceOf(UnauthorizedException);
         await expect(
-            service.login({ accessToken: 'eyJhbGciOi.eyJzdWIi.sig' } as any),
+            service.login({ accessToken: 'eyJhbGciOi.eyJzdWIi.sig' }),
         ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
     it('records when the token was last used', async () => {
         const { service, schoolRequests } = setup();
         const { token } = await approved(service);
-        expect(schoolRequests[0].tokenLastUsedAt).toBeUndefined();
+        expect(schoolRequests[0].tokenLastUsedAt).toBeNull();
 
-        await service.login({ accessToken: token } as any);
+        await service.login({ accessToken: token });
 
         expect(schoolRequests[0].tokenLastUsedAt).toBeInstanceOf(Date);
     });
@@ -405,11 +634,11 @@ describe('decide — revoke and re-grant', () => {
         const { service, users } = setup();
         const { requestId, token } = await approved(service);
 
-        await service.decide(requestId, { decision: 'REVOKED', reason: 'Contract ended' } as any, 'a');
+        await service.decide(requestId, { decision: 'REVOKED', reason: 'Contract ended' }, 'a');
 
         // Deactivation is what kills a still-valid JWT on its next request.
         expect(users[0].isActive).toBe(false);
-        await expect(service.login({ accessToken: token } as any)).rejects.toBeInstanceOf(
+        await expect(service.login({ accessToken: token })).rejects.toBeInstanceOf(
             ForbiddenException,
         );
     });
@@ -417,19 +646,19 @@ describe('decide — revoke and re-grant', () => {
     it('re-granting restores access with the same token', async () => {
         const { service, users } = setup();
         const { requestId, token } = await approved(service);
-        await service.decide(requestId, { decision: 'REVOKED', reason: 'pause' } as any, 'a');
+        await service.decide(requestId, { decision: 'REVOKED', reason: 'pause' }, 'a');
 
-        await service.decide(requestId, { decision: 'APPROVED', reason: 'resumed' } as any, 'a');
+        await service.decide(requestId, { decision: 'APPROVED', reason: 'resumed' }, 'a');
 
         expect(users[0].isActive).toBe(true);
-        await expect(service.login({ accessToken: token } as any)).resolves.toBeDefined();
+        await expect(service.login({ accessToken: token })).resolves.toBeDefined();
     });
 });
 
 describe('card and rotateToken', () => {
     it('exists only for an approved school', async () => {
         const { service } = setup();
-        await service.apply(APPLICATION as any);
+        await service.apply(APPLICATION);
         const [request] = await service.list();
 
         await expect(service.card(request.id)).rejects.toBeInstanceOf(ForbiddenException);
@@ -463,12 +692,11 @@ describe('card and rotateToken', () => {
         const rotated = await service.rotateToken(requestId, 'admin-1');
 
         expect(rotated.accessToken).not.toBe(old);
-        await expect(service.login({ accessToken: old } as any)).rejects.toBeInstanceOf(
+        await expect(service.login({ accessToken: old })).rejects.toBeInstanceOf(
             UnauthorizedException,
         );
-        await expect(
-            service.login({ accessToken: rotated.accessToken as string } as any),
-        ).resolves.toBeDefined();
+        if (!rotated.accessToken) throw new Error('test setup: rotated token missing');
+        await expect(service.login({ accessToken: rotated.accessToken })).resolves.toBeDefined();
     });
 
     it('audits every decision and rotation', async () => {

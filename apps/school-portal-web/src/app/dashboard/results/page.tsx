@@ -11,6 +11,10 @@ interface ClassRow {
 	avgScore: number;
 }
 
+function csvCell(value: string | number | null): string {
+	return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
 /**
  * Results & analytics — released results only (§2.14), participation summary
  * (§2.15), class/grade performance (§2.16), student-wise scores + percentile
@@ -86,9 +90,10 @@ export default function ResultsPage() {
 
 	function exportCsv() {
 		const header = "Name,Class,Exam,Score,Max,Percentile,Rank";
-		const lines = rows.map(
-			(s: PortalResult) =>
-				`${s.name},${s.classBand},${s.examTitle},${s.score ?? ""},${s.totalMarks},${s.percentile ?? ""},${s.rank ?? ""}`,
+		const lines = rows.map((s: PortalResult) =>
+			[s.name, s.classBand, s.examTitle, s.score, s.totalMarks, s.percentile, s.rank]
+				.map(csvCell)
+				.join(","),
 		);
 		const csv = [header, ...lines].join("\n");
 		const a = document.createElement("a");

@@ -87,25 +87,43 @@ export interface Campaign {
 	readonly createdAt: string;
 }
 
-export type PayoutStatus = "PENDING" | "FINANCE_REVIEW" | "APPROVED" | "RELEASED" | "ON_HOLD";
+export type PayoutStatus = "PENDING" | "SIGNED_OFF" | "RELEASED";
 
 export interface StatementRequestInput {
-	readonly periodStart: string;
-	readonly periodEnd: string;
+	readonly period: string;
+}
+
+export interface CommissionLineItem {
+	readonly attributionId: string;
+	readonly campaignId: string;
+	readonly studentId: string;
+	readonly registrationId: string;
+	readonly amountPaise: number;
+	readonly commissionRatePct: number;
+	readonly commissionPaise: number;
 }
 
 export interface Statement {
 	readonly id: string;
 	readonly partnerId: string;
-	readonly periodStart: string;
-	readonly periodEnd: string;
-	readonly currency: string;
-	readonly totalCommission: number;
-	readonly payoutStatus: PayoutStatus;
-	readonly financeSignOff: boolean;
-	readonly downloadUrl: string | null;
-	readonly generatedAt: string;
-	readonly releasedAt?: string;
+	readonly period: string;
+	readonly version: number;
+	readonly lineItems: readonly CommissionLineItem[];
+	readonly totalPaise: number;
+	readonly status: "ISSUED";
+	readonly issuedAt: string;
+}
+
+export interface Payout {
+	readonly id: string;
+	readonly partnerId: string;
+	readonly statementId: string;
+	readonly amountPaise: number;
+	readonly status: PayoutStatus;
+	readonly financeSignOffApprover: string | null;
+	readonly financeSignOffAt: string | null;
+	readonly reason: string | null;
+	readonly createdAt: string;
 }
 
 export type SupportRequestCategory = "CAMPAIGN" | "PRICING" | "OTHER";

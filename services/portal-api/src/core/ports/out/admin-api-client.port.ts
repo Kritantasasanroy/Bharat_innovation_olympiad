@@ -39,26 +39,15 @@
  *  - `GET /exports/*` is an admin/finance bulk-export surface, unscoped to a
  *    single partner — out of scope for partner self-service.
  *
- * Gaps filled by assumption (flag for reconciliation at merge time):
- *  - There is no enumerated "read a partner application/profile" route, but
- *    PRD-011 requires application status to be visible, so one must exist.
- *    This client assumes `GET /partner-applications/:id`.
- *  - `partnerId` (the `:id` segment throughout) is assumed to be the same
- *    value as the authenticated partner's JWT `sub` — i.e. admin-api keys
- *    partner records by platform user id, never a separately-generated id.
- *    `createPartnerApplication` passes `partnerId` explicitly in the POST
- *    body so admin-api can create the record under that id from the start.
- *  - There is no enumerated "list campaigns" or "list institutions" route.
- *    Both are assumed to be derivable from the one funnel read-model
- *    (`GET /partners/:id/funnel`), which is assumed to return a per-campaign
- *    breakdown (including the campaign's share code/URL) and a per-institution
- *    breakdown together with the totals.
- *  - `PATCH /partners/:id/campaigns` is assumed to address one campaign at
- *    `/partners/:id/campaigns/:campaignId` (the given route list does not
- *    spell out where the campaign id goes for an update).
- *  - Statement objects are assumed to double as payout-ledger entries (each
- *    carrying `payoutStatus` + `financeSignOff` + a downloadable URL), since
- *    no separate "list payouts" read route was enumerated.
+ * Contract notes:
+ *  - `partnerId` (the `:id` segment throughout) is the authenticated partner's
+ *    JWT `sub`. The portal never accepts a client-supplied partner id for scope.
+ *  - Campaigns and assigned institutions have dedicated read routes; the funnel
+ *    route carries only campaign counts and is enriched by the HTTP adapter.
+ *  - Campaign updates use `/partners/:id/campaigns/:campaignId` and translate the
+ *    portal status enum to admin-api's `deactivate` boolean at the adapter.
+ *  - Statements use the engine's canonical `YYYY-MM` period key. Payout ledger
+ *    entries are a separate resource exposed through `listPayouts`.
  */
 
 export type PartnerApplicationStatus = "SUBMITTED" | "APPROVED" | "REJECTED";
@@ -178,25 +167,44 @@ export interface AdminApiCampaignRow {
 	readonly createdAt: string;
 }
 
-export type PayoutStatus = "PENDING" | "FINANCE_REVIEW" | "APPROVED" | "RELEASED" | "ON_HOLD";
+export type PayoutStatus = "PENDING" | "SIGNED_OFF" | "RELEASED";
 
 export interface StatementRequestInput {
-	readonly periodStart: string;
-	readonly periodEnd: string;
+	/** Commission periods use the engine's canonical YYYY-MM key. */
+	readonly period: string;
+}
+
+export interface CommissionLineItem {
+	readonly attributionId: string;
+	readonly campaignId: string;
+	readonly studentId: string;
+	readonly registrationId: string;
+	readonly amountPaise: number;
+	readonly commissionRatePct: number;
+	readonly commissionPaise: number;
 }
 
 export interface Statement {
 	readonly id: string;
 	readonly partnerId: string;
-	readonly periodStart: string;
-	readonly periodEnd: string;
-	readonly currency: string;
-	readonly totalCommission: number;
-	readonly payoutStatus: PayoutStatus;
-	readonly financeSignOff: boolean;
-	readonly downloadUrl: string | null;
-	readonly generatedAt: string;
-	readonly releasedAt?: string;
+	readonly period: string;
+	readonly version: number;
+	readonly lineItems: readonly CommissionLineItem[];
+	readonly totalPaise: number;
+	readonly status: "ISSUED";
+	readonly issuedAt: string;
+}
+
+export interface Payout {
+	readonly id: string;
+	readonly partnerId: string;
+	readonly statementId: string;
+	readonly amountPaise: number;
+	readonly status: PayoutStatus;
+	readonly financeSignOffApprover: string | null;
+	readonly financeSignOffAt: string | null;
+	readonly reason: string | null;
+	readonly createdAt: string;
 }
 
 /**
@@ -242,4 +250,6 @@ export interface AdminApiClient {
 	): Promise<Statement>;
 
 	listStatements(partnerId: string, token: string): Promise<Statement[]>;
+
+	listPayouts(partnerId: string, token: string): Promise<Payout[]>;
 }

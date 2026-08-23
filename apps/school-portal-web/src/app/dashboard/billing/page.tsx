@@ -1,23 +1,45 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { ApiError, portalApi } from "../../../lib/api-client";
+import { useAuth } from "../../../lib/auth-context";
 
 const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SCHOOL_SUPPORT_EMAIL ?? "schools@bharatolympiad.in";
 
-/**
- * Sponsored / future payments (§2.21). There is no billing backend for schools,
- * so a sponsorship enquiry composes an email to the BIO team rather than
- * pretending to persist a request.
- */
 export default function BillingPage() {
+	const { token } = useAuth();
 	const [count, setCount] = useState("");
 	const [note, setNote] = useState("");
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [submitted, setSubmitted] = useState(false);
 
-	function submit(event: FormEvent<HTMLFormElement>) {
+	async function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const subject = encodeURIComponent(`Sponsorship enquiry — ${count || "?"} students`);
-		const body = encodeURIComponent(`Number of students: ${count}\n\nDetails:\n${note.trim()}`);
-		window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+		if (!token || !count || !note.trim()) {
+			setError("Enter the number of students and tell us how the sponsorship should work.");
+			return;
+		}
+
+		setSubmitting(true);
+		setError(null);
+		setSubmitted(false);
+		try {
+			await portalApi.createSupport(token, {
+				category: "Payments",
+				subject: `Sponsorship enquiry — ${count} students`,
+				message: `Number of students: ${count}\n\nDetails:\n${note.trim()}`,
+			});
+			setCount("");
+			setNote("");
+			setSubmitted(true);
+		} catch (cause) {
+			setError(
+				cause instanceof ApiError ? cause.message : "Could not send your sponsorship enquiry.",
+			);
+		} finally {
+			setSubmitting(false);
+		}
 	}
 
 	return (
@@ -25,10 +47,22 @@ export default function BillingPage() {
 			<div className="page-header">
 				<h1>Sponsorship &amp; future payments</h1>
 				<p className="muted">
-					Arranging a sponsored batch (CSR-funded, EWS, merit) or deferred billing? Send us the
-					details and our team will set it up.
+					Request a sponsored batch, CSR-funded places, EWS support, merit sponsorship, or an
+					approved deferred-payment arrangement. Your enquiry is saved as a support ticket for the
+					BIO team.
 				</p>
 			</div>
+
+			{error ? (
+				<div className="notice notice--error" role="alert">
+					{error}
+				</div>
+			) : null}
+			{submitted ? (
+				<div className="notice notice--success" role="status">
+					Your sponsorship enquiry was sent to the BIO team. We will reply in the Support section.
+				</div>
+			) : null}
 
 			<div className="card" style={{ maxWidth: 620 }}>
 				<h2>Sponsorship enquiry</h2>
@@ -39,24 +73,31 @@ export default function BillingPage() {
 							id="count"
 							type="number"
 							min={1}
+							max={5000}
+							required
 							value={count}
-							onChange={(e) => setCount(e.target.value)}
-							placeholder="e.g. 10"
+							onChange={(event) => setCount(event.target.value)}
+							placeholder="e.g. 50"
 						/>
 					</div>
 					<div>
-						<label htmlFor="note">Details</label>
+						<label htmlFor="note">How should it work?</label>
 						<textarea
 							id="note"
+							required
+							maxLength={4000}
 							value={note}
-							onChange={(e) => setNote(e.target.value)}
-							placeholder="Who is sponsoring, and any conditions (e.g. merit-list, EWS category, deferred payment date)."
+							onChange={(event) => setNote(event.target.value)}
+							placeholder="Who is sponsoring, and any conditions such as merit list, EWS category, or a deferred payment date."
 						/>
 					</div>
-					<button type="submit" className="button">
-						Compose email
+					<button type="submit" className="button" disabled={submitting || !token}>
+						{submitting ? "Sending…" : "Send enquiry"}
 					</button>
 				</form>
+				<p className="muted" style={{ fontSize: "0.85rem", marginBottom: 0 }}>
+					Prefer email? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+				</p>
 			</div>
 		</main>
 	);

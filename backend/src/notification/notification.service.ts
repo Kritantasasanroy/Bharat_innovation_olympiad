@@ -12,6 +12,7 @@ import {
     partnerAccessResentEmail,
     partnerAccessTokenRotatedEmail,
     partnerApplicationReceivedEmail,
+    partnerEmailVerificationEmail,
     partnerApprovedEmail,
     partnerRejectedEmail,
     partnerRevokedEmail,
@@ -20,6 +21,7 @@ import {
     schoolAccessResentEmail,
     schoolAccessTokenRotatedEmail,
     schoolApplicationReceivedEmail,
+    schoolEmailVerificationEmail,
     schoolApprovedEmail,
     schoolRejectedEmail,
     schoolRevokedEmail,
@@ -300,6 +302,21 @@ export class NotificationService implements OnModuleInit {
     // the admin access queue can show a real "email sent" confirmation instead
     // of assuming one went out.
 
+    async sendPartnerEmailVerification(
+        to: string,
+        vars: { contactPerson: string; orgName: string; token: string },
+    ): Promise<boolean> {
+        const url = `${this.partnerPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
+        return this.deliver(
+            to,
+            partnerEmailVerificationEmail({
+                contactPerson: vars.contactPerson,
+                orgName: vars.orgName,
+                verificationUrl: url,
+            }),
+        );
+    }
+
     async sendPartnerApplicationReceived(to: string, contactPerson: string, orgName: string): Promise<boolean> {
         return this.deliver(to, partnerApplicationReceivedEmail({ contactPerson, orgName }));
     }
@@ -363,6 +380,21 @@ export class NotificationService implements OnModuleInit {
     // ── School lifecycle ───────────────────────────────────────────────────
     // A school has no password — the access token in the approval/rotation/
     // resend mails below is the only way a coordinator ever signs in.
+
+    async sendSchoolEmailVerification(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string; token: string },
+    ): Promise<boolean> {
+        const url = `${this.schoolPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
+        return this.deliver(
+            to,
+            schoolEmailVerificationEmail({
+                coordinatorName: vars.coordinatorName,
+                schoolName: vars.schoolName,
+                verificationUrl: url,
+            }),
+        );
+    }
 
     async sendSchoolApplicationReceived(to: string, coordinatorName: string, schoolName: string): Promise<boolean> {
         return this.deliver(to, schoolApplicationReceivedEmail({ coordinatorName, schoolName }));

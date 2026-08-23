@@ -24,24 +24,36 @@ const PINCODE_LENGTH = 6;
 export default function ActivatePage() {
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [done, setDone] = useState<{ schoolName: string; coordinatorEmail: string } | null>(null);
+	const [done, setDone] = useState<{
+		schoolName: string;
+		coordinatorEmail: string;
+		emailSent: boolean;
+	} | null>(null);
 
 	const [pincode, setPincode] = useState("");
 	const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
 	const [locating, setLocating] = useState(false);
+	const [locationError, setLocationError] = useState<string | null>(null);
 
 	// Resolve city and state as soon as a complete pincode is entered.
 	useEffect(() => {
 		if (pincode.length !== PINCODE_LENGTH) {
 			setLocation(null);
+			setLocationError(null);
 			return;
 		}
 		let cancelled = false;
 		setLocating(true);
+		setLocationError(null);
 		backendApi
 			.lookupPincode(pincode)
 			.then((found) => !cancelled && setLocation({ city: found.city, state: found.state }))
-			.catch(() => !cancelled && setLocation(null))
+			.catch(() => {
+				if (!cancelled) {
+					setLocation(null);
+					setLocationError("We couldn't find that pincode. Check the six digits and try again.");
+				}
+			})
 			.finally(() => !cancelled && setLocating(false));
 		return () => {
 			cancelled = true;
@@ -77,7 +89,11 @@ export default function ActivatePage() {
 				...(referralCode ? { referralCode } : {}),
 			});
 			clearReferralCode();
-			setDone(result);
+			setDone({
+				schoolName: result.schoolName,
+				coordinatorEmail: result.coordinatorEmail,
+				emailSent: result.emailSent,
+			});
 		} catch (cause) {
 			setError(
 				cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.",
@@ -90,27 +106,32 @@ export default function ActivatePage() {
 	if (done) {
 		return (
 			<main className="page">
-				<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-					<Image
-						src="/bio-logo.png"
-						alt="Bharat Innovation Olympiad"
-						width={160}
-						height={48}
-						style={{ height: "48px", width: "auto", objectFit: "contain" }}
-					/>
+				<div className="verification-brand">
+					<Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" width={211} height={64} />
 				</div>
-				<div className="card" style={{ maxWidth: 560, textAlign: "center" }}>
-					<div className="empty-state__icon">📨</div>
-					<h2>Request submitted</h2>
-					<p className="muted mb-0">
-						<strong>{done.schoolName}</strong> is now queued for review. Once BIO staff approve it,
-						an access token will be sent to <strong>{done.coordinatorEmail}</strong>. Sign in with
-						that token to open your school&apos;s dashboard.
+				<div className="card verification-card">
+					<p className="eyebrow">Step 1 of 2 complete</p>
+					<h1>Confirm your school email</h1>
+					<p className="muted">
+						We saved the application for <strong>{done.schoolName}</strong>. We sent a confirmation
+						link to <strong>{done.coordinatorEmail}</strong>. Open it to prove you own this address.
 					</p>
-					<div className="divider" />
-					<Link href="/login" className="button">
-						I already have a token
-					</Link>
+					<div className="verification-status verification-status--success" role="status">
+						<strong>{done.emailSent ? "Check your inbox." : "Your application is saved."}</strong>
+						<span>
+							{done.emailSent
+								? "After you confirm, BIO staff will review the school application."
+								: "Email delivery is temporarily unavailable. Use the verification page to request another link or contact BIO support."}
+						</span>
+					</div>
+					<div className="inline">
+						<Link href="/verify" className="button">
+							Open verification page
+						</Link>
+						<Link href="/login" className="button button--secondary">
+							Already verified? Sign in
+						</Link>
+					</div>
 				</div>
 			</main>
 		);
@@ -133,8 +154,8 @@ export default function ActivatePage() {
 			<div className="page-header">
 				<h1>Activate your school</h1>
 				<p>
-					Tell us about your school. BIO staff review every request and issue an access token on
-					approval.
+					Two steps: confirm the coordinator email, then wait for BIO staff approval. The school
+					access token is issued only after both checks are complete.
 				</p>
 			</div>
 
@@ -145,6 +166,7 @@ export default function ActivatePage() {
 						<input
 							id="schoolName"
 							name="schoolName"
+							maxLength={200}
 							placeholder="Delhi Public School, ..."
 							required
 						/>
@@ -191,18 +213,37 @@ export default function ActivatePage() {
 							/>
 						</div>
 					</div>
+					{locationError ? (
+						<div className="notice notice--error" role="alert">
+							{locationError}
+						</div>
+					) : null}
 					<div>
 						<label htmlFor="coordinatorName">Coordinator name</label>
-						<input id="coordinatorName" name="coordinatorName" required />
+						<input id="coordinatorName" name="coordinatorName" maxLength={200} required />
 					</div>
 					<div className="grid-2" style={{ gap: "1rem" }}>
 						<div>
 							<label htmlFor="coordinatorEmail">Coordinator email</label>
-							<input id="coordinatorEmail" name="coordinatorEmail" type="email" required />
+							<input
+								id="coordinatorEmail"
+								name="coordinatorEmail"
+								type="email"
+								maxLength={254}
+								required
+							/>
 						</div>
 						<div>
 							<label htmlFor="coordinatorPhone">Coordinator phone</label>
-							<input id="coordinatorPhone" name="coordinatorPhone" required />
+							<input
+								id="coordinatorPhone"
+								name="coordinatorPhone"
+								maxLength={20}
+								pattern="^[+0-9][0-9()\\s-]{6,19}$"
+								title="Enter a phone number with 7–20 digits"
+								autoComplete="tel"
+								required
+							/>
 						</div>
 					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}

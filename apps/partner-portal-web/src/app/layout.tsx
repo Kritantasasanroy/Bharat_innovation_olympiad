@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ConnectionBanner } from "../components/connection-banner";
 import { AuthProvider } from "../lib/auth-context";
 import "./globals.css";
 
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
 				<link rel="icon" href="/favicon.ico" />
 			</head>
 			<body>
+				<ConnectionBanner />
 				<AuthProvider>{children}</AuthProvider>
 			</body>
 		</html>

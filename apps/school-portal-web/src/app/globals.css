@@ -1024,3 +1024,118 @@ h2,
 	background: rgba(245, 158, 11, 0.08);
 	color: var(--warning-400);
 }
+
+.verification-theme-toggle {
+	position: fixed;
+	top: var(--space-4);
+	right: var(--space-4);
+	z-index: 5;
+}
+
+.verification-brand {
+	display: flex;
+	justify-content: center;
+	margin-bottom: var(--space-6);
+}
+
+.verification-brand img {
+	height: 64px;
+	width: auto;
+	object-fit: contain;
+}
+
+.eyebrow {
+	color: var(--primary-400);
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	margin-bottom: var(--space-2);
+}
+
+.verification-card {
+	max-width: 620px;
+	margin: 0 auto var(--space-5);
+}
+
+.verification-status {
+	display: grid;
+	gap: var(--space-1);
+	padding: var(--space-4);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	margin-bottom: var(--space-6);
+}
+
+.verification-status--success {
+	border-color: rgba(34, 197, 94, 0.3);
+	background: rgba(34, 197, 94, 0.08);
+	color: var(--success-400);
+}
+
+.verification-status span {
+	color: var(--text-secondary);
+}
+
+.verification-steps {
+	display: grid;
+	gap: var(--space-4);
+	margin-bottom: var(--space-6);
+}
+
+.verification-steps > div {
+	display: grid;
+	grid-template-columns: 32px 1fr;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.verification-steps span {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: rgba(255, 203, 5, 0.14);
+	color: var(--primary-400);
+	font-weight: 800;
+}
+
+.verification-steps p {
+	color: var(--text-secondary);
+}
+
+.verification-help {
+	font-size: 0.85rem;
+}
+
+.verification-footer {
+	text-align: center;
+}
+
+@media (max-width: 640px) {
+	.verification-card {
+		padding: var(--space-5);
+	}
+}
+
+.offline-banner {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 20;
+	padding: var(--space-2) var(--space-4);
+	background: var(--warning-500);
+	color: var(--text-on-primary);
+	font-size: 0.82rem;
+	font-weight: 600;
+	text-align: center;
+}
+
+.error-page {
+	display: grid;
+	place-items: start center;
+	gap: var(--space-4);
+	text-align: center;
+}

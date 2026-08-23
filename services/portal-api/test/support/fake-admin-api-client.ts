@@ -8,6 +8,7 @@ import type {
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerFunnel,
+	Payout,
 	Statement,
 	StatementRequestInput,
 } from "../../src/core/ports/out/index.ts";
@@ -34,6 +35,7 @@ export class FakeAdminApiClient implements AdminApiClient {
 	readonly #funnels = new Map<string, PartnerFunnel>();
 	readonly #campaigns = new Map<string, Campaign[]>();
 	readonly #statements = new Map<string, Statement[]>();
+	readonly #payouts = new Map<string, Payout[]>();
 	readonly #institutions = new Map<string, AssignedInstitution[]>();
 
 	seedApplication(partnerId: string, application: PartnerApplication): void {
@@ -56,6 +58,10 @@ export class FakeAdminApiClient implements AdminApiClient {
 
 	seedStatements(partnerId: string, statements: Statement[]): void {
 		this.#statements.set(partnerId, statements);
+	}
+
+	seedPayouts(partnerId: string, payouts: Payout[]): void {
+		this.#payouts.set(partnerId, payouts);
 	}
 
 	seedInstitutions(partnerId: string, institutions: AssignedInstitution[]): void {
@@ -163,14 +169,12 @@ export class FakeAdminApiClient implements AdminApiClient {
 		const statement: Statement = {
 			id: `stmt_${partnerId}_${list.length + 1}`,
 			partnerId,
-			periodStart: input.periodStart,
-			periodEnd: input.periodEnd,
-			currency: "INR",
-			totalCommission: 0,
-			payoutStatus: "PENDING",
-			financeSignOff: false,
-			downloadUrl: null,
-			generatedAt: new Date().toISOString(),
+			period: input.period,
+			version: list.length + 1,
+			lineItems: [],
+			totalPaise: 0,
+			status: "ISSUED",
+			issuedAt: new Date().toISOString(),
 		};
 		list.push(statement);
 		this.#statements.set(partnerId, list);
@@ -180,5 +184,10 @@ export class FakeAdminApiClient implements AdminApiClient {
 	listStatements(partnerId: string, token: string): Promise<Statement[]> {
 		this.calls.push({ method: "listStatements", partnerId, token });
 		return Promise.resolve([...(this.#statements.get(partnerId) ?? [])]);
+	}
+
+	listPayouts(partnerId: string, token: string): Promise<Payout[]> {
+		this.calls.push({ method: "listPayouts", partnerId, token });
+		return Promise.resolve([...(this.#payouts.get(partnerId) ?? [])]);
 	}
 }

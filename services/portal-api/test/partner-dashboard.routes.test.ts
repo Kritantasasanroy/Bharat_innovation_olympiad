@@ -6,6 +6,23 @@ import type {
 } from "../src/core/ports/out/index.ts";
 import { authHeader, buildTestApp, partnerToken } from "./support/build-test-app";
 
+type TestApp = ReturnType<typeof buildTestApp>["app"];
+
+function jsonRequest(
+	app: TestApp,
+	method: string,
+	path: string,
+	options: { body?: unknown; headers?: Record<string, string> } = {},
+): Promise<Response> {
+	return app.handle(
+		new Request(`http://localhost${path}`, {
+			method,
+			headers: { "content-type": "application/json", ...options.headers },
+			...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+		}),
+	);
+}
+
 function approvedApplication(partnerId: string): PartnerApplication {
 	return {
 		partnerId,
@@ -169,28 +186,24 @@ describe("no cross-partner leakage across the dashboard", () => {
 			{
 				id: "stmt-a-1",
 				partnerId: "partner-a",
-				periodStart: "2026-01-01",
-				periodEnd: "2026-01-31",
-				currency: "INR",
-				totalCommission: 1000,
-				payoutStatus: "RELEASED",
-				financeSignOff: true,
-				downloadUrl: "https://files.example.com/stmt-a-1.pdf",
-				generatedAt: new Date().toISOString(),
+				period: "2026-01",
+				version: 1,
+				lineItems: [],
+				totalPaise: 100_000,
+				status: "ISSUED",
+				issuedAt: new Date().toISOString(),
 			},
 		]);
 		adminApiClient.seedStatements("partner-b", [
 			{
 				id: "stmt-b-1",
 				partnerId: "partner-b",
-				periodStart: "2026-01-01",
-				periodEnd: "2026-01-31",
-				currency: "INR",
-				totalCommission: 2000,
-				payoutStatus: "PENDING",
-				financeSignOff: false,
-				downloadUrl: null,
-				generatedAt: new Date().toISOString(),
+				period: "2026-01",
+				version: 1,
+				lineItems: [],
+				totalPaise: 200_000,
+				status: "ISSUED",
+				issuedAt: new Date().toISOString(),
 			},
 		]);
 
@@ -232,6 +245,59 @@ describe("no cross-partner leakage across the dashboard", () => {
 		expect(createCalls).toEqual([
 			expect.objectContaining({ method: "createCampaign", partnerId: "partner-a" }),
 		]);
+	});
+
+	it("payouts: returns only the caller's payout ledger", async () => {
+		const { app, adminApiClient } = buildTestApp();
+		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
+		adminApiClient.seedPayouts("partner-a", [
+			{
+				id: "payout-a-1",
+				partnerId: "partner-a",
+				statementId: "stmt-a-1",
+				amountPaise: 125_000,
+				status: "PENDING",
+				financeSignOffApprover: null,
+				financeSignOffAt: null,
+				reason: null,
+				createdAt: new Date().toISOString(),
+			},
+		]);
+
+		const response = await app.handle(
+			new Request("http://localhost/partner/payouts?partnerId=partner-b", {
+				headers: authHeader(partnerToken("partner-a")),
+			}),
+		);
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body.data).toHaveLength(1);
+		expect(body.data[0].partnerId).toBe("partner-a");
+	});
+
+	it("statements: validates and forwards the canonical YYYY-MM period", async () => {
+		const { app, adminApiClient } = buildTestApp();
+		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
+
+		const response = await jsonRequest(app, "POST", "/partner/statements", {
+			body: { period: "2026-08" },
+			headers: authHeader(partnerToken("partner-a")),
+		});
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body.data.period).toBe("2026-08");
+	});
+
+	it("statements: rejects date ranges because the engine uses one month key", async () => {
+		const { app } = buildTestApp();
+		const response = await jsonRequest(app, "POST", "/partner/statements", {
+			body: { periodStart: "2026-08-01", periodEnd: "2026-08-31" },
+			headers: authHeader(partnerToken("partner-a")),
+		});
+
+		expect(response.status).toBe(400);
 	});
 });
 

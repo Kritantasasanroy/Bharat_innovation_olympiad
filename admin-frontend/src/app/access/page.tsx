@@ -17,6 +17,7 @@ interface PartnerRow {
     email: string;
     phone: string;
     status: Status;
+    emailVerifiedAt: string | null;
     decisionReason: string | null;
     createdAt: string;
     tokenIssuedAt: string | null;
@@ -36,6 +37,7 @@ interface SchoolRow {
     coordinatorEmail: string;
     coordinatorPhone: string;
     status: Status;
+    emailVerifiedAt: string | null;
     submittedByPartnerId: string | null;
     decisionReason: string | null;
     createdAt: string;
@@ -53,6 +55,7 @@ interface Row {
     email: string;
     phone: string;
     status: Status;
+    emailVerifiedAt: string | null;
     decisionReason: string | null;
     createdAt: string;
     tokenIssuedAt: string | null;
@@ -107,8 +110,9 @@ const STATUS_CLASS: Record<Status, string> = {
 };
 
 /** Which actions make sense from each status (the access state machine). */
-function actionsFor(status: Status): Decision[] {
-    switch (status) {
+function actionsFor(row: Row): Decision[] {
+    if (row.status === 'PENDING' && !row.emailVerifiedAt) return [];
+    switch (row.status) {
         case 'PENDING':
             return ['APPROVED', 'REJECTED'];
         case 'APPROVED':
@@ -128,6 +132,13 @@ const ACTION_LABEL: Record<Decision, string> = {
 /** `/admin/partner-requests` vs `/admin/school-requests`. */
 const basePath = (kind: Kind) => `/admin/${kind === 'PARTNER' ? 'partner' : 'school'}-requests`;
 
+function responseStatus(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
+    const response = error.response;
+    if (!response || typeof response !== 'object' || !('status' in response)) return undefined;
+    return typeof response.status === 'number' ? response.status : undefined;
+}
+
 const toRow = {
     PARTNER: (r: PartnerRow): Row => ({
         kind: 'PARTNER',
@@ -138,6 +149,7 @@ const toRow = {
         email: r.email,
         phone: r.phone,
         status: r.status,
+        emailVerifiedAt: r.emailVerifiedAt,
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
         tokenIssuedAt: r.tokenIssuedAt,
@@ -152,6 +164,7 @@ const toRow = {
         email: r.coordinatorEmail,
         phone: r.coordinatorPhone,
         status: r.status,
+        emailVerifiedAt: r.emailVerifiedAt,
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
         tokenIssuedAt: r.tokenIssuedAt,
@@ -267,7 +280,8 @@ export default function AccessPage() {
             (kindFilter === 'ALL' || r.kind === kindFilter) &&
             (statusFilter === 'ALL' || r.status === statusFilter),
     );
-    const pendingCount = rows.filter((r) => r.status === 'PENDING').length;
+    const pendingCount = rows.filter((r) => r.status === 'PENDING' && r.emailVerifiedAt).length;
+    const verificationCount = rows.filter((r) => r.status === 'PENDING' && !r.emailVerifiedAt).length;
 
     const openCard = useCallback(async (kind: Kind, id: string) => {
         setCardBusy(true);
@@ -409,6 +423,32 @@ export default function AccessPage() {
 
     const resend = (row: Row) => resendEmail(row.kind, row.id, row.email);
 
+    async function resendVerification(row: Row) {
+        setCardBusy(true);
+        setEmailNotice(null);
+        setError(null);
+        try {
+            const { data } = await api.post<{ emailSent: boolean }>(
+                `${basePath(row.kind)}/${row.id}/resend-verification`,
+            );
+            setEmailNotice({
+                type: data.emailSent ? 'success' : 'warn',
+                message: data.emailSent
+                    ? `A new verification link was sent to ${row.email}.`
+                    : `The verification link could not be sent to ${row.email}. Check the email provider configuration.`,
+            });
+        } catch (cause: unknown) {
+            const status = responseStatus(cause);
+            setError(
+                status === 429
+                    ? 'A verification email was sent recently. Wait a minute before requesting another.'
+                    : 'Could not resend the verification email.',
+            );
+        } finally {
+            setCardBusy(false);
+        }
+    }
+
     return (
         <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
             <Navbar />
@@ -445,7 +485,7 @@ export default function AccessPage() {
                         ))}
                     </div>
                     <span className="stats-pill">
-                        {pendingCount} awaiting review · {rows.length} total
+                        {pendingCount} ready for review · {verificationCount} awaiting email · {rows.length} total
                     </span>
                 </div>
 
@@ -513,10 +553,23 @@ export default function AccessPage() {
                                             })}
                                         </td>
                                         <td>
-                                            <span className={STATUS_CLASS[row.status]}>{row.status}</span>
+                                            {row.status === 'PENDING' && !row.emailVerifiedAt ? (
+                                                <span className="badge badge-warning">EMAIL UNVERIFIED</span>
+                                            ) : (
+                                                <span className={STATUS_CLASS[row.status]}>{row.status}</span>
+                                            )}
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div className="row-actions">
+                                                {row.status === 'PENDING' && !row.emailVerifiedAt && (
+                                                    <button
+                                                        className="btn btn-sm btn-secondary"
+                                                        onClick={() => void resendVerification(row)}
+                                                        disabled={cardBusy}
+                                                    >
+                                                        Resend verification
+                                                    </button>
+                                                )}
                                                 {row.tokenIssuedAt && (
                                                     <>
                                                         <button
@@ -537,7 +590,7 @@ export default function AccessPage() {
                                                         )}
                                                     </>
                                                 )}
-                                                {actionsFor(row.status).map((decision) => (
+                                                {actionsFor(row).map((decision) => (
                                                     <button
                                                         key={decision}
                                                         className={`btn btn-sm ${decision === 'APPROVED' ? 'btn-primary' : 'btn-danger'}`}

@@ -15,11 +15,11 @@ function layout(heading: string, bodyHtml: string, cta?: { label: string; url: s
 <div style="margin:0;padding:24px;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
     <p style="margin:0 0 24px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#8a8f98;">${BRAND}</p>
-    <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#111827;">${heading}</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#111827;">${escapeHtml(heading)}</h1>
     <div style="font-size:15px;line-height:1.6;color:#374151;">${bodyHtml}</div>
     ${cta
             ? `<p style="margin:28px 0 0;">
-             <a href="${cta.url}" style="display:inline-block;background:#ffcb05;color:#111827;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px;">${cta.label}</a>
+             <a href="${escapeHtml(cta.url)}" style="display:inline-block;background:#ffcb05;color:#111827;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px;">${escapeHtml(cta.label)}</a>
            </p>`
             : ''
         }
@@ -52,8 +52,8 @@ function build(subject: string, heading: string, body: string, cta?: { label: st
 /** A labelled fact block — roll number, slot, that sort of thing. */
 function factRow(label: string, value: string): string {
     return `<tr>
-      <td style="padding:6px 0;font-size:13px;color:#6b7280;white-space:nowrap;">${label}</td>
-      <td style="padding:6px 0 6px 16px;font-size:15px;font-weight:600;color:#111827;">${value}</td>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;white-space:nowrap;">${escapeHtml(label)}</td>
+      <td style="padding:6px 0 6px 16px;font-size:15px;font-weight:600;color:#111827;">${escapeHtml(value)}</td>
     </tr>`;
 }
 
@@ -86,7 +86,7 @@ export function welcomeEmail(vars: {
 }): RenderedEmail {
     return build(
         `Welcome to ${BRAND}`,
-        `Welcome, ${vars.firstName}!`,
+        `Welcome, ${escapeHtml(vars.firstName)}!`,
         `<p style="margin:0 0 12px;">Your registration is complete. Keep this email — it has your roll number.</p>
      ${factTable([
          ...(vars.rollNumber ? [factRow('Your roll number', vars.rollNumber)] : []),
@@ -122,9 +122,9 @@ export function slotConfirmedEmail(vars: {
 }): RenderedEmail {
     const when = formatSlot(vars.startsAt, vars.endsAt);
     return build(
-        `Your schedule for ${vars.examTitle} is confirmed`,
+        `Your schedule for ${escapeHtml(vars.examTitle)} is confirmed`,
         'Your exam schedule is confirmed',
-        `<p style="margin:0 0 12px;">Hi ${vars.firstName}, your sitting is booked. Please be signed in and ready 15 minutes before it starts.</p>
+        `<p style="margin:0 0 12px;">Hi ${escapeHtml(vars.firstName)}, your sitting is booked. Please be signed in and ready 15 minutes before it starts.</p>
      ${factTable([
          factRow('Exam', vars.examTitle),
          ...(vars.rollNumber ? [factRow('Roll number', vars.rollNumber)] : []),
@@ -156,9 +156,9 @@ export function resultsPublishedEmail(vars: {
     appUrl: string;
 }): RenderedEmail {
     return build(
-        `Your ${vars.examTitle} result is ready`,
+        `Your ${escapeHtml(vars.examTitle)} result is ready`,
         'Your final result is published',
-        `<p style="margin:0 0 12px;">Hi ${vars.firstName}, marking and verification for <strong>${vars.examTitle}</strong> are complete.</p>
+        `<p style="margin:0 0 12px;">Hi ${escapeHtml(vars.firstName)}, marking and verification for <strong>${escapeHtml(vars.examTitle)}</strong> are complete.</p>
      <p style="margin:0 0 12px;">Your report now shows your final score, your rank and percentile, a breakdown across the five dimensions, and the answer key with explanations for every question.</p>
      <p style="margin:0;color:#6b7280;font-size:14px;">If something in your report looks wrong, you can raise it with us from the results page.</p>`,
         { label: 'See your full report', url: `${vars.appUrl}/results` },
@@ -188,7 +188,7 @@ export function accessPassActivatedEmail(vars: {
     return build(
         'Your exam access is unlocked',
         'Payment confirmed',
-        `<p style="margin:0 0 12px;">Hi ${vars.firstName}, we've received your payment of <strong>₹${rupees}</strong>.</p>
+        `<p style="margin:0 0 12px;">Hi ${escapeHtml(vars.firstName)}, we've received your payment of <strong>₹${rupees}</strong>.</p>
      <p style="margin:0 0 12px;">Every olympiad exam is now unlocked on your account for the current season. This is a one-time payment for the season, there is nothing further to pay.</p>
      <p style="margin:0;">Keep this email as your receipt.</p>`,
         { label: 'Browse exams', url: `${vars.appUrl}/exams` },
@@ -201,9 +201,9 @@ export function examSubmittedEmail(vars: {
     appUrl: string;
 }): RenderedEmail {
     return build(
-        `Your ${vars.examTitle} submission is in`,
+        `Your ${escapeHtml(vars.examTitle)} submission is in`,
         'Exam submitted',
-        `<p style="margin:0 0 12px;">Hi ${vars.firstName}, your attempt at <strong>${vars.examTitle}</strong> has been submitted successfully.</p>
+        `<p style="margin:0 0 12px;">Hi ${escapeHtml(vars.firstName)}, your attempt at <strong>${escapeHtml(vars.examTitle)}</strong> has been submitted successfully.</p>
      <p style="margin:0;">Results are published once marking is complete — we'll let you know as soon as yours is available.</p>`,
         { label: 'View your results', url: `${vars.appUrl}/results` },
     );
@@ -215,7 +215,8 @@ function escapeHtml(s: string): string {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 /**
@@ -240,8 +241,8 @@ export function parentApprovalEmail(vars: {
     approvalLink: string;
 }): RenderedEmail {
     const body = `
-        <p style="margin:0 0 12px;">Dear ${vars.guardianName},</p>
-        <p style="margin:0 0 12px;">Your details and consent were submitted for <strong>${vars.studentName}</strong>'s participation in the <strong>Bharat Innovation Olympiad</strong>.</p>
+        <p style="margin:0 0 12px;">Dear ${escapeHtml(vars.guardianName)},</p>
+        <p style="margin:0 0 12px;">Your details and consent were submitted for <strong>${escapeHtml(vars.studentName)}</strong>'s participation in the <strong>Bharat Innovation Olympiad</strong>.</p>
         <p style="margin:0 0 12px;">Please review and confirm your parental approval by clicking the link below.</p>
     `;
     return build(
@@ -258,14 +259,29 @@ export function parentApprovalEmail(vars: {
 // access token is a second, staff-issued path. Both are worth surfacing by
 // mail, because today the only handover mechanism is a human copying a card.
 
+export function partnerEmailVerificationEmail(vars: {
+    contactPerson: string;
+    orgName: string;
+    verificationUrl: string;
+}): RenderedEmail {
+    return build(
+        'Confirm your BIO partner application email',
+        `Confirm your email, ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">Someone requested partner access for <strong>${escapeHtml(vars.orgName)}</strong> on the Bharat Innovation Olympiad.</p>
+     <p style="margin:0 0 12px;">Confirm that you own this email address. After confirmation, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
+        { label: 'Confirm email address', url: vars.verificationUrl },
+    );
+}
+
 export function partnerApplicationReceivedEmail(vars: {
     contactPerson: string;
     orgName: string;
 }): RenderedEmail {
     return build(
         "We've received your partner application",
-        `Thanks, ${vars.contactPerson}`,
-        `<p style="margin:0 0 12px;">We've received <strong>${vars.orgName}</strong>'s application for Bharat Innovation Olympiad partner access.</p>
+        `Thanks, ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">We've received <strong>${escapeHtml(vars.orgName)}</strong>'s application for Bharat Innovation Olympiad partner access.</p>
      <p style="margin:0;">Our team reviews every application by hand. We'll email you as soon as a decision is made — there's nothing further to do right now.</p>`,
     );
 }
@@ -278,8 +294,8 @@ export function partnerApprovedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO partner access is approved',
-        `Welcome aboard, ${vars.contactPerson}`,
-        `<p style="margin:0 0 12px;"><strong>${vars.orgName}</strong> is now an approved Bharat Innovation Olympiad partner.</p>
+        `Welcome aboard, ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.orgName)}</strong> is now an approved Bharat Innovation Olympiad partner.</p>
      <p style="margin:0 0 12px;">Sign in with the email and password you chose when applying, or with the access token below.</p>
      ${factTable([factRow('Access token', vars.accessToken)])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">Keep this token private — anyone who has it can sign in as your organisation. Contact us if it ever needs to be rotated.</p>`,
@@ -294,9 +310,9 @@ export function partnerRejectedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Update on your BIO partner application',
-        `Hi ${vars.contactPerson}`,
-        `<p style="margin:0 0 12px;">We've reviewed <strong>${vars.orgName}</strong>'s application for partner access, and are not able to approve it at this time.</p>
-     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">We've reviewed <strong>${escapeHtml(vars.orgName)}</strong>'s application for partner access, and are not able to approve it at this time.</p>
+     ${factTable([factRow('Reason', vars.reason)])}
      <p style="margin:0;color:#6b7280;font-size:14px;">If you believe this is a mistake or your circumstances have changed, you're welcome to get in touch or reapply.</p>`,
     );
 }
@@ -308,9 +324,9 @@ export function partnerRevokedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO partner access has been revoked',
-        `Hi ${vars.contactPerson}`,
-        `<p style="margin:0 0 12px;"><strong>${vars.orgName}</strong>'s Bharat Innovation Olympiad partner portal access has been revoked, effective immediately.</p>
-     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.orgName)}</strong>'s Bharat Innovation Olympiad partner portal access has been revoked, effective immediately.</p>
+     ${factTable([factRow('Reason', vars.reason)])}
      <p style="margin:0;color:#6b7280;font-size:14px;">Your existing access token no longer works. Contact us if you have questions about this decision.</p>`,
     );
 }
@@ -323,8 +339,8 @@ export function partnerAccessTokenRotatedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO partner access token has been renewed',
-        `Hi ${vars.contactPerson}`,
-        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${vars.orgName}</strong>. Your previous token no longer works.</p>
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${escapeHtml(vars.orgName)}</strong>. Your previous token no longer works.</p>
      ${factTable([factRow('New access token', vars.accessToken)])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">If you didn't request this, contact us right away.</p>`,
         { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
@@ -340,8 +356,8 @@ export function partnerAccessResentEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO partner access details',
-        `Hi ${vars.contactPerson}`,
-        `<p style="margin:0;">As requested, here are ${vars.orgName}'s current Bharat Innovation Olympiad partner portal access details.</p>
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0;">As requested, here are ${escapeHtml(vars.orgName)}'s current Bharat Innovation Olympiad partner portal access details.</p>
      ${factTable([factRow('Access token', vars.accessToken)])}`,
         { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
     );
@@ -356,11 +372,11 @@ export function partnerSchoolStatusChangedEmail(vars: {
 }): RenderedEmail {
     const approved = vars.status === 'APPROVED';
     return build(
-        approved ? `${vars.schoolName} is now approved` : `Update on ${vars.schoolName}'s application`,
-        `Hi ${vars.contactPerson}`,
+        approved ? `${escapeHtml(vars.schoolName)} is now approved` : `Update on ${escapeHtml(vars.schoolName)}'s application`,
+        `Hi ${escapeHtml(vars.contactPerson)}`,
         approved
-            ? `<p style="margin:0;">The school you onboarded, <strong>${vars.schoolName}</strong>, has been approved. Its coordinator has been sent their own access details, and it now appears in your Schools list.</p>`
-            : `<p style="margin:0;">The school you onboarded, <strong>${vars.schoolName}</strong>, was not approved this time. You're welcome to onboard it again once its details are corrected.</p>`,
+            ? `<p style="margin:0;">The school you onboarded, <strong>${escapeHtml(vars.schoolName)}</strong>, has been approved. Its coordinator has been sent their own access details, and it now appears in your Schools list.</p>`
+            : `<p style="margin:0;">The school you onboarded, <strong>${escapeHtml(vars.schoolName)}</strong>, was not approved this time. You're welcome to onboard it again once its details are corrected.</p>`,
         approved ? { label: 'View your schools', url: `${vars.portalUrl}/dashboard/schools` } : undefined,
     );
 }
@@ -371,14 +387,29 @@ export function partnerSchoolStatusChangedEmail(vars: {
 // credential a coordinator ever gets, so — unlike the partner mails above —
 // this one is not optional context, it's the only way in.
 
+export function schoolEmailVerificationEmail(vars: {
+    coordinatorName: string;
+    schoolName: string;
+    verificationUrl: string;
+}): RenderedEmail {
+    return build(
+        "Confirm your school's BIO application email",
+        `Confirm your email, ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;">Someone requested school portal access for <strong>${escapeHtml(vars.schoolName)}</strong> on the Bharat Innovation Olympiad.</p>
+     <p style="margin:0 0 12px;">Confirm that you own this coordinator email. After confirmation, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
+        { label: 'Confirm email address', url: vars.verificationUrl },
+    );
+}
+
 export function schoolApplicationReceivedEmail(vars: {
     coordinatorName: string;
     schoolName: string;
 }): RenderedEmail {
     return build(
         "We've received your school's application",
-        `Thanks, ${vars.coordinatorName}`,
-        `<p style="margin:0 0 12px;">We've received <strong>${vars.schoolName}</strong>'s application for Bharat Innovation Olympiad school portal access.</p>
+        `Thanks, ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;">We've received <strong>${escapeHtml(vars.schoolName)}</strong>'s application for Bharat Innovation Olympiad school portal access.</p>
      <p style="margin:0;">Our team reviews every application by hand. We'll email you as soon as a decision is made, with your access token if approved.</p>`,
     );
 }
@@ -392,8 +423,8 @@ export function schoolApprovedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO school portal access is ready',
-        `Welcome, ${vars.coordinatorName}`,
-        `<p style="margin:0 0 12px;"><strong>${vars.schoolName}</strong> is now approved on the Bharat Innovation Olympiad. Your access token below is the only credential you need — there is no separate password.</p>
+        `Welcome, ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong> is now approved on the Bharat Innovation Olympiad. Your access token below is the only credential you need — there is no separate password.</p>
      ${factTable([
          ...(vars.schoolCode ? [factRow('School code', vars.schoolCode)] : []),
          factRow('Access token', vars.accessToken),
@@ -416,9 +447,9 @@ export function schoolRejectedEmail(vars: {
 }): RenderedEmail {
     return build(
         "Update on your school's BIO application",
-        `Hi ${vars.coordinatorName}`,
-        `<p style="margin:0 0 12px;">We've reviewed <strong>${vars.schoolName}</strong>'s application for school portal access, and are not able to approve it at this time.</p>
-     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+        `Hi ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;">We've reviewed <strong>${escapeHtml(vars.schoolName)}</strong>'s application for school portal access, and are not able to approve it at this time.</p>
+     ${factTable([factRow('Reason', vars.reason)])}
      <p style="margin:0;color:#6b7280;font-size:14px;">If you believe this is a mistake or your circumstances have changed, you're welcome to get in touch or reapply.</p>`,
     );
 }
@@ -430,9 +461,9 @@ export function schoolRevokedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO school portal access has been revoked',
-        `Hi ${vars.coordinatorName}`,
-        `<p style="margin:0 0 12px;"><strong>${vars.schoolName}</strong>'s Bharat Innovation Olympiad school portal access has been revoked, effective immediately.</p>
-     ${factTable([factRow('Reason', escapeHtml(vars.reason))])}
+        `Hi ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong>'s Bharat Innovation Olympiad school portal access has been revoked, effective immediately.</p>
+     ${factTable([factRow('Reason', vars.reason)])}
      <p style="margin:0;color:#6b7280;font-size:14px;">Your existing access token no longer works, and coordinator sign-in has been disabled. Contact us if you have questions about this decision.</p>`,
     );
 }
@@ -445,8 +476,8 @@ export function schoolAccessTokenRotatedEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO school access token has been renewed',
-        `Hi ${vars.coordinatorName}`,
-        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${vars.schoolName}</strong>. Your previous token no longer works.</p>
+        `Hi ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${escapeHtml(vars.schoolName)}</strong>. Your previous token no longer works.</p>
      ${factTable([factRow('New access token', vars.accessToken)])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">If you didn't request this, contact us right away.</p>`,
         { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
@@ -462,8 +493,8 @@ export function schoolAccessResentEmail(vars: {
 }): RenderedEmail {
     return build(
         'Your BIO school access details',
-        `Hi ${vars.coordinatorName}`,
-        `<p style="margin:0;">As requested, here are ${vars.schoolName}'s current Bharat Innovation Olympiad school portal access details.</p>
+        `Hi ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0;">As requested, here are ${escapeHtml(vars.schoolName)}'s current Bharat Innovation Olympiad school portal access details.</p>
      ${factTable([factRow('Access token', vars.accessToken)])}`,
         { label: 'Sign in to your dashboard', url: `${vars.portalUrl}/login` },
     );

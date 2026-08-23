@@ -61,7 +61,10 @@ export default function LoginPage() {
 			</div>
 			<div className="page-header">
 				<h1>Partner sign in</h1>
-				<p>Use the password from your access request, or the access token BIO issued you.</p>
+				<p>
+					Use the password from your access request, or the access token BIO issued you. Email must
+					be confirmed before access can be approved.
+				</p>
 			</div>
 
 			<div className="inline" style={{ marginBottom: "1.5rem" }}>
@@ -103,6 +106,7 @@ export default function LoginPage() {
 								<input
 									id="email"
 									type="email"
+									maxLength={254}
 									required
 									autoComplete="email"
 									value={email}
@@ -127,6 +131,9 @@ export default function LoginPage() {
 						{submitting ? "Signing in…" : "Sign in"}
 					</button>
 				</form>
+				<p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+					Need to confirm or resend your email? <Link href="/verify">Open verification</Link>.
+				</p>
 			</div>
 
 			<p className="muted" style={{ marginTop: "1rem" }}>

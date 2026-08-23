@@ -26,15 +26,33 @@ export class ApiError extends Error {
 	}
 }
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} catch (cause) {
+		if (cause instanceof DOMException && cause.name === "AbortError") {
+			throw new ApiError("The request took too long. Check your connection and try again.", 408);
+		}
+		throw cause;
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(body),
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
 	}
 
@@ -81,13 +99,27 @@ export interface SchoolLoginResult {
 	readonly coordinator: { readonly name: string; readonly email: string };
 }
 
+export interface SchoolApplicationResult {
+	readonly status: "PENDING" | "EMAIL_VERIFICATION_REQUIRED";
+	readonly schoolName: string;
+	readonly coordinatorEmail: string;
+	readonly emailSent: boolean;
+}
+
+export interface EmailVerificationResult {
+	readonly status: "PENDING" | "ALREADY_VERIFIED";
+	readonly email: string;
+	readonly emailSent?: boolean;
+}
+
 async function authed<T>(path: string, token: string): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 			headers: { authorization: `Bearer ${token}` },
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
@@ -104,12 +136,13 @@ async function authed<T>(path: string, token: string): Promise<T> {
 async function authedPost<T>(path: string, token: string, body: unknown): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 			method: "POST",
 			headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
 			body: JSON.stringify(body),
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
@@ -125,8 +158,12 @@ async function authedPost<T>(path: string, token: string, body: unknown): Promis
 
 export const backendApi = {
 	/** Self-service access request. No credential required — this is the way in. */
-	apply: (input: SchoolApplyInput) =>
-		post<{ status: string; schoolName: string; coordinatorEmail: string }>("/school/apply", input),
+	apply: (input: SchoolApplyInput) => post<SchoolApplicationResult>("/school/apply", input),
+
+	verifyEmail: (token: string) => post<EmailVerificationResult>("/school/verify-email", { token }),
+
+	resendVerification: (email: string) =>
+		post<{ status: "CHECK_INBOX" }>("/school/resend-verification", { email }),
 
 	/** Exchange the issued access token for a session JWT. */
 	login: (accessToken: string) => post<SchoolLoginResult>("/school/login", { accessToken }),
@@ -135,8 +172,12 @@ export const backendApi = {
 	async lookupPincode(pincode: string): Promise<PincodeLocation> {
 		let response: Response;
 		try {
-			response = await fetch(`${BACKEND_API_URL}/api/geo/pincode/${encodeURIComponent(pincode)}`);
-		} catch {
+			response = await fetchWithTimeout(
+				`${BACKEND_API_URL}/api/geo/pincode/${encodeURIComponent(pincode)}`,
+				{},
+			);
+		} catch (cause) {
+			if (cause instanceof ApiError) throw cause;
 			throw new ApiError("Could not reach the pincode service.", 0);
 		}
 		const raw: unknown = await response.json().catch(() => null);
@@ -169,12 +210,13 @@ export interface SupportTicket {
 async function authedPatch<T>(path: string, token: string, body: unknown): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 			method: "PATCH",
 			headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
 			body: JSON.stringify(body),
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
@@ -193,7 +235,7 @@ async function authedPatch<T>(path: string, token: string, body: unknown): Promi
  * as a file. It cannot go through `authed`, which parses every response as JSON.
  */
 async function authedDownload(path: string, token: string, filename: string): Promise<void> {
-	const response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+	const response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 		headers: { authorization: `Bearer ${token}` },
 	});
 	if (!response.ok) {

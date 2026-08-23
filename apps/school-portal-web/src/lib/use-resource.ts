@@ -8,6 +8,7 @@ interface ResourceState<T> {
 	data: T | null;
 	loading: boolean;
 	error: string | null;
+	errorStatus: number | null;
 	reload: () => void;
 }
 
@@ -25,6 +26,7 @@ export function useResource<T>(fetcher: (token: string) => Promise<T>): Resource
 	const [data, setData] = useState<T | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [errorStatus, setErrorStatus] = useState<number | null>(null);
 	const [nonce, setNonce] = useState(0);
 
 	const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -41,11 +43,13 @@ export function useResource<T>(fetcher: (token: string) => Promise<T>): Resource
 		const run = (background: boolean) => {
 			if (!background) setLoading(true);
 			setError(null);
+			setErrorStatus(null);
 			fetcher(token)
 				.then((result) => !cancelled && setData(result))
 				.catch((cause) => {
 					if (cancelled) return;
 					setError(cause instanceof ApiError ? cause.message : "Could not load this data.");
+					setErrorStatus(cause instanceof ApiError ? cause.statusCode : 0);
 				})
 				.finally(() => !cancelled && !background && setLoading(false));
 		};
@@ -62,5 +66,5 @@ export function useResource<T>(fetcher: (token: string) => Promise<T>): Resource
 		};
 	}, [token, nonce]);
 
-	return { data, loading, error, reload };
+	return { data, loading, error, errorStatus, reload };
 }

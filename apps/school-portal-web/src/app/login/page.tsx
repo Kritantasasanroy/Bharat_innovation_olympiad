@@ -54,7 +54,8 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>
 				<p>
-					Enter the access token issued to your school. New to the platform?{" "}
+					Enter the access token issued to your school. The coordinator email must be confirmed
+					before BIO staff can approve an application. New to the platform?{" "}
 					<Link href="/activate">Activate your school</Link>.
 				</p>
 			</div>
@@ -64,6 +65,7 @@ export default function LoginPage() {
 						<label htmlFor="token">Access token</label>
 						<input
 							id="token"
+							maxLength={39}
 							value={value}
 							onChange={(event) => setValue(event.target.value)}
 							placeholder="BIO-SCH-XXXXX-XXXXX-XXXXX-XXXXX"
@@ -77,6 +79,9 @@ export default function LoginPage() {
 						{submitting ? "Signing in…" : "Continue to dashboard"}
 					</button>
 				</form>
+				<p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+					Need to confirm or resend your email? <Link href="/verify">Open verification</Link>.
+				</p>
 			</div>
 		</main>
 	);

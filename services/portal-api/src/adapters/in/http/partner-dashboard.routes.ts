@@ -12,7 +12,7 @@ import { requireApprovedPartner } from "./require-approved-partner";
  * Every handler here calls {@link requireApprovedPartner} first — a partner
  * whose application is missing, SUBMITTED, or REJECTED gets a 403 before any
  * `admin-api` call is made — and every downstream `admin-api` call is scoped
- * to `application.partnerId` (derived from the token's `sub`), never a
+ * to `partner.partnerId` (derived from the token's `sub`), never a
  * client-supplied id. No route in this file accepts a partner id from the
  * URL, query, or body.
  */
@@ -46,19 +46,15 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 				return { success: true, data: institution };
 			})
 			.get("/funnel", async ({ auth, token }) => {
-				const application = await requireApprovedPartner(auth, adminApiClient, token);
-				const data = await adminApiClient.getFunnel(application.partnerId, token ?? "");
+				const partner = await requireApprovedPartner(auth, adminApiClient, token);
+				const data = await adminApiClient.getFunnel(partner.partnerId, token ?? "");
 				return { success: true, data };
 			})
 			.post(
 				"/campaigns",
 				async ({ auth, token, body }) => {
-					const application = await requireApprovedPartner(auth, adminApiClient, token);
-					const data = await adminApiClient.createCampaign(
-						application.partnerId,
-						body,
-						token ?? "",
-					);
+					const partner = await requireApprovedPartner(auth, adminApiClient, token);
+					const data = await adminApiClient.createCampaign(partner.partnerId, body, token ?? "");
 					return { success: true, data };
 				},
 				{
@@ -100,24 +96,25 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 			.post(
 				"/statements",
 				async ({ auth, token, body }) => {
-					const application = await requireApprovedPartner(auth, adminApiClient, token);
-					const data = await adminApiClient.requestStatement(
-						application.partnerId,
-						body,
-						token ?? "",
-					);
+					const partner = await requireApprovedPartner(auth, adminApiClient, token);
+					const data = await adminApiClient.requestStatement(partner.partnerId, body, token ?? "");
 					return { success: true, data };
 				},
 				{
 					body: t.Object(
-						{ periodStart: t.String(), periodEnd: t.String() },
+						{ period: t.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" }) },
 						{ additionalProperties: false },
 					),
 				},
 			)
 			.get("/statements", async ({ auth, token }) => {
-				const application = await requireApprovedPartner(auth, adminApiClient, token);
-				const data = await adminApiClient.listStatements(application.partnerId, token ?? "");
+				const partner = await requireApprovedPartner(auth, adminApiClient, token);
+				const data = await adminApiClient.listStatements(partner.partnerId, token ?? "");
+				return { success: true, data };
+			})
+			.get("/payouts", async ({ auth, token }) => {
+				const partner = await requireApprovedPartner(auth, adminApiClient, token);
+				const data = await adminApiClient.listPayouts(partner.partnerId, token ?? "");
 				return { success: true, data };
 			})
 	);

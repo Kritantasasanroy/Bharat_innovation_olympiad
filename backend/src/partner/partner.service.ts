@@ -1,12 +1,16 @@
 import {
+    BadRequestException,
     ConflictException,
     ForbiddenException,
+    HttpException,
+    HttpStatus,
     Injectable,
     NotFoundException,
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
 import {
     generateAccessToken,
     hashAccessToken,
@@ -14,10 +18,19 @@ import {
     openAccessToken,
     sealAccessToken,
 } from '../common/access-token';
+import {
+    cooldownRemainingSeconds,
+    createEmailVerificationChallenge,
+    hashEmailVerificationToken,
+} from '../common/email-verification-token';
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartnerAdminApiClient } from './admin-api.client';
-import { ApplyPartnerDto, DecidePartnerDto, PartnerLoginDto } from './dto/partner.dto';
+import {
+    ApplyPartnerDto,
+    DecidePartnerDto,
+    PartnerLoginDto,
+} from './dto/partner.dto';
 
 /**
  * A real hash to compare against when no partner matches the email, so the
@@ -25,6 +38,23 @@ import { ApplyPartnerDto, DecidePartnerDto, PartnerLoginDto } from './dto/partne
  * import; a hand-written placeholder would make bcrypt throw on a malformed salt.
  */
 const ABSENT_PARTNER_HASH = bcrypt.hashSync('bio-timing-equalizer', 10);
+
+type PartnerRequestRecord = {
+    id: string;
+    orgName: string;
+    contactPerson: string;
+    email: string;
+    phone: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    emailVerifiedAt: Date | null;
+    emailVerificationTokenExpiresAt: Date | null;
+    emailVerificationSentAt: Date | null;
+    emailVerificationTokenUsedAt: Date | null;
+    partnerId: string | null;
+    applicationId: string | null;
+    accessTokenHash: string | null;
+    accessTokenSealed: string | null;
+};
 
 /**
  * Partner access lifecycle owned by the legacy backend (the only JWT signer):
@@ -53,28 +83,172 @@ export class PartnerService {
         const email = dto.email.trim().toLowerCase();
         const existing = await this.prisma.partnerRequest.findUnique({ where: { email } });
         if (existing) {
-            throw new ConflictException('A partner application already exists for this email.');
+            throw new ConflictException(
+                'A partner application already exists for this email. Open the verification page to request another link.',
+            );
         }
 
+        const now = new Date();
+        const challenge = createEmailVerificationChallenge(now);
         const passwordHash = await bcrypt.hash(dto.password, 10);
         const request = await this.prisma.partnerRequest.create({
             data: {
-                orgName: dto.orgName,
-                contactPerson: dto.contactPerson,
+                orgName: dto.orgName.trim(),
+                contactPerson: dto.contactPerson.trim(),
                 email,
-                phone: dto.phone,
+                phone: dto.phone.trim(),
                 passwordHash,
                 status: 'PENDING',
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
             },
         });
 
-        await this.notifications.sendPartnerApplicationReceived(
+        const emailSent =
+            (await this.notifications.sendPartnerEmailVerification?.(request.email, {
+                contactPerson: request.contactPerson,
+                orgName: request.orgName,
+                token: challenge.rawToken,
+            })) ?? false;
+
+        return {
+            status: 'EMAIL_VERIFICATION_REQUIRED' as const,
+            email: request.email,
+            orgName: request.orgName,
+            emailSent,
+        };
+    }
+
+    async verifyEmail(rawToken: string) {
+        const token = rawToken.trim();
+        if (!token || token.length > 256) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        const request = await this.prisma.partnerRequest.findUnique({
+            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
+        });
+        if (!request) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        if (request.emailVerifiedAt) {
+            return { status: 'ALREADY_VERIFIED' as const, email: request.email };
+        }
+        if (
+            !request.emailVerificationTokenExpiresAt ||
+            request.emailVerificationTokenExpiresAt <= new Date()
+        ) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+        if (request.emailVerificationTokenUsedAt) {
+            throw new BadRequestException('This verification link has already been used. Request a new one.');
+        }
+
+        const now = new Date();
+        const claimed = await this.prisma.partnerRequest.updateMany({
+            where: {
+                id: request.id,
+                emailVerifiedAt: null,
+                emailVerificationTokenUsedAt: null,
+            },
+            data: { emailVerifiedAt: now, emailVerificationTokenUsedAt: now },
+        });
+        if (claimed.count === 0) {
+            const current = await this.prisma.partnerRequest.findUnique({ where: { id: request.id } });
+            if (current?.emailVerifiedAt) {
+                return { status: 'ALREADY_VERIFIED' as const, email: current.email };
+            }
+            throw new BadRequestException('This verification link has already been used. Request a new one.');
+        }
+
+        await this.prisma.auditLog.create({
+            data: {
+                action: 'partner.email.verified',
+                resource: 'partner-request',
+                details: { partnerRequestId: request.id },
+            },
+        });
+        const emailSent = await this.notifications.sendPartnerApplicationReceived(
             request.email,
             request.contactPerson,
             request.orgName,
         );
 
-        return { status: request.status, email: request.email, orgName: request.orgName };
+        return { status: 'PENDING' as const, email: request.email, emailSent };
+    }
+
+    async resendVerification(emailAddress: string) {
+        const email = emailAddress.trim().toLowerCase();
+        const request = await this.prisma.partnerRequest.findUnique({ where: { email } });
+        if (!request || request.emailVerifiedAt || request.status !== 'PENDING') {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const now = new Date();
+        if (cooldownRemainingSeconds(request.emailVerificationSentAt, now) > 0) {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        await this.prisma.partnerRequest.update({
+            where: { id: request.id },
+            data: {
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
+                emailVerificationTokenUsedAt: null,
+            },
+        });
+        await this.notifications.sendPartnerEmailVerification(request.email, {
+            contactPerson: request.contactPerson,
+            orgName: request.orgName,
+            token: challenge.rawToken,
+        });
+        return { status: 'CHECK_INBOX' as const };
+    }
+
+    async resendVerificationForAdmin(id: string, adminId: string) {
+        const request = await this.prisma.partnerRequest.findUnique({ where: { id } });
+        if (!request) throw new NotFoundException('Partner request not found.');
+        if (request.emailVerifiedAt || request.status !== 'PENDING') {
+            throw new ConflictException('This partner does not need email verification.');
+        }
+
+        const now = new Date();
+        const retryAfterSeconds = cooldownRemainingSeconds(request.emailVerificationSentAt, now);
+        if (retryAfterSeconds > 0) {
+            throw new HttpException(
+                `A verification email was sent recently. Try again in ${retryAfterSeconds} seconds.`,
+                HttpStatus.TOO_MANY_REQUESTS,
+            );
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        await this.prisma.partnerRequest.update({
+            where: { id: request.id },
+            data: {
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
+                emailVerificationTokenUsedAt: null,
+            },
+        });
+        const emailSent = await this.notifications.sendPartnerEmailVerification(request.email, {
+            contactPerson: request.contactPerson,
+            orgName: request.orgName,
+            token: challenge.rawToken,
+        });
+        await this.prisma.auditLog.create({
+            data: {
+                userId: adminId,
+                action: 'partner.email.verification.resent',
+                resource: 'partner-request',
+                details: { partnerRequestId: id, emailSent },
+            },
+        });
+        return { emailSent };
     }
 
     /**
@@ -89,10 +263,15 @@ export class PartnerService {
 
         if (request.status !== 'APPROVED') {
             throw new ForbiddenException(
-                request.status === 'PENDING'
-                    ? 'Your application is still under review.'
-                    : `Your partner access has been ${request.status.toLowerCase()}.`,
+                request.status === 'PENDING' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)
+                    ? 'Confirm your email address before your application can be reviewed.'
+                    : request.status === 'PENDING'
+                      ? 'Your application is still under review.'
+                      : `Your partner access has been ${request.status.toLowerCase()}.`,
             );
+        }
+        if (!hasVerifiedEmail(request.status, request.emailVerifiedAt)) {
+            throw new ForbiddenException('Confirm your email address before signing in.');
         }
         if (!request.partnerId) {
             throw new ForbiddenException('Partner account is not fully provisioned yet.');
@@ -152,6 +331,8 @@ export class PartnerService {
                 email: true,
                 phone: true,
                 status: true,
+                emailVerifiedAt: true,
+                emailVerificationSentAt: true,
                 partnerId: true,
                 decisionReason: true,
                 decidedBy: true,
@@ -163,20 +344,40 @@ export class PartnerService {
         });
     }
 
-    /**
-     * ADMIN — grant / reject / revoke / re-grant. Mirrors the decision into the
-     * engine, provisioning the engine partner on first approval.
-     */
+    /** ADMIN — grant, reject, revoke, or re-grant a partner request. */
     async decide(id: string, dto: DecidePartnerDto, adminId: string) {
         const request = await this.prisma.partnerRequest.findUnique({ where: { id } });
         if (!request) throw new NotFoundException('Partner request not found.');
 
+        assertAccessTransition(request.status, dto.decision, 'partner');
+        if (dto.decision === 'APPROVED' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)) {
+            throw new BadRequestException(
+                'Confirm the contact email before granting partner access. The applicant must use the verification link first.',
+            );
+        }
+
+        const engine = await this.syncPartnerAccess(request, dto);
+        const decision = await this.persistDecision(request, dto, adminId, engine);
+        await this.recordDecisionAudit(id, adminId, dto, engine.partnerId, decision.issuing);
+        const emailSent = await this.notifyDecision(decision.updated, dto, decision.plaintext);
+
+        return {
+            id: decision.updated.id,
+            status: decision.updated.status,
+            partnerId: decision.updated.partnerId,
+            emailSent,
+        };
+    }
+
+    private async syncPartnerAccess(
+        request: PartnerRequestRecord,
+        dto: DecidePartnerDto,
+    ): Promise<{ partnerId: string | null; applicationId: string | null }> {
         let { partnerId, applicationId } = request;
-
-        // Rejecting an application that was never provisioned needs no engine call.
         const needsEngine = dto.decision !== 'REJECTED' || partnerId !== null;
+        if (!needsEngine) return { partnerId, applicationId };
 
-        if (needsEngine && !partnerId) {
+        if (!partnerId) {
             const app = await this.adminApi.createApplication({
                 orgName: request.orgName,
                 contactPerson: request.contactPerson,
@@ -187,25 +388,27 @@ export class PartnerService {
             applicationId = app.id;
         }
 
-        // Drive the engine gate first; if it fails we don't record a false local state.
-        if (needsEngine && partnerId) {
-            await this.adminApi.setAccess(partnerId, dto.decision, dto.reason);
-        }
+        await this.adminApi.setAccess(partnerId, dto.decision, dto.reason);
+        return { partnerId, applicationId };
+    }
 
-        // A partner gets exactly one access token, minted at first approval and
-        // kept across a revoke/re-grant cycle so the handover card stays valid.
+    private async persistDecision(
+        request: PartnerRequestRecord,
+        dto: DecidePartnerDto,
+        adminId: string,
+        engine: { partnerId: string | null; applicationId: string | null },
+    ) {
         const issuing = dto.decision === 'APPROVED' && !request.accessTokenHash;
         const plaintext = issuing ? generateAccessToken('PARTNER') : null;
-
         const updated = await this.prisma.partnerRequest.update({
-            where: { id },
+            where: { id: request.id },
             data: {
                 status: dto.decision,
                 decisionReason: dto.reason,
                 decidedBy: adminId,
                 decidedAt: new Date(),
-                partnerId,
-                applicationId,
+                partnerId: engine.partnerId,
+                applicationId: engine.applicationId,
                 ...(plaintext
                     ? {
                           accessTokenHash: hashAccessToken(plaintext),
@@ -215,8 +418,17 @@ export class PartnerService {
                     : {}),
             },
         });
+        return { updated, plaintext, issuing };
+    }
 
-        await this.prisma.auditLog.create({
+    private recordDecisionAudit(
+        id: string,
+        adminId: string,
+        dto: DecidePartnerDto,
+        partnerId: string | null,
+        issuing: boolean,
+    ) {
+        return this.prisma.auditLog.create({
             data: {
                 userId: adminId,
                 action: `partner.${dto.decision.toLowerCase()}`,
@@ -224,38 +436,35 @@ export class PartnerService {
                 details: { partnerRequestId: id, partnerId, reason: dto.reason, tokenIssued: issuing },
             },
         });
+    }
 
-        // A partner's own inbox is the only place they will learn about this
-        // decision — there is no in-app notification, so a failed send here
-        // means they simply never find out. `emailSent` lets the admin queue
-        // show that plainly instead of assuming the mail went out.
-        let emailSent = false;
+    private notifyDecision(
+        updated: PartnerRequestRecord,
+        dto: DecidePartnerDto,
+        plaintext: string | null,
+    ): Promise<boolean> {
         if (dto.decision === 'APPROVED') {
-            // Re-approving after a revoke issues no new token; the existing
-            // sealed one is still what the partner needs to see.
             const token = plaintext ?? openAccessToken(updated.accessTokenSealed);
-            if (token) {
-                emailSent = await this.notifications.sendPartnerApproved(updated.email, {
-                    contactPerson: updated.contactPerson,
-                    orgName: updated.orgName,
-                    accessToken: token,
-                });
-            }
-        } else if (dto.decision === 'REJECTED') {
-            emailSent = await this.notifications.sendPartnerRejected(updated.email, {
-                contactPerson: updated.contactPerson,
-                orgName: updated.orgName,
-                reason: dto.reason,
-            });
-        } else {
-            emailSent = await this.notifications.sendPartnerRevoked(updated.email, {
+            return token
+                ? this.notifications.sendPartnerApproved(updated.email, {
+                      contactPerson: updated.contactPerson,
+                      orgName: updated.orgName,
+                      accessToken: token,
+                  })
+                : Promise.resolve(false);
+        }
+        if (dto.decision === 'REJECTED') {
+            return this.notifications.sendPartnerRejected(updated.email, {
                 contactPerson: updated.contactPerson,
                 orgName: updated.orgName,
                 reason: dto.reason,
             });
         }
-
-        return { id: updated.id, status: updated.status, partnerId: updated.partnerId, emailSent };
+        return this.notifications.sendPartnerRevoked(updated.email, {
+            contactPerson: updated.contactPerson,
+            orgName: updated.orgName,
+            reason: dto.reason,
+        });
     }
 
     /**

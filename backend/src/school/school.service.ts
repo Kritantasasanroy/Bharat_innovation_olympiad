@@ -1,12 +1,17 @@
 import {
+    BadRequestException,
     ConflictException,
     ForbiddenException,
+    HttpException,
+    HttpStatus,
     Injectable,
     NotFoundException,
     UnauthorizedException,
+    Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
 import {
     generateAccessToken,
     hashAccessToken,
@@ -15,6 +20,11 @@ import {
     randomCode,
     sealAccessToken,
 } from '../common/access-token';
+import {
+    cooldownRemainingSeconds,
+    createEmailVerificationChallenge,
+    hashEmailVerificationToken,
+} from '../common/email-verification-token';
 import { NotificationService } from '../notification/notification.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PartnerDirectoryService } from '../partner/partner-directory.service';
@@ -32,14 +42,118 @@ import { schoolNameKey } from './school-directory.helpers';
  * Its digest is uniquely indexed, so a token resolves to at most one school and
  * can never sign a different one in.
  */
+type SchoolRequestRecord = {
+    id: string;
+    schoolName: string;
+    board: string;
+    udiseCode: string | null;
+    pincode: string;
+    city: string;
+    state: string;
+    coordinatorName: string;
+    coordinatorEmail: string;
+    coordinatorPhone: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    emailVerifiedAt: Date | null;
+    emailVerificationTokenExpiresAt: Date | null;
+    emailVerificationSentAt: Date | null;
+    emailVerificationTokenUsedAt: Date | null;
+    submittedByPartnerId: string | null;
+    submittedViaReferralCode: string | null;
+    schoolId: string | null;
+    coordinatorUserId: string | null;
+    accessTokenHash: string | null;
+    accessTokenSealed: string | null;
+    tokenIssuedAt: Date | null;
+    tokenLastUsedAt: Date | null;
+    decidedAt: Date | null;
+    school?: SchoolRecord | null;
+};
+
+type SchoolRecord = {
+    id: string;
+    name: string;
+    nameKey: string;
+    code: string;
+    city: string;
+    state: string;
+    pincode: string;
+    board: string | null | undefined;
+    udiseCode: string | null | undefined;
+    partnerId: string | null | undefined;
+    onboardedAt: Date | null | undefined;
+};
+
+type UserRecord = {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    schoolId: string | null | undefined;
+    isActive: boolean;
+};
+
+type StoreArgs = {
+    where?: Record<string, unknown>;
+    data?: Record<string, unknown>;
+    include?: Record<string, unknown>;
+    select?: Record<string, unknown>;
+    orderBy?: unknown;
+};
+
+type SchoolTransactionStore = {
+    schoolRequest: {
+        update(args: StoreArgs): Promise<SchoolRequestRecord>;
+    };
+    school: {
+        findUnique(args: StoreArgs): Promise<SchoolRecord | null>;
+        create(args: StoreArgs): Promise<SchoolRecord>;
+        update(args: StoreArgs): Promise<SchoolRecord>;
+    };
+    user: {
+        findUnique(args: StoreArgs): Promise<UserRecord | null>;
+        create(args: StoreArgs): Promise<UserRecord>;
+        update(args: StoreArgs): Promise<UserRecord>;
+    };
+    auditLog: {
+        create(args: StoreArgs): Promise<unknown>;
+    };
+};
+
+type SchoolPersistence = SchoolTransactionStore & {
+    schoolRequest: SchoolTransactionStore['schoolRequest'] & {
+        findUnique(args: StoreArgs): Promise<SchoolRequestRecord | null>;
+        findMany(args?: StoreArgs): Promise<readonly SchoolRequestRecord[]>;
+        create(args: StoreArgs): Promise<SchoolRequestRecord>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
+    };
+    $transaction<T>(callback: (tx: SchoolTransactionStore) => Promise<T>): Promise<T>;
+};
+
+type SchoolSessionSigner = {
+    sign(payload: Record<string, unknown>, options?: Record<string, unknown>): string;
+};
+
+type SchoolPartnerResolver = {
+    resolvePartnerIdByReferralCode(code: string): Promise<string | null>;
+};
+
+type SchoolPartnerDirectory = {
+    detailsFor(partnerId: string, isDefault: boolean): Promise<{
+        email: string;
+        contactPerson: string;
+    }>;
+};
+
 @Injectable()
 export class SchoolService {
     constructor(
-        private prisma: PrismaService,
-        private jwt: JwtService,
-        private adminApi: PartnerAdminApiClient,
+        @Inject(PrismaService) private prisma: SchoolPersistence,
+        @Inject(JwtService) private jwt: SchoolSessionSigner,
+        @Inject(PartnerAdminApiClient) private adminApi: SchoolPartnerResolver,
         private notifications: NotificationService,
-        private partnerDirectory: PartnerDirectoryService,
+        @Inject(PartnerDirectoryService) private partnerDirectory: SchoolPartnerDirectory,
     ) {}
 
     /**
@@ -81,35 +195,178 @@ export class SchoolService {
             partnerId = await this.adminApi.resolvePartnerIdByReferralCode(referralCode);
         }
 
+        const now = new Date();
+        const challenge = createEmailVerificationChallenge(now);
         const request = await this.prisma.schoolRequest.create({
             data: {
-                schoolName: dto.schoolName,
-                board: dto.board,
-                udiseCode: dto.udiseCode || null,
+                schoolName: dto.schoolName.trim(),
+                board: dto.board.trim(),
+                udiseCode: dto.udiseCode?.trim() || null,
                 pincode: dto.pincode.trim(),
-                city: dto.city,
-                state: dto.state,
-                coordinatorName: dto.coordinatorName,
+                city: dto.city.trim(),
+                state: dto.state.trim(),
+                coordinatorName: dto.coordinatorName.trim(),
                 coordinatorEmail,
-                coordinatorPhone: dto.coordinatorPhone,
+                coordinatorPhone: dto.coordinatorPhone.trim(),
                 status: 'PENDING',
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
                 submittedByPartnerId: partnerId,
                 // Recorded only when a code actually resolved to a partner.
                 submittedViaReferralCode: partnerId && referralCode ? referralCode : null,
             },
         });
 
-        await this.notifications.sendSchoolApplicationReceived(
+        const emailSent =
+            (await this.notifications.sendSchoolEmailVerification?.(request.coordinatorEmail, {
+                coordinatorName: request.coordinatorName,
+                schoolName: request.schoolName,
+                token: challenge.rawToken,
+            })) ?? false;
+
+        return {
+            status: 'EMAIL_VERIFICATION_REQUIRED' as const,
+            schoolName: request.schoolName,
+            coordinatorEmail: request.coordinatorEmail,
+            emailSent,
+        };
+    }
+
+    async verifyEmail(rawToken: string) {
+        const token = rawToken.trim();
+        if (!token || token.length > 256) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        const request = await this.prisma.schoolRequest.findUnique({
+            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
+        });
+        if (!request) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        if (request.emailVerifiedAt) {
+            return { status: 'ALREADY_VERIFIED' as const, email: request.coordinatorEmail };
+        }
+        if (
+            !request.emailVerificationTokenExpiresAt ||
+            request.emailVerificationTokenExpiresAt <= new Date()
+        ) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+        if (request.emailVerificationTokenUsedAt) {
+            throw new BadRequestException('This verification link has already been used. Request a new one.');
+        }
+
+        const now = new Date();
+        const claimed = await this.prisma.schoolRequest.updateMany({
+            where: {
+                id: request.id,
+                emailVerifiedAt: null,
+                emailVerificationTokenUsedAt: null,
+            },
+            data: { emailVerifiedAt: now, emailVerificationTokenUsedAt: now },
+        });
+        if (claimed.count === 0) {
+            const current = await this.prisma.schoolRequest.findUnique({ where: { id: request.id } });
+            if (current?.emailVerifiedAt) {
+                return {
+                    status: 'ALREADY_VERIFIED' as const,
+                    email: current.coordinatorEmail,
+                };
+            }
+            throw new BadRequestException('This verification link has already been used. Request a new one.');
+        }
+
+        await this.prisma.auditLog.create({
+            data: {
+                action: 'school.email.verified',
+                resource: 'school-request',
+                details: { schoolRequestId: request.id },
+            },
+        });
+        const emailSent = await this.notifications.sendSchoolApplicationReceived(
             request.coordinatorEmail,
             request.coordinatorName,
             request.schoolName,
         );
 
-        return {
-            status: request.status,
+        return { status: 'PENDING' as const, email: request.coordinatorEmail, emailSent };
+    }
+
+    async resendVerification(emailAddress: string) {
+        const email = emailAddress.trim().toLowerCase();
+        const request = await this.prisma.schoolRequest.findUnique({
+            where: { coordinatorEmail: email },
+        });
+        if (!request || request.emailVerifiedAt || request.status !== 'PENDING') {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const now = new Date();
+        if (cooldownRemainingSeconds(request.emailVerificationSentAt, now) > 0) {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        await this.prisma.schoolRequest.update({
+            where: { id: request.id },
+            data: {
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
+                emailVerificationTokenUsedAt: null,
+            },
+        });
+        await this.notifications.sendSchoolEmailVerification(request.coordinatorEmail, {
+            coordinatorName: request.coordinatorName,
             schoolName: request.schoolName,
-            coordinatorEmail: request.coordinatorEmail,
-        };
+            token: challenge.rawToken,
+        });
+        return { status: 'CHECK_INBOX' as const };
+    }
+
+    async resendVerificationForAdmin(id: string, adminId: string) {
+        const request = await this.prisma.schoolRequest.findUnique({ where: { id } });
+        if (!request) throw new NotFoundException('School request not found.');
+        if (request.emailVerifiedAt || request.status !== 'PENDING') {
+            throw new ConflictException('This school does not need email verification.');
+        }
+
+        const now = new Date();
+        const retryAfterSeconds = cooldownRemainingSeconds(request.emailVerificationSentAt, now);
+        if (retryAfterSeconds > 0) {
+            throw new HttpException(
+                `A verification email was sent recently. Try again in ${retryAfterSeconds} seconds.`,
+                HttpStatus.TOO_MANY_REQUESTS,
+            );
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        await this.prisma.schoolRequest.update({
+            where: { id },
+            data: {
+                emailVerificationTokenHash: challenge.tokenHash,
+                emailVerificationTokenExpiresAt: challenge.expiresAt,
+                emailVerificationSentAt: challenge.sentAt,
+                emailVerificationTokenUsedAt: null,
+            },
+        });
+        const emailSent = await this.notifications.sendSchoolEmailVerification(request.coordinatorEmail, {
+            coordinatorName: request.coordinatorName,
+            schoolName: request.schoolName,
+            token: challenge.rawToken,
+        });
+        await this.prisma.auditLog.create({
+            data: {
+                userId: adminId,
+                action: 'school.email.verification.resent',
+                resource: 'school-request',
+                details: { schoolRequestId: id, emailSent },
+            },
+        });
+        return { emailSent };
     }
 
     /** PUBLIC — the access token issued on approval is the only way in. */
@@ -126,10 +383,25 @@ export class SchoolService {
             throw new UnauthorizedException('That access token is not valid.');
         }
         if (request.status !== 'APPROVED') {
-            throw new ForbiddenException(`Your school's access has been ${request.status.toLowerCase()}.`);
+            throw new ForbiddenException(
+                request.status === 'PENDING' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)
+                    ? 'Confirm your coordinator email before your application can be reviewed.'
+                    : `Your school's access has been ${request.status.toLowerCase()}.`,
+            );
+        }
+        if (!hasVerifiedEmail(request.status, request.emailVerifiedAt)) {
+            throw new ForbiddenException('Confirm your coordinator email before signing in.');
         }
         if (!request.school || !request.coordinatorUserId) {
             throw new ForbiddenException('This school is not fully provisioned yet.');
+        }
+
+        const coordinator = await this.prisma.user.findUnique({
+            where: { id: request.coordinatorUserId },
+            select: { isActive: true },
+        });
+        if (!coordinator?.isActive) {
+            throw new ForbiddenException('This school coordinator account is not active. Contact BIO support.');
         }
 
         await this.prisma.schoolRequest.update({
@@ -178,6 +450,8 @@ export class SchoolService {
                 coordinatorEmail: true,
                 coordinatorPhone: true,
                 status: true,
+                emailVerifiedAt: true,
+                emailVerificationSentAt: true,
                 schoolId: true,
                 submittedByPartnerId: true,
                 submittedViaReferralCode: true,
@@ -192,7 +466,7 @@ export class SchoolService {
     }
 
     /** `SCH-XXXXXX` over the unambiguous alphabet; retried on the rare collision. */
-    private async allocateSchoolCode(tx: Prisma.TransactionClient): Promise<string> {
+    private async allocateSchoolCode(tx: SchoolTransactionStore): Promise<string> {
         for (let attempt = 0; attempt < 5; attempt += 1) {
             const code = `SCH-${randomCode(6)}`;
             const taken = await tx.school.findUnique({ where: { code } });
@@ -201,184 +475,208 @@ export class SchoolService {
         throw new ConflictException('Could not allocate a unique school code. Try again.');
     }
 
-    /**
-     * ADMIN — grant / reject / revoke / re-grant.
-     *
-     * Approving provisions the School + coordinator User the first time, and
-     * mints the token the first time. Revoking deactivates the coordinator so
-     * live sessions die on their next request, not when their JWT expires.
-     */
+    /** ADMIN — grant, reject, revoke, or re-grant a school request. */
     async decide(id: string, dto: DecideSchoolDto, adminId: string) {
         const request = await this.prisma.schoolRequest.findUnique({ where: { id } });
         if (!request) throw new NotFoundException('School request not found.');
 
-        // A school keeps one token across a revoke/re-grant cycle, so the
-        // handover card already in the coordinator's inbox stays valid.
+        assertAccessTransition(request.status, dto.decision, 'school');
+        if (dto.decision === 'APPROVED' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)) {
+            throw new BadRequestException(
+                'Confirm the coordinator email before granting school access. The coordinator must use the verification link first.',
+            );
+        }
+
+        const now = new Date();
         const issuing = dto.decision === 'APPROVED' && !request.accessTokenHash;
         const plaintext = issuing ? generateAccessToken('SCHOOL') : null;
-        const now = new Date();
-
         const result = await this.prisma.$transaction(async (tx) => {
-            let schoolId = request.schoolId;
-            let coordinatorUserId = request.coordinatorUserId;
+            const provisioned =
+                dto.decision === 'APPROVED'
+                    ? await this.provisionSchool(tx, request, now)
+                    : { schoolId: request.schoolId, coordinatorUserId: request.coordinatorUserId };
+            return this.persistDecision(tx, request, dto, adminId, provisioned, plaintext, issuing, now);
+        });
 
-            if (dto.decision === 'APPROVED' && (!schoolId || !coordinatorUserId)) {
-                const nameKey = schoolNameKey(request.schoolName);
-                const pincode = request.pincode;
+        const emailSent = await this.notifyDecision(result, dto, plaintext);
+        await this.notifyOnboardingPartner(result, dto);
+        return { id: result.id, status: result.status, schoolId: result.schoolId, emailSent };
+    }
 
-                // A student may already have added this school to the directory.
-                // Adopt that row and onboard it rather than creating a second one
-                // — (nameKey, pincode) is unique, so a blind create would fail,
-                // and students already pointing at it must keep their school.
-                const existing = await tx.school.findUnique({
-                    where: { nameKey_pincode: { nameKey, pincode } },
-                });
+    private async provisionSchool(
+        tx: SchoolTransactionStore,
+        request: SchoolRequestRecord,
+        now: Date,
+    ): Promise<{ schoolId: string; coordinatorUserId: string }> {
+        const school = request.schoolId
+            ? await tx.school.update({
+                  where: { id: request.schoolId },
+                  data: {
+                      name: request.schoolName,
+                      city: request.city,
+                      state: request.state,
+                      board: request.board,
+                      udiseCode: request.udiseCode,
+                      ...(request.submittedByPartnerId
+                          ? { partnerId: request.submittedByPartnerId }
+                          : {}),
+                      onboardedAt: now,
+                  },
+              })
+            : await this.findOrCreateSchool(tx, request, now);
 
-                // The partner that brought this school in owns the relationship from
-                // here on: it is how the partner portal scopes the school's students
-                // and results, and how the school portal knows who its partner is.
-                // A school that self-applied has none, and falls back to the house
-                // partner at read time (see `PartnerDirectoryService`).
-                const partnerId = request.submittedByPartnerId ?? null;
-
-                const school = existing
-                    ? await tx.school.update({
-                          where: { id: existing.id },
-                          data: {
-                              // The coordinator's own details win over whatever a
-                              // student typed, but never blank out what we have.
-                              name: request.schoolName,
-                              city: request.city || existing.city,
-                              state: request.state || existing.state,
-                              board: request.board,
-                              udiseCode: request.udiseCode,
-                              // Never clear an existing partner by adopting a
-                              // self-applied request over a partner-onboarded school.
-                              ...(partnerId ? { partnerId } : {}),
-                              onboardedAt: now,
-                          },
-                      })
-                    : await tx.school.create({
-                          data: {
-                              name: request.schoolName,
-                              nameKey,
-                              code: await this.allocateSchoolCode(tx),
-                              city: request.city,
-                              state: request.state,
-                              pincode,
-                              board: request.board,
-                              udiseCode: request.udiseCode,
-                              partnerId,
-                              onboardedAt: now,
-                          },
-                      });
-
-                const [firstName, ...rest] = request.coordinatorName.trim().split(/\s+/);
-                const coordinator = await tx.user.create({
+        const coordinatorUserId =
+            request.coordinatorUserId ??
+            (
+                await tx.user.create({
                     data: {
                         email: request.coordinatorEmail,
-                        firstName: firstName || request.coordinatorName,
-                        lastName: rest.join(' '),
+                        firstName: request.coordinatorName.trim().split(/\s+/)[0] ?? request.coordinatorName,
+                        lastName: request.coordinatorName.trim().split(/\s+/).slice(1).join(' '),
                         role: Role.SCHOOL,
                         schoolId: school.id,
                         isActive: true,
                     },
-                });
+                })
+            ).id;
 
-                schoolId = school.id;
-                coordinatorUserId = coordinator.id;
-            }
+        return { schoolId: school.id, coordinatorUserId };
+    }
 
-            // Deactivating the coordinator is what makes a revoke immediate:
-            // JwtStrategy rejects an inactive user on the very next request.
-            if (coordinatorUserId) {
-                await tx.user.update({
-                    where: { id: coordinatorUserId },
-                    data: { isActive: dto.decision === 'APPROVED' },
-                });
-            }
-
-            const updated = await tx.schoolRequest.update({
-                where: { id },
-                data: {
-                    status: dto.decision,
-                    decisionReason: dto.reason,
-                    decidedBy: adminId,
-                    decidedAt: new Date(),
-                    schoolId,
-                    coordinatorUserId,
-                    ...(plaintext
-                        ? {
-                              accessTokenHash: hashAccessToken(plaintext),
-                              accessTokenSealed: sealAccessToken(plaintext),
-                              tokenIssuedAt: new Date(),
-                          }
-                        : {}),
-                },
-            });
-
-            await tx.auditLog.create({
-                data: {
-                    userId: adminId,
-                    action: `school.${dto.decision.toLowerCase()}`,
-                    resource: 'school-request',
-                    details: { schoolRequestId: id, schoolId, reason: dto.reason, tokenIssued: issuing },
-                },
-            });
-
-            return updated;
+    private async findOrCreateSchool(
+        tx: SchoolTransactionStore,
+        request: SchoolRequestRecord,
+        now: Date,
+    ) {
+        const nameKey = schoolNameKey(request.schoolName);
+        const existing = await tx.school.findUnique({
+            where: { nameKey_pincode: { nameKey, pincode: request.pincode } },
         });
+        if (existing) {
+            return tx.school.update({
+                where: { id: existing.id },
+                data: {
+                    name: request.schoolName,
+                    city: request.city || existing.city,
+                    state: request.state || existing.state,
+                    board: request.board,
+                    udiseCode: request.udiseCode,
+                    ...(request.submittedByPartnerId
+                        ? { partnerId: request.submittedByPartnerId }
+                        : {}),
+                    onboardedAt: now,
+                },
+            });
+        }
 
-        // A school has no password — this mail (or the resend button on the
-        // access queue) is the only way a coordinator ever learns their token.
-        let emailSent = false;
+        return tx.school.create({
+            data: {
+                name: request.schoolName,
+                nameKey,
+                code: await this.allocateSchoolCode(tx),
+                city: request.city,
+                state: request.state,
+                pincode: request.pincode,
+                board: request.board,
+                udiseCode: request.udiseCode,
+                partnerId: request.submittedByPartnerId,
+                onboardedAt: now,
+            },
+        });
+    }
+
+    private persistDecision(
+        tx: SchoolTransactionStore,
+        request: SchoolRequestRecord,
+        dto: DecideSchoolDto,
+        adminId: string,
+        provisioned: { schoolId: string | null; coordinatorUserId: string | null },
+        plaintext: string | null,
+        issuing: boolean,
+        now: Date,
+    ) {
+        const coordinatorUpdate = provisioned.coordinatorUserId
+            ? tx.user.update({
+                  where: { id: provisioned.coordinatorUserId },
+                  data: { isActive: dto.decision === 'APPROVED' },
+              })
+            : null;
+        const requestUpdate = tx.schoolRequest.update({
+            where: { id: request.id },
+            data: {
+                status: dto.decision,
+                decisionReason: dto.reason,
+                decidedBy: adminId,
+                decidedAt: now,
+                schoolId: provisioned.schoolId,
+                coordinatorUserId: provisioned.coordinatorUserId,
+                ...(plaintext
+                    ? {
+                          accessTokenHash: hashAccessToken(plaintext),
+                          accessTokenSealed: sealAccessToken(plaintext),
+                          tokenIssuedAt: now,
+                      }
+                    : {}),
+            },
+        });
+        const audit = tx.auditLog.create({
+            data: {
+                userId: adminId,
+                action: `school.${dto.decision.toLowerCase()}`,
+                resource: 'school-request',
+                details: {
+                    schoolRequestId: request.id,
+                    schoolId: provisioned.schoolId,
+                    reason: dto.reason,
+                    tokenIssued: issuing,
+                },
+            },
+        });
+        return Promise.all([coordinatorUpdate, requestUpdate, audit]).then(([, updated]) => updated);
+    }
+
+    private notifyDecision(
+        result: SchoolRequestRecord,
+        dto: DecideSchoolDto,
+        plaintext: string | null,
+    ): Promise<boolean> {
         if (dto.decision === 'APPROVED') {
-            // Re-approving after a revoke issues no new token; the existing
-            // sealed one is still what the coordinator needs to see.
             const token = plaintext ?? openAccessToken(result.accessTokenSealed);
-            const school = result.schoolId
-                ? await this.prisma.school.findUnique({
-                      where: { id: result.schoolId },
-                      select: { code: true },
-                  })
-                : null;
-            if (token) {
-                emailSent = await this.notifications.sendSchoolApproved(result.coordinatorEmail, {
+            if (!token) return Promise.resolve(false);
+            return this.prisma.school.findUnique({
+                where: { id: result.schoolId ?? '' },
+                select: { code: true },
+            }).then((school) =>
+                this.notifications.sendSchoolApproved(result.coordinatorEmail, {
                     coordinatorName: result.coordinatorName,
                     schoolName: result.schoolName,
                     schoolCode: school?.code ?? null,
                     accessToken: token,
-                });
-            }
-        } else if (dto.decision === 'REJECTED') {
-            emailSent = await this.notifications.sendSchoolRejected(result.coordinatorEmail, {
-                coordinatorName: result.coordinatorName,
-                schoolName: result.schoolName,
-                reason: dto.reason,
-            });
-        } else {
-            emailSent = await this.notifications.sendSchoolRevoked(result.coordinatorEmail, {
+                }),
+            );
+        }
+        if (dto.decision === 'REJECTED') {
+            return this.notifications.sendSchoolRejected(result.coordinatorEmail, {
                 coordinatorName: result.coordinatorName,
                 schoolName: result.schoolName,
                 reason: dto.reason,
             });
         }
+        return this.notifications.sendSchoolRevoked(result.coordinatorEmail, {
+            coordinatorName: result.coordinatorName,
+            schoolName: result.schoolName,
+            reason: dto.reason,
+        });
+    }
 
-        // The partner that onboarded this school learns its status changed the
-        // same way the coordinator does — by mail, not by polling its dashboard.
-        if (
-            result.submittedByPartnerId &&
-            (dto.decision === 'APPROVED' || dto.decision === 'REJECTED')
-        ) {
-            const partner = await this.partnerDirectory.detailsFor(result.submittedByPartnerId, false);
-            await this.notifications.sendPartnerSchoolStatusChanged(partner.email, {
-                contactPerson: partner.contactPerson,
-                schoolName: result.schoolName,
-                status: dto.decision,
-            });
-        }
-
-        return { id: result.id, status: result.status, schoolId: result.schoolId, emailSent };
+    private async notifyOnboardingPartner(result: SchoolRequestRecord, dto: DecideSchoolDto): Promise<void> {
+        if (!result.submittedByPartnerId || (dto.decision !== 'APPROVED' && dto.decision !== 'REJECTED')) return;
+        const partner = await this.partnerDirectory.detailsFor(result.submittedByPartnerId, false);
+        await this.notifications.sendPartnerSchoolStatusChanged(partner.email, {
+            contactPerson: partner.contactPerson,
+            schoolName: result.schoolName,
+            status: dto.decision,
+        });
     }
 
     /**

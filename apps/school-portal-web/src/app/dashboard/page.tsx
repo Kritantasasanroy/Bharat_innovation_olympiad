@@ -6,7 +6,7 @@ import { useResource } from "../../lib/use-resource";
 
 /** Overview — Dashboard Access (§2.5) + Participation Summary at a glance (§2.15). */
 export default function OverviewPage() {
-	const { data: overview, loading, error } = useResource(portalApi.overview);
+	const { data: overview, loading, error, errorStatus } = useResource(portalApi.overview);
 	const { data: slots } = useResource(portalApi.slots);
 
 	const tiles = [
@@ -50,7 +50,13 @@ export default function OverviewPage() {
 				<p className="muted">Welcome back — here&apos;s how your school is tracking.</p>
 			</div>
 
-			{error && <div className="notice notice--error">{error}</div>}
+			{error && (
+				<div className="notice notice--error" role="alert">
+					{errorStatus === 401 || errorStatus === 403
+						? "Your session expired or this school no longer has access. Sign out and sign in again with a current access token."
+						: error}
+				</div>
+			)}
 
 			<div className="stat-row">
 				{tiles.map((t) => (

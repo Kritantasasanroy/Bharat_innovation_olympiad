@@ -4,6 +4,7 @@ import type {
 	CampaignInput,
 	CampaignUpdateInput,
 	PartnerFunnel,
+	Payout,
 	Statement,
 	StatementRequestInput,
 	SupportRequest,
@@ -40,10 +41,31 @@ export class ApiError extends Error {
 	}
 }
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} catch (cause) {
+		if (cause instanceof DOMException && cause.name === "AbortError") {
+			throw new ApiError({
+				code: "REQUEST_TIMEOUT",
+				message: "The request took too long. Check your connection and try again.",
+				statusCode: 408,
+			});
+		}
+		throw cause;
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 async function request<T>(path: string, token: string | null, init: RequestInit = {}): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${PORTAL_API_URL}${path}`, {
+		response = await fetchWithTimeout(`${PORTAL_API_URL}${path}`, {
 			...init,
 			headers: {
 				"content-type": "application/json",
@@ -51,7 +73,8 @@ async function request<T>(path: string, token: string | null, init: RequestInit 
 				...init.headers,
 			},
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
 			message: `Could not reach portal-api at ${PORTAL_API_URL}. Is it running?`,
@@ -123,6 +146,8 @@ export const portalApi = {
 
 	listStatements: (token: string) => request<Statement[]>("/partner/statements", token),
 
+	listPayouts: (token: string) => request<Payout[]>("/partner/payouts", token),
+
 	createSupportRequest: (token: string, input: SupportRequestInput) =>
 		request<SupportRequest>("/partner/support-requests", token, {
 			method: "POST",
@@ -148,6 +173,19 @@ export interface PartnerLoginResult {
 	readonly partner: { readonly id: string; readonly orgName: string; readonly email: string };
 }
 
+export interface PartnerApplicationResult {
+	readonly status: "PENDING" | "EMAIL_VERIFICATION_REQUIRED";
+	readonly email: string;
+	readonly orgName: string;
+	readonly emailSent: boolean;
+}
+
+export interface EmailVerificationResult {
+	readonly status: "PENDING" | "ALREADY_VERIFIED";
+	readonly email: string;
+	readonly emailSent?: boolean;
+}
+
 /** NestJS error envelope: `{ statusCode, message: string | string[], error }`. */
 interface NestErrorBody {
 	readonly statusCode?: number;
@@ -162,7 +200,7 @@ async function backendRequest<T>(
 ): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_API_URL}/api${path}`, {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
 			method: init.method ?? (body === undefined ? "GET" : "POST"),
 			headers: {
 				"content-type": "application/json",
@@ -170,7 +208,8 @@ async function backendRequest<T>(
 			},
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
-	} catch {
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
 			message: `Could not reach the BIO backend at ${BACKEND_API_URL}. Is it running?`,
@@ -197,7 +236,13 @@ async function backendRequest<T>(
 export const backendApi = {
 	/** Self-service access request. No token required — this is the way in. */
 	apply: (input: PartnerApplyInput) =>
-		backendRequest<{ status: string; email: string; orgName: string }>("/partner/apply", input),
+		backendRequest<PartnerApplicationResult>("/partner/apply", input),
+
+	verifyEmail: (token: string) =>
+		backendRequest<EmailVerificationResult>("/partner/verify-email", { token }),
+
+	resendVerification: (email: string) =>
+		backendRequest<{ status: "CHECK_INBOX" }>("/partner/resend-verification", { email }),
 
 	/** Email + password sign-in; only APPROVED partners receive a token. */
 	login: (email: string, password: string) =>
@@ -236,6 +281,7 @@ export interface PartnerSchool {
 	readonly coordinatorName: string;
 	readonly coordinatorEmail: string;
 	readonly status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+	readonly emailVerifiedAt: string | null;
 	/** The campaign code the school arrived on, or null for a direct onboard. */
 	readonly submittedViaReferralCode: string | null;
 	readonly decisionReason: string | null;
@@ -383,9 +429,19 @@ export interface PartnerProfileUpdate {
  * parses every response as JSON.
  */
 async function downloadXlsx(path: string, token: string, filename: string): Promise<void> {
-	const response = await fetch(`${BACKEND_API_URL}/api${path}`, {
-		headers: { authorization: `Bearer ${token}` },
-	});
+	let response: Response;
+	try {
+		response = await fetchWithTimeout(`${BACKEND_API_URL}/api${path}`, {
+			headers: { authorization: `Bearer ${token}` },
+		});
+	} catch (cause) {
+		if (cause instanceof ApiError) throw cause;
+		throw new ApiError({
+			code: "NETWORK_ERROR",
+			message: `Could not reach the BIO backend at ${BACKEND_API_URL}. Is it running?`,
+			statusCode: 0,
+		});
+	}
 	if (!response.ok) {
 		const raw = (await response.json().catch(() => null)) as NestErrorBody | null;
 		const message = Array.isArray(raw?.message) ? raw?.message[0] : raw?.message;

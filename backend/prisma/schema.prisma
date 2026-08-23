@@ -587,6 +587,13 @@ model PartnerRequest {
   phone          String
   passwordHash   String
   status         PartnerRequestStatus @default(PENDING)
+  /// Null until the contact proves control of the application email.
+  emailVerifiedAt DateTime?
+  /// Digest of the current email-verification token; the raw token is never persisted.
+  emailVerificationTokenHash String? @unique
+  emailVerificationTokenExpiresAt DateTime?
+  emailVerificationSentAt DateTime?
+  emailVerificationTokenUsedAt DateTime?
   partnerId      String? // admin-api Partner.id (also the JWT sub once issued)
   applicationId  String? // admin-api PartnerApplication.id
   decisionReason String?
@@ -633,6 +640,13 @@ model SchoolRequest {
   coordinatorEmail String              @unique
   coordinatorPhone String
   status           SchoolRequestStatus @default(PENDING)
+  /// Null until the coordinator proves control of the application email.
+  emailVerifiedAt DateTime?
+  /// Digest of the current email-verification token; the raw token is never persisted.
+  emailVerificationTokenHash String? @unique
+  emailVerificationTokenExpiresAt DateTime?
+  emailVerificationSentAt DateTime?
+  emailVerificationTokenUsedAt DateTime?
 
   /// The admin-api `Partner.id` that onboarded this school, when a partner
   /// submitted the request on the school's behalf rather than the school
