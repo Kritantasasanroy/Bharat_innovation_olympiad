@@ -1,10 +1,13 @@
 /* ══════════════════════════════════════════════════════════════
-   Bharat Innovation Olympiad by Lemon Ideas — Design System
-   Premium dark theme with Lemon Ideas yellow & green accents
+   Bharat Innovation Olympiad by Lemon Ideas — Admin Design System
+   Professional, data-dense, light by default (2026-07-11 decision —
+   see memory bio-portal-redesign-2026-08 — kept on redesign, not the
+   dark-default in DESIGN_BRIEF.md). Inter is self-hosted via
+   next/font (layout.tsx's --font-inter), not loaded twice.
    ══════════════════════════════════════════════════════════════ */
 
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* ── Google Fonts — JetBrains Mono only; Inter comes from next/font ── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ── CSS Custom Properties ── */
 :root {
@@ -89,7 +92,7 @@
   --radius-full: 9999px;
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Transitions */
