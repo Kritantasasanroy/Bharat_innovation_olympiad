@@ -237,6 +237,18 @@ export class PartnerAdminApiClient {
         );
     }
 
+    /** Staff pausing/resuming a specific campaign — the only lever short of revoking the whole partner. */
+    setCampaignActive(
+        partnerId: string,
+        campaignId: string,
+        deactivate: boolean,
+    ): Promise<AdminApiCampaign> {
+        return this.call<AdminApiCampaign>(
+            `/partners/${encodeURIComponent(partnerId)}/campaigns/${encodeURIComponent(campaignId)}`,
+            { method: 'PATCH', body: JSON.stringify({ deactivate }) },
+        );
+    }
+
     getFunnel(partnerId: string): Promise<AdminApiFunnel> {
         return this.call<AdminApiFunnel>(`/partners/${encodeURIComponent(partnerId)}/funnel`, {
             method: 'GET',

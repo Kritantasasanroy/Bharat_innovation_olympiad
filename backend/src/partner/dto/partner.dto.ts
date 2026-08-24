@@ -1,4 +1,5 @@
 import {
+    IsBoolean,
     IsEmail,
     IsIn,
     IsNotEmpty,
@@ -101,4 +102,10 @@ export class UpdatePayoutStatusDto {
     @IsOptional()
     @IsString()
     reason?: string;
+}
+
+/** ADMIN — pause/resume a partner's campaign without revoking the whole partner (engine proxy). */
+export class SetCampaignActiveDto {
+    @IsBoolean()
+    deactivate: boolean;
 }

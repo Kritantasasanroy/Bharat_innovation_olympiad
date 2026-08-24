@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
+import { downloadCsv } from '@/lib/csv';
 import { useAuth } from '@/hooks/useAuth';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
@@ -133,6 +134,10 @@ export default function PartnersPage() {
     const [payoutReason, setPayoutReason] = useState('');
     const [payoutSubmitting, setPayoutSubmitting] = useState(false);
 
+    const [editingIdentity, setEditingIdentity] = useState(false);
+    const [identitySaving, setIdentitySaving] = useState(false);
+    const [campaignActionId, setCampaignActionId] = useState<string | null>(null);
+
     useEffect(() => {
         void loadPartners();
     }, []);
@@ -218,6 +223,51 @@ export default function PartnersPage() {
         }
     }
 
+    async function saveIdentity(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!selectedPartnerId) return;
+        const form = new FormData(event.currentTarget);
+        setIdentitySaving(true);
+        setError(null);
+        setNotice(null);
+        try {
+            await api.patch(`/admin/manage/partners/${selectedPartnerId}`, {
+                orgName: String(form.get('orgName')),
+                contactPerson: String(form.get('contactPerson')),
+                email: String(form.get('email')),
+                phone: String(form.get('phone')),
+            });
+            setEditingIdentity(false);
+            setNotice({ type: 'success', message: 'Partner identity updated.' });
+            await loadPartners();
+            await loadSnapshot(selectedPartnerId);
+        } catch (err) {
+            setError(apiMessage(err, 'Could not update the partner.'));
+        } finally {
+            setIdentitySaving(false);
+        }
+    }
+
+    async function toggleCampaign(campaign: Campaign) {
+        if (!selectedPartnerId) return;
+        const deactivate = campaign.status !== 'INACTIVE';
+        setCampaignActionId(campaign.id);
+        setError(null);
+        setNotice(null);
+        try {
+            await api.patch(`/admin/partners/${selectedPartnerId}/campaigns/${campaign.id}`, { deactivate });
+            setNotice({
+                type: 'success',
+                message: `Campaign "${campaign.name}" ${deactivate ? 'paused' : 'resumed'}.`,
+            });
+            await loadSnapshot(selectedPartnerId);
+        } catch (err) {
+            setError(apiMessage(err, 'Could not update the campaign.'));
+        } finally {
+            setCampaignActionId(null);
+        }
+    }
+
     const selectedPartner = useMemo(
         () => partnerRequests.find((p) => p.partnerId === selectedPartnerId) || null,
         [partnerRequests, selectedPartnerId],
@@ -241,25 +291,41 @@ export default function PartnersPage() {
                 )}
 
                 <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label htmlFor="partner">Select an approved partner</label>
-                        {partnerRequests.length === 0 && !loading ? (
-                            <p className="text-muted">No approved partners yet. Approve a partner request first.</p>
-                        ) : (
-                            <select
-                                id="partner"
-                                className="form-control"
-                                value={selectedPartnerId ?? ''}
-                                onChange={(e) => setSelectedPartnerId(e.target.value || null)}
-                            >
-                                <option value="">Choose a partner…</option>
-                                {partnerRequests.map((p) => (
-                                    <option key={p.id} value={p.partnerId as string}>
-                                        {p.orgName} — {p.contactPerson}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
+                    <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end' }}>
+                        <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                            <label htmlFor="partner">Select an approved partner</label>
+                            {partnerRequests.length === 0 && !loading ? (
+                                <p className="text-muted">No approved partners yet. Approve a partner request first.</p>
+                            ) : (
+                                <select
+                                    id="partner"
+                                    className="form-control"
+                                    value={selectedPartnerId ?? ''}
+                                    onChange={(e) => setSelectedPartnerId(e.target.value || null)}
+                                >
+                                    <option value="">Choose a partner…</option>
+                                    {partnerRequests.map((p) => (
+                                        <option key={p.id} value={p.partnerId as string}>
+                                            {p.orgName} — {p.contactPerson}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={partnerRequests.length === 0}
+                            onClick={() =>
+                                downloadCsv(
+                                    'bio-partners.csv',
+                                    ['Organisation', 'Contact', 'Email', 'Status'],
+                                    partnerRequests.map((p) => [p.orgName, p.contactPerson, p.email, p.status]),
+                                )
+                            }
+                        >
+                            Export CSV
+                        </button>
                     </div>
                 </div>
 
@@ -272,7 +338,12 @@ export default function PartnersPage() {
                 {snapshot && selectedPartner && (
                     <>
                         <section className="glass-card" style={{ marginBottom: '1.5rem' }}>
-                            <h2>Partner identity</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                <h2>Partner identity</h2>
+                                <button className="btn btn-sm btn-secondary" onClick={() => setEditingIdentity(true)}>
+                                    Edit
+                                </button>
+                            </div>
                             <div className="access-card__grid">
                                 <div className="access-card__field">
                                     <dt>Organisation</dt>
@@ -361,6 +432,7 @@ export default function PartnersPage() {
                                             <th>Referral code</th>
                                             <th>Status</th>
                                             <th>Cap</th>
+                                            <th style={{ textAlign: 'right' }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -374,6 +446,19 @@ export default function PartnersPage() {
                                                     </span>
                                                 </td>
                                                 <td>{c.caps?.maxConversions ?? '—'}</td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <button
+                                                        className={c.status === 'INACTIVE' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-danger'}
+                                                        disabled={campaignActionId === c.id}
+                                                        onClick={() => toggleCampaign(c)}
+                                                    >
+                                                        {campaignActionId === c.id
+                                                            ? 'Saving…'
+                                                            : c.status === 'INACTIVE'
+                                                              ? 'Resume'
+                                                              : 'Pause'}
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -499,6 +584,73 @@ export default function PartnersPage() {
                     </>
                 )}
             </div>
+
+            {editingIdentity && snapshot && (
+                <div className="modal-overlay" onClick={() => !identitySaving && setEditingIdentity(false)}>
+                    <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
+                        <h2>Edit partner identity</h2>
+                        <p className="text-muted">
+                            Staff can move a partner&apos;s login email; the partner itself cannot.
+                        </p>
+                        <form className="exam-form" onSubmit={saveIdentity}>
+                            <div className="form-group">
+                                <label htmlFor="orgName">Organisation</label>
+                                <input
+                                    id="orgName"
+                                    name="orgName"
+                                    className="form-control"
+                                    defaultValue={snapshot.partner.orgName}
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="contactPerson">Contact person</label>
+                                <input
+                                    id="contactPerson"
+                                    name="contactPerson"
+                                    className="form-control"
+                                    defaultValue={snapshot.partner.contactPerson}
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="email">Login email</label>
+                                <input
+                                    id="email"
+                                    name="email"
+                                    type="email"
+                                    className="form-control"
+                                    defaultValue={snapshot.partner.email}
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="phone">Phone</label>
+                                <input
+                                    id="phone"
+                                    name="phone"
+                                    className="form-control"
+                                    defaultValue={snapshot.partner.phone}
+                                    required
+                                />
+                            </div>
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setEditingIdentity(false)}
+                                    disabled={identitySaving}
+                                >
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn btn-primary" disabled={identitySaving}>
+                                    {identitySaving ? 'Saving…' : 'Save'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {payoutAction && (
                 <div className="modal-overlay" onClick={() => !payoutSubmitting && setPayoutAction(null)}>

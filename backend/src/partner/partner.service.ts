@@ -668,4 +668,9 @@ export class PartnerService {
     updatePayoutStatus(payoutId: string, status: 'SIGNED_OFF' | 'RELEASED', approver?: string, reason?: string) {
         return this.adminApi.updatePayoutStatus(payoutId, status, approver, reason);
     }
+
+    /** ADMIN — pause/resume one campaign, short of revoking the whole partner. */
+    setCampaignActive(partnerId: string, campaignId: string, deactivate: boolean) {
+        return this.adminApi.setCampaignActive(partnerId, campaignId, deactivate);
+    }
 }

@@ -20,6 +20,7 @@ function toDateInput(dto: CreateAnnouncementDto): CreateAnnouncementInput {
         publishedAt: new Date(dto.publishedAt),
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         active: dto.active ?? true,
+        targetSchoolId: dto.targetSchoolId || null,
     };
 }
 
@@ -31,6 +32,7 @@ function toUpdateInput(dto: UpdateAnnouncementDto): UpdateAnnouncementInput {
     if (dto.publishedAt !== undefined) input.publishedAt = new Date(dto.publishedAt);
     if (dto.expiresAt !== undefined) input.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     if (dto.active !== undefined) input.active = dto.active;
+    if (dto.targetSchoolId !== undefined) input.targetSchoolId = dto.targetSchoolId || null;
     return input;
 }
 
@@ -52,8 +54,8 @@ export class SchoolAnnouncementController {
     constructor(private service: AnnouncementService) {}
 
     @Get()
-    list() {
-        return this.service.listForSchool('');
+    list(@CurrentUser('schoolId') schoolId: string) {
+        return this.service.listForSchool(schoolId ?? '');
     }
 }
 

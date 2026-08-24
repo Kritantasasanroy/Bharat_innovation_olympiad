@@ -2,7 +2,9 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
+import LimonAvatar from '@/components/limon/LimonAvatar';
 import api from '@/lib/api';
+import { XP_PER_EXAM_COMPLETE } from '@/lib/constants';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
@@ -242,7 +244,47 @@ export default function ResultsPage() {
                         <div className="spinner" />
                     </div>
                 ) : results.length > 0 ? (
-                    <div className="results-list" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <>
+                        {(() => {
+                            const completed = results.filter(
+                                (r) => typeof r.score === 'number' && !r.isDisqualified,
+                            ).length;
+                            if (completed === 0) return null;
+                            const totalXp = completed * XP_PER_EXAM_COMPLETE;
+                            return (
+                                <div
+                                    className="glass-card"
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 'var(--space-5)',
+                                        padding: 'var(--space-5) var(--space-6)',
+                                        marginBottom: '2rem',
+                                        background: 'var(--gradient-card)',
+                                    }}
+                                >
+                                    <LimonAvatar mood="celebrating" size={64} />
+                                    <div>
+                                        <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>
+                                            <span
+                                                style={{
+                                                    background: 'var(--gradient-brand)',
+                                                    WebkitBackgroundClip: 'text',
+                                                    WebkitTextFillColor: 'transparent',
+                                                }}
+                                            >
+                                                {totalXp} XP
+                                            </span>{' '}
+                                            earned
+                                        </div>
+                                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                                            {completed} exam{completed === 1 ? '' : 's'} completed — keep going for more!
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        <div className="results-list" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                         {results.map((result) => {
                             const chartData = ensureRadarShape(result.radarData, result);
                             return (
@@ -405,6 +447,7 @@ export default function ResultsPage() {
                             );
                         })}
                     </div>
+                    </>
                 ) : (
                     <div className="glass-card" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📊</div>

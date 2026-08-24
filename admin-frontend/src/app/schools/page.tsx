@@ -3,6 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
+import { downloadCsv } from '@/lib/csv';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
 /**
@@ -142,6 +143,31 @@ export default function AdminSchoolsPage() {
                     />
                     <button className="btn btn-primary" type="submit">
                         Search
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={schools.length === 0}
+                        onClick={() =>
+                            downloadCsv(
+                                'bio-schools.csv',
+                                ['Name', 'Code', 'City', 'State', 'Pincode', 'Board', 'UDISE code', 'Partner', 'Members', 'Status'],
+                                schools.map((s) => [
+                                    s.name,
+                                    s.code,
+                                    s.city,
+                                    s.state,
+                                    s.pincode,
+                                    s.board,
+                                    s.udiseCode,
+                                    s.partnerName ?? 'Bharat Innovation Olympiad',
+                                    s.members,
+                                    s.status,
+                                ]),
+                            )
+                        }
+                    >
+                        Export CSV
                     </button>
                 </form>
 

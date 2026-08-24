@@ -15,7 +15,11 @@ type Announcement = {
     expiresAt: string | null;
     active: boolean;
     createdAt: string;
+    targetSchoolId: string | null;
+    targetSchoolName: string | null;
 };
+
+type SchoolOption = { id: string; name: string; city: string };
 
 const AUDIENCE_LABEL: Record<Audience, string> = {
     PARTNER: 'Partners',
@@ -45,6 +49,7 @@ function fromLocalInput(value: string) {
  */
 export default function AdminAnnouncementsPage() {
     const [items, setItems] = useState<Announcement[]>([]);
+    const [schools, setSchools] = useState<SchoolOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +58,7 @@ export default function AdminAnnouncementsPage() {
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [audience, setAudience] = useState<Audience>('ALL');
+    const [targetSchoolId, setTargetSchoolId] = useState('');
     const [publishedAt, setPublishedAt] = useState('');
     const [expiresAt, setExpiresAt] = useState('');
     const [isActive, setIsActive] = useState(true);
@@ -76,10 +82,18 @@ export default function AdminAnnouncementsPage() {
     }, [load]);
 
     useEffect(() => {
+        api.get<SchoolOption[]>('/admin/manage/schools').then(
+            ({ data }) => setSchools(data),
+            () => {},
+        );
+    }, []);
+
+    useEffect(() => {
         if (editing) {
             setTitle(editing.title);
             setBody(editing.body);
             setAudience(editing.audience);
+            setTargetSchoolId(editing.targetSchoolId ?? '');
             setPublishedAt(toLocalInput(editing.publishedAt));
             setExpiresAt(editing.expiresAt ? toLocalInput(editing.expiresAt) : '');
             setIsActive(editing.active);
@@ -87,6 +101,7 @@ export default function AdminAnnouncementsPage() {
             setTitle('');
             setBody('');
             setAudience('ALL');
+            setTargetSchoolId('');
             setPublishedAt(toLocalInput(new Date().toISOString()));
             setExpiresAt('');
             setIsActive(true);
@@ -98,6 +113,7 @@ export default function AdminAnnouncementsPage() {
         setTitle('');
         setBody('');
         setAudience('ALL');
+        setTargetSchoolId('');
         setPublishedAt(toLocalInput(new Date().toISOString()));
         setExpiresAt('');
         setIsActive(true);
@@ -112,6 +128,8 @@ export default function AdminAnnouncementsPage() {
             title: title.trim(),
             body: body.trim(),
             audience,
+            // '' clears any existing target — only meaningful when audience is SCHOOL.
+            targetSchoolId: audience === 'SCHOOL' ? targetSchoolId : '',
             publishedAt: fromLocalInput(publishedAt),
             expiresAt: expiresAt ? fromLocalInput(expiresAt) : undefined,
             active: isActive,
@@ -183,6 +201,23 @@ export default function AdminAnnouncementsPage() {
                                     <option value="SCHOOL">Schools only</option>
                                 </select>
                             </div>
+                            {audience === 'SCHOOL' && (
+                                <div className="form-group">
+                                    <label>Target</label>
+                                    <select
+                                        className="form-control"
+                                        value={targetSchoolId}
+                                        onChange={(e) => setTargetSchoolId(e.target.value)}
+                                    >
+                                        <option value="">All schools</option>
+                                        {schools.map((s) => (
+                                            <option key={s.id} value={s.id}>
+                                                {s.name} — {s.city}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="form-group">
                                 <label>Publish at</label>
                                 <input
@@ -266,7 +301,14 @@ export default function AdminAnnouncementsPage() {
                                                     {a.body.length > 90 ? `${a.body.slice(0, 90)}…` : a.body}
                                                 </div>
                                             </td>
-                                            <td><span className={AUDIENCE_CLASS[a.audience]}>{AUDIENCE_LABEL[a.audience]}</span></td>
+                                            <td>
+                                                <span className={AUDIENCE_CLASS[a.audience]}>{AUDIENCE_LABEL[a.audience]}</span>
+                                                {a.targetSchoolName && (
+                                                    <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 2 }}>
+                                                        → {a.targetSchoolName}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td>
                                                 {visible ? (
                                                     <span className="badge badge-success">Live</span>

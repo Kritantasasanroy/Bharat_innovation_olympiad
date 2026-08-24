@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, IsUUID, ValidateIf } from 'class-validator';
 
 export enum AnnouncementAudienceDto {
     PARTNER = 'PARTNER',
@@ -26,6 +26,12 @@ export class CreateAnnouncementDto {
     @IsBoolean()
     @IsOptional()
     active?: boolean;
+
+    /** Narrows a SCHOOL/ALL post to one school. Omit (or '') for the original broadcast-to-audience behaviour. */
+    @ValidateIf((o) => !!o.targetSchoolId)
+    @IsUUID()
+    @IsOptional()
+    targetSchoolId?: string;
 }
 
 export class UpdateAnnouncementDto {
@@ -52,6 +58,12 @@ export class UpdateAnnouncementDto {
     @IsBoolean()
     @IsOptional()
     active?: boolean;
+
+    /** Narrows a SCHOOL/ALL post to one school. Send '' to clear back to broadcast. */
+    @ValidateIf((o) => !!o.targetSchoolId)
+    @IsUUID()
+    @IsOptional()
+    targetSchoolId?: string;
 }
 
 export class AnnouncementParamsDto {

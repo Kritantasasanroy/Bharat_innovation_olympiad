@@ -13,6 +13,7 @@ import {
     DecidePartnerDto,
     GenerateStatementDto,
     PartnerLoginDto,
+    SetCampaignActiveDto,
     UpdatePayoutStatusDto,
 } from './dto/partner.dto';
 import { PartnerService } from './partner.service';
@@ -121,5 +122,17 @@ export class PartnerController {
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     updatePayoutStatus(@Param('payoutId') payoutId: string, @Body() dto: UpdatePayoutStatusDto) {
         return this.partnerService.updatePayoutStatus(payoutId, dto.status, dto.approver, dto.reason);
+    }
+
+    /** ADMIN — pause/resume one campaign; revoking the whole partner was previously the only lever. */
+    @Patch('admin/partners/:partnerId/campaigns/:campaignId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    setCampaignActive(
+        @Param('partnerId') partnerId: string,
+        @Param('campaignId') campaignId: string,
+        @Body() dto: SetCampaignActiveDto,
+    ) {
+        return this.partnerService.setCampaignActive(partnerId, campaignId, dto.deactivate);
     }
 }

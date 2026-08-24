@@ -1243,9 +1243,14 @@ model Announcement {
   createdBy   String
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
+  /// Narrows a SCHOOL/ALL post to one school. Null means every school in the
+  /// audience sees it (the original broadcast-only behaviour). Not a formal
+  /// relation — a school can be deleted independently without touching posts.
+  targetSchoolId String?
 
   @@index([audience])
   @@index([active, publishedAt])
+  @@index([targetSchoolId])
 }
 
 enum WhatsAppStatus {

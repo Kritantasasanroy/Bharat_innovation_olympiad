@@ -45,6 +45,7 @@ export default function AdminSupportPage() {
     const [error, setError] = useState<string | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'ALL' | Source>('ALL');
     const [statusFilter, setStatusFilter] = useState<'ALL' | Status>('ALL');
+    const [categoryFilter, setCategoryFilter] = useState('ALL');
 
     const [active, setActive] = useState<SupportTicket | null>(null);
     const [response, setResponse] = useState('');
@@ -89,10 +90,12 @@ export default function AdminSupportPage() {
         }
     }
 
+    const categories = Array.from(new Set(tickets.map((t) => t.category))).sort();
     const visible = tickets.filter(
         (t) =>
             (sourceFilter === 'ALL' || t.source === sourceFilter) &&
-            (statusFilter === 'ALL' || t.status === statusFilter),
+            (statusFilter === 'ALL' || t.status === statusFilter) &&
+            (categoryFilter === 'ALL' || t.category === categoryFilter),
     );
     const openCount = tickets.filter((t) => t.status !== 'RESOLVED').length;
 
@@ -124,6 +127,18 @@ export default function AdminSupportPage() {
                             </button>
                         ))}
                     </div>
+                    {categories.length > 0 && (
+                        <div className="class-pills">
+                            <button className={`class-pill ${categoryFilter === 'ALL' ? 'active' : ''}`} onClick={() => setCategoryFilter('ALL')}>
+                                Any category
+                            </button>
+                            {categories.map((c) => (
+                                <button key={c} className={`class-pill ${categoryFilter === c ? 'active' : ''}`} onClick={() => setCategoryFilter(c)}>
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <span className="stats-pill">{openCount} open · {tickets.length} total</span>
                 </div>
 

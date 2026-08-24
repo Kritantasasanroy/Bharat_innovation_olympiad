@@ -9,6 +9,7 @@ export type CreateAnnouncementInput = {
     publishedAt: Date;
     expiresAt?: Date | null;
     active?: boolean;
+    targetSchoolId?: string | null;
 };
 
 export type UpdateAnnouncementInput = Partial<CreateAnnouncementInput>;
@@ -25,11 +26,12 @@ export class AnnouncementService {
         return this.listVisible('PARTNER');
     }
 
+    /** Sees broadcasts (targetSchoolId null) plus posts targeted at this school specifically. */
     async listForSchool(schoolId: string) {
-        return this.listVisible('SCHOOL');
+        return this.listVisible('SCHOOL', schoolId);
     }
 
-    private async listVisible(audience: 'PARTNER' | 'SCHOOL') {
+    private async listVisible(audience: 'PARTNER' | 'SCHOOL', schoolId?: string) {
         const now = this.now();
         return this.prisma.announcement.findMany({
             where: {
@@ -43,6 +45,9 @@ export class AnnouncementService {
                             { expiresAt: { gt: now } },
                         ],
                     },
+                    ...(schoolId
+                        ? [{ OR: [{ targetSchoolId: null }, { targetSchoolId: schoolId }] }]
+                        : []),
                 ],
             },
             orderBy: { publishedAt: 'desc' },
@@ -57,10 +62,22 @@ export class AnnouncementService {
         });
     }
 
+    /** Admin's own list, decorated with the target school's name for narrowed posts. */
     async listAll() {
-        return this.prisma.announcement.findMany({
+        const items = await this.prisma.announcement.findMany({
             orderBy: { publishedAt: 'desc' },
         });
+        const schoolIds = [...new Set(items.map((a) => a.targetSchoolId).filter((id): id is string => !!id))];
+        if (schoolIds.length === 0) return items.map((a) => ({ ...a, targetSchoolName: null as string | null }));
+        const schools = await this.prisma.school.findMany({
+            where: { id: { in: schoolIds } },
+            select: { id: true, name: true },
+        });
+        const nameById = new Map(schools.map((s) => [s.id, s.name]));
+        return items.map((a) => ({
+            ...a,
+            targetSchoolName: a.targetSchoolId ? nameById.get(a.targetSchoolId) ?? null : null,
+        }));
     }
 
     async create(data: CreateAnnouncementInput & { createdBy: string }) {
