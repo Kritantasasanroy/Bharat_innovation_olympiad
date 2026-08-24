@@ -8,8 +8,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export default function AdminLoginPage() {
-    const [email, setEmail] = useState('admin@bharatolympiad.in');
-    const [password, setPassword] = useState('BIO@Admin2025');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -131,20 +131,6 @@ export default function AdminLoginPage() {
                         {error}
                     </div>
                 )}
-
-                <div style={{
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: 'var(--space-3)',
-                    marginBottom: 'var(--space-4)',
-                    fontSize: '0.85rem',
-                    color: 'var(--text-secondary)',
-                    lineHeight: 1.6
-                }}>
-                    <div><strong>Admin ID:</strong> admin@bharatolympiad.in</div>
-                    <div><strong>Password:</strong> BIO@Admin2025</div>
-                </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                     <div className="input-group">
