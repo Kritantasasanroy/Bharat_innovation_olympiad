@@ -103,7 +103,7 @@ export default function LandingPage() {
             </div>
 
             <h1 className="lp-fade-up-1" style={{
-              fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 46, lineHeight: 1.08,
+              fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 46, lineHeight: 1.08,
               letterSpacing: -1.5, margin: '0 0 18px',
             }}>
               Bharat{' '}
@@ -169,7 +169,7 @@ export default function LandingPage() {
                       <Icon size={18} color={col} />
                     </span>
                     <div>
-                      <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{sub}</div>
                     </div>
                   </div>
@@ -186,7 +186,7 @@ export default function LandingPage() {
                   <Rocket size={18} color="#fff" />
                 </span>
                 <div>
-                  <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14, color: '#fff' }}>Future Innovator</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: '#fff' }}>Future Innovator</div>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>Your journey continues</div>
                 </div>
               </div>
@@ -272,7 +272,7 @@ export default function LandingPage() {
             }}>
               <Star size={10} fill="#ffcb05" color="#ffcb05" /> Innovation Alumni · Where Are They Now
             </div>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 38, margin: '0 0 14px', letterSpacing: -0.8, lineHeight: 1.1 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 38, margin: '0 0 14px', letterSpacing: -0.8, lineHeight: 1.1 }}>
               Real Participants. Real Ideas. Real Impact.
             </h2>
             <p style={{ fontSize: 16, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 600, lineHeight: 1.65 }}>
@@ -283,7 +283,7 @@ export default function LandingPage() {
           <AlumniCarousel />
 
           <div className="lp-fade-up" style={{ textAlign: 'center', marginTop: 48 }}>
-            <p style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are participants. Tomorrow, they&apos;ll build the future of Bharat.</p>
+            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are participants. Tomorrow, they&apos;ll build the future of Bharat.</p>
             <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '0 0 26px' }}>Your innovation journey could be next · Powered by Lemon Ideas · Connected to Innopreneurs Junior</p>
             <Link href="/register" className="lp-btn-primary" style={{
               background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
@@ -300,7 +300,7 @@ export default function LandingPage() {
       {/* ── WHY DIFFERENT ── */}
       <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>Why This Olympiad Is Different</h2>
+          <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>Why This Olympiad Is Different</h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 520 }}>We don&apos;t test what participants memorise. We measure how they think, create and solve.</p>
 
           <div className="lp-compare-grid">
@@ -336,7 +336,7 @@ export default function LandingPage() {
           and where it sits, in the organisation's own words. */}
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
-          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 20px', letterSpacing: -0.6, textAlign: 'center' }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 20px', letterSpacing: -0.6, textAlign: 'center' }}>
             Building a Future-Ready India
           </h2>
           <div className="lp-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20, fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
@@ -378,7 +378,7 @@ export default function LandingPage() {
           meet it as section headings mid-exam. */}
       <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6, textAlign: 'center' }}>
+          <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6, textAlign: 'center' }}>
             The Five Dimensions
           </h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 560, textAlign: 'center' }}>
@@ -428,7 +428,7 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>One Registration. Four Powerful Benefits.</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>One Registration. Four Powerful Benefits.</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Everything a young innovator needs to be recognised and grow.</p>
           </div>
           <div className="lp-grid-4">
@@ -442,7 +442,7 @@ export default function LandingPage() {
                 <div className="lp-icon-wrap" style={{ width: 52, height: 52, borderRadius: 14, background: bg, marginBottom: 18 }}>
                   <Icon size={24} color={col} />
                 </div>
-                <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
                 <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{desc}</div>
               </div>
             ))}
@@ -454,7 +454,7 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-secondary)', padding: '78px 32px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 52 }}>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 32, margin: '0 0 10px', letterSpacing: -0.5 }}>The Innovation Journey Roadmap</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 32, margin: '0 0 10px', letterSpacing: -0.5 }}>The Innovation Journey Roadmap</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>From your first Olympiad to becoming a recognised innovator.</p>
           </div>
           <div className="lp-grid-5">
@@ -470,7 +470,7 @@ export default function LandingPage() {
                   <Icon size={20} color={col} />
                   <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 11, color: col, letterSpacing: '0.04em', lineHeight: 1 }}>{n}</span>
                 </div>
-                <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14.5, marginBottom: 6 }}>{label}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14.5, marginBottom: 6 }}>{label}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{sub}</div>
               </div>
             ))}
@@ -482,7 +482,7 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 50 }}>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Participant Receives</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>What Every Participant Receives</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>Far more than a score: a complete innovation identity.</p>
           </div>
           <div className="lp-grid-3">
@@ -499,7 +499,7 @@ export default function LandingPage() {
                   <Icon size={22} color={col} />
                 </span>
                 <div>
-                  <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 15.5, marginBottom: 5 }}>{title}</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15.5, marginBottom: 5 }}>{title}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{desc}</div>
                 </div>
               </div>
@@ -520,7 +520,7 @@ export default function LandingPage() {
             }}>
               <Award size={12} /> Proven Legacy · Powered by Innopreneurs Junior
             </div>
-            <h2 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Participants. Real Ideas. Real Impact.</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 12px', letterSpacing: -0.6 }}>Real Participants. Real Ideas. Real Impact.</h2>
             <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto', maxWidth: 640, lineHeight: 1.65 }}>For over four years, Innopreneurs Junior has helped school participants across India identify problems, build solutions and present their ideas on a national stage.</p>
           </div>
           <div className="lp-gallery-grid">
@@ -552,7 +552,7 @@ export default function LandingPage() {
       <section style={{ background: 'linear-gradient(135deg,#1a3a0a,#0e2206)', padding: '70px 32px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(125,200,50,0.12), transparent)' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <h2 className="lp-fade-up" style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 32, color: '#fff', margin: '0 0 12px', letterSpacing: -0.5 }}>Every idea starts small. Every innovator starts somewhere.</h2>
+          <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 32, color: '#fff', margin: '0 0 12px', letterSpacing: -0.5 }}>Every idea starts small. Every innovator starts somewhere.</h2>
           <p className="lp-fade-up-1" style={{ fontSize: 17, color: 'rgba(255,255,255,0.7)', margin: '0 0 30px' }}>Join India&apos;s most complete innovation ecosystem today.</p>
           <Link href="/register" className="lp-btn-primary" style={{
             background: 'linear-gradient(135deg,#7dc832,#ffcb05)', color: '#0a0a0a',
