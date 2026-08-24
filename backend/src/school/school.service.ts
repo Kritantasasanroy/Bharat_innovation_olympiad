@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
+import { issueActivationTicket, verifyActivationTicket } from '../common/activation-ticket';
 import {
     generateAccessToken,
     hashAccessToken,
@@ -33,14 +35,24 @@ import { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dt
 import { schoolNameKey } from './school-directory.helpers';
 
 /**
+ * A real hash to compare against when no school matches the email, so the
+ * "unknown email" and "wrong password" paths cost the same time. Built once at
+ * import; a hand-written placeholder would make bcrypt throw on a malformed salt.
+ */
+const ABSENT_SCHOOL_HASH = bcrypt.hashSync('bio-timing-equalizer', 10);
+
+/**
  * School access lifecycle (PRD-047), mirroring the partner loop: a school
  * self-applies (public, no credential), staff review it alongside partner
  * requests, and approval provisions the `School` row, a coordinator `User`
  * (role `SCHOOL`), and exactly one access token.
  *
- * Unlike partners there is no password: the access token *is* the credential.
- * Its digest is uniquely indexed, so a token resolves to at most one school and
- * can never sign a different one in.
+ * A self-applying coordinator also chooses a password (verified email +
+ * password is the second, equally valid way in — see `findByPassword`); a
+ * partner-submitted school has none, so its coordinator can only sign in with
+ * the access token issued on approval. Either way, the token's digest is
+ * uniquely indexed, so a token resolves to at most one school and can never
+ * sign a different one in.
  */
 type SchoolRequestRecord = {
     id: string;
@@ -54,6 +66,7 @@ type SchoolRequestRecord = {
     coordinatorEmail: string;
     coordinatorPhone: string;
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    passwordHash: string | null;
     emailVerifiedAt: Date | null;
     emailVerificationTokenExpiresAt: Date | null;
     emailVerificationSentAt: Date | null;
@@ -94,6 +107,18 @@ type UserRecord = {
     isActive: boolean;
 };
 
+/** The email-verify-first step (PRD: "verify email, then submit activation"). */
+type PreActivationRecord = {
+    id: string;
+    kind: 'SCHOOL' | 'PARTNER';
+    email: string;
+    verifiedAt: Date | null;
+    tokenHash: string;
+    tokenExpiresAt: Date;
+    tokenSentAt: Date;
+    tokenUsedAt: Date | null;
+};
+
 type StoreArgs = {
     where?: Record<string, unknown>;
     data?: Record<string, unknown>;
@@ -128,6 +153,12 @@ type SchoolPersistence = SchoolTransactionStore & {
         create(args: StoreArgs): Promise<SchoolRequestRecord>;
         updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
+    preActivationVerification: {
+        findUnique(args: StoreArgs): Promise<PreActivationRecord | null>;
+        create(args: StoreArgs): Promise<PreActivationRecord>;
+        update(args: StoreArgs): Promise<PreActivationRecord>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
+    };
     $transaction<T>(callback: (tx: SchoolTransactionStore) => Promise<T>): Promise<T>;
 };
 
@@ -157,14 +188,19 @@ export class SchoolService {
     ) {}
 
     /**
-     * Self-service application — no token, no side effects beyond the row.
+     * Self-service application. Two shapes, depending on who is submitting:
      *
-     * `submittedByPartnerId` is set when a partner onboards the school directly
-     * (the authenticated `/partner/schools` path). A self-applying school can
-     * instead arrive on a partner's campaign link carrying `referralCode`; that
-     * code is resolved to the same partner here, so a campaign onboards schools
-     * just as it onboards students. A bad or inactive code is ignored, never an
-     * error — attribution must never block a school's application.
+     * - **Self-applying coordinator** (public `/school/apply`, no
+     *   `submittedByPartnerId`): must already hold a `verificationTicket` from
+     *   `startVerification` + `verifyEmail` — the coordinator proves control of
+     *   the email *before* filling in the rest, not after. The request is
+     *   created already verified, and a password is required so the
+     *   coordinator can sign in with email + password as well as a token.
+     * - **Partner-submitted** (`submittedByPartnerId` set, from the
+     *   authenticated `/partner/schools` path): unchanged — the partner has no
+     *   way to prove control of someone else's inbox up front, so this school
+     *   is created unverified and the coordinator confirms their email
+     *   afterwards, exactly as before.
      */
     async apply(dto: ApplySchoolDto, submittedByPartnerId?: string) {
         const coordinatorEmail = dto.coordinatorEmail.trim().toLowerCase();
@@ -196,25 +232,59 @@ export class SchoolService {
         }
 
         const now = new Date();
+        const baseData = {
+            schoolName: dto.schoolName.trim(),
+            board: dto.board.trim(),
+            udiseCode: dto.udiseCode?.trim() || null,
+            pincode: dto.pincode.trim(),
+            city: dto.city.trim(),
+            state: dto.state.trim(),
+            coordinatorName: dto.coordinatorName.trim(),
+            coordinatorEmail,
+            coordinatorPhone: dto.coordinatorPhone.trim(),
+            status: 'PENDING' as const,
+            submittedByPartnerId: partnerId,
+            // Recorded only when a code actually resolved to a partner.
+            submittedViaReferralCode: partnerId && referralCode ? referralCode : null,
+        };
+
+        if (!submittedByPartnerId) {
+            if (!dto.password) {
+                throw new BadRequestException('Choose a password.');
+            }
+            if (
+                !dto.verificationTicket ||
+                !verifyActivationTicket(dto.verificationTicket, 'SCHOOL', coordinatorEmail, now)
+            ) {
+                throw new BadRequestException(
+                    'Verify your coordinator email before submitting this application.',
+                );
+            }
+
+            const passwordHash = await bcrypt.hash(dto.password, 10);
+            const request = await this.prisma.schoolRequest.create({
+                data: { ...baseData, passwordHash, emailVerifiedAt: now },
+            });
+            const emailSent = await this.notifications.sendSchoolApplicationReceived(
+                request.coordinatorEmail,
+                request.coordinatorName,
+                request.schoolName,
+            );
+            return {
+                status: 'PENDING' as const,
+                schoolName: request.schoolName,
+                coordinatorEmail: request.coordinatorEmail,
+                emailSent,
+            };
+        }
+
         const challenge = createEmailVerificationChallenge(now);
         const request = await this.prisma.schoolRequest.create({
             data: {
-                schoolName: dto.schoolName.trim(),
-                board: dto.board.trim(),
-                udiseCode: dto.udiseCode?.trim() || null,
-                pincode: dto.pincode.trim(),
-                city: dto.city.trim(),
-                state: dto.state.trim(),
-                coordinatorName: dto.coordinatorName.trim(),
-                coordinatorEmail,
-                coordinatorPhone: dto.coordinatorPhone.trim(),
-                status: 'PENDING',
+                ...baseData,
                 emailVerificationTokenHash: challenge.tokenHash,
                 emailVerificationTokenExpiresAt: challenge.expiresAt,
                 emailVerificationSentAt: challenge.sentAt,
-                submittedByPartnerId: partnerId,
-                // Recorded only when a code actually resolved to a partner.
-                submittedViaReferralCode: partnerId && referralCode ? referralCode : null,
             },
         });
 
@@ -233,14 +303,75 @@ export class SchoolService {
         };
     }
 
+    /**
+     * PUBLIC — step 1 of self-service activation: prove control of the
+     * coordinator email before any school details are collected. Mirrors the
+     * existing `resendVerification` cooldown/anti-enumeration behaviour, just
+     * against `PreActivationVerification` instead of an existing application.
+     */
+    async startVerification(emailAddress: string) {
+        const coordinatorEmail = emailAddress.trim().toLowerCase();
+
+        const existingRequest = await this.prisma.schoolRequest.findUnique({
+            where: { coordinatorEmail },
+        });
+        if (existingRequest) {
+            throw new ConflictException('A school request already exists for this coordinator email.');
+        }
+        const claimed = await this.prisma.user.findUnique({ where: { email: coordinatorEmail } });
+        if (claimed) {
+            throw new ConflictException(
+                'That email already has a BIO account. Use a different coordinator email.',
+            );
+        }
+
+        const now = new Date();
+        const existing = await this.prisma.preActivationVerification.findUnique({
+            where: { kind_email: { kind: 'SCHOOL', email: coordinatorEmail } },
+        });
+        if (existing && cooldownRemainingSeconds(existing.tokenSentAt, now) > 0) {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        const data = {
+            tokenHash: challenge.tokenHash,
+            tokenExpiresAt: challenge.expiresAt,
+            tokenSentAt: challenge.sentAt,
+            tokenUsedAt: null,
+            verifiedAt: null,
+        };
+        if (existing) {
+            await this.prisma.preActivationVerification.update({ where: { id: existing.id }, data });
+        } else {
+            await this.prisma.preActivationVerification.create({
+                data: { kind: 'SCHOOL', email: coordinatorEmail, ...data },
+            });
+        }
+
+        const emailSent = await this.notifications.sendSchoolStartVerification(coordinatorEmail, {
+            token: challenge.rawToken,
+        });
+        return { status: 'CHECK_INBOX' as const, emailSent };
+    }
+
     async verifyEmail(rawToken: string) {
         const token = rawToken.trim();
         if (!token || token.length > 256) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
         }
+        const tokenHash = hashEmailVerificationToken(token);
+
+        // The verify-first step (`startVerification`) checks in here before the
+        // legacy "application already created, now confirm it" path below —
+        // which still exists for the partner-submitted flow (see `apply`).
+        const pre = await this.prisma.preActivationVerification.findUnique({ where: { tokenHash } });
+        if (pre) {
+            return this.confirmPreActivation(pre);
+        }
 
         const request = await this.prisma.schoolRequest.findUnique({
-            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
+            where: { emailVerificationTokenHash: tokenHash },
         });
         if (!request) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
@@ -295,8 +426,59 @@ export class SchoolService {
         return { status: 'PENDING' as const, email: request.coordinatorEmail, emailSent };
     }
 
+    /**
+     * The verify-first step's confirm: mints a short-lived `verificationTicket`
+     * instead of admitting the coordinator to a staff review queue directly —
+     * there is no application yet for it to admit them to.
+     */
+    private async confirmPreActivation(pre: PreActivationRecord) {
+        const now = new Date();
+        if (pre.tokenUsedAt) {
+            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
+        }
+        if (pre.tokenExpiresAt <= now) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        const claimed = await this.prisma.preActivationVerification.updateMany({
+            where: { id: pre.id, tokenUsedAt: null },
+            data: { tokenUsedAt: now, verifiedAt: now },
+        });
+        if (claimed.count === 0) {
+            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
+        }
+
+        return {
+            status: 'CONTINUE_APPLICATION' as const,
+            email: pre.email,
+            submissionTicket: issueActivationTicket('SCHOOL', pre.email, now),
+        };
+    }
+
     async resendVerification(emailAddress: string) {
         const email = emailAddress.trim().toLowerCase();
+
+        const pre = await this.prisma.preActivationVerification.findUnique({
+            where: { kind_email: { kind: 'SCHOOL', email } },
+        });
+        if (pre && !pre.tokenUsedAt) {
+            const now = new Date();
+            if (cooldownRemainingSeconds(pre.tokenSentAt, now) > 0) {
+                return { status: 'CHECK_INBOX' as const };
+            }
+            const challenge = createEmailVerificationChallenge(now);
+            await this.prisma.preActivationVerification.update({
+                where: { id: pre.id },
+                data: {
+                    tokenHash: challenge.tokenHash,
+                    tokenExpiresAt: challenge.expiresAt,
+                    tokenSentAt: challenge.sentAt,
+                },
+            });
+            await this.notifications.sendSchoolStartVerification(email, { token: challenge.rawToken });
+            return { status: 'CHECK_INBOX' as const };
+        }
+
         const request = await this.prisma.schoolRequest.findUnique({
             where: { coordinatorEmail: email },
         });
@@ -369,19 +551,17 @@ export class SchoolService {
         return { emailSent };
     }
 
-    /** PUBLIC — the access token issued on approval is the only way in. */
+    /**
+     * PUBLIC — the access token staff issue on approval, or (for a
+     * self-applied school) the email + password chosen at activation time.
+     * A partner-submitted school has no password, so it can only ever sign in
+     * with the token.
+     */
     async login(dto: SchoolLoginDto) {
-        if (!isValidAccessToken(dto.accessToken, 'SCHOOL')) {
-            throw new UnauthorizedException('That access token is not valid.');
-        }
+        const request = dto.accessToken
+            ? await this.findByAccessToken(dto.accessToken)
+            : await this.findByPassword(dto);
 
-        const request = await this.prisma.schoolRequest.findUnique({
-            where: { accessTokenHash: hashAccessToken(dto.accessToken) },
-            include: { school: true },
-        });
-        if (!request) {
-            throw new UnauthorizedException('That access token is not valid.');
-        }
         if (request.status !== 'APPROVED') {
             throw new ForbiddenException(
                 request.status === 'PENDING' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)
@@ -432,6 +612,37 @@ export class SchoolService {
             },
             coordinator: { name: request.coordinatorName, email: request.coordinatorEmail },
         };
+    }
+
+    /**
+     * The digest is uniquely indexed, so a token resolves to at most one school.
+     * A token issued to one school can never sign another one in.
+     */
+    private async findByAccessToken(raw: string): Promise<SchoolRequestRecord> {
+        if (!isValidAccessToken(raw, 'SCHOOL')) {
+            throw new UnauthorizedException('That access token is not valid.');
+        }
+        const request = await this.prisma.schoolRequest.findUnique({
+            where: { accessTokenHash: hashAccessToken(raw) },
+            include: { school: true },
+        });
+        if (!request) {
+            throw new UnauthorizedException('That access token is not valid.');
+        }
+        return request;
+    }
+
+    private async findByPassword(dto: SchoolLoginDto): Promise<SchoolRequestRecord> {
+        const coordinatorEmail = (dto.coordinatorEmail ?? '').trim().toLowerCase();
+        const request = await this.prisma.schoolRequest.findUnique({
+            where: { coordinatorEmail },
+            include: { school: true },
+        });
+        const ok = await bcrypt.compare(dto.password ?? '', request?.passwordHash ?? ABSENT_SCHOOL_HASH);
+        if (!request || !ok) {
+            throw new UnauthorizedException('Invalid email or password.');
+        }
+        return request;
     }
 
     /** ADMIN — the school half of the Access Management queue. */

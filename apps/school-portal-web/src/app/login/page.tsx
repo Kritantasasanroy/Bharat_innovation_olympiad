@@ -11,15 +11,18 @@ import { useAuth } from "../../lib/auth-context";
 /**
  * Coordinator sign-in.
  *
- * The access token staff issue on approval is the credential. It is exchanged
- * here for a short-lived session JWT (`role: SCHOOL`), which every subsequent
- * request carries. A token belongs to exactly one school, and stops working the
- * moment staff revoke or rotate it.
+ * Two credentials resolve to the same session JWT (`role: SCHOOL`): the
+ * access token staff issue on approval, or (for a self-applied school) the
+ * email + password chosen at activation. A partner-submitted school has no
+ * password, so it can only ever sign in with the token.
  */
 export default function LoginPage() {
 	const { setToken } = useAuth();
 	const router = useRouter();
-	const [value, setValue] = useState("");
+	const [mode, setMode] = useState<"password" | "token">("password");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
+	const [accessToken, setAccessToken] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -28,11 +31,15 @@ export default function LoginPage() {
 		setSubmitting(true);
 		setError(null);
 		try {
-			const result = await backendApi.login(value.trim());
+			const result =
+				mode === "token"
+					? await backendApi.loginWithToken(accessToken.trim())
+					: await backendApi.login(email.trim(), password);
 			setToken(result.accessToken);
 			router.push("/dashboard");
 		} catch (cause) {
 			setError(cause instanceof ApiError ? cause.message : "Could not sign in. Please try again.");
+		} finally {
 			setSubmitting(false);
 		}
 	}
@@ -54,28 +61,74 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>
 				<p>
-					Enter the access token issued to your school. The coordinator email must be confirmed
-					before BIO staff can approve an application. New to the platform?{" "}
-					<Link href="/activate">Activate your school</Link>.
+					Use the email and password chosen at activation, or the access token BIO issued you. The
+					coordinator email must be confirmed before BIO staff can approve an application. New to
+					the platform? <Link href="/activate">Activate your school</Link>.
 				</p>
 			</div>
+
+			<div className="inline" style={{ marginBottom: "1.5rem" }}>
+				<button
+					type="button"
+					className={mode === "password" ? "pill pill--active" : "pill"}
+					onClick={() => setMode("password")}
+				>
+					Email &amp; password
+				</button>
+				<button
+					type="button"
+					className={mode === "token" ? "pill pill--active" : "pill"}
+					onClick={() => setMode("token")}
+				>
+					Access token
+				</button>
+			</div>
+
 			<div className="card" style={{ maxWidth: 560 }}>
 				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
-					<div>
-						<label htmlFor="token">Access token</label>
-						<input
-							id="token"
-							maxLength={39}
-							value={value}
-							onChange={(event) => setValue(event.target.value)}
-							placeholder="BIO-SCH-XXXXX-XXXXX-XXXXX-XXXXX"
-							autoComplete="one-time-code"
-							spellCheck={false}
-							required
-						/>
-					</div>
+					{mode === "token" ? (
+						<div>
+							<label htmlFor="token">Access token</label>
+							<input
+								id="token"
+								maxLength={39}
+								value={accessToken}
+								onChange={(event) => setAccessToken(event.target.value)}
+								placeholder="BIO-SCH-XXXXX-XXXXX-XXXXX-XXXXX"
+								autoComplete="one-time-code"
+								spellCheck={false}
+								required
+							/>
+						</div>
+					) : (
+						<>
+							<div>
+								<label htmlFor="email">Coordinator email</label>
+								<input
+									id="email"
+									type="email"
+									maxLength={254}
+									required
+									autoComplete="email"
+									value={email}
+									onChange={(event) => setEmail(event.target.value)}
+								/>
+							</div>
+							<div>
+								<label htmlFor="password">Password</label>
+								<input
+									id="password"
+									type="password"
+									required
+									autoComplete="current-password"
+									value={password}
+									onChange={(event) => setPassword(event.target.value)}
+								/>
+							</div>
+						</>
+					)}
 					{error ? <div className="notice notice--error">{error}</div> : null}
-					<button type="submit" className="button" disabled={submitting || !value.trim()}>
+					<button type="submit" className="button" disabled={submitting}>
 						{submitting ? "Signing in…" : "Continue to dashboard"}
 					</button>
 				</form>

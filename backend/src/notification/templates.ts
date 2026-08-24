@@ -274,6 +274,22 @@ export function partnerEmailVerificationEmail(vars: {
     );
 }
 
+/**
+ * The very first step of partner onboarding, before any org details exist —
+ * so unlike `partnerEmailVerificationEmail` above, there is no contact name or
+ * org name to greet the reader with yet.
+ */
+export function partnerStartVerificationEmail(vars: { verificationUrl: string }): RenderedEmail {
+    return build(
+        'Confirm your email to apply for BIO partner access',
+        'Confirm your email',
+        `<p style="margin:0 0 12px;">Someone started a Bharat Innovation Olympiad partner application with this email address.</p>
+     <p style="margin:0 0 12px;">Confirm that you own it to continue — you'll fill in your organisation's details right after.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
+        { label: 'Confirm email address', url: vars.verificationUrl },
+    );
+}
+
 export function partnerApplicationReceivedEmail(vars: {
     contactPerson: string;
     orgName: string;
@@ -397,6 +413,22 @@ export function schoolEmailVerificationEmail(vars: {
         `Confirm your email, ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">Someone requested school portal access for <strong>${escapeHtml(vars.schoolName)}</strong> on the Bharat Innovation Olympiad.</p>
      <p style="margin:0 0 12px;">Confirm that you own this coordinator email. After confirmation, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
+        { label: 'Confirm email address', url: vars.verificationUrl },
+    );
+}
+
+/**
+ * The very first step of school activation, before any school or coordinator
+ * details exist yet — so unlike `schoolEmailVerificationEmail` above, there is
+ * no coordinator name or school name to greet the reader with.
+ */
+export function schoolStartVerificationEmail(vars: { verificationUrl: string }): RenderedEmail {
+    return build(
+        'Confirm your email to activate your school on BIO',
+        'Confirm your email',
+        `<p style="margin:0 0 12px;">Someone started a school activation on the Bharat Innovation Olympiad with this coordinator email address.</p>
+     <p style="margin:0 0 12px;">Confirm that you own it to continue — you'll fill in your school's details right after.</p>
      <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
         { label: 'Confirm email address', url: vars.verificationUrl },
     );

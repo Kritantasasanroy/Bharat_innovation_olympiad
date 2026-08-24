@@ -1,4 +1,5 @@
-import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { issueActivationTicket } from '../common/activation-ticket';
 import { generateAccessToken } from '../common/access-token';
 import { notificationServiceStub } from '../notification/notification.stub';
 import type { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
@@ -48,6 +49,7 @@ type SchoolRequestRow = {
     coordinatorEmail: string;
     coordinatorPhone: string;
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    passwordHash: string | null;
     emailVerifiedAt: Date | null;
     emailVerificationTokenHash: string | null;
     emailVerificationTokenExpiresAt: Date | null;
@@ -80,12 +82,29 @@ type UserRow = {
 
 type AuditRow = Record<string, unknown>;
 
+type PreActivationRow = {
+    id: string;
+    kind: 'SCHOOL' | 'PARTNER';
+    email: string;
+    verifiedAt: Date | null;
+    tokenHash: string;
+    tokenExpiresAt: Date;
+    tokenSentAt: Date;
+    tokenUsedAt: Date | null;
+};
+
 type FakePrisma = {
     schoolRequest: {
         findUnique(args: StoreArgs): Promise<SchoolRequestRow | null>;
         findMany(args?: StoreArgs): Promise<readonly SchoolRequestRow[]>;
         create(args: StoreArgs): Promise<SchoolRequestRow>;
         update(args: StoreArgs): Promise<SchoolRequestRow>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
+    };
+    preActivationVerification: {
+        findUnique(args: StoreArgs): Promise<PreActivationRow | null>;
+        create(args: StoreArgs): Promise<PreActivationRow>;
+        update(args: StoreArgs): Promise<PreActivationRow>;
         updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
     school: {
@@ -139,6 +158,7 @@ function createFakeDb() {
     const schools: SchoolRow[] = [];
     const users: UserRow[] = [];
     const auditLogs: AuditRow[] = [];
+    const preActivations: PreActivationRow[] = [];
 
     const match = (row: Record<string, unknown>, where: Record<string, unknown> = {}) =>
         Object.entries(where).every(([key, value]) => {
@@ -171,6 +191,7 @@ function createFakeDb() {
                     coordinatorEmail: stringValue(data, 'coordinatorEmail'),
                     coordinatorPhone: stringValue(data, 'coordinatorPhone'),
                     status: statusValue(data),
+                    passwordHash: nullableStringValue(data, 'passwordHash'),
                     emailVerifiedAt: dateValue(data, 'emailVerifiedAt'),
                     emailVerificationTokenHash: nullableStringValue(data, 'emailVerificationTokenHash'),
                     emailVerificationTokenExpiresAt: dateValue(data, 'emailVerificationTokenExpiresAt'),
@@ -260,10 +281,40 @@ function createFakeDb() {
                 return data;
             },
         },
+        preActivationVerification: {
+            findUnique: async ({ where = {} }: StoreArgs) =>
+                preActivations.find((row) => match(row, where)) ?? null,
+            create: async ({ data = {} }: StoreArgs) => {
+                const row: PreActivationRow = {
+                    id: nextId('preact'),
+                    kind: (data.kind as PreActivationRow['kind']) ?? 'SCHOOL',
+                    email: stringValue(data, 'email'),
+                    verifiedAt: dateValue(data, 'verifiedAt'),
+                    tokenHash: stringValue(data, 'tokenHash'),
+                    tokenExpiresAt: dateValue(data, 'tokenExpiresAt') ?? new Date(),
+                    tokenSentAt: dateValue(data, 'tokenSentAt') ?? new Date(),
+                    tokenUsedAt: dateValue(data, 'tokenUsedAt'),
+                };
+                preActivations.push(row);
+                return row;
+            },
+            update: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = preActivations.find((candidate) => match(candidate, where));
+                if (!row) throw new Error('test fixture row not found');
+                Object.assign(row, data);
+                return row;
+            },
+            updateMany: async ({ where = {}, data = {} }: StoreArgs) => {
+                const row = preActivations.find((candidate) => match(candidate, where));
+                if (!row) return { count: 0 };
+                Object.assign(row, data);
+                return { count: 1 };
+            },
+        },
         $transaction: async <T>(callback: (tx: FakePrisma) => Promise<T>) => callback(prisma),
     };
 
-    return { prisma, schoolRequests, schools, users, auditLogs };
+    return { prisma, schoolRequests, schools, users, auditLogs, preActivations };
 }
 
 type JwtDouble = { sign(payload: Record<string, unknown>, options?: Record<string, unknown>): string };
@@ -283,7 +334,13 @@ const APPLICATION: ApplySchoolDto = {
     coordinatorName: 'Anita Rao',
     coordinatorEmail: 'Anita.Rao@dps.example',
     coordinatorPhone: '+919812345678',
+    password: 'correct horse battery staple',
 };
+
+/** A valid verify-first ticket for a self-applying coordinator's email. */
+function ticketFor(email: string): string {
+    return issueActivationTicket('SCHOOL', email.trim().toLowerCase());
+}
 
 /**
  * Fake engine client. `resolvePartnerIdByReferralCode` is best-effort: the real
@@ -334,10 +391,15 @@ function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
  * Selects the request by coordinator email rather than by position: the fake's
  * `findMany` does not honour `orderBy`, and two calls must not collapse onto
  * the same row (which would quietly defeat the one-token-one-school test).
+ *
+ * Goes in via the partner-submitted path (a `submittedByPartnerId` arg) rather
+ * than self-apply — this helper only cares about reaching APPROVED with a
+ * working token, and self-apply's password/ticket requirements are exercised
+ * by their own dedicated tests below.
  */
 async function approved(service: SchoolService, overrides: Partial<typeof APPLICATION> = {}) {
     const application: ApplySchoolDto = { ...APPLICATION, ...overrides };
-    await service.apply(application);
+    await service.apply(application, 'test-partner-approved');
 
     const requests = await service.list();
     const request = requests.find(
@@ -352,25 +414,57 @@ async function approved(service: SchoolService, overrides: Partial<typeof APPLIC
     return { requestId: request.id, token: card.accessToken, card };
 }
 
-describe('apply', () => {
-    it('records a PENDING request and nothing else', async () => {
+describe('apply (self-service, verify-first)', () => {
+    it('records a verified PENDING request and nothing else', async () => {
         const { service, schoolRequests, schools, users } = setup();
 
-        const result = await service.apply(APPLICATION);
+        const result = await service.apply({
+            ...APPLICATION,
+            verificationTicket: ticketFor(APPLICATION.coordinatorEmail),
+        });
 
-        expect(result.status).toBe('EMAIL_VERIFICATION_REQUIRED');
+        expect(result.status).toBe('PENDING');
         expect(schoolRequests).toHaveLength(1);
+        expect(schoolRequests[0].emailVerifiedAt).toBeInstanceOf(Date);
+        expect(schoolRequests[0].passwordHash).toBeTruthy();
         // Approval is what provisions these; applying must not.
         expect(schools).toHaveLength(0);
         expect(users).toHaveLength(0);
     });
 
-    it('lower-cases the coordinator email so a re-apply is caught', async () => {
+    it('refuses to submit without a password', async () => {
         const { service } = setup();
-        await service.apply(APPLICATION);
+        const { password, ...noPassword } = APPLICATION;
 
         await expect(
-            service.apply({ ...APPLICATION, coordinatorEmail: 'anita.rao@dps.example' }),
+            service.apply({ ...noPassword, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses to submit without proof the email was verified', async () => {
+        const { service } = setup();
+
+        await expect(service.apply(APPLICATION)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a ticket minted for a different email', async () => {
+        const { service } = setup();
+
+        await expect(
+            service.apply({ ...APPLICATION, verificationTicket: ticketFor('someone-else@example.com') }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('lower-cases the coordinator email so a re-apply is caught', async () => {
+        const { service } = setup();
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
+
+        await expect(
+            service.apply({
+                ...APPLICATION,
+                coordinatorEmail: 'anita.rao@dps.example',
+                verificationTicket: ticketFor('anita.rao@dps.example'),
+            }),
         ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -384,11 +478,43 @@ describe('apply', () => {
     });
 });
 
-describe('email verification', () => {
+describe('startVerification + verifyEmail (self-service, verify-first)', () => {
+    it('rejects an email that already has an application, before any details are collected', async () => {
+        const { service } = setup();
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
+
+        await expect(service.startVerification(APPLICATION.coordinatorEmail)).rejects.toBeInstanceOf(
+            ConflictException,
+        );
+    });
+
+    it('confirming mints a ticket that apply() accepts, and only once', async () => {
+        const { service, notifications } = setup();
+
+        await service.startVerification(APPLICATION.coordinatorEmail);
+        const token = notifications.sendSchoolStartVerification.mock.calls[0][1].token;
+
+        const confirmed = await service.verifyEmail(token);
+        expect(confirmed.status).toBe('CONTINUE_APPLICATION');
+        if (confirmed.status !== 'CONTINUE_APPLICATION') throw new Error('unreachable');
+
+        const result = await service.apply({
+            ...APPLICATION,
+            verificationTicket: confirmed.submissionTicket,
+        });
+        expect(result.status).toBe('PENDING');
+
+        // Re-clicking the same link a second time must not mint another ticket.
+        const replay = await service.verifyEmail(token);
+        expect(replay.status).toBe('ALREADY_VERIFIED');
+    });
+});
+
+describe('email verification (partner-submitted)', () => {
     it('keeps a school out of the approval flow until its email is verified', async () => {
         const { service, schoolRequests, notifications } = setup();
 
-        const result = await service.apply(APPLICATION);
+        const result = await service.apply(APPLICATION, 'partner-99');
         const request = schoolRequests[0];
         const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
 
@@ -402,7 +528,7 @@ describe('email verification', () => {
 
     it('verifies once, sends the review notification, and makes replay idempotent', async () => {
         const { service, schoolRequests, notifications } = setup();
-        await service.apply(APPLICATION);
+        await service.apply(APPLICATION, 'partner-99');
         const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
 
         const first = await service.verifyEmail(token);
@@ -416,7 +542,7 @@ describe('email verification', () => {
 
     it('rejects an expired verification token', async () => {
         const { service, schoolRequests, notifications } = setup();
-        await service.apply(APPLICATION);
+        await service.apply(APPLICATION, 'partner-99');
         schoolRequests[0].emailVerificationTokenExpiresAt = new Date(Date.now() - 1);
         const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
 
@@ -504,7 +630,7 @@ describe('decide — approval', () => {
 
     it('leaves submittedByPartnerId null on a self-application', async () => {
         const { service, schoolRequests } = setup();
-        await service.apply(APPLICATION);
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
 
         expect(schoolRequests[0].submittedByPartnerId).toBeNull();
     });
@@ -515,7 +641,11 @@ describe('decide — approval', () => {
         );
         const { service, schoolRequests } = setup(adminApi);
 
-        await service.apply({ ...APPLICATION, referralCode: 'ref_good' });
+        await service.apply({
+            ...APPLICATION,
+            referralCode: 'ref_good',
+            verificationTicket: ticketFor(APPLICATION.coordinatorEmail),
+        });
 
         expect(adminApi.resolvePartnerIdByReferralCode).toHaveBeenCalledWith('ref_good');
         expect(schoolRequests[0].submittedByPartnerId).toBe('partner-from-campaign');
@@ -526,9 +656,13 @@ describe('decide — approval', () => {
         // The resolver returns null for an unknown/inactive code; apply must succeed.
         const { service, schoolRequests } = setup(createFakeAdminApi(async () => null));
 
-        const result = await service.apply({ ...APPLICATION, referralCode: 'ref_bad' });
+        const result = await service.apply({
+            ...APPLICATION,
+            referralCode: 'ref_bad',
+            verificationTicket: ticketFor(APPLICATION.coordinatorEmail),
+        });
 
-        expect(result.status).toBe('EMAIL_VERIFICATION_REQUIRED');
+        expect(result.status).toBe('PENDING');
         expect(schoolRequests[0].submittedByPartnerId).toBeNull();
         expect(schoolRequests[0].submittedViaReferralCode).toBeNull();
     });
@@ -546,7 +680,7 @@ describe('decide — approval', () => {
 
     it('rejecting an unprovisioned request creates no school or user', async () => {
         const { service, schools, users } = setup();
-        await service.apply(APPLICATION);
+        await service.apply(APPLICATION, 'partner-99');
         const [request] = await service.list();
 
         await service.decide(request.id, { decision: 'REJECTED', reason: 'Duplicate' }, 'a');
@@ -629,6 +763,69 @@ describe('login', () => {
     });
 });
 
+describe('login with email + password (self-applied school)', () => {
+    /** Self-apply -> approve, so the coordinator has both a password and a token. */
+    async function approvedSelfApply(service: SchoolService) {
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
+        const [request] = await service.list();
+        await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+        return request.id;
+    }
+
+    it('signs in with the coordinator email and chosen password', async () => {
+        const { service } = setup();
+        await approvedSelfApply(service);
+
+        const result = await service.login({
+            coordinatorEmail: APPLICATION.coordinatorEmail,
+            password: APPLICATION.password,
+        });
+
+        expect(result.school.name).toBe('Delhi Public School, Sector 12');
+    });
+
+    it('is case-insensitive on the email', async () => {
+        const { service } = setup();
+        await approvedSelfApply(service);
+
+        await expect(
+            service.login({
+                coordinatorEmail: APPLICATION.coordinatorEmail.toUpperCase(),
+                password: APPLICATION.password,
+            }),
+        ).resolves.toBeDefined();
+    });
+
+    it('rejects the wrong password', async () => {
+        const { service } = setup();
+        await approvedSelfApply(service);
+
+        await expect(
+            service.login({ coordinatorEmail: APPLICATION.coordinatorEmail, password: 'nope' }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('rejects an unknown email in the same way as a wrong password (no enumeration)', async () => {
+        const { service } = setup();
+
+        await expect(
+            service.login({ coordinatorEmail: 'nobody@example.com', password: 'whatever123' }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('a partner-submitted school has no password to sign in with', async () => {
+        const { service } = setup();
+        await service.apply(APPLICATION, 'partner-99');
+        const [request] = await service.list();
+        request.emailVerifiedAt = new Date();
+        await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+
+        await expect(
+            service.login({ coordinatorEmail: APPLICATION.coordinatorEmail, password: 'anything' }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+});
+
 describe('decide — revoke and re-grant', () => {
     it('refuses login and deactivates the coordinator', async () => {
         const { service, users } = setup();
@@ -658,7 +855,7 @@ describe('decide — revoke and re-grant', () => {
 describe('card and rotateToken', () => {
     it('exists only for an approved school', async () => {
         const { service } = setup();
-        await service.apply(APPLICATION);
+        await service.apply(APPLICATION, 'partner-99');
         const [request] = await service.list();
 
         await expect(service.card(request.id)).rejects.toBeInstanceOf(ForbiddenException);

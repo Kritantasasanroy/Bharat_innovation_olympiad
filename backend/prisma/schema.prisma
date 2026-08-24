@@ -640,6 +640,11 @@ model SchoolRequest {
   coordinatorEmail String              @unique
   coordinatorPhone String
   status           SchoolRequestStatus @default(PENDING)
+  /// Set only for a self-applied school (the email-verify-first flow issues an
+  /// activation ticket instead of a password). Null for a partner-submitted
+  /// school, which has no email/password login of its own until the coordinator
+  /// signs in with the access token issued on approval.
+  passwordHash String?
   /// Null until the coordinator proves control of the application email.
   emailVerifiedAt DateTime?
   /// Digest of the current email-verification token; the raw token is never persisted.
@@ -674,6 +679,42 @@ model SchoolRequest {
   updatedAt      DateTime  @updatedAt
 
   @@index([status])
+}
+
+enum PreActivationKind {
+  SCHOOL
+  PARTNER
+}
+
+/// The email-verify-first step of self-service onboarding: a coordinator or
+/// partner contact confirms their address *before* filling in the rest of the
+/// application. Deliberately a standalone table rather than a draft row on
+/// `SchoolRequest`/`PartnerRequest` — those tables are the staff review queue,
+/// and a half-finished, not-yet-submitted application must never appear there.
+///
+/// Confirming a token here does not persist a session or a ticket: `apply()`
+/// is authorized by a short-lived, self-verifying `verificationTicket` minted
+/// at confirm time (see `common/activation-ticket.ts`) and never written to
+/// the database, so a row here only ever tracks the emailing step itself.
+model PreActivationVerification {
+  id   String            @id @default(uuid())
+  kind PreActivationKind
+  email String
+
+  verifiedAt DateTime?
+
+  /// Digest of the current verification token; the raw token is never persisted.
+  tokenHash      String    @unique
+  tokenExpiresAt DateTime
+  tokenSentAt    DateTime
+  tokenUsedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// At most one live verification per address per flow — a fresh "start" call
+  /// overwrites it rather than accumulating rows.
+  @@unique([kind, email])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

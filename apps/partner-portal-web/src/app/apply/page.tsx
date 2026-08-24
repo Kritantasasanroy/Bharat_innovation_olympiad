@@ -2,88 +2,58 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
+import {
+	clearActivationTicket,
+	getActivationTicket,
+	type StoredActivationTicket,
+} from "../../lib/activation-ticket";
 import { ApiError, backendApi } from "../../lib/api-client";
 
 /**
- * PUBLIC partner access request — no token required.
+ * PUBLIC partner access request, verify-first: the applicant confirms their
+ * contact email *before* any organisation details are collected, not after.
  *
- * This is the front door: a brand-new partner has no account and nothing to
- * paste, so this page must be reachable unauthenticated. It posts to the legacy
- * backend (`POST /api/partner/apply`), which creates the engine record in
- * admin-api and stores the credential. Staff then grant access from the admin
- * Partner Management page, after which the partner signs in at `/login`.
+ * Step 1 ({@link StartStep}) takes only the email and sends a confirmation
+ * link. Clicking it lands on `/verify`, which stores a short-lived
+ * `verificationTicket` and sends the applicant back here —
+ * `getActivationTicket()` finding one is what switches this page to step 2
+ * ({@link DetailsStep}), the full application form. Staff then grant access
+ * from the admin Partner Management page; nothing is granted here.
  *
  * Deliberately no KYC/Aadhaar/document-upload fields (PRD-011).
  */
 export default function ApplyPage() {
-	const [submitting, setSubmitting] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [submitted, setSubmitted] = useState<{
-		orgName: string;
-		email: string;
-		emailSent: boolean;
-	} | null>(null);
-	const [form, setForm] = useState({
-		orgName: "",
-		contactPerson: "",
-		email: "",
-		phone: "",
-		password: "",
-	});
+	const [ticket, setTicket] = useState<StoredActivationTicket | null | undefined>(undefined);
+	const [expired, setExpired] = useState(false);
 
-	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-		setSubmitting(true);
-		setError(null);
-		try {
-			const result = await backendApi.apply(form);
-			setSubmitted({ orgName: result.orgName, email: result.email, emailSent: result.emailSent });
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Could not submit the application.");
-		} finally {
-			setSubmitting(false);
-		}
-	}
+	useEffect(() => {
+		setTicket(getActivationTicket());
+	}, []);
 
-	if (submitted) {
+	if (ticket === undefined) {
 		return (
 			<main className="page">
-				<div className="verification-brand">
-					<Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" width={211} height={64} />
-				</div>
-				<div className="card verification-card">
-					<p className="eyebrow">Step 1 of 2 complete</p>
-					<h1>Confirm your partner email</h1>
-					<p className="muted">
-						We saved the application for <strong>{submitted.orgName}</strong>. We sent a
-						confirmation link to <strong>{submitted.email}</strong>. Open it to prove you own this
-						address.
-					</p>
-					<div className="verification-status verification-status--success" role="status">
-						<strong>
-							{submitted.emailSent ? "Check your inbox." : "Your application is saved."}
-						</strong>
-						<span>
-							{submitted.emailSent
-								? "After you confirm, BIO staff will review the partner application."
-								: "Email delivery is temporarily unavailable. Use the verification page to request another link or contact BIO support."}
-						</span>
-					</div>
-					<div className="inline">
-						<Link href="/verify" className="button">
-							Open verification page
-						</Link>
-						<Link href="/login" className="button button--secondary">
-							Already verified? Sign in
-						</Link>
-					</div>
-				</div>
+				<p className="muted">Loading…</p>
 			</main>
 		);
 	}
 
+	return ticket ? (
+		<DetailsStep
+			ticket={ticket}
+			onTicketExpired={() => {
+				setTicket(null);
+				setExpired(true);
+			}}
+		/>
+	) : (
+		<StartStep expired={expired} />
+	);
+}
+
+function Chrome({ children }: { children: ReactNode }) {
 	return (
 		<main className="page">
 			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
@@ -98,12 +68,164 @@ export default function ApplyPage() {
 					style={{ height: "48px", width: "auto", objectFit: "contain" }}
 				/>
 			</div>
+			{children}
+		</main>
+	);
+}
+
+/** Step 1 — prove control of the contact email before anything else. */
+function StartStep({ expired }: { expired: boolean }) {
+	const [email, setEmail] = useState("");
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [sent, setSent] = useState(false);
+
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setSubmitting(true);
+		setError(null);
+		try {
+			await backendApi.startVerification(email.trim());
+			setSent(true);
+		} catch (cause) {
+			setError(cause instanceof ApiError ? cause.message : "Could not submit the request.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	if (sent) {
+		return (
+			<Chrome>
+				<div className="card verification-card">
+					<p className="eyebrow">Step 1 of 2</p>
+					<h1>Confirm your email</h1>
+					<p className="muted">
+						We sent a confirmation link to <strong>{email.trim()}</strong>. Open it to prove you own
+						this address — you&apos;ll fill in your organisation&apos;s details right after.
+					</p>
+					<div className="verification-status verification-status--success" role="status">
+						<strong>Check your inbox.</strong>
+						<span>
+							Links expire after 24 hours. Check spam or junk mail before requesting another.
+						</span>
+					</div>
+					<div className="inline">
+						<Link href="/verify" className="button">
+							Open verification page
+						</Link>
+						<Link href="/login" className="button button--secondary">
+							Already approved? Sign in
+						</Link>
+					</div>
+				</div>
+			</Chrome>
+		);
+	}
+
+	return (
+		<Chrome>
 			<div className="page-header">
 				<h1>Request partner access</h1>
 				<p>
-					Two steps: confirm your contact email, then wait for BIO staff approval. Once approved,
-					sign in and start referring institutions and students.
+					Two steps: confirm your contact email, then fill in your organisation&apos;s details. Once
+					approved, sign in and start referring institutions and students.
 				</p>
+			</div>
+			{expired ? (
+				<div className="notice notice--error" style={{ maxWidth: 480, marginBottom: "1rem" }}>
+					Your email confirmation expired before you finished the form. Send a new link and try
+					again.
+				</div>
+			) : null}
+			<div className="card" style={{ maxWidth: 480 }}>
+				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
+					<div>
+						<label htmlFor="email">Email</label>
+						<input
+							id="email"
+							type="email"
+							maxLength={254}
+							required
+							autoComplete="email"
+							value={email}
+							onChange={(event) => setEmail(event.target.value)}
+						/>
+					</div>
+					{error ? <div className="notice notice--error">{error}</div> : null}
+					<button type="submit" className="button" disabled={submitting || !email.trim()}>
+						{submitting ? "Sending…" : "Send confirmation link"}
+					</button>
+				</form>
+			</div>
+			<p className="muted" style={{ marginTop: "1rem" }}>
+				Already approved? <Link href="/login">Sign in</Link>.
+			</p>
+		</Chrome>
+	);
+}
+
+/** Step 2 — the contact email is confirmed; collect the rest and submit. */
+function DetailsStep({
+	ticket,
+	onTicketExpired,
+}: {
+	ticket: StoredActivationTicket;
+	onTicketExpired: () => void;
+}) {
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [submitted, setSubmitted] = useState<{ orgName: string } | null>(null);
+	const [form, setForm] = useState({ orgName: "", contactPerson: "", phone: "", password: "" });
+
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setSubmitting(true);
+		setError(null);
+		try {
+			const result = await backendApi.apply({
+				...form,
+				email: ticket.email,
+				verificationTicket: ticket.ticket,
+			});
+			clearActivationTicket();
+			setSubmitted({ orgName: result.orgName });
+		} catch (cause) {
+			if (cause instanceof ApiError && /verify your email/i.test(cause.message)) {
+				clearActivationTicket();
+				onTicketExpired();
+				return;
+			}
+			setError(cause instanceof ApiError ? cause.message : "Could not submit the application.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	if (submitted) {
+		return (
+			<Chrome>
+				<div className="card verification-card">
+					<p className="eyebrow">Application submitted</p>
+					<h1>You&apos;re in the review queue</h1>
+					<p className="muted">
+						We saved the application for <strong>{submitted.orgName}</strong>. Our team reviews
+						every application by hand — we&apos;ll email you as soon as a decision is made.
+					</p>
+					<Link href="/login" className="button">
+						Go to partner sign in
+					</Link>
+				</div>
+			</Chrome>
+		);
+	}
+
+	return (
+		<Chrome>
+			<div className="page-header">
+				<p className="eyebrow">Step 2 of 2 — email confirmed</p>
+				<h1>Tell us about your organisation</h1>
+				<p>Confirmed as {ticket.email}. Fill in the rest and submit for review.</p>
 			</div>
 
 			<div className="card" style={{ maxWidth: 620 }}>
@@ -130,15 +252,7 @@ export default function ApplyPage() {
 					</div>
 					<div>
 						<label htmlFor="email">Email</label>
-						<input
-							id="email"
-							type="email"
-							maxLength={254}
-							required
-							autoComplete="email"
-							value={form.email}
-							onChange={(event) => setForm({ ...form, email: event.target.value })}
-						/>
+						<input id="email" value={ticket.email} readOnly />
 					</div>
 					<div>
 						<label htmlFor="phone">Phone</label>
@@ -169,7 +283,7 @@ export default function ApplyPage() {
 					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}
 					<button type="submit" className="button" disabled={submitting}>
-						{submitting ? "Submitting…" : "Request access"}
+						{submitting ? "Submitting…" : "Submit for review"}
 					</button>
 				</form>
 			</div>
@@ -177,6 +291,6 @@ export default function ApplyPage() {
 			<p className="muted" style={{ marginTop: "1rem" }}>
 				Already approved? <Link href="/login">Sign in</Link>.
 			</p>
-		</main>
+		</Chrome>
 	);
 }

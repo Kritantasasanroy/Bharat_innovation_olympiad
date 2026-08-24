@@ -79,6 +79,10 @@ export interface SchoolApplyInput {
 	readonly coordinatorPhone: string;
 	/** Campaign code from a partner's onboarding link (`/activate?ref=CODE`). */
 	readonly referralCode?: string;
+	/** Enables the email + password sign-in option alongside the access token. */
+	readonly password: string;
+	/** Proof the coordinator email was already confirmed — see `verifyEmail`. */
+	readonly verificationTicket: string;
 }
 
 export interface PincodeLocation {
@@ -107,9 +111,11 @@ export interface SchoolApplicationResult {
 }
 
 export interface EmailVerificationResult {
-	readonly status: "PENDING" | "ALREADY_VERIFIED";
+	readonly status: "PENDING" | "ALREADY_VERIFIED" | "CONTINUE_APPLICATION";
 	readonly email: string;
 	readonly emailSent?: boolean;
+	/** Present only when `status` is `CONTINUE_APPLICATION` — pass to `apply()`. */
+	readonly submissionTicket?: string;
 }
 
 async function authed<T>(path: string, token: string): Promise<T> {
@@ -157,7 +163,11 @@ async function authedPost<T>(path: string, token: string, body: unknown): Promis
 }
 
 export const backendApi = {
-	/** Self-service access request. No credential required — this is the way in. */
+	/** Step 1 of activation: confirm the coordinator email before any school details are collected. */
+	startVerification: (email: string) =>
+		post<{ status: "CHECK_INBOX" }>("/school/verification/start", { email }),
+
+	/** Step 2: the full application, authorized by the ticket `verifyEmail` returned. */
 	apply: (input: SchoolApplyInput) => post<SchoolApplicationResult>("/school/apply", input),
 
 	verifyEmail: (token: string) => post<EmailVerificationResult>("/school/verify-email", { token }),
@@ -165,8 +175,12 @@ export const backendApi = {
 	resendVerification: (email: string) =>
 		post<{ status: "CHECK_INBOX" }>("/school/resend-verification", { email }),
 
-	/** Exchange the issued access token for a session JWT. */
-	login: (accessToken: string) => post<SchoolLoginResult>("/school/login", { accessToken }),
+	/** Email + password chosen at activation, or the access token issued on approval. */
+	login: (coordinatorEmail: string, password: string) =>
+		post<SchoolLoginResult>("/school/login", { coordinatorEmail, password }),
+
+	loginWithToken: (accessToken: string) =>
+		post<SchoolLoginResult>("/school/login", { accessToken }),
 
 	/** City and state from a pincode, so a school never types them. */
 	async lookupPincode(pincode: string): Promise<PincodeLocation> {

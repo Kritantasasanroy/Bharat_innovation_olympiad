@@ -22,6 +22,17 @@ import { PartnerService } from './partner.service';
 export class PartnerController {
     constructor(private partnerService: PartnerService) {}
 
+    /**
+     * PUBLIC — step 1 of self-service application: confirm the contact email
+     * before any organisation details are collected. Succeeding hands back a
+     * `verificationTicket` (via `/partner/verify-email`) that `partner/apply`
+     * requires.
+     */
+    @Post('partner/verification/start')
+    startVerification(@Body() dto: ResendEmailVerificationDto) {
+        return this.partnerService.startVerification(dto.email);
+    }
+
     /** PUBLIC — a brand-new partner requests access (no token). */
     @Post('partner/apply')
     apply(@Body() dto: ApplyPartnerDto) {

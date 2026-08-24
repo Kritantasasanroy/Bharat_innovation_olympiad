@@ -29,6 +29,13 @@ export class ApplyPartnerDto {
     @IsString()
     @MinLength(8, { message: 'Password must be at least 8 characters.' })
     password: string;
+
+    /// Proves the applicant already confirmed this email via
+    /// `POST /partner/verification/start` + `/partner/verify-email` — the
+    /// verify-first step. Minted by `issueActivationTicket` and never persisted.
+    @IsString()
+    @IsNotEmpty()
+    verificationTicket: string;
 }
 
 /** Either `accessToken`, or the `email` + `password` pair. Never a mix. */

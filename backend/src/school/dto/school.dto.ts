@@ -12,6 +12,8 @@ import {
     Matches,
     Max,
     Min,
+    MinLength,
+    ValidateIf,
     ValidateNested,
 } from 'class-validator';
 import { PINCODE_PATTERN } from '../school-directory.helpers';
@@ -61,12 +63,41 @@ export class ApplySchoolDto {
     @IsOptional()
     @IsString()
     referralCode?: string;
+
+    /// Required for a self-applying coordinator (enables the email +
+    /// password sign-in option), absent when a partner submits the school on
+    /// the coordinator's behalf — see `SchoolService.apply`.
+    @IsOptional()
+    @IsString()
+    @MinLength(8, { message: 'Password must be at least 8 characters.' })
+    password?: string;
+
+    /// Proves the coordinator already confirmed this email via
+    /// `POST /school/verification/start` + `/school/verify-email` — the
+    /// verify-first step. Minted by `issueActivationTicket` and never
+    /// persisted. Also absent on the partner-submitted path, which verifies
+    /// the coordinator's email *after* submission instead (the partner has no
+    /// way to prove control of someone else's inbox up front).
+    @IsOptional()
+    @IsString()
+    verificationTicket?: string;
 }
 
+/** Either `accessToken`, or the `coordinatorEmail` + `password` pair. Never a mix. */
 export class SchoolLoginDto {
+    @IsOptional()
     @IsString()
     @IsNotEmpty()
-    accessToken: string;
+    accessToken?: string;
+
+    @ValidateIf((dto: SchoolLoginDto) => !dto.accessToken)
+    @IsEmail()
+    coordinatorEmail?: string;
+
+    @ValidateIf((dto: SchoolLoginDto) => !dto.accessToken)
+    @IsString()
+    @IsNotEmpty()
+    password?: string;
 }
 
 export class DecideSchoolDto {

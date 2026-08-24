@@ -17,11 +17,13 @@ import {
     partnerRejectedEmail,
     partnerRevokedEmail,
     partnerSchoolStatusChangedEmail,
+    partnerStartVerificationEmail,
     resultsPublishedEmail,
     schoolAccessResentEmail,
     schoolAccessTokenRotatedEmail,
     schoolApplicationReceivedEmail,
     schoolEmailVerificationEmail,
+    schoolStartVerificationEmail,
     schoolApprovedEmail,
     schoolRejectedEmail,
     schoolRevokedEmail,
@@ -317,6 +319,12 @@ export class NotificationService implements OnModuleInit {
         );
     }
 
+    /** The email-verify-first step, before any org details exist to greet the reader with. */
+    async sendPartnerStartVerification(to: string, vars: { token: string }): Promise<boolean> {
+        const url = `${this.partnerPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
+        return this.deliver(to, partnerStartVerificationEmail({ verificationUrl: url }));
+    }
+
     async sendPartnerApplicationReceived(to: string, contactPerson: string, orgName: string): Promise<boolean> {
         return this.deliver(to, partnerApplicationReceivedEmail({ contactPerson, orgName }));
     }
@@ -394,6 +402,12 @@ export class NotificationService implements OnModuleInit {
                 verificationUrl: url,
             }),
         );
+    }
+
+    /** The email-verify-first step, before any school/coordinator details exist to greet the reader with. */
+    async sendSchoolStartVerification(to: string, vars: { token: string }): Promise<boolean> {
+        const url = `${this.schoolPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
+        return this.deliver(to, schoolStartVerificationEmail({ verificationUrl: url }));
     }
 
     async sendSchoolApplicationReceived(to: string, coordinatorName: string, schoolName: string): Promise<boolean> {

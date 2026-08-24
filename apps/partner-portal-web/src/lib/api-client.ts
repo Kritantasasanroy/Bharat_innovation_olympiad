@@ -166,6 +166,8 @@ export interface PartnerApplyInput {
 	readonly email: string;
 	readonly phone: string;
 	readonly password: string;
+	/** Proof the contact email was already confirmed — see `verifyEmail`. */
+	readonly verificationTicket: string;
 }
 
 export interface PartnerLoginResult {
@@ -181,9 +183,11 @@ export interface PartnerApplicationResult {
 }
 
 export interface EmailVerificationResult {
-	readonly status: "PENDING" | "ALREADY_VERIFIED";
+	readonly status: "PENDING" | "ALREADY_VERIFIED" | "CONTINUE_APPLICATION";
 	readonly email: string;
 	readonly emailSent?: boolean;
+	/** Present only when `status` is `CONTINUE_APPLICATION` — pass to `apply()`. */
+	readonly submissionTicket?: string;
 }
 
 /** NestJS error envelope: `{ statusCode, message: string | string[], error }`. */
@@ -234,7 +238,11 @@ async function backendRequest<T>(
 
 /** Partner authentication against the legacy backend (public — no token needed). */
 export const backendApi = {
-	/** Self-service access request. No token required — this is the way in. */
+	/** Step 1 of application: confirm the contact email before any org details are collected. */
+	startVerification: (email: string) =>
+		backendRequest<{ status: "CHECK_INBOX" }>("/partner/verification/start", { email }),
+
+	/** Step 2: the full application, authorized by the ticket `verifyEmail` returned. */
 	apply: (input: PartnerApplyInput) =>
 		backendRequest<PartnerApplicationResult>("/partner/apply", input),
 

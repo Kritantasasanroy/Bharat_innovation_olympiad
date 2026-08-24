@@ -15,13 +15,24 @@ import { SchoolService } from './school.service';
 export class SchoolController {
     constructor(private schoolService: SchoolService) {}
 
+    /**
+     * PUBLIC — step 1 of self-service activation: confirm the coordinator email
+     * before any school details are collected. Succeeding hands back a
+     * `verificationTicket` (via `/school/verify-email`) that `school/apply`
+     * requires.
+     */
+    @Post('school/verification/start')
+    startVerification(@Body() dto: ResendEmailVerificationDto) {
+        return this.schoolService.startVerification(dto.email);
+    }
+
     /** PUBLIC — a school requests access (no credential yet). */
     @Post('school/apply')
     apply(@Body() dto: ApplySchoolDto) {
         return this.schoolService.apply(dto);
     }
 
-    /** PUBLIC — an approved school signs in with its issued access token. */
+    /** PUBLIC — an approved school signs in with its issued access token, or email + password. */
     @Post('school/login')
     login(@Body() dto: SchoolLoginDto) {
         return this.schoolService.login(dto);

@@ -2,8 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
+import {
+	clearActivationTicket,
+	getActivationTicket,
+	type StoredActivationTicket,
+} from "../../lib/activation-ticket";
 import { ApiError, backendApi } from "../../lib/api-client";
 import { clearReferralCode, getReferralCode } from "../../lib/referral";
 
@@ -11,24 +16,171 @@ const BOARDS = ["CBSE", "ICSE", "State Board", "IB / Cambridge"] as const;
 const PINCODE_LENGTH = 6;
 
 /**
- * School self-activation (features §2.1–2.2).
+ * School self-activation (features §2.1–2.2), verify-first: the coordinator
+ * confirms their email *before* any school details are collected, not after.
  *
- * Submits a real access request to the backend, which queues it for staff
- * review on the admin Access Requests page. Approval provisions the school and
- * issues a single access token, which staff hand over; the school then signs in
- * with it at `/login`. Nothing is granted here.
- *
- * City and state are filled from the pincode, so they always agree with what a
- * student sees when picking this school later.
+ * Step 1 ({@link StartStep}) takes only the coordinator email and sends a
+ * confirmation link. Clicking it lands on `/verify`, which stores a
+ * short-lived `verificationTicket` and sends the coordinator back here —
+ * `getActivationTicket()` finding one is what switches this page to step 2
+ * ({@link DetailsStep}), the full application form. Nothing is granted at
+ * either step; approval is a separate staff review.
  */
 export default function ActivatePage() {
+	const [ticket, setTicket] = useState<StoredActivationTicket | null | undefined>(undefined);
+	const [expired, setExpired] = useState(false);
+
+	useEffect(() => {
+		setTicket(getActivationTicket());
+	}, []);
+
+	if (ticket === undefined) {
+		return (
+			<main className="page">
+				<p className="muted">Loading…</p>
+			</main>
+		);
+	}
+
+	return ticket ? (
+		<DetailsStep
+			ticket={ticket}
+			onTicketExpired={() => {
+				setTicket(null);
+				setExpired(true);
+			}}
+		/>
+	) : (
+		<StartStep expired={expired} />
+	);
+}
+
+function Chrome({ children }: { children: ReactNode }) {
+	return (
+		<main className="page">
+			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
+				<ThemeToggle />
+			</div>
+			<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+				<Image
+					src="/bio-logo.png"
+					alt="Bharat Innovation Olympiad"
+					width={160}
+					height={48}
+					style={{ height: "48px", width: "auto", objectFit: "contain" }}
+				/>
+			</div>
+			{children}
+		</main>
+	);
+}
+
+/** Step 1 — prove control of the coordinator email before anything else. */
+function StartStep({ expired }: { expired: boolean }) {
+	const [email, setEmail] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [done, setDone] = useState<{
-		schoolName: string;
-		coordinatorEmail: string;
-		emailSent: boolean;
-	} | null>(null);
+	const [sent, setSent] = useState(false);
+
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setSubmitting(true);
+		setError(null);
+		try {
+			await backendApi.startVerification(email.trim());
+			setSent(true);
+		} catch (cause) {
+			setError(
+				cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.",
+			);
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	if (sent) {
+		return (
+			<Chrome>
+				<div className="card verification-card">
+					<p className="eyebrow">Step 1 of 2</p>
+					<h1>Confirm your email</h1>
+					<p className="muted">
+						We sent a confirmation link to <strong>{email.trim()}</strong>. Open it to prove you own
+						this address — you&apos;ll fill in your school&apos;s details right after.
+					</p>
+					<div className="verification-status verification-status--success" role="status">
+						<strong>Check your inbox.</strong>
+						<span>
+							Links expire after 24 hours. Check spam or junk mail before requesting another.
+						</span>
+					</div>
+					<div className="inline">
+						<Link href="/verify" className="button">
+							Open verification page
+						</Link>
+						<Link href="/login" className="button button--secondary">
+							Already activated? Sign in
+						</Link>
+					</div>
+				</div>
+			</Chrome>
+		);
+	}
+
+	return (
+		<Chrome>
+			<div className="page-header">
+				<h1>Activate your school</h1>
+				<p>
+					Two steps: confirm the coordinator email, then fill in your school&apos;s details. The
+					school access token is issued only after BIO staff review is complete.
+				</p>
+			</div>
+			{expired ? (
+				<div className="notice notice--error" style={{ maxWidth: 480, marginBottom: "1rem" }}>
+					Your email confirmation expired before you finished the form. Send a new link and try
+					again.
+				</div>
+			) : null}
+			<div className="card" style={{ maxWidth: 480 }}>
+				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
+					<div>
+						<label htmlFor="coordinatorEmail">Coordinator email</label>
+						<input
+							id="coordinatorEmail"
+							type="email"
+							maxLength={254}
+							required
+							autoComplete="email"
+							value={email}
+							onChange={(event) => setEmail(event.target.value)}
+							placeholder="coordinator@school.edu.in"
+						/>
+					</div>
+					{error ? <div className="notice notice--error">{error}</div> : null}
+					<button type="submit" className="button" disabled={submitting || !email.trim()}>
+						{submitting ? "Sending…" : "Send confirmation link"}
+					</button>
+				</form>
+			</div>
+			<p className="muted" style={{ marginTop: "1rem" }}>
+				Already have an access token? <Link href="/login">Sign in</Link>.
+			</p>
+		</Chrome>
+	);
+}
+
+/** Step 2 — the coordinator's email is confirmed; collect the rest and submit. */
+function DetailsStep({
+	ticket,
+	onTicketExpired,
+}: {
+	ticket: StoredActivationTicket;
+	onTicketExpired: () => void;
+}) {
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [done, setDone] = useState<{ schoolName: string } | null>(null);
 
 	const [pincode, setPincode] = useState("");
 	const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
@@ -84,17 +236,21 @@ export default function ActivatePage() {
 				city: location.city,
 				state: location.state,
 				coordinatorName: value("coordinatorName"),
-				coordinatorEmail: value("coordinatorEmail"),
+				coordinatorEmail: ticket.email,
 				coordinatorPhone: value("coordinatorPhone"),
+				password: value("password"),
+				verificationTicket: ticket.ticket,
 				...(referralCode ? { referralCode } : {}),
 			});
 			clearReferralCode();
-			setDone({
-				schoolName: result.schoolName,
-				coordinatorEmail: result.coordinatorEmail,
-				emailSent: result.emailSent,
-			});
+			clearActivationTicket();
+			setDone({ schoolName: result.schoolName });
 		} catch (cause) {
+			if (cause instanceof ApiError && /verify your (coordinator )?email/i.test(cause.message)) {
+				clearActivationTicket();
+				onTicketExpired();
+				return;
+			}
 			setError(
 				cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.",
 			);
@@ -105,58 +261,28 @@ export default function ActivatePage() {
 
 	if (done) {
 		return (
-			<main className="page">
-				<div className="verification-brand">
-					<Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" width={211} height={64} />
-				</div>
+			<Chrome>
 				<div className="card verification-card">
-					<p className="eyebrow">Step 1 of 2 complete</p>
-					<h1>Confirm your school email</h1>
+					<p className="eyebrow">Application submitted</p>
+					<h1>You&apos;re in the review queue</h1>
 					<p className="muted">
-						We saved the application for <strong>{done.schoolName}</strong>. We sent a confirmation
-						link to <strong>{done.coordinatorEmail}</strong>. Open it to prove you own this address.
+						We saved the application for <strong>{done.schoolName}</strong>. BIO staff review every
+						application by hand — we&apos;ll email the access token once it&apos;s approved.
 					</p>
-					<div className="verification-status verification-status--success" role="status">
-						<strong>{done.emailSent ? "Check your inbox." : "Your application is saved."}</strong>
-						<span>
-							{done.emailSent
-								? "After you confirm, BIO staff will review the school application."
-								: "Email delivery is temporarily unavailable. Use the verification page to request another link or contact BIO support."}
-						</span>
-					</div>
-					<div className="inline">
-						<Link href="/verify" className="button">
-							Open verification page
-						</Link>
-						<Link href="/login" className="button button--secondary">
-							Already verified? Sign in
-						</Link>
-					</div>
+					<Link href="/login" className="button">
+						Go to coordinator sign in
+					</Link>
 				</div>
-			</main>
+			</Chrome>
 		);
 	}
 
 	return (
-		<main className="page">
-			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
-				<ThemeToggle />
-			</div>
-			<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-				<Image
-					src="/bio-logo.png"
-					alt="Bharat Innovation Olympiad"
-					width={160}
-					height={48}
-					style={{ height: "48px", width: "auto", objectFit: "contain" }}
-				/>
-			</div>
+		<Chrome>
 			<div className="page-header">
-				<h1>Activate your school</h1>
-				<p>
-					Two steps: confirm the coordinator email, then wait for BIO staff approval. The school
-					access token is issued only after both checks are complete.
-				</p>
+				<p className="eyebrow">Step 2 of 2 — email confirmed</p>
+				<h1>Tell us about your school</h1>
+				<p>Confirmed as {ticket.email}. Fill in the rest and submit for BIO staff review.</p>
 			</div>
 
 			<div className="card" style={{ maxWidth: 620 }}>
@@ -225,13 +351,7 @@ export default function ActivatePage() {
 					<div className="grid-2" style={{ gap: "1rem" }}>
 						<div>
 							<label htmlFor="coordinatorEmail">Coordinator email</label>
-							<input
-								id="coordinatorEmail"
-								name="coordinatorEmail"
-								type="email"
-								maxLength={254}
-								required
-							/>
+							<input id="coordinatorEmail" value={ticket.email} readOnly />
 						</div>
 						<div>
 							<label htmlFor="coordinatorPhone">Coordinator phone</label>
@@ -246,9 +366,22 @@ export default function ActivatePage() {
 							/>
 						</div>
 					</div>
+					<div>
+						<label htmlFor="password">Choose a password</label>
+						<input
+							id="password"
+							name="password"
+							type="password"
+							required
+							minLength={8}
+							maxLength={128}
+							autoComplete="new-password"
+							placeholder="At least 8 characters"
+						/>
+					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}
 					<button type="submit" className="button" disabled={submitting || !location}>
-						{submitting ? "Submitting…" : "Submit for activation"}
+						{submitting ? "Submitting…" : "Submit for review"}
 					</button>
 				</form>
 			</div>
@@ -256,6 +389,6 @@ export default function ActivatePage() {
 			<p className="muted" style={{ marginTop: "1rem" }}>
 				Already have an access token? <Link href="/login">Sign in</Link>.
 			</p>
-		</main>
+		</Chrome>
 	);
 }

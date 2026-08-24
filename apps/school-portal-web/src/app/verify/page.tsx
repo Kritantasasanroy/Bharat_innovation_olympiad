@@ -2,13 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
+import { setActivationTicket } from "../../lib/activation-ticket";
 import { ApiError, backendApi } from "../../lib/api-client";
 
-type VerificationState = "checking" | "form" | "verified" | "error";
+type VerificationState = "checking" | "form" | "verified" | "continue" | "error";
 
 export default function VerifySchoolEmailPage() {
+	const router = useRouter();
 	const [state, setState] = useState<VerificationState>("checking");
 	const [alreadyVerified, setAlreadyVerified] = useState(false);
 	const [email, setEmail] = useState("");
@@ -33,6 +36,15 @@ export default function VerifySchoolEmailPage() {
 			.verifyEmail(token)
 			.then((result) => {
 				if (!active) return;
+				if (result.status === "CONTINUE_APPLICATION" && result.submissionTicket) {
+					// Verify-first: hand the ticket to /activate and jump straight there
+					// instead of showing an intermediate "confirmed" screen.
+					setActivationTicket(result.submissionTicket, result.email);
+					setEmail(result.email);
+					setState("continue");
+					router.replace("/activate");
+					return;
+				}
 				setAlreadyVerified(result.status === "ALREADY_VERIFIED");
 				setState("verified");
 			})
@@ -49,7 +61,7 @@ export default function VerifySchoolEmailPage() {
 		return () => {
 			active = false;
 		};
-	}, []);
+	}, [router]);
 
 	async function resend(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -74,7 +86,7 @@ export default function VerifySchoolEmailPage() {
 		}
 	}
 
-	if (state === "checking") {
+	if (state === "checking" || state === "continue") {
 		return (
 			<main className="page">
 				<p className="muted">Checking your email confirmation…</p>

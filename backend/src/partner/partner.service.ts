@@ -9,8 +9,10 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { PreActivationVerification } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
+import { issueActivationTicket, verifyActivationTicket } from '../common/activation-ticket';
 import {
     generateAccessToken,
     hashAccessToken,
@@ -78,7 +80,14 @@ export class PartnerService {
         private notifications: NotificationService,
     ) {}
 
-    /** PUBLIC self-service application — no token, and no engine round-trip. */
+    /**
+     * PUBLIC self-service application — no token, and no engine round-trip.
+     *
+     * Requires a `verificationTicket` from `startVerification` +
+     * `verifyEmail`: the applicant proves control of the email *before*
+     * filling in organisation details, not after. The request is therefore
+     * created already verified and goes straight into the staff review queue.
+     */
     async apply(dto: ApplyPartnerDto) {
         const email = dto.email.trim().toLowerCase();
         const existing = await this.prisma.partnerRequest.findUnique({ where: { email } });
@@ -89,7 +98,10 @@ export class PartnerService {
         }
 
         const now = new Date();
-        const challenge = createEmailVerificationChallenge(now);
+        if (!verifyActivationTicket(dto.verificationTicket, 'PARTNER', email, now)) {
+            throw new BadRequestException('Verify your email before submitting this application.');
+        }
+
         const passwordHash = await bcrypt.hash(dto.password, 10);
         const request = await this.prisma.partnerRequest.create({
             data: {
@@ -99,25 +111,68 @@ export class PartnerService {
                 phone: dto.phone.trim(),
                 passwordHash,
                 status: 'PENDING',
-                emailVerificationTokenHash: challenge.tokenHash,
-                emailVerificationTokenExpiresAt: challenge.expiresAt,
-                emailVerificationSentAt: challenge.sentAt,
+                emailVerifiedAt: now,
             },
         });
 
-        const emailSent =
-            (await this.notifications.sendPartnerEmailVerification?.(request.email, {
-                contactPerson: request.contactPerson,
-                orgName: request.orgName,
-                token: challenge.rawToken,
-            })) ?? false;
+        const emailSent = await this.notifications.sendPartnerApplicationReceived(
+            request.email,
+            request.contactPerson,
+            request.orgName,
+        );
 
         return {
-            status: 'EMAIL_VERIFICATION_REQUIRED' as const,
+            status: 'PENDING' as const,
             email: request.email,
             orgName: request.orgName,
             emailSent,
         };
+    }
+
+    /**
+     * PUBLIC — step 1 of self-service application: prove control of the
+     * contact email before any organisation details are collected. Mirrors
+     * `resendVerification`'s cooldown/anti-enumeration behaviour, just against
+     * `PreActivationVerification` instead of an existing application.
+     */
+    async startVerification(emailAddress: string) {
+        const email = emailAddress.trim().toLowerCase();
+
+        const existingRequest = await this.prisma.partnerRequest.findUnique({ where: { email } });
+        if (existingRequest) {
+            throw new ConflictException(
+                'A partner application already exists for this email. Open the verification page to request another link.',
+            );
+        }
+
+        const now = new Date();
+        const existing = await this.prisma.preActivationVerification.findUnique({
+            where: { kind_email: { kind: 'PARTNER', email } },
+        });
+        if (existing && cooldownRemainingSeconds(existing.tokenSentAt, now) > 0) {
+            return { status: 'CHECK_INBOX' as const };
+        }
+
+        const challenge = createEmailVerificationChallenge(now);
+        const data = {
+            tokenHash: challenge.tokenHash,
+            tokenExpiresAt: challenge.expiresAt,
+            tokenSentAt: challenge.sentAt,
+            tokenUsedAt: null,
+            verifiedAt: null,
+        };
+        if (existing) {
+            await this.prisma.preActivationVerification.update({ where: { id: existing.id }, data });
+        } else {
+            await this.prisma.preActivationVerification.create({
+                data: { kind: 'PARTNER', email, ...data },
+            });
+        }
+
+        const emailSent = await this.notifications.sendPartnerStartVerification(email, {
+            token: challenge.rawToken,
+        });
+        return { status: 'CHECK_INBOX' as const, emailSent };
     }
 
     async verifyEmail(rawToken: string) {
@@ -125,9 +180,17 @@ export class PartnerService {
         if (!token || token.length > 256) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
         }
+        const tokenHash = hashEmailVerificationToken(token);
+
+        // The verify-first step (`startVerification`) checks in here before the
+        // legacy "application already created, now confirm it" path below.
+        const pre = await this.prisma.preActivationVerification.findUnique({ where: { tokenHash } });
+        if (pre) {
+            return this.confirmPreActivation(pre);
+        }
 
         const request = await this.prisma.partnerRequest.findUnique({
-            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
+            where: { emailVerificationTokenHash: tokenHash },
         });
         if (!request) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
@@ -179,8 +242,59 @@ export class PartnerService {
         return { status: 'PENDING' as const, email: request.email, emailSent };
     }
 
+    /**
+     * The verify-first step's confirm: mints a short-lived `verificationTicket`
+     * instead of admitting the applicant to a staff review queue directly —
+     * there is no application yet for it to admit them to.
+     */
+    private async confirmPreActivation(pre: PreActivationVerification) {
+        const now = new Date();
+        if (pre.tokenUsedAt) {
+            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
+        }
+        if (pre.tokenExpiresAt <= now) {
+            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
+        }
+
+        const claimed = await this.prisma.preActivationVerification.updateMany({
+            where: { id: pre.id, tokenUsedAt: null },
+            data: { tokenUsedAt: now, verifiedAt: now },
+        });
+        if (claimed.count === 0) {
+            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
+        }
+
+        return {
+            status: 'CONTINUE_APPLICATION' as const,
+            email: pre.email,
+            submissionTicket: issueActivationTicket('PARTNER', pre.email, now),
+        };
+    }
+
     async resendVerification(emailAddress: string) {
         const email = emailAddress.trim().toLowerCase();
+
+        const pre = await this.prisma.preActivationVerification.findUnique({
+            where: { kind_email: { kind: 'PARTNER', email } },
+        });
+        if (pre && !pre.tokenUsedAt) {
+            const now = new Date();
+            if (cooldownRemainingSeconds(pre.tokenSentAt, now) > 0) {
+                return { status: 'CHECK_INBOX' as const };
+            }
+            const challenge = createEmailVerificationChallenge(now);
+            await this.prisma.preActivationVerification.update({
+                where: { id: pre.id },
+                data: {
+                    tokenHash: challenge.tokenHash,
+                    tokenExpiresAt: challenge.expiresAt,
+                    tokenSentAt: challenge.sentAt,
+                },
+            });
+            await this.notifications.sendPartnerStartVerification(email, { token: challenge.rawToken });
+            return { status: 'CHECK_INBOX' as const };
+        }
+
         const request = await this.prisma.partnerRequest.findUnique({ where: { email } });
         if (!request || request.emailVerifiedAt || request.status !== 'PENDING') {
             return { status: 'CHECK_INBOX' as const };
