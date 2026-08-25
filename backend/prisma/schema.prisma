@@ -684,6 +684,8 @@ model SchoolRequest {
 enum EmailOtpKind {
   SCHOOL
   PARTNER
+  SCHOOL_RESET
+  PARTNER_RESET
 }
 
 /// The email-verify-first step of self-service onboarding: a coordinator or

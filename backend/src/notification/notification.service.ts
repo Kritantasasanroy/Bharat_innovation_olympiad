@@ -15,6 +15,8 @@ import {
     partnerBankDetailsSubmittedEmail,
     partnerEmailVerificationEmail,
     partnerApprovedEmail,
+    partnerPasswordChangedEmail,
+    partnerPasswordResetCodeEmail,
     partnerRejectedEmail,
     partnerRevokedEmail,
     partnerSchoolStatusChangedEmail,
@@ -26,6 +28,8 @@ import {
     schoolEmailVerificationEmail,
     schoolStartVerificationEmail,
     schoolApprovedEmail,
+    schoolPasswordChangedEmail,
+    schoolPasswordResetCodeEmail,
     schoolRejectedEmail,
     schoolRevokedEmail,
     slotConfirmedEmail,
@@ -329,6 +333,17 @@ export class NotificationService implements OnModuleInit {
         return this.deliver(to, partnerApplicationReceivedEmail({ contactPerson, orgName }));
     }
 
+    async sendPartnerPasswordResetCode(to: string, vars: { code: string }): Promise<boolean> {
+        return this.deliver(to, partnerPasswordResetCodeEmail({ code: vars.code }));
+    }
+
+    async sendPartnerPasswordChanged(
+        to: string,
+        vars: { contactPerson: string; orgName: string },
+    ): Promise<boolean> {
+        return this.deliver(to, partnerPasswordChangedEmail(vars));
+    }
+
     async sendPartnerApproved(
         to: string,
         vars: { contactPerson: string; orgName: string; accessToken: string },
@@ -422,6 +437,17 @@ export class NotificationService implements OnModuleInit {
     /** The email-verify-first step, before any school/coordinator details exist to greet the reader with. */
     async sendSchoolStartVerification(to: string, vars: { code: string }): Promise<boolean> {
         return this.deliver(to, schoolStartVerificationEmail({ code: vars.code }));
+    }
+
+    async sendSchoolPasswordResetCode(to: string, vars: { code: string }): Promise<boolean> {
+        return this.deliver(to, schoolPasswordResetCodeEmail({ code: vars.code }));
+    }
+
+    async sendSchoolPasswordChanged(
+        to: string,
+        vars: { coordinatorName: string; schoolName: string },
+    ): Promise<boolean> {
+        return this.deliver(to, schoolPasswordChangedEmail(vars));
     }
 
     async sendSchoolApplicationReceived(to: string, coordinatorName: string, schoolName: string): Promise<boolean> {

@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import {
     ConfirmEmailOtpDto,
     ResendEmailVerificationDto,
+    ResetPasswordDto,
     VerifyEmailDto,
 } from '../common/dto/email-verification.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -51,6 +52,24 @@ export class PartnerController {
     @Post('partner/login')
     login(@Body() dto: PartnerLoginDto) {
         return this.partnerService.login(dto);
+    }
+
+    /** PUBLIC — forgot-password step 1: email a 6-digit code to an existing password account. */
+    @Post('partner/forgot-password')
+    forgotPassword(@Body() dto: ResendEmailVerificationDto) {
+        return this.partnerService.forgotPassword(dto.email);
+    }
+
+    /** PUBLIC — forgot-password step 2: check the code and hand back the `resetTicket` that `reset-password` requires. */
+    @Post('partner/reset-password/confirm')
+    confirmPasswordReset(@Body() dto: ConfirmEmailOtpDto) {
+        return this.partnerService.confirmPasswordReset(dto.email, dto.code);
+    }
+
+    /** PUBLIC — forgot-password step 3: set the new password, proven by the step-2 ticket. */
+    @Post('partner/reset-password')
+    resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.partnerService.resetPassword(dto.email, dto.resetTicket, dto.newPassword);
     }
 
     /** PUBLIC — legacy link-based confirmation, kept for any application submitted before verify-first shipped. */

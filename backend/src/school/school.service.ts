@@ -28,6 +28,7 @@ import {
     createEmailVerificationChallenge,
     hashEmailVerificationToken,
 } from '../common/email-verification-token';
+import { issuePasswordResetTicket, verifyPasswordResetTicket } from '../common/password-reset-ticket';
 import { NotificationService } from '../notification/notification.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PartnerDirectoryService } from '../partner/partner-directory.service';
@@ -570,6 +571,59 @@ export class SchoolService {
             throw new UnauthorizedException('Invalid email or password.');
         }
         return request;
+    }
+
+    /**
+     * PUBLIC — forgot-password step 1: send a 6-digit code, same shape as the
+     * verify-first step. Only accounts that actually have a password can reset
+     * one — a partner-submitted school signs in with its access token only, so
+     * there is nothing here for `resetPassword` to change.
+     */
+    async forgotPassword(rawEmail: string) {
+        const coordinatorEmail = rawEmail.trim().toLowerCase();
+        const request = await this.prisma.schoolRequest.findUnique({ where: { coordinatorEmail } });
+        if (!request) {
+            throw new BadRequestException('No school account found with that email.');
+        }
+        if (!request.passwordHash) {
+            throw new BadRequestException(
+                'This school signs in with an access token, not a password. Contact BIO support if you need it resent.',
+            );
+        }
+        return this.emailOtp.sendOtp('SCHOOL_RESET', coordinatorEmail);
+    }
+
+    /**
+     * PUBLIC — forgot-password step 2: check the code and hand back the
+     * short-lived `resetTicket` that `resetPassword` requires.
+     */
+    async confirmPasswordReset(rawEmail: string, code: string) {
+        const email = await this.emailOtp.verifyOtp('SCHOOL_RESET', rawEmail, code);
+        return { status: 'CONTINUE_RESET' as const, email, resetTicket: issuePasswordResetTicket('SCHOOL', email) };
+    }
+
+    /** PUBLIC — forgot-password step 3: set the new password, proven by the step-2 ticket. */
+    async resetPassword(rawEmail: string, resetTicket: string, newPassword: string) {
+        const coordinatorEmail = rawEmail.trim().toLowerCase();
+        const now = new Date();
+        if (!verifyPasswordResetTicket(resetTicket, 'SCHOOL', coordinatorEmail, now)) {
+            throw new BadRequestException('This reset code has expired. Request a new one.');
+        }
+
+        const request = await this.prisma.schoolRequest.findUnique({ where: { coordinatorEmail } });
+        if (!request || !request.passwordHash) {
+            throw new BadRequestException('No school account found with that email.');
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await this.prisma.schoolRequest.update({ where: { id: request.id }, data: { passwordHash } });
+
+        await this.notifications.sendSchoolPasswordChanged(request.coordinatorEmail, {
+            coordinatorName: request.coordinatorName,
+            schoolName: request.schoolName,
+        });
+
+        return { status: 'PASSWORD_RESET' as const };
     }
 
     /** ADMIN — the school half of the Access Management queue. */

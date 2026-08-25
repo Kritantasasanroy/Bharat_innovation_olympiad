@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import {
     ConfirmEmailOtpDto,
     ResendEmailVerificationDto,
+    ResetPasswordDto,
     VerifyEmailDto,
 } from '../common/dto/email-verification.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -44,6 +45,24 @@ export class SchoolController {
     @Post('school/login')
     login(@Body() dto: SchoolLoginDto) {
         return this.schoolService.login(dto);
+    }
+
+    /** PUBLIC — forgot-password step 1: email the coordinator a 6-digit code for an existing password account. */
+    @Post('school/forgot-password')
+    forgotPassword(@Body() dto: ResendEmailVerificationDto) {
+        return this.schoolService.forgotPassword(dto.email);
+    }
+
+    /** PUBLIC — forgot-password step 2: check the code and hand back the `resetTicket` that `reset-password` requires. */
+    @Post('school/reset-password/confirm')
+    confirmPasswordReset(@Body() dto: ConfirmEmailOtpDto) {
+        return this.schoolService.confirmPasswordReset(dto.email, dto.code);
+    }
+
+    /** PUBLIC — forgot-password step 3: set the new password, proven by the step-2 ticket. */
+    @Post('school/reset-password')
+    resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.schoolService.resetPassword(dto.email, dto.resetTicket, dto.newPassword);
     }
 
     /** PUBLIC — legacy link-based confirmation, for a school a partner submitted on the coordinator's behalf. */

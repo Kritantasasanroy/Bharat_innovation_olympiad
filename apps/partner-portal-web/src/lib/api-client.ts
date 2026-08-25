@@ -190,6 +190,12 @@ export interface EmailVerificationResult {
 	readonly emailSent?: boolean;
 }
 
+export interface ConfirmPasswordResetResult {
+	readonly status: "CONTINUE_RESET";
+	readonly email: string;
+	readonly resetTicket: string;
+}
+
 /** NestJS error envelope: `{ statusCode, message: string | string[], error }`. */
 interface NestErrorBody {
 	readonly statusCode?: number;
@@ -264,6 +270,22 @@ export const backendApi = {
 	/** The access token staff issue on approval, exchanged for a session JWT. */
 	loginWithToken: (accessToken: string) =>
 		backendRequest<PartnerLoginResult>("/partner/login", { accessToken }),
+
+	/** Forgot-password step 1: email a 6-digit code to an existing password account. */
+	forgotPassword: (email: string) =>
+		backendRequest<StartVerificationResult>("/partner/forgot-password", { email }),
+
+	/** Step 2: check the code and get the ticket `resetPassword` requires. */
+	confirmPasswordReset: (email: string, code: string) =>
+		backendRequest<ConfirmPasswordResetResult>("/partner/reset-password/confirm", { email, code }),
+
+	/** Step 3: set the new password, authorized by the ticket `confirmPasswordReset` returned. */
+	resetPassword: (email: string, resetTicket: string, newPassword: string) =>
+		backendRequest<{ status: "PASSWORD_RESET" }>("/partner/reset-password", {
+			email,
+			resetTicket,
+			newPassword,
+		}),
 };
 
 export interface PincodeLocation {

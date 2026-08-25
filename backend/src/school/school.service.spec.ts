@@ -824,6 +824,94 @@ describe('login with email + password (self-applied school)', () => {
     });
 });
 
+describe('forgotPassword + confirmPasswordReset + resetPassword', () => {
+    async function approvedSelfApply(service: SchoolService) {
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
+        const [request] = await service.list();
+        await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+        return request.id;
+    }
+
+    it('rejects an unknown email', async () => {
+        const { service } = setup();
+        await expect(service.forgotPassword('nobody@example.com')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('a partner-submitted school has no password to reset', async () => {
+        const { service } = setup();
+        await service.apply(APPLICATION, 'partner-99');
+        const [request] = await service.list();
+        request.emailVerifiedAt = new Date();
+        await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+
+        await expect(service.forgotPassword(APPLICATION.coordinatorEmail)).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
+    });
+
+    it('sends the OTP scoped to SCHOOL_RESET, distinct from the activation OTP', async () => {
+        const { service, emailOtp } = setup();
+        await approvedSelfApply(service);
+
+        await service.forgotPassword(APPLICATION.coordinatorEmail);
+
+        expect(emailOtp.sendOtp).toHaveBeenCalledWith('SCHOOL_RESET', APPLICATION.coordinatorEmail.toLowerCase());
+    });
+
+    it('the full round trip changes the password: old one stops working, new one signs in — not trimmed', async () => {
+        const { service, notifications } = setup();
+        await approvedSelfApply(service);
+
+        await service.forgotPassword(APPLICATION.coordinatorEmail);
+        const confirmed = await service.confirmPasswordReset(APPLICATION.coordinatorEmail, '123456');
+        expect(confirmed.status).toBe('CONTINUE_RESET');
+
+        // Deliberately includes trailing whitespace, mirroring the school
+        // registration bug this feature exists alongside: the new password
+        // must be stored byte-for-byte, or login (which never trims) would
+        // fail against it for the same reason the old bug did.
+        const newPassword = 'a brand new password ';
+        await expect(
+            service.resetPassword(APPLICATION.coordinatorEmail, confirmed.resetTicket, newPassword),
+        ).resolves.toEqual({ status: 'PASSWORD_RESET' });
+        expect(notifications.sendSchoolPasswordChanged).toHaveBeenCalledTimes(1);
+
+        await expect(
+            service.login({ coordinatorEmail: APPLICATION.coordinatorEmail, password: APPLICATION.password }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(
+            service.login({ coordinatorEmail: APPLICATION.coordinatorEmail, password: newPassword }),
+        ).resolves.toBeDefined();
+        await expect(
+            service.login({ coordinatorEmail: APPLICATION.coordinatorEmail, password: newPassword.trim() }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('rejects a reset ticket minted for a different email', async () => {
+        const { service } = setup();
+        await approvedSelfApply(service);
+        await service.forgotPassword(APPLICATION.coordinatorEmail);
+        const confirmed = await service.confirmPasswordReset(APPLICATION.coordinatorEmail, '123456');
+
+        await expect(
+            service.resetPassword('someone-else@example.com', confirmed.resetTicket, 'a brand new password'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('an activation ticket cannot be replayed as a reset ticket', async () => {
+        const { service } = setup();
+        await approvedSelfApply(service);
+
+        await expect(
+            service.resetPassword(
+                APPLICATION.coordinatorEmail,
+                ticketFor(APPLICATION.coordinatorEmail),
+                'a brand new password',
+            ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+});
+
 describe('decide — revoke and re-grant', () => {
     it('refuses login and deactivates the coordinator', async () => {
         const { service, users } = setup();

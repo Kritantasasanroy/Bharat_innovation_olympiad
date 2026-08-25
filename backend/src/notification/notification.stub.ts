@@ -91,6 +91,12 @@ export class NotificationServiceTestDouble extends NotificationService {
             _vars: { contactPerson: string; accountNumberLast4: string },
         ): Promise<boolean> => true,
     );
+    sendPartnerPasswordResetCode = jest.fn(
+        async (_to: string, _vars: { code: string }): Promise<boolean> => true,
+    );
+    sendPartnerPasswordChanged = jest.fn(
+        async (_to: string, _vars: { contactPerson: string; orgName: string }): Promise<boolean> => true,
+    );
 
     sendSchoolEmailVerification = jest.fn(
         async (_to: string, _vars: { coordinatorName: string; schoolName: string; token: string }): Promise<boolean> =>
@@ -101,6 +107,12 @@ export class NotificationServiceTestDouble extends NotificationService {
     );
     sendSchoolApplicationReceived = jest.fn(
         async (_to: string, _coordinatorName: string, _schoolName: string): Promise<boolean> => true,
+    );
+    sendSchoolPasswordResetCode = jest.fn(
+        async (_to: string, _vars: { code: string }): Promise<boolean> => true,
+    );
+    sendSchoolPasswordChanged = jest.fn(
+        async (_to: string, _vars: { coordinatorName: string; schoolName: string }): Promise<boolean> => true,
     );
     sendSchoolApproved = jest.fn(
         async (

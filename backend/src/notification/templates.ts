@@ -292,6 +292,28 @@ export function partnerStartVerificationEmail(vars: { code: string }): RenderedE
     );
 }
 
+/** Forgot-password step 1: the 6-digit code to prove control of the address before a new password is accepted. */
+export function partnerPasswordResetCodeEmail(vars: { code: string }): RenderedEmail {
+    return build(
+        'Reset your BIO partner password',
+        'Reset your password',
+        `<p style="margin:0 0 12px;">Someone asked to reset the password on this Bharat Innovation Olympiad partner account.</p>
+     <p style="margin:0 0 12px;">Enter this code on the reset page to choose a new password.</p>
+     ${factTable([factRow('Reset code', vars.code)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in 10 minutes. If you did not make this request, your password is safe — you can ignore this email.</p>`,
+    );
+}
+
+/** Confirms a password change actually happened, so an account holder who didn't request it finds out. */
+export function partnerPasswordChangedEmail(vars: { contactPerson: string; orgName: string }): RenderedEmail {
+    return build(
+        'Your BIO partner password was changed',
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">The password on <strong>${escapeHtml(vars.orgName)}</strong>'s Bharat Innovation Olympiad partner account was just changed.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away.</p>`,
+    );
+}
+
 export function partnerApplicationReceivedEmail(vars: {
     contactPerson: string;
     orgName: string;
@@ -456,6 +478,28 @@ export function schoolStartVerificationEmail(vars: { code: string }): RenderedEm
      <p style="margin:0 0 12px;">Enter this code on the activation page to continue — you'll fill in your school's details right after.</p>
      ${factTable([factRow('Verification code', vars.code)])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in 10 minutes. If you did not make this request, you can ignore this email.</p>`,
+    );
+}
+
+/** Forgot-password step 1: the 6-digit code to prove control of the address before a new password is accepted. */
+export function schoolPasswordResetCodeEmail(vars: { code: string }): RenderedEmail {
+    return build(
+        'Reset your BIO school password',
+        'Reset your password',
+        `<p style="margin:0 0 12px;">Someone asked to reset the password on this Bharat Innovation Olympiad school coordinator account.</p>
+     <p style="margin:0 0 12px;">Enter this code on the reset page to choose a new password.</p>
+     ${factTable([factRow('Reset code', vars.code)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in 10 minutes. If you did not make this request, your password is safe — you can ignore this email.</p>`,
+    );
+}
+
+/** Confirms a password change actually happened, so an account holder who didn't request it finds out. */
+export function schoolPasswordChangedEmail(vars: { coordinatorName: string; schoolName: string }): RenderedEmail {
+    return build(
+        'Your BIO school password was changed',
+        `Hi ${escapeHtml(vars.coordinatorName)}`,
+        `<p style="margin:0 0 12px;">The password on <strong>${escapeHtml(vars.schoolName)}</strong>'s Bharat Innovation Olympiad coordinator account was just changed.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away.</p>`,
     );
 }
 

@@ -120,9 +120,15 @@ export default function LoginPage() {
 									type="password"
 									required
 									autoComplete="current-password"
+									autoCapitalize="none"
+									autoCorrect="off"
+									spellCheck={false}
 									value={password}
 									onChange={(event) => setPassword(event.target.value)}
 								/>
+								<p className="muted" style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}>
+									<Link href="/forgot-password">Forgot your password?</Link>
+								</p>
 							</div>
 						</>
 					)}

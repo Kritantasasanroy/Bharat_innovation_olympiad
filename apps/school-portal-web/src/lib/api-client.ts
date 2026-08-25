@@ -128,6 +128,12 @@ export interface EmailVerificationResult {
 	readonly emailSent?: boolean;
 }
 
+export interface ConfirmPasswordResetResult {
+	readonly status: "CONTINUE_RESET";
+	readonly email: string;
+	readonly resetTicket: string;
+}
+
 async function authed<T>(path: string, token: string): Promise<T> {
 	let response: Response;
 	try {
@@ -196,6 +202,22 @@ export const backendApi = {
 
 	loginWithToken: (accessToken: string) =>
 		post<SchoolLoginResult>("/school/login", { accessToken }),
+
+	/** Forgot-password step 1: email a 6-digit code to an existing password account. */
+	forgotPassword: (email: string) =>
+		post<StartVerificationResult>("/school/forgot-password", { email }),
+
+	/** Step 2: check the code and get the ticket `resetPassword` requires. */
+	confirmPasswordReset: (email: string, code: string) =>
+		post<ConfirmPasswordResetResult>("/school/reset-password/confirm", { email, code }),
+
+	/** Step 3: set the new password, authorized by the ticket `confirmPasswordReset` returned. */
+	resetPassword: (email: string, resetTicket: string, newPassword: string) =>
+		post<{ status: "PASSWORD_RESET" }>("/school/reset-password", {
+			email,
+			resetTicket,
+			newPassword,
+		}),
 
 	/** City and state from a pincode, so a school never types them. */
 	async lookupPincode(pincode: string): Promise<PincodeLocation> {

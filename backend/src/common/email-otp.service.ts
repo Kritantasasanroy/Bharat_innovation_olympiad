@@ -10,15 +10,18 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 5;
 const SEND_WINDOW_MS = 15 * 60 * 1000;
 
-export type EmailOtpKind = 'SCHOOL' | 'PARTNER';
+export type EmailOtpKind = 'SCHOOL' | 'PARTNER' | 'SCHOOL_RESET' | 'PARTNER_RESET';
 
 /**
  * Email verify-first, by 6-digit code — the same OTP shape as student
  * registration's `PhoneOtpService`, just delivered by email instead of SMS.
  * Shared by `SchoolService` and `PartnerService`'s self-service `apply()`
- * entry points; each owns interpreting the result (duplicate-application
- * checks, minting the post-verify `verificationTicket`), this just proves
- * control of the address.
+ * entry points (kinds `SCHOOL`/`PARTNER`) and their forgot-password flows
+ * (kinds `SCHOOL_RESET`/`PARTNER_RESET`); each owns interpreting the result
+ * (duplicate-application checks, minting the post-verify ticket), this just
+ * proves control of the address. The `_RESET` kinds are namespaced apart from
+ * their non-reset counterpart so a code sent for one purpose can never be
+ * replayed to complete the other.
  */
 @Injectable()
 export class EmailOtpService {
@@ -34,6 +37,19 @@ export class EmailOtpService {
     /** Uniform over 000000–999999; Math.random is not acceptable for a credential. */
     private generateCode(): string {
         return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+    }
+
+    private sendCode(kind: EmailOtpKind, email: string, code: string): Promise<boolean> {
+        switch (kind) {
+            case 'SCHOOL':
+                return this.notifications.sendSchoolStartVerification(email, { code });
+            case 'PARTNER':
+                return this.notifications.sendPartnerStartVerification(email, { code });
+            case 'SCHOOL_RESET':
+                return this.notifications.sendSchoolPasswordResetCode(email, { code });
+            case 'PARTNER_RESET':
+                return this.notifications.sendPartnerPasswordResetCode(email, { code });
+        }
     }
 
     async sendOtp(kind: EmailOtpKind, rawEmail: string): Promise<{ sent: boolean; expiresInSeconds: number }> {
@@ -60,10 +76,7 @@ export class EmailOtpService {
             data: { kind, email, codeHash: this.hash(code), expiresAt },
         });
 
-        const emailSent =
-            kind === 'SCHOOL'
-                ? await this.notifications.sendSchoolStartVerification(email, { code })
-                : await this.notifications.sendPartnerStartVerification(email, { code });
+        const emailSent = await this.sendCode(kind, email, code);
 
         return { sent: emailSent, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };
     }

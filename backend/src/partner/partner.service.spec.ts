@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { issueActivationTicket } from '../common/activation-ticket';
 import type { EmailOtpService } from '../common/email-otp.service';
@@ -101,6 +101,13 @@ function createTestContext() {
         ),
         sendPartnerRevoked: jest.fn(
             (_to: string, _vars: { contactPerson: string; orgName: string; reason: string }): Promise<boolean> =>
+                Promise.resolve(true),
+        ),
+        sendPartnerPasswordResetCode: jest.fn(
+            (_to: string, _vars: { code: string }): Promise<boolean> => Promise.resolve(true),
+        ),
+        sendPartnerPasswordChanged: jest.fn(
+            (_to: string, _vars: { contactPerson: string; orgName: string }): Promise<boolean> =>
                 Promise.resolve(true),
         ),
     };
@@ -311,5 +318,71 @@ describe('apply (self-service, verify-first)', () => {
             accessToken: 'session.jwt',
             partner: { id: 'partner-1' },
         });
+    });
+});
+
+describe('forgotPassword + confirmPasswordReset + resetPassword', () => {
+    async function applyAndApprove(service: ReturnType<typeof createTestContext>['service'], rows: PartnerRequestRow[]) {
+        await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.email) });
+        const request = rows[0];
+        if (!request) throw new Error('test fixture request missing');
+        await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+        return request;
+    }
+
+    it('rejects an unknown email', async () => {
+        const { service } = createTestContext();
+        await expect(service.forgotPassword('nobody@example.com')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('sends the OTP scoped to PARTNER_RESET, distinct from the application OTP', async () => {
+        const { service, rows, emailOtp } = createTestContext();
+        await applyAndApprove(service, rows);
+
+        await service.forgotPassword(APPLICATION.email);
+
+        expect(emailOtp.sendOtp).toHaveBeenCalledWith('PARTNER_RESET', APPLICATION.email.toLowerCase());
+    });
+
+    it('the full round trip changes the password: old one stops working, new one signs in', async () => {
+        const { service, rows, notifications } = createTestContext();
+        await applyAndApprove(service, rows);
+
+        await service.forgotPassword(APPLICATION.email);
+        const confirmed = await service.confirmPasswordReset(APPLICATION.email, '123456');
+        expect(confirmed.status).toBe('CONTINUE_RESET');
+
+        const newPassword = 'a brand new correct horse';
+        await expect(
+            service.resetPassword(APPLICATION.email, confirmed.resetTicket, newPassword),
+        ).resolves.toEqual({ status: 'PASSWORD_RESET' });
+        expect(notifications.sendPartnerPasswordChanged).toHaveBeenCalledTimes(1);
+
+        await expect(
+            service.login({ email: APPLICATION.email, password: APPLICATION.password }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(
+            service.login({ email: APPLICATION.email, password: newPassword }),
+        ).resolves.toMatchObject({ accessToken: 'session.jwt' });
+    });
+
+    it('rejects a reset ticket minted for a different email', async () => {
+        const { service, rows } = createTestContext();
+        await applyAndApprove(service, rows);
+        await service.forgotPassword(APPLICATION.email);
+        const confirmed = await service.confirmPasswordReset(APPLICATION.email, '123456');
+
+        await expect(
+            service.resetPassword('someone-else@example.com', confirmed.resetTicket, 'a brand new password'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('an activation ticket cannot be replayed as a reset ticket', async () => {
+        const { service, rows } = createTestContext();
+        await applyAndApprove(service, rows);
+
+        await expect(
+            service.resetPassword(APPLICATION.email, ticketFor(APPLICATION.email), 'a brand new password'),
+        ).rejects.toBeInstanceOf(BadRequestException);
     });
 });

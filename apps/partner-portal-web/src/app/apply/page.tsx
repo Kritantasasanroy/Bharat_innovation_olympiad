@@ -362,6 +362,9 @@ function DetailsStep({
 							minLength={8}
 							maxLength={128}
 							autoComplete="new-password"
+							autoCapitalize="none"
+							autoCorrect="off"
+							spellCheck={false}
 							placeholder="At least 8 characters"
 							value={form.password}
 							onChange={(event) => setForm({ ...form, password: event.target.value })}

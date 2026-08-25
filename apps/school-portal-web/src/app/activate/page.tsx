@@ -309,6 +309,11 @@ function DetailsStep({
 
 		const form = new FormData(event.currentTarget);
 		const value = (name: string) => String(form.get(name) ?? "").trim();
+		// Not trimmed: login sends the password exactly as typed, so trimming it
+		// here would silently hash a different string than what the coordinator
+		// re-types at sign-in whenever it has incidental leading/trailing
+		// whitespace (common from mobile keyboards or a pasted password).
+		const rawPassword = String(form.get("password") ?? "");
 
 		try {
 			// A partner's onboarding link leaves `?ref=CODE` in localStorage;
@@ -324,7 +329,7 @@ function DetailsStep({
 				coordinatorName: value("coordinatorName"),
 				coordinatorEmail: ticket.email,
 				coordinatorPhone: value("coordinatorPhone"),
-				password: value("password"),
+				password: rawPassword,
 				verificationTicket: ticket.ticket,
 				...(referralCode ? { referralCode } : {}),
 			});
@@ -462,6 +467,9 @@ function DetailsStep({
 							minLength={8}
 							maxLength={128}
 							autoComplete="new-password"
+							autoCapitalize="none"
+							autoCorrect="off"
+							spellCheck={false}
 							placeholder="At least 8 characters"
 						/>
 					</div>
