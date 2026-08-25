@@ -869,25 +869,14 @@ enum AttributionRule {
   LINK_ONLY
 }
 
-enum CommissionStatementStatus {
-  ISSUED
-}
-
-enum PayoutStatus {
-  PENDING
-  SIGNED_OFF
-  RELEASED
-}
-
 model Partner {
-  id                String        @id
-  orgName           String
-  contactPerson     String
-  email             String
-  phone             String
-  commissionRatePct Int
-  status            PartnerStatus @default(PENDING)
-  createdAt         DateTime      @default(now()) @db.Timestamp(3)
+  id            String        @id
+  orgName       String
+  contactPerson String
+  email         String
+  phone         String
+  status        PartnerStatus @default(PENDING)
+  createdAt     DateTime      @default(now()) @db.Timestamp(3)
 }
 
 model PartnerApplication {
@@ -928,31 +917,6 @@ model AttributionRecord {
   createdAt      DateTime          @default(now()) @db.Timestamp(3)
 
   @@unique([partnerId, studentId, registrationId], map: "attribution_partner_student_registration_key")
-}
-
-model CommissionStatement {
-  id            String                    @id
-  partnerId     String
-  period        String
-  version       Int
-  lineItemsJson Json
-  totalPaise    Int
-  status        CommissionStatementStatus @default(ISSUED)
-  issuedAt      DateTime                  @default(now()) @db.Timestamp(3)
-
-  @@unique([partnerId, period, version], map: "statement_partner_period_version_key")
-}
-
-model PayoutLedgerEntry {
-  id                     String       @id
-  partnerId              String
-  statementId            String
-  amountPaise            Int
-  status                 PayoutStatus @default(PENDING)
-  financeSignOffApprover String?
-  financeSignOffAt       DateTime?    @db.Timestamp(3)
-  reason                 String?
-  createdAt              DateTime     @default(now()) @db.Timestamp(3)
 }
 
 model PartnerInstitutionAssignment {
