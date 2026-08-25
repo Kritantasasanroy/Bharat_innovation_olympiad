@@ -166,7 +166,7 @@ export interface PartnerApplyInput {
 	readonly email: string;
 	readonly phone: string;
 	readonly password: string;
-	/** Proof the contact email was already confirmed — see `verifyEmail`. */
+	/** Proof the contact email was already confirmed — see `confirmVerification`. */
 	readonly verificationTicket: string;
 }
 
@@ -182,12 +182,22 @@ export interface PartnerApplicationResult {
 	readonly emailSent: boolean;
 }
 
+export interface StartVerificationResult {
+	readonly sent: boolean;
+	readonly expiresInSeconds: number;
+}
+
+export interface ConfirmVerificationResult {
+	readonly status: "CONTINUE_APPLICATION";
+	readonly email: string;
+	readonly submissionTicket: string;
+}
+
+/** Legacy link-based confirmation — kept only for any application submitted before verify-first shipped. */
 export interface EmailVerificationResult {
-	readonly status: "PENDING" | "ALREADY_VERIFIED" | "CONTINUE_APPLICATION";
+	readonly status: "PENDING" | "ALREADY_VERIFIED";
 	readonly email: string;
 	readonly emailSent?: boolean;
-	/** Present only when `status` is `CONTINUE_APPLICATION` — pass to `apply()`. */
-	readonly submissionTicket?: string;
 }
 
 /** NestJS error envelope: `{ statusCode, message: string | string[], error }`. */
@@ -238,14 +248,19 @@ async function backendRequest<T>(
 
 /** Partner authentication against the legacy backend (public — no token needed). */
 export const backendApi = {
-	/** Step 1 of application: confirm the contact email before any org details are collected. */
+	/** Step 1 of application: email the applicant a 6-digit code before any org details are collected. */
 	startVerification: (email: string) =>
-		backendRequest<{ status: "CHECK_INBOX" }>("/partner/verification/start", { email }),
+		backendRequest<StartVerificationResult>("/partner/verification/start", { email }),
 
-	/** Step 2: the full application, authorized by the ticket `verifyEmail` returned. */
+	/** Step 2: check the code and get the ticket `apply()` requires. */
+	confirmVerification: (email: string, code: string) =>
+		backendRequest<ConfirmVerificationResult>("/partner/verification/confirm", { email, code }),
+
+	/** Step 3: the full application, authorized by the ticket `confirmVerification` returned. */
 	apply: (input: PartnerApplyInput) =>
 		backendRequest<PartnerApplicationResult>("/partner/apply", input),
 
+	/** Legacy link-based confirmation, kept only for any application submitted before verify-first shipped. */
 	verifyEmail: (token: string) =>
 		backendRequest<EmailVerificationResult>("/partner/verify-email", { token }),
 

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import {
+    ConfirmEmailOtpDto,
     ResendEmailVerificationDto,
     VerifyEmailDto,
 } from '../common/dto/email-verification.dto';
@@ -23,14 +24,21 @@ export class PartnerController {
     constructor(private partnerService: PartnerService) {}
 
     /**
-     * PUBLIC — step 1 of self-service application: confirm the contact email
-     * before any organisation details are collected. Succeeding hands back a
-     * `verificationTicket` (via `/partner/verify-email`) that `partner/apply`
-     * requires.
+     * PUBLIC — step 1 of self-service application: email the contact a
+     * 6-digit code before any organisation details are collected.
      */
     @Post('partner/verification/start')
     startVerification(@Body() dto: ResendEmailVerificationDto) {
         return this.partnerService.startVerification(dto.email);
+    }
+
+    /**
+     * PUBLIC — step 2: check the code and hand back the `verificationTicket`
+     * that `partner/apply` requires.
+     */
+    @Post('partner/verification/confirm')
+    confirmVerification(@Body() dto: ConfirmEmailOtpDto) {
+        return this.partnerService.confirmVerification(dto.email, dto.code);
     }
 
     /** PUBLIC — a brand-new partner requests access (no token). */
@@ -45,13 +53,13 @@ export class PartnerController {
         return this.partnerService.login(dto);
     }
 
-    /** PUBLIC — confirm the contact email before staff review. */
+    /** PUBLIC — legacy link-based confirmation, kept for any application submitted before verify-first shipped. */
     @Post('partner/verify-email')
     verifyEmail(@Body() dto: VerifyEmailDto) {
         return this.partnerService.verifyEmail(dto.token);
     }
 
-    /** PUBLIC — resend without revealing whether an address has an application. */
+    /** PUBLIC — resend on the legacy link flow (see `verify-email`). */
     @Post('partner/resend-verification')
     resendVerification(@Body() dto: ResendEmailVerificationDto) {
         return this.partnerService.resendVerification(dto.email);

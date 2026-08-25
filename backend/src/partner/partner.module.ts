@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { EmailOtpService } from '../common/email-otp.service';
 import { getJwtSecret } from '../common/jwt-secret';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ResultsModule } from '../results/results.module';
@@ -31,6 +32,7 @@ import { PartnerService } from './partner.service';
         PartnerJwtGuard,
         PartnerDirectoryService,
         PartnerPortalService,
+        EmailOtpService,
     ],
     // Exported so AuthModule (signup) and PaymentModule (paid conversion) can
     // fire best-effort referral attribution into the partner engine, and so the

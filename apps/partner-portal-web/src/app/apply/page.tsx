@@ -8,6 +8,7 @@ import {
 	clearActivationTicket,
 	getActivationTicket,
 	type StoredActivationTicket,
+	setActivationTicket,
 } from "../../lib/activation-ticket";
 import { ApiError, backendApi } from "../../lib/api-client";
 
@@ -15,10 +16,10 @@ import { ApiError, backendApi } from "../../lib/api-client";
  * PUBLIC partner access request, verify-first: the applicant confirms their
  * contact email *before* any organisation details are collected, not after.
  *
- * Step 1 ({@link StartStep}) takes only the email and sends a confirmation
- * link. Clicking it lands on `/verify`, which stores a short-lived
- * `verificationTicket` and sends the applicant back here —
- * `getActivationTicket()` finding one is what switches this page to step 2
+ * Step 1 ({@link StartStep}) is the same OTP shape as student registration:
+ * enter the contact email, get a 6-digit code by mail, enter it right here —
+ * no separate page to visit. Confirming stores a short-lived
+ * `verificationTicket`, which is what switches this page to step 2
  * ({@link DetailsStep}), the full application form. Staff then grant access
  * from the admin Partner Management page; nothing is granted here.
  *
@@ -49,7 +50,13 @@ export default function ApplyPage() {
 			}}
 		/>
 	) : (
-		<StartStep expired={expired} />
+		<StartStep
+			expired={expired}
+			onVerified={(confirmed) => {
+				setExpired(false);
+				setTicket(confirmed);
+			}}
+		/>
 	);
 }
 
@@ -73,20 +80,29 @@ function Chrome({ children }: { children: ReactNode }) {
 	);
 }
 
-/** Step 1 — prove control of the contact email before anything else. */
-function StartStep({ expired }: { expired: boolean }) {
+/** Step 1 — prove control of the contact email, by OTP, before anything else. */
+function StartStep({
+	expired,
+	onVerified,
+}: {
+	expired: boolean;
+	onVerified: (ticket: StoredActivationTicket) => void;
+}) {
+	const [phase, setPhase] = useState<"email" | "code">("email");
 	const [email, setEmail] = useState("");
+	const [code, setCode] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [sent, setSent] = useState(false);
+	const [resending, setResending] = useState(false);
+	const [resent, setResent] = useState(false);
 
-	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+	async function sendCode(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		setSubmitting(true);
 		setError(null);
 		try {
 			await backendApi.startVerification(email.trim());
-			setSent(true);
+			setPhase("code");
 		} catch (cause) {
 			setError(cause instanceof ApiError ? cause.message : "Could not submit the request.");
 		} finally {
@@ -94,31 +110,101 @@ function StartStep({ expired }: { expired: boolean }) {
 		}
 	}
 
-	if (sent) {
+	async function confirmCode(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setSubmitting(true);
+		setError(null);
+		try {
+			const result = await backendApi.confirmVerification(email.trim(), code.trim());
+			const confirmed: StoredActivationTicket = {
+				ticket: result.submissionTicket,
+				email: result.email,
+			};
+			setActivationTicket(confirmed.ticket, confirmed.email);
+			onVerified(confirmed);
+		} catch (cause) {
+			setError(cause instanceof ApiError ? cause.message : "That code didn't work. Try again.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	async function resendCode() {
+		setResending(true);
+		setError(null);
+		setResent(false);
+		try {
+			await backendApi.startVerification(email.trim());
+			setResent(true);
+		} catch (cause) {
+			setError(cause instanceof ApiError ? cause.message : "Could not resend the code. Try again.");
+		} finally {
+			setResending(false);
+		}
+	}
+
+	if (phase === "code") {
 		return (
 			<Chrome>
-				<div className="card verification-card">
+				<div className="page-header">
 					<p className="eyebrow">Step 1 of 2</p>
-					<h1>Confirm your email</h1>
-					<p className="muted">
-						We sent a confirmation link to <strong>{email.trim()}</strong>. Open it to prove you own
-						this address — you&apos;ll fill in your organisation&apos;s details right after.
+					<h1>Enter your code</h1>
+					<p>
+						We sent a 6-digit code to <strong>{email.trim()}</strong>. Enter it below — you&apos;ll
+						fill in your organisation&apos;s details right after.
 					</p>
-					<div className="verification-status verification-status--success" role="status">
-						<strong>Check your inbox.</strong>
-						<span>
-							Links expire after 24 hours. Check spam or junk mail before requesting another.
-						</span>
-					</div>
-					<div className="inline">
-						<Link href="/verify" className="button">
-							Open verification page
-						</Link>
-						<Link href="/login" className="button button--secondary">
-							Already approved? Sign in
-						</Link>
+				</div>
+				<div className="card" style={{ maxWidth: 480 }}>
+					<form className="form-grid" onSubmit={confirmCode} style={{ maxWidth: "none" }}>
+						<div>
+							<label htmlFor="code">6-digit code</label>
+							<input
+								id="code"
+								inputMode="numeric"
+								maxLength={6}
+								autoComplete="one-time-code"
+								required
+								value={code}
+								onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+								placeholder="123456"
+							/>
+						</div>
+						{error ? <div className="notice notice--error">{error}</div> : null}
+						{resent ? (
+							<div className="notice notice--success" role="status">
+								A fresh code is on its way.
+							</div>
+						) : null}
+						<button type="submit" className="button" disabled={submitting || code.length !== 6}>
+							{submitting ? "Checking…" : "Continue"}
+						</button>
+					</form>
+					<div className="inline" style={{ marginTop: "1rem" }}>
+						<button
+							type="button"
+							className="button button--secondary"
+							onClick={resendCode}
+							disabled={resending}
+						>
+							{resending ? "Sending…" : "Resend code"}
+						</button>
+						<button
+							type="button"
+							className="button button--secondary"
+							onClick={() => {
+								setPhase("email");
+								setCode("");
+								setError(null);
+								setResent(false);
+							}}
+						>
+							Use a different email
+						</button>
 					</div>
 				</div>
+				<p className="muted" style={{ marginTop: "1rem" }}>
+					Already approved? <Link href="/login">Sign in</Link>.
+				</p>
 			</Chrome>
 		);
 	}
@@ -128,18 +214,18 @@ function StartStep({ expired }: { expired: boolean }) {
 			<div className="page-header">
 				<h1>Request partner access</h1>
 				<p>
-					Two steps: confirm your contact email, then fill in your organisation&apos;s details. Once
-					approved, sign in and start referring institutions and students.
+					Two steps: confirm your contact email with a code, then fill in your organisation&apos;s
+					details. Once approved, sign in and start referring institutions and students.
 				</p>
 			</div>
 			{expired ? (
 				<div className="notice notice--error" style={{ maxWidth: 480, marginBottom: "1rem" }}>
-					Your email confirmation expired before you finished the form. Send a new link and try
+					Your email confirmation expired before you finished the form. Send a new code and try
 					again.
 				</div>
 			) : null}
 			<div className="card" style={{ maxWidth: 480 }}>
-				<form className="form-grid" onSubmit={handleSubmit} style={{ maxWidth: "none" }}>
+				<form className="form-grid" onSubmit={sendCode} style={{ maxWidth: "none" }}>
 					<div>
 						<label htmlFor="email">Email</label>
 						<input
@@ -154,7 +240,7 @@ function StartStep({ expired }: { expired: boolean }) {
 					</div>
 					{error ? <div className="notice notice--error">{error}</div> : null}
 					<button type="submit" className="button" disabled={submitting || !email.trim()}>
-						{submitting ? "Sending…" : "Send confirmation link"}
+						{submitting ? "Sending…" : "Send code"}
 					</button>
 				</form>
 			</div>

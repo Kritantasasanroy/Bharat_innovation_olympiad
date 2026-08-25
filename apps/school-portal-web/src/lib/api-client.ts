@@ -81,8 +81,19 @@ export interface SchoolApplyInput {
 	readonly referralCode?: string;
 	/** Enables the email + password sign-in option alongside the access token. */
 	readonly password: string;
-	/** Proof the coordinator email was already confirmed — see `verifyEmail`. */
+	/** Proof the coordinator email was already confirmed — see `confirmVerification`. */
 	readonly verificationTicket: string;
+}
+
+export interface StartVerificationResult {
+	readonly sent: boolean;
+	readonly expiresInSeconds: number;
+}
+
+export interface ConfirmVerificationResult {
+	readonly status: "CONTINUE_APPLICATION";
+	readonly email: string;
+	readonly submissionTicket: string;
 }
 
 export interface PincodeLocation {
@@ -110,12 +121,11 @@ export interface SchoolApplicationResult {
 	readonly emailSent: boolean;
 }
 
+/** Legacy link-based confirmation — only for a school a partner submitted on the coordinator's behalf. */
 export interface EmailVerificationResult {
-	readonly status: "PENDING" | "ALREADY_VERIFIED" | "CONTINUE_APPLICATION";
+	readonly status: "PENDING" | "ALREADY_VERIFIED";
 	readonly email: string;
 	readonly emailSent?: boolean;
-	/** Present only when `status` is `CONTINUE_APPLICATION` — pass to `apply()`. */
-	readonly submissionTicket?: string;
 }
 
 async function authed<T>(path: string, token: string): Promise<T> {
@@ -163,13 +173,18 @@ async function authedPost<T>(path: string, token: string, body: unknown): Promis
 }
 
 export const backendApi = {
-	/** Step 1 of activation: confirm the coordinator email before any school details are collected. */
+	/** Step 1 of activation: email the coordinator a 6-digit code before any school details are collected. */
 	startVerification: (email: string) =>
-		post<{ status: "CHECK_INBOX" }>("/school/verification/start", { email }),
+		post<StartVerificationResult>("/school/verification/start", { email }),
 
-	/** Step 2: the full application, authorized by the ticket `verifyEmail` returned. */
+	/** Step 2: check the code and get the ticket `apply()` requires. */
+	confirmVerification: (email: string, code: string) =>
+		post<ConfirmVerificationResult>("/school/verification/confirm", { email, code }),
+
+	/** Step 3: the full application, authorized by the ticket `confirmVerification` returned. */
 	apply: (input: SchoolApplyInput) => post<SchoolApplicationResult>("/school/apply", input),
 
+	/** Legacy link-based confirmation, only for a school a partner submitted on the coordinator's behalf. */
 	verifyEmail: (token: string) => post<EmailVerificationResult>("/school/verify-email", { token }),
 
 	resendVerification: (email: string) =>

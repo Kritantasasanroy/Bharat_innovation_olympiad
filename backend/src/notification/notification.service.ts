@@ -320,9 +320,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     /** The email-verify-first step, before any org details exist to greet the reader with. */
-    async sendPartnerStartVerification(to: string, vars: { token: string }): Promise<boolean> {
-        const url = `${this.partnerPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
-        return this.deliver(to, partnerStartVerificationEmail({ verificationUrl: url }));
+    async sendPartnerStartVerification(to: string, vars: { code: string }): Promise<boolean> {
+        return this.deliver(to, partnerStartVerificationEmail({ code: vars.code }));
     }
 
     async sendPartnerApplicationReceived(to: string, contactPerson: string, orgName: string): Promise<boolean> {
@@ -405,9 +404,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     /** The email-verify-first step, before any school/coordinator details exist to greet the reader with. */
-    async sendSchoolStartVerification(to: string, vars: { token: string }): Promise<boolean> {
-        const url = `${this.schoolPortalUrl}/verify?token=${encodeURIComponent(vars.token)}`;
-        return this.deliver(to, schoolStartVerificationEmail({ verificationUrl: url }));
+    async sendSchoolStartVerification(to: string, vars: { code: string }): Promise<boolean> {
+        return this.deliver(to, schoolStartVerificationEmail({ code: vars.code }));
     }
 
     async sendSchoolApplicationReceived(to: string, coordinatorName: string, schoolName: string): Promise<boolean> {

@@ -681,40 +681,38 @@ model SchoolRequest {
   @@index([status])
 }
 
-enum PreActivationKind {
+enum EmailOtpKind {
   SCHOOL
   PARTNER
 }
 
 /// The email-verify-first step of self-service onboarding: a coordinator or
-/// partner contact confirms their address *before* filling in the rest of the
-/// application. Deliberately a standalone table rather than a draft row on
-/// `SchoolRequest`/`PartnerRequest` — those tables are the staff review queue,
-/// and a half-finished, not-yet-submitted application must never appear there.
+/// partner contact enters a 6-digit code emailed to them *before* filling in
+/// the rest of the application — the same OTP pattern as student registration
+/// (`PhoneOtp`), just by email instead of SMS. Deliberately a standalone table
+/// rather than a draft row on `SchoolRequest`/`PartnerRequest` — those tables
+/// are the staff review queue, and a half-finished, not-yet-submitted
+/// application must never appear there.
 ///
-/// Confirming a token here does not persist a session or a ticket: `apply()`
+/// Confirming a code here does not persist a session or a ticket: `apply()`
 /// is authorized by a short-lived, self-verifying `verificationTicket` minted
 /// at confirm time (see `common/activation-ticket.ts`) and never written to
-/// the database, so a row here only ever tracks the emailing step itself.
-model PreActivationVerification {
-  id   String            @id @default(uuid())
-  kind PreActivationKind
+/// the database, so a row here only ever tracks the OTP itself.
+model EmailOtp {
+  id   String       @id @default(uuid())
+  kind EmailOtpKind
   email String
 
-  verifiedAt DateTime?
-
-  /// Digest of the current verification token; the raw token is never persisted.
-  tokenHash      String    @unique
-  tokenExpiresAt DateTime
-  tokenSentAt    DateTime
-  tokenUsedAt    DateTime?
-
+  /// SHA-256 of the code — a leaked DB row must not hand over a live code.
+  codeHash  String
+  expiresAt DateTime
+  /// Set once redeemed; a code is single-use.
+  consumedAt DateTime?
+  /// Wrong guesses so far. Caps brute-forcing a 6-digit code.
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  /// At most one live verification per address per flow — a fresh "start" call
-  /// overwrites it rather than accumulating rows.
-  @@unique([kind, email])
+  @@index([kind, email, expiresAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { issueActivationTicket } from '../common/activation-ticket';
 import { generateAccessToken } from '../common/access-token';
+import type { EmailOtpService } from '../common/email-otp.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import type { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
@@ -82,29 +83,12 @@ type UserRow = {
 
 type AuditRow = Record<string, unknown>;
 
-type PreActivationRow = {
-    id: string;
-    kind: 'SCHOOL' | 'PARTNER';
-    email: string;
-    verifiedAt: Date | null;
-    tokenHash: string;
-    tokenExpiresAt: Date;
-    tokenSentAt: Date;
-    tokenUsedAt: Date | null;
-};
-
 type FakePrisma = {
     schoolRequest: {
         findUnique(args: StoreArgs): Promise<SchoolRequestRow | null>;
         findMany(args?: StoreArgs): Promise<readonly SchoolRequestRow[]>;
         create(args: StoreArgs): Promise<SchoolRequestRow>;
         update(args: StoreArgs): Promise<SchoolRequestRow>;
-        updateMany(args: StoreArgs): Promise<{ count: number }>;
-    };
-    preActivationVerification: {
-        findUnique(args: StoreArgs): Promise<PreActivationRow | null>;
-        create(args: StoreArgs): Promise<PreActivationRow>;
-        update(args: StoreArgs): Promise<PreActivationRow>;
         updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
     school: {
@@ -158,7 +142,6 @@ function createFakeDb() {
     const schools: SchoolRow[] = [];
     const users: UserRow[] = [];
     const auditLogs: AuditRow[] = [];
-    const preActivations: PreActivationRow[] = [];
 
     const match = (row: Record<string, unknown>, where: Record<string, unknown> = {}) =>
         Object.entries(where).every(([key, value]) => {
@@ -281,40 +264,10 @@ function createFakeDb() {
                 return data;
             },
         },
-        preActivationVerification: {
-            findUnique: async ({ where = {} }: StoreArgs) =>
-                preActivations.find((row) => match(row, where)) ?? null,
-            create: async ({ data = {} }: StoreArgs) => {
-                const row: PreActivationRow = {
-                    id: nextId('preact'),
-                    kind: (data.kind as PreActivationRow['kind']) ?? 'SCHOOL',
-                    email: stringValue(data, 'email'),
-                    verifiedAt: dateValue(data, 'verifiedAt'),
-                    tokenHash: stringValue(data, 'tokenHash'),
-                    tokenExpiresAt: dateValue(data, 'tokenExpiresAt') ?? new Date(),
-                    tokenSentAt: dateValue(data, 'tokenSentAt') ?? new Date(),
-                    tokenUsedAt: dateValue(data, 'tokenUsedAt'),
-                };
-                preActivations.push(row);
-                return row;
-            },
-            update: async ({ where = {}, data = {} }: StoreArgs) => {
-                const row = preActivations.find((candidate) => match(candidate, where));
-                if (!row) throw new Error('test fixture row not found');
-                Object.assign(row, data);
-                return row;
-            },
-            updateMany: async ({ where = {}, data = {} }: StoreArgs) => {
-                const row = preActivations.find((candidate) => match(candidate, where));
-                if (!row) return { count: 0 };
-                Object.assign(row, data);
-                return { count: 1 };
-            },
-        },
         $transaction: async <T>(callback: (tx: FakePrisma) => Promise<T>) => callback(prisma),
     };
 
-    return { prisma, schoolRequests, schools, users, auditLogs, preActivations };
+    return { prisma, schoolRequests, schools, users, auditLogs };
 }
 
 type JwtDouble = { sign(payload: Record<string, unknown>, options?: Record<string, unknown>): string };
@@ -373,16 +326,51 @@ function createFakePartnerDirectory(): FakePartnerDirectory {
     };
 }
 
+/**
+ * A lightweight double, not a fake table: `EmailOtpService` gets its own
+ * dedicated coverage in `common/email-otp.service.spec.ts` (hashing, expiry,
+ * attempts, rate limiting). `SchoolService` only needs to be tested on how it
+ * interprets that contract — a duplicate/claimed email is still checked
+ * before ever calling this, and a valid code hands back the normalised email.
+ */
+function createFakeEmailOtp() {
+    const codes = new Map<string, string>();
+    return {
+        sendOtp: jest.fn(async (kind: string, email: string) => {
+            codes.set(`${kind}:${email.trim().toLowerCase()}`, '123456');
+            return { sent: true, expiresInSeconds: 600 };
+        }),
+        verifyOtp: jest.fn(async (kind: string, email: string, code: string) => {
+            const normalized = email.trim().toLowerCase();
+            const key = `${kind}:${normalized}`;
+            if (codes.get(key) !== code) {
+                throw new BadRequestException('This code is invalid or has expired. Request a new one.');
+            }
+            codes.delete(key);
+            return normalized;
+        }),
+    };
+}
+
 function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
     const db = createFakeDb();
     const notifications = notificationServiceStub();
     const partnerDirectory = createFakePartnerDirectory();
+    const emailOtp = createFakeEmailOtp();
     return {
         ...db,
         adminApi,
         notifications,
         partnerDirectory,
-        service: new SchoolService(db.prisma, jwt, adminApi, notifications, partnerDirectory),
+        emailOtp,
+        service: new SchoolService(
+            db.prisma,
+            jwt,
+            adminApi,
+            notifications,
+            partnerDirectory,
+            emailOtp as unknown as EmailOtpService,
+        ),
     };
 }
 
@@ -478,7 +466,7 @@ describe('apply (self-service, verify-first)', () => {
     });
 });
 
-describe('startVerification + verifyEmail (self-service, verify-first)', () => {
+describe('startVerification + confirmVerification (self-service, verify-first, OTP)', () => {
     it('rejects an email that already has an application, before any details are collected', async () => {
         const { service } = setup();
         await service.apply({ ...APPLICATION, verificationTicket: ticketFor(APPLICATION.coordinatorEmail) });
@@ -488,25 +476,35 @@ describe('startVerification + verifyEmail (self-service, verify-first)', () => {
         );
     });
 
-    it('confirming mints a ticket that apply() accepts, and only once', async () => {
-        const { service, notifications } = setup();
+    it('delegates the send to EmailOtpService, scoped to SCHOOL', async () => {
+        const { service, emailOtp } = setup();
 
         await service.startVerification(APPLICATION.coordinatorEmail);
-        const token = notifications.sendSchoolStartVerification.mock.calls[0][1].token;
 
-        const confirmed = await service.verifyEmail(token);
+        expect(emailOtp.sendOtp).toHaveBeenCalledWith('SCHOOL', APPLICATION.coordinatorEmail.toLowerCase());
+    });
+
+    it('confirming the right code mints a ticket that apply() accepts', async () => {
+        const { service } = setup();
+
+        await service.startVerification(APPLICATION.coordinatorEmail);
+        const confirmed = await service.confirmVerification(APPLICATION.coordinatorEmail, '123456');
+
         expect(confirmed.status).toBe('CONTINUE_APPLICATION');
-        if (confirmed.status !== 'CONTINUE_APPLICATION') throw new Error('unreachable');
-
         const result = await service.apply({
             ...APPLICATION,
             verificationTicket: confirmed.submissionTicket,
         });
         expect(result.status).toBe('PENDING');
+    });
 
-        // Re-clicking the same link a second time must not mint another ticket.
-        const replay = await service.verifyEmail(token);
-        expect(replay.status).toBe('ALREADY_VERIFIED');
+    it('rejects the wrong code', async () => {
+        const { service } = setup();
+        await service.startVerification(APPLICATION.coordinatorEmail);
+
+        await expect(
+            service.confirmVerification(APPLICATION.coordinatorEmail, '000000'),
+        ).rejects.toBeInstanceOf(BadRequestException);
     });
 });
 

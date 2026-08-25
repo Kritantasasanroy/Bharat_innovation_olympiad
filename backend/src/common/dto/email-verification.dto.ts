@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 
 export class VerifyEmailDto {
     @IsString()
@@ -10,4 +10,13 @@ export class VerifyEmailDto {
 export class ResendEmailVerificationDto {
     @IsEmail()
     email: string;
+}
+
+/** The email-verify-first step: check the 6-digit code sent to `email`. */
+export class ConfirmEmailOtpDto {
+    @IsEmail()
+    email: string;
+
+    @Matches(/^\d{6}$/, { message: 'Enter the 6-digit code.' })
+    code: string;
 }

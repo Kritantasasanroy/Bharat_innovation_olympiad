@@ -9,7 +9,6 @@ import {
     UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import type { PreActivationVerification } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
 import { issueActivationTicket, verifyActivationTicket } from '../common/activation-ticket';
@@ -20,6 +19,7 @@ import {
     openAccessToken,
     sealAccessToken,
 } from '../common/access-token';
+import { EmailOtpService } from '../common/email-otp.service';
 import {
     cooldownRemainingSeconds,
     createEmailVerificationChallenge,
@@ -78,6 +78,7 @@ export class PartnerService {
         private jwt: JwtService,
         private adminApi: PartnerAdminApiClient,
         private notifications: NotificationService,
+        private emailOtp: EmailOtpService,
     ) {}
 
     /**
@@ -130,10 +131,11 @@ export class PartnerService {
     }
 
     /**
-     * PUBLIC — step 1 of self-service application: prove control of the
-     * contact email before any organisation details are collected. Mirrors
-     * `resendVerification`'s cooldown/anti-enumeration behaviour, just against
-     * `PreActivationVerification` instead of an existing application.
+     * PUBLIC — step 1 of self-service application: send a 6-digit code to the
+     * contact email before any organisation details are collected — the same
+     * OTP shape as student registration, just by email instead of SMS. The
+     * duplicate-application check runs here too, so an applicant finds out
+     * before typing anything else, not after.
      */
     async startVerification(emailAddress: string) {
         const email = emailAddress.trim().toLowerCase();
@@ -145,52 +147,38 @@ export class PartnerService {
             );
         }
 
-        const now = new Date();
-        const existing = await this.prisma.preActivationVerification.findUnique({
-            where: { kind_email: { kind: 'PARTNER', email } },
-        });
-        if (existing && cooldownRemainingSeconds(existing.tokenSentAt, now) > 0) {
-            return { status: 'CHECK_INBOX' as const };
-        }
-
-        const challenge = createEmailVerificationChallenge(now);
-        const data = {
-            tokenHash: challenge.tokenHash,
-            tokenExpiresAt: challenge.expiresAt,
-            tokenSentAt: challenge.sentAt,
-            tokenUsedAt: null,
-            verifiedAt: null,
-        };
-        if (existing) {
-            await this.prisma.preActivationVerification.update({ where: { id: existing.id }, data });
-        } else {
-            await this.prisma.preActivationVerification.create({
-                data: { kind: 'PARTNER', email, ...data },
-            });
-        }
-
-        const emailSent = await this.notifications.sendPartnerStartVerification(email, {
-            token: challenge.rawToken,
-        });
-        return { status: 'CHECK_INBOX' as const, emailSent };
+        return this.emailOtp.sendOtp('PARTNER', email);
     }
 
+    /**
+     * PUBLIC — step 2 of self-service application: check the submitted code
+     * and, on success, mint the short-lived `verificationTicket` that
+     * `apply()` requires. There is no application yet to admit the applicant
+     * to — that only happens once they submit the full form.
+     */
+    async confirmVerification(emailAddress: string, code: string) {
+        const email = await this.emailOtp.verifyOtp('PARTNER', emailAddress, code);
+        return {
+            status: 'CONTINUE_APPLICATION' as const,
+            email,
+            submissionTicket: issueActivationTicket('PARTNER', email),
+        };
+    }
+
+    /**
+     * PUBLIC — confirm a contact email via the legacy link flow, kept only for
+     * any application submitted before verify-first shipped. A self-applying
+     * partner never reaches this now — they confirm inline with
+     * `confirmVerification` before submitting.
+     */
     async verifyEmail(rawToken: string) {
         const token = rawToken.trim();
         if (!token || token.length > 256) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
         }
-        const tokenHash = hashEmailVerificationToken(token);
-
-        // The verify-first step (`startVerification`) checks in here before the
-        // legacy "application already created, now confirm it" path below.
-        const pre = await this.prisma.preActivationVerification.findUnique({ where: { tokenHash } });
-        if (pre) {
-            return this.confirmPreActivation(pre);
-        }
 
         const request = await this.prisma.partnerRequest.findUnique({
-            where: { emailVerificationTokenHash: tokenHash },
+            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
         });
         if (!request) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
@@ -243,57 +231,12 @@ export class PartnerService {
     }
 
     /**
-     * The verify-first step's confirm: mints a short-lived `verificationTicket`
-     * instead of admitting the applicant to a staff review queue directly —
-     * there is no application yet for it to admit them to.
+     * PUBLIC — resend on the legacy link flow, kept only for any application
+     * submitted before verify-first shipped. A self-applying partner resends
+     * their OTP by calling `startVerification` again instead.
      */
-    private async confirmPreActivation(pre: PreActivationVerification) {
-        const now = new Date();
-        if (pre.tokenUsedAt) {
-            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
-        }
-        if (pre.tokenExpiresAt <= now) {
-            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
-        }
-
-        const claimed = await this.prisma.preActivationVerification.updateMany({
-            where: { id: pre.id, tokenUsedAt: null },
-            data: { tokenUsedAt: now, verifiedAt: now },
-        });
-        if (claimed.count === 0) {
-            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
-        }
-
-        return {
-            status: 'CONTINUE_APPLICATION' as const,
-            email: pre.email,
-            submissionTicket: issueActivationTicket('PARTNER', pre.email, now),
-        };
-    }
-
     async resendVerification(emailAddress: string) {
         const email = emailAddress.trim().toLowerCase();
-
-        const pre = await this.prisma.preActivationVerification.findUnique({
-            where: { kind_email: { kind: 'PARTNER', email } },
-        });
-        if (pre && !pre.tokenUsedAt) {
-            const now = new Date();
-            if (cooldownRemainingSeconds(pre.tokenSentAt, now) > 0) {
-                return { status: 'CHECK_INBOX' as const };
-            }
-            const challenge = createEmailVerificationChallenge(now);
-            await this.prisma.preActivationVerification.update({
-                where: { id: pre.id },
-                data: {
-                    tokenHash: challenge.tokenHash,
-                    tokenExpiresAt: challenge.expiresAt,
-                    tokenSentAt: challenge.sentAt,
-                },
-            });
-            await this.notifications.sendPartnerStartVerification(email, { token: challenge.rawToken });
-            return { status: 'CHECK_INBOX' as const };
-        }
 
         const request = await this.prisma.partnerRequest.findUnique({ where: { email } });
         if (!request || request.emailVerifiedAt || request.status !== 'PENDING') {

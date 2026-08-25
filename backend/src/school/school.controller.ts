@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import {
+    ConfirmEmailOtpDto,
     ResendEmailVerificationDto,
     VerifyEmailDto,
 } from '../common/dto/email-verification.dto';
@@ -16,14 +17,21 @@ export class SchoolController {
     constructor(private schoolService: SchoolService) {}
 
     /**
-     * PUBLIC — step 1 of self-service activation: confirm the coordinator email
-     * before any school details are collected. Succeeding hands back a
-     * `verificationTicket` (via `/school/verify-email`) that `school/apply`
-     * requires.
+     * PUBLIC — step 1 of self-service activation: email the coordinator a
+     * 6-digit code before any school details are collected.
      */
     @Post('school/verification/start')
     startVerification(@Body() dto: ResendEmailVerificationDto) {
         return this.schoolService.startVerification(dto.email);
+    }
+
+    /**
+     * PUBLIC — step 2: check the code and hand back the `verificationTicket`
+     * that `school/apply` requires.
+     */
+    @Post('school/verification/confirm')
+    confirmVerification(@Body() dto: ConfirmEmailOtpDto) {
+        return this.schoolService.confirmVerification(dto.email, dto.code);
     }
 
     /** PUBLIC — a school requests access (no credential yet). */
@@ -38,13 +46,13 @@ export class SchoolController {
         return this.schoolService.login(dto);
     }
 
-    /** PUBLIC — confirm the coordinator email before staff review. */
+    /** PUBLIC — legacy link-based confirmation, for a school a partner submitted on the coordinator's behalf. */
     @Post('school/verify-email')
     verifyEmail(@Body() dto: VerifyEmailDto) {
         return this.schoolService.verifyEmail(dto.token);
     }
 
-    /** PUBLIC — resend without revealing whether an address has an application. */
+    /** PUBLIC — resend on the legacy link flow (see `verify-email`). */
     @Post('school/resend-verification')
     resendVerification(@Body() dto: ResendEmailVerificationDto) {
         return this.schoolService.resendVerification(dto.email);

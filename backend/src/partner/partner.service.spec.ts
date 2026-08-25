@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { issueActivationTicket } from '../common/activation-ticket';
+import type { EmailOtpService } from '../common/email-otp.service';
 import { PartnerAdminApiClient } from './admin-api.client';
 import { PartnerService } from './partner.service';
 import { NotificationService } from '../notification/notification.service';
@@ -35,17 +36,6 @@ type PartnerRequestRow = {
 
 type VerificationVars = { contactPerson: string; orgName: string; token: string };
 
-type PreActivationRow = {
-    id: string;
-    kind: 'SCHOOL' | 'PARTNER';
-    email: string;
-    verifiedAt: Date | null;
-    tokenHash: string;
-    tokenExpiresAt: Date;
-    tokenSentAt: Date;
-    tokenUsedAt: Date | null;
-};
-
 function matches<T extends Record<string, unknown>>(row: T, where: Record<string, unknown>): boolean {
     return Object.entries(where).every(([key, value]) => {
         if (value && typeof value === 'object' && !(value instanceof Date)) {
@@ -60,10 +50,36 @@ function ticketFor(email: string): string {
     return issueActivationTicket('PARTNER', email.trim().toLowerCase());
 }
 
+/**
+ * A lightweight double, not a fake table: `EmailOtpService` gets its own
+ * dedicated coverage in `common/email-otp.service.spec.ts` (hashing, expiry,
+ * attempts, rate limiting). `PartnerService` only needs to be tested on how
+ * it interprets that contract — a duplicate-application email is still
+ * checked before ever calling this, and a valid code hands back the
+ * normalised email.
+ */
+function createFakeEmailOtp() {
+    const codes = new Map<string, string>();
+    return {
+        sendOtp: jest.fn(async (kind: string, email: string) => {
+            codes.set(`${kind}:${email.trim().toLowerCase()}`, '123456');
+            return { sent: true, expiresInSeconds: 600 };
+        }),
+        verifyOtp: jest.fn(async (kind: string, email: string, code: string) => {
+            const normalized = email.trim().toLowerCase();
+            const key = `${kind}:${normalized}`;
+            if (codes.get(key) !== code) {
+                throw new BadRequestException('This code is invalid or has expired. Request a new one.');
+            }
+            codes.delete(key);
+            return normalized;
+        }),
+    };
+}
+
 function createTestContext() {
     let nextId = 1;
     const rows: PartnerRequestRow[] = [];
-    const preActivations: PreActivationRow[] = [];
     const sendPartnerEmailVerification = jest.fn(
         (_to: string, _vars: VerificationVars): Promise<boolean> => Promise.resolve(true),
     );
@@ -135,36 +151,6 @@ function createTestContext() {
                 return { count: 1 };
             },
         },
-        preActivationVerification: {
-            findUnique: async ({ where }: { where: Record<string, unknown> }) =>
-                preActivations.find((row) => matches(row, where)) ?? null,
-            create: async ({ data }: { data: Partial<PreActivationRow> }) => {
-                const row: PreActivationRow = {
-                    id: `preact-${nextId++}`,
-                    kind: data.kind ?? 'PARTNER',
-                    email: data.email ?? '',
-                    verifiedAt: data.verifiedAt ?? null,
-                    tokenHash: data.tokenHash ?? '',
-                    tokenExpiresAt: data.tokenExpiresAt ?? new Date(),
-                    tokenSentAt: data.tokenSentAt ?? new Date(),
-                    tokenUsedAt: data.tokenUsedAt ?? null,
-                };
-                preActivations.push(row);
-                return row;
-            },
-            update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-                const row = preActivations.find((candidate) => matches(candidate, where));
-                if (!row) throw new Error('test fixture row not found');
-                Object.assign(row, data);
-                return row;
-            },
-            updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-                const row = preActivations.find((candidate) => matches(candidate, where));
-                if (!row) return { count: 0 };
-                Object.assign(row, data);
-                return { count: 1 };
-            },
-        },
         auditLog: {
             create: async (_input: unknown) => undefined,
         },
@@ -187,14 +173,17 @@ function createTestContext() {
         sign: jest.fn(() => 'session.jwt'),
     } as unknown as JwtService;
 
+    const emailOtp = createFakeEmailOtp();
+
     const service = new PartnerService(
         prisma,
         jwt,
         adminApi,
         notifications as unknown as NotificationService,
+        emailOtp as unknown as EmailOtpService,
     );
 
-    return { service, rows, preActivations, notifications, adminApi };
+    return { service, rows, emailOtp, notifications, adminApi };
 }
 
 const APPLICATION = {
@@ -205,7 +194,7 @@ const APPLICATION = {
     password: 'correct horse battery staple',
 };
 
-describe('startVerification + verifyEmail (verify-first)', () => {
+describe('startVerification + confirmVerification (verify-first, OTP)', () => {
     it('rejects an email that already has an application, before any details are collected', async () => {
         const { service, rows } = createTestContext();
         rows.push({
@@ -236,31 +225,32 @@ describe('startVerification + verifyEmail (verify-first)', () => {
         await expect(service.startVerification(APPLICATION.email)).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('confirming mints a ticket that apply() accepts, and only once', async () => {
-        const { service, notifications } = createTestContext();
+    it('delegates the send to EmailOtpService, scoped to PARTNER', async () => {
+        const { service, emailOtp } = createTestContext();
 
         await service.startVerification(APPLICATION.email);
-        const token = notifications.sendPartnerStartVerification.mock.calls[0]?.[1].token;
 
-        const confirmed = await service.verifyEmail(token);
-        expect(confirmed.status).toBe('CONTINUE_APPLICATION');
-        if (confirmed.status !== 'CONTINUE_APPLICATION') throw new Error('unreachable');
-
-        const result = await service.apply({ ...APPLICATION, verificationTicket: confirmed.submissionTicket });
-        expect(result.status).toBe('PENDING');
-
-        // Re-clicking the same link a second time must not mint another ticket.
-        const replay = await service.verifyEmail(token);
-        expect(replay.status).toBe('ALREADY_VERIFIED');
+        expect(emailOtp.sendOtp).toHaveBeenCalledWith('PARTNER', APPLICATION.email.toLowerCase());
     });
 
-    it('rejects an expired start-verification link', async () => {
-        const { service, preActivations, notifications } = createTestContext();
-        await service.startVerification(APPLICATION.email);
-        preActivations[0].tokenExpiresAt = new Date(Date.now() - 1);
-        const token = notifications.sendPartnerStartVerification.mock.calls[0]?.[1].token;
+    it('confirming the right code mints a ticket that apply() accepts', async () => {
+        const { service } = createTestContext();
 
-        await expect(service.verifyEmail(token)).rejects.toBeInstanceOf(BadRequestException);
+        await service.startVerification(APPLICATION.email);
+        const confirmed = await service.confirmVerification(APPLICATION.email, '123456');
+
+        expect(confirmed.status).toBe('CONTINUE_APPLICATION');
+        const result = await service.apply({ ...APPLICATION, verificationTicket: confirmed.submissionTicket });
+        expect(result.status).toBe('PENDING');
+    });
+
+    it('rejects the wrong code', async () => {
+        const { service } = createTestContext();
+        await service.startVerification(APPLICATION.email);
+
+        await expect(service.confirmVerification(APPLICATION.email, '000000')).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
     });
 });
 

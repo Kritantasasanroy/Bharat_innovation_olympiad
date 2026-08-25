@@ -277,16 +277,18 @@ export function partnerEmailVerificationEmail(vars: {
 /**
  * The very first step of partner onboarding, before any org details exist —
  * so unlike `partnerEmailVerificationEmail` above, there is no contact name or
- * org name to greet the reader with yet.
+ * org name to greet the reader with yet. A 6-digit code entered on the
+ * application page itself, not a link — the same OTP shape as student
+ * registration.
  */
-export function partnerStartVerificationEmail(vars: { verificationUrl: string }): RenderedEmail {
+export function partnerStartVerificationEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Confirm your email to apply for BIO partner access',
+        'Your BIO partner application code',
         'Confirm your email',
         `<p style="margin:0 0 12px;">Someone started a Bharat Innovation Olympiad partner application with this email address.</p>
-     <p style="margin:0 0 12px;">Confirm that you own it to continue — you'll fill in your organisation's details right after.</p>
-     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
-        { label: 'Confirm email address', url: vars.verificationUrl },
+     <p style="margin:0 0 12px;">Enter this code on the application page to continue — you'll fill in your organisation's details right after.</p>
+     ${factTable([factRow('Verification code', vars.code)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in 10 minutes. If you did not make this request, you can ignore this email.</p>`,
     );
 }
 
@@ -399,9 +401,11 @@ export function partnerSchoolStatusChangedEmail(vars: {
 
 // ── School lifecycle ─────────────────────────────────────────────────────
 //
-// A school has no password: the access token issued on approval is the only
-// credential a coordinator ever gets, so — unlike the partner mails above —
-// this one is not optional context, it's the only way in.
+// A partner-submitted school's coordinator has no password: the access token
+// issued on approval is the only credential they ever get, so — unlike the
+// partner mails above — the approval mail's token is not optional context for
+// them, it's the only way in. A self-applied coordinator additionally chose a
+// password at activation and can sign in with either.
 
 export function schoolEmailVerificationEmail(vars: {
     coordinatorName: string;
@@ -421,16 +425,18 @@ export function schoolEmailVerificationEmail(vars: {
 /**
  * The very first step of school activation, before any school or coordinator
  * details exist yet — so unlike `schoolEmailVerificationEmail` above, there is
- * no coordinator name or school name to greet the reader with.
+ * no coordinator name or school name to greet the reader with. A 6-digit code
+ * entered on the activation page itself, not a link — the same OTP shape as
+ * student registration.
  */
-export function schoolStartVerificationEmail(vars: { verificationUrl: string }): RenderedEmail {
+export function schoolStartVerificationEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Confirm your email to activate your school on BIO',
+        'Your BIO school activation code',
         'Confirm your email',
         `<p style="margin:0 0 12px;">Someone started a school activation on the Bharat Innovation Olympiad with this coordinator email address.</p>
-     <p style="margin:0 0 12px;">Confirm that you own it to continue — you'll fill in your school's details right after.</p>
-     <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
-        { label: 'Confirm email address', url: vars.verificationUrl },
+     <p style="margin:0 0 12px;">Enter this code on the activation page to continue — you'll fill in your school's details right after.</p>
+     ${factTable([factRow('Verification code', vars.code)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in 10 minutes. If you did not make this request, you can ignore this email.</p>`,
     );
 }
 

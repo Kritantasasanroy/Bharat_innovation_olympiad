@@ -22,6 +22,7 @@ import {
     randomCode,
     sealAccessToken,
 } from '../common/access-token';
+import { EmailOtpService } from '../common/email-otp.service';
 import {
     cooldownRemainingSeconds,
     createEmailVerificationChallenge,
@@ -107,18 +108,6 @@ type UserRecord = {
     isActive: boolean;
 };
 
-/** The email-verify-first step (PRD: "verify email, then submit activation"). */
-type PreActivationRecord = {
-    id: string;
-    kind: 'SCHOOL' | 'PARTNER';
-    email: string;
-    verifiedAt: Date | null;
-    tokenHash: string;
-    tokenExpiresAt: Date;
-    tokenSentAt: Date;
-    tokenUsedAt: Date | null;
-};
-
 type StoreArgs = {
     where?: Record<string, unknown>;
     data?: Record<string, unknown>;
@@ -153,12 +142,6 @@ type SchoolPersistence = SchoolTransactionStore & {
         create(args: StoreArgs): Promise<SchoolRequestRecord>;
         updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
-    preActivationVerification: {
-        findUnique(args: StoreArgs): Promise<PreActivationRecord | null>;
-        create(args: StoreArgs): Promise<PreActivationRecord>;
-        update(args: StoreArgs): Promise<PreActivationRecord>;
-        updateMany(args: StoreArgs): Promise<{ count: number }>;
-    };
     $transaction<T>(callback: (tx: SchoolTransactionStore) => Promise<T>): Promise<T>;
 };
 
@@ -185,6 +168,7 @@ export class SchoolService {
         @Inject(PartnerAdminApiClient) private adminApi: SchoolPartnerResolver,
         private notifications: NotificationService,
         @Inject(PartnerDirectoryService) private partnerDirectory: SchoolPartnerDirectory,
+        private emailOtp: EmailOtpService,
     ) {}
 
     /**
@@ -304,10 +288,11 @@ export class SchoolService {
     }
 
     /**
-     * PUBLIC — step 1 of self-service activation: prove control of the
-     * coordinator email before any school details are collected. Mirrors the
-     * existing `resendVerification` cooldown/anti-enumeration behaviour, just
-     * against `PreActivationVerification` instead of an existing application.
+     * PUBLIC — step 1 of self-service activation: send a 6-digit code to the
+     * coordinator email before any school details are collected — the same
+     * OTP shape as student registration, just by email instead of SMS. The
+     * duplicate/claimed-email checks run here too, so a coordinator finds out
+     * before typing anything else, not after.
      */
     async startVerification(emailAddress: string) {
         const coordinatorEmail = emailAddress.trim().toLowerCase();
@@ -325,53 +310,40 @@ export class SchoolService {
             );
         }
 
-        const now = new Date();
-        const existing = await this.prisma.preActivationVerification.findUnique({
-            where: { kind_email: { kind: 'SCHOOL', email: coordinatorEmail } },
-        });
-        if (existing && cooldownRemainingSeconds(existing.tokenSentAt, now) > 0) {
-            return { status: 'CHECK_INBOX' as const };
-        }
-
-        const challenge = createEmailVerificationChallenge(now);
-        const data = {
-            tokenHash: challenge.tokenHash,
-            tokenExpiresAt: challenge.expiresAt,
-            tokenSentAt: challenge.sentAt,
-            tokenUsedAt: null,
-            verifiedAt: null,
-        };
-        if (existing) {
-            await this.prisma.preActivationVerification.update({ where: { id: existing.id }, data });
-        } else {
-            await this.prisma.preActivationVerification.create({
-                data: { kind: 'SCHOOL', email: coordinatorEmail, ...data },
-            });
-        }
-
-        const emailSent = await this.notifications.sendSchoolStartVerification(coordinatorEmail, {
-            token: challenge.rawToken,
-        });
-        return { status: 'CHECK_INBOX' as const, emailSent };
+        return this.emailOtp.sendOtp('SCHOOL', coordinatorEmail);
     }
 
+    /**
+     * PUBLIC — step 2 of self-service activation: check the submitted code and,
+     * on success, mint the short-lived `verificationTicket` that `apply()`
+     * requires. There is no application yet to admit the coordinator to — that
+     * only happens once they submit the full form.
+     */
+    async confirmVerification(emailAddress: string, code: string) {
+        const coordinatorEmail = await this.emailOtp.verifyOtp('SCHOOL', emailAddress, code);
+        return {
+            status: 'CONTINUE_APPLICATION' as const,
+            email: coordinatorEmail,
+            submissionTicket: issueActivationTicket('SCHOOL', coordinatorEmail),
+        };
+    }
+
+    /**
+     * PUBLIC — confirm a coordinator email via the legacy link flow: only
+     * reachable when a partner submitted the school on the coordinator's
+     * behalf (`apply(dto, submittedByPartnerId)`), which still emails a
+     * confirmation link afterwards since the partner cannot prove control of
+     * someone else's inbox up front. A self-applying coordinator never reaches
+     * this — they confirm inline with `confirmVerification` before submitting.
+     */
     async verifyEmail(rawToken: string) {
         const token = rawToken.trim();
         if (!token || token.length > 256) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
         }
-        const tokenHash = hashEmailVerificationToken(token);
-
-        // The verify-first step (`startVerification`) checks in here before the
-        // legacy "application already created, now confirm it" path below —
-        // which still exists for the partner-submitted flow (see `apply`).
-        const pre = await this.prisma.preActivationVerification.findUnique({ where: { tokenHash } });
-        if (pre) {
-            return this.confirmPreActivation(pre);
-        }
 
         const request = await this.prisma.schoolRequest.findUnique({
-            where: { emailVerificationTokenHash: tokenHash },
+            where: { emailVerificationTokenHash: hashEmailVerificationToken(token) },
         });
         if (!request) {
             throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
@@ -427,57 +399,12 @@ export class SchoolService {
     }
 
     /**
-     * The verify-first step's confirm: mints a short-lived `verificationTicket`
-     * instead of admitting the coordinator to a staff review queue directly —
-     * there is no application yet for it to admit them to.
+     * PUBLIC — resend on the legacy link flow (partner-submitted schools only).
+     * A self-applying coordinator resends their OTP by calling
+     * `startVerification` again instead — see its doc comment.
      */
-    private async confirmPreActivation(pre: PreActivationRecord) {
-        const now = new Date();
-        if (pre.tokenUsedAt) {
-            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
-        }
-        if (pre.tokenExpiresAt <= now) {
-            throw new BadRequestException('This verification link is invalid or has expired. Request a new one.');
-        }
-
-        const claimed = await this.prisma.preActivationVerification.updateMany({
-            where: { id: pre.id, tokenUsedAt: null },
-            data: { tokenUsedAt: now, verifiedAt: now },
-        });
-        if (claimed.count === 0) {
-            return { status: 'ALREADY_VERIFIED' as const, email: pre.email };
-        }
-
-        return {
-            status: 'CONTINUE_APPLICATION' as const,
-            email: pre.email,
-            submissionTicket: issueActivationTicket('SCHOOL', pre.email, now),
-        };
-    }
-
     async resendVerification(emailAddress: string) {
         const email = emailAddress.trim().toLowerCase();
-
-        const pre = await this.prisma.preActivationVerification.findUnique({
-            where: { kind_email: { kind: 'SCHOOL', email } },
-        });
-        if (pre && !pre.tokenUsedAt) {
-            const now = new Date();
-            if (cooldownRemainingSeconds(pre.tokenSentAt, now) > 0) {
-                return { status: 'CHECK_INBOX' as const };
-            }
-            const challenge = createEmailVerificationChallenge(now);
-            await this.prisma.preActivationVerification.update({
-                where: { id: pre.id },
-                data: {
-                    tokenHash: challenge.tokenHash,
-                    tokenExpiresAt: challenge.expiresAt,
-                    tokenSentAt: challenge.sentAt,
-                },
-            });
-            await this.notifications.sendSchoolStartVerification(email, { token: challenge.rawToken });
-            return { status: 'CHECK_INBOX' as const };
-        }
 
         const request = await this.prisma.schoolRequest.findUnique({
             where: { coordinatorEmail: email },

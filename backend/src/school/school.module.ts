@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { EmailOtpService } from '../common/email-otp.service';
 import { getJwtSecret } from '../common/jwt-secret';
 import { GeoModule } from '../geo/geo.module';
 import { PartnerModule } from '../partner/partner.module';
@@ -31,7 +32,7 @@ import { SchoolService } from './school.service';
         JwtModule.register({ secret: getJwtSecret() }),
     ],
     controllers: [SchoolController, SchoolDirectoryController, SchoolPortalController],
-    providers: [SchoolService, SchoolDirectoryService, SchoolPortalService],
+    providers: [SchoolService, SchoolDirectoryService, SchoolPortalService, EmailOtpService],
     // PartnerModule's school-onboarding route submits requests through SchoolService.
     exports: [SchoolService],
 })
