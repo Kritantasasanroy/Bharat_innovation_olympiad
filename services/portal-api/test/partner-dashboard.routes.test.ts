@@ -6,23 +6,6 @@ import type {
 } from "../src/core/ports/out/index.ts";
 import { authHeader, buildTestApp, partnerToken } from "./support/build-test-app";
 
-type TestApp = ReturnType<typeof buildTestApp>["app"];
-
-function jsonRequest(
-	app: TestApp,
-	method: string,
-	path: string,
-	options: { body?: unknown; headers?: Record<string, string> } = {},
-): Promise<Response> {
-	return app.handle(
-		new Request(`http://localhost${path}`, {
-			method,
-			headers: { "content-type": "application/json", ...options.headers },
-			...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-		}),
-	);
-}
-
 function approvedApplication(partnerId: string): PartnerApplication {
 	return {
 		partnerId,
@@ -66,7 +49,7 @@ function assignedInstitutions(partnerId: string): AssignedInstitution[] {
 	];
 }
 
-const DASHBOARD_ROUTES = ["/partner/institutions", "/partner/funnel", "/partner/statements"];
+const DASHBOARD_ROUTES = ["/partner/institutions", "/partner/funnel"];
 
 describe("dashboard gating on approved status", () => {
 	for (const route of DASHBOARD_ROUTES) {
@@ -178,54 +161,6 @@ describe("no cross-partner leakage across the dashboard", () => {
 		expect(institutionCalls[0]?.partnerId).toBe("partner-a");
 	});
 
-	it("statements: two partners' statement lists never cross", async () => {
-		const { app, adminApiClient } = buildTestApp();
-		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
-		adminApiClient.seedApplication("partner-b", approvedApplication("partner-b"));
-		adminApiClient.seedStatements("partner-a", [
-			{
-				id: "stmt-a-1",
-				partnerId: "partner-a",
-				period: "2026-01",
-				version: 1,
-				lineItems: [],
-				totalPaise: 100_000,
-				status: "ISSUED",
-				issuedAt: new Date().toISOString(),
-			},
-		]);
-		adminApiClient.seedStatements("partner-b", [
-			{
-				id: "stmt-b-1",
-				partnerId: "partner-b",
-				period: "2026-01",
-				version: 1,
-				lineItems: [],
-				totalPaise: 200_000,
-				status: "ISSUED",
-				issuedAt: new Date().toISOString(),
-			},
-		]);
-
-		const asA = await app.handle(
-			new Request("http://localhost/partner/statements", {
-				headers: authHeader(partnerToken("partner-a")),
-			}),
-		);
-		const bodyA = await asA.json();
-		expect(bodyA.data).toHaveLength(1);
-		expect(bodyA.data[0].partnerId).toBe("partner-a");
-
-		const asB = await app.handle(
-			new Request("http://localhost/partner/statements", {
-				headers: authHeader(partnerToken("partner-b")),
-			}),
-		);
-		const bodyB = await asB.json();
-		expect(bodyB.data).toHaveLength(1);
-		expect(bodyB.data[0].partnerId).toBe("partner-b");
-	});
-
 	it("campaigns: creating a campaign is always scoped to the caller's own partnerId", async () => {
 		const { app, adminApiClient } = buildTestApp();
 		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
@@ -245,59 +180,6 @@ describe("no cross-partner leakage across the dashboard", () => {
 		expect(createCalls).toEqual([
 			expect.objectContaining({ method: "createCampaign", partnerId: "partner-a" }),
 		]);
-	});
-
-	it("payouts: returns only the caller's payout ledger", async () => {
-		const { app, adminApiClient } = buildTestApp();
-		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
-		adminApiClient.seedPayouts("partner-a", [
-			{
-				id: "payout-a-1",
-				partnerId: "partner-a",
-				statementId: "stmt-a-1",
-				amountPaise: 125_000,
-				status: "PENDING",
-				financeSignOffApprover: null,
-				financeSignOffAt: null,
-				reason: null,
-				createdAt: new Date().toISOString(),
-			},
-		]);
-
-		const response = await app.handle(
-			new Request("http://localhost/partner/payouts?partnerId=partner-b", {
-				headers: authHeader(partnerToken("partner-a")),
-			}),
-		);
-		const body = await response.json();
-
-		expect(response.status).toBe(200);
-		expect(body.data).toHaveLength(1);
-		expect(body.data[0].partnerId).toBe("partner-a");
-	});
-
-	it("statements: validates and forwards the canonical YYYY-MM period", async () => {
-		const { app, adminApiClient } = buildTestApp();
-		adminApiClient.seedApplication("partner-a", approvedApplication("partner-a"));
-
-		const response = await jsonRequest(app, "POST", "/partner/statements", {
-			body: { period: "2026-08" },
-			headers: authHeader(partnerToken("partner-a")),
-		});
-		const body = await response.json();
-
-		expect(response.status).toBe(200);
-		expect(body.data.period).toBe("2026-08");
-	});
-
-	it("statements: rejects date ranges because the engine uses one month key", async () => {
-		const { app } = buildTestApp();
-		const response = await jsonRequest(app, "POST", "/partner/statements", {
-			body: { periodStart: "2026-08-01", periodEnd: "2026-08-31" },
-			headers: authHeader(partnerToken("partner-a")),
-		});
-
-		expect(response.status).toBe(400);
 	});
 });
 

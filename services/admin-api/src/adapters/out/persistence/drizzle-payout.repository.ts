@@ -1,30 +1,27 @@
 import { and, eq, isNull } from "drizzle-orm";
-import type {
-	PartnerInstitutionAssignment,
-	PayoutLedgerEntry,
-} from "../../../core/domain/partner-models";
+import type { PartnerInstitutionAssignment, Payout } from "../../../core/domain/partner-models";
 import { ProviderError } from "../../../core/errors";
 import type {
 	PartnerInstitutionAssignmentRepository,
-	PayoutLedgerRepository,
+	PayoutRepository,
 } from "../../../core/ports/out/partner-repositories.port";
 import { getDb } from "./postgres.client";
-import { partnerInstitutionAssignments, payoutLedgerEntries } from "./schema/schema";
+import { partnerInstitutionAssignments, payouts } from "./schema/schema";
 
-type PayoutRow = typeof payoutLedgerEntries.$inferSelect;
+type PayoutRow = typeof payouts.$inferSelect;
 type AssignmentRow = typeof partnerInstitutionAssignments.$inferSelect;
 
-function toPayout(row: PayoutRow): PayoutLedgerEntry {
+function toPayout(row: PayoutRow): Payout {
 	return {
 		id: row.id,
 		partnerId: row.partnerId,
-		statementId: row.statementId,
 		amountPaise: row.amountPaise,
-		status: row.status as PayoutLedgerEntry["status"],
-		financeSignOffApprover: row.financeSignOffApprover,
-		financeSignOffAt: row.financeSignOffAt,
-		reason: row.reason,
-		createdAt: row.createdAt,
+		note: row.note,
+		status: row.status as Payout["status"],
+		triggeredBy: row.triggeredBy,
+		triggeredAt: row.triggeredAt,
+		paidBy: row.paidBy,
+		paidAt: row.paidAt,
 	};
 }
 
@@ -39,16 +36,12 @@ function toAssignment(row: AssignmentRow): PartnerInstitutionAssignment {
 	};
 }
 
-/** Drizzle-backed {@link PayoutLedgerRepository} over the shared Postgres `PayoutLedgerEntry` table. */
-export class DrizzlePayoutLedgerRepository implements PayoutLedgerRepository {
+/** Drizzle-backed {@link PayoutRepository} over the shared Postgres `Payout` table. */
+export class DrizzlePayoutRepository implements PayoutRepository {
 	private readonly db = getDb();
 
-	async findById(id: string): Promise<PayoutLedgerEntry | null> {
-		const rows = await this.db
-			.select()
-			.from(payoutLedgerEntries)
-			.where(eq(payoutLedgerEntries.id, id))
-			.limit(1);
+	async findById(id: string): Promise<Payout | null> {
+		const rows = await this.db.select().from(payouts).where(eq(payouts.id, id)).limit(1);
 		const row = rows[0];
 		return row ? toPayout(row) : null;
 	}
@@ -56,61 +49,45 @@ export class DrizzlePayoutLedgerRepository implements PayoutLedgerRepository {
 	async create(input: {
 		readonly id: string;
 		readonly partnerId: string;
-		readonly statementId: string;
 		readonly amountPaise: number;
-		readonly createdAt: Date;
-	}): Promise<PayoutLedgerEntry> {
+		readonly note: string | null;
+		readonly triggeredBy: string;
+		readonly triggeredAt: Date;
+	}): Promise<Payout> {
 		const rows = await this.db
-			.insert(payoutLedgerEntries)
+			.insert(payouts)
 			.values({
 				id: input.id,
 				partnerId: input.partnerId,
-				statementId: input.statementId,
 				amountPaise: input.amountPaise,
-				status: "PENDING",
-				createdAt: input.createdAt,
+				note: input.note,
+				status: "TRIGGERED",
+				triggeredBy: input.triggeredBy,
+				triggeredAt: input.triggeredAt,
 			})
 			.returning();
 		const row = rows[0];
-		if (!row)
-			throw new ProviderError("Postgres", new Error("PayoutLedgerEntry insert returned no row"));
+		if (!row) throw new ProviderError("Postgres", new Error("Payout insert returned no row"));
 		return toPayout(row);
 	}
 
-	async update(
-		id: string,
-		patch: {
-			readonly status: PayoutLedgerEntry["status"];
-			readonly financeSignOffApprover?: string | null;
-			readonly financeSignOffAt?: Date | null;
-			readonly reason?: string | null;
-		},
-	): Promise<PayoutLedgerEntry | null> {
-		const set: Partial<PayoutRow> = { status: patch.status };
-		if (patch.financeSignOffApprover !== undefined)
-			set.financeSignOffApprover = patch.financeSignOffApprover;
-		if (patch.financeSignOffAt !== undefined) set.financeSignOffAt = patch.financeSignOffAt;
-		if (patch.reason !== undefined) set.reason = patch.reason;
-
+	async markPaid(id: string, paidBy: string, paidAt: Date): Promise<Payout | null> {
 		const rows = await this.db
-			.update(payoutLedgerEntries)
-			.set(set)
-			.where(eq(payoutLedgerEntries.id, id))
+			.update(payouts)
+			.set({ status: "PAID", paidBy, paidAt })
+			.where(eq(payouts.id, id))
 			.returning();
 		const row = rows[0];
 		return row ? toPayout(row) : null;
 	}
 
-	async findByPartnerId(partnerId: string): Promise<readonly PayoutLedgerEntry[]> {
-		const rows = await this.db
-			.select()
-			.from(payoutLedgerEntries)
-			.where(eq(payoutLedgerEntries.partnerId, partnerId));
+	async findByPartnerId(partnerId: string): Promise<readonly Payout[]> {
+		const rows = await this.db.select().from(payouts).where(eq(payouts.partnerId, partnerId));
 		return rows.map(toPayout);
 	}
 
-	async findAll(): Promise<readonly PayoutLedgerEntry[]> {
-		const rows = await this.db.select().from(payoutLedgerEntries);
+	async findAll(): Promise<readonly Payout[]> {
+		const rows = await this.db.select().from(payouts);
 		return rows.map(toPayout);
 	}
 }

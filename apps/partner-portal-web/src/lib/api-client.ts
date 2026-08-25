@@ -1,12 +1,12 @@
 import type {
 	AssignedInstitution,
+	BankDetails,
 	Campaign,
 	CampaignInput,
 	CampaignUpdateInput,
 	PartnerFunnel,
 	Payout,
-	Statement,
-	StatementRequestInput,
+	SubmitBankDetailsInput,
 	SupportRequest,
 	SupportRequestInput,
 } from "./types";
@@ -137,16 +137,6 @@ export const portalApi = {
 			method: "PATCH",
 			body: JSON.stringify(input),
 		}),
-
-	requestStatement: (token: string, input: StatementRequestInput) =>
-		request<Statement>("/partner/statements", token, {
-			method: "POST",
-			body: JSON.stringify(input),
-		}),
-
-	listStatements: (token: string) => request<Statement[]>("/partner/statements", token),
-
-	listPayouts: (token: string) => request<Payout[]>("/partner/payouts", token),
 
 	createSupportRequest: (token: string, input: SupportRequestInput) =>
 		request<SupportRequest>("/partner/support-requests", token, {
@@ -542,4 +532,16 @@ export const partnerPortalApi = {
 			token,
 			method: "PATCH",
 		}),
+
+	/** No fixed commission — admin decides and triggers each payout. */
+	payouts: (token: string) =>
+		backendRequest<Payout[]>("/partner/portal/payouts", undefined, { token }),
+
+	/** `null` until submitted — the frontend only asks for this once a payout exists. */
+	bankDetails: (token: string) =>
+		backendRequest<BankDetails | null>("/partner/portal/bank-details", undefined, { token }),
+
+	/** Submits (or resubmits) where payouts get sent. Confirmed by email. */
+	submitBankDetails: (token: string, input: SubmitBankDetailsInput) =>
+		backendRequest<BankDetails>("/partner/portal/bank-details", input, { token, method: "PUT" }),
 };

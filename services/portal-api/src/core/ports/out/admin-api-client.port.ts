@@ -46,8 +46,9 @@
  *    route carries only campaign counts and is enriched by the HTTP adapter.
  *  - Campaign updates use `/partners/:id/campaigns/:campaignId` and translate the
  *    portal status enum to admin-api's `deactivate` boolean at the adapter.
- *  - Statements use the engine's canonical `YYYY-MM` period key. Payout ledger
- *    entries are a separate resource exposed through `listPayouts`.
+ *  - Payouts and bank details are not exposed here — they go through the
+ *    legacy backend's `/partner/portal/*` instead (see
+ *    `partner-dashboard.routes.ts`'s module doc for why).
  */
 
 export type PartnerApplicationStatus = "SUBMITTED" | "APPROVED" | "REJECTED";
@@ -67,7 +68,6 @@ export interface Partner {
 	readonly email: string;
 	readonly phone: string;
 	readonly status: PartnerAccessStatus;
-	readonly commissionRatePct: number;
 	readonly createdAt: string;
 }
 
@@ -167,46 +167,6 @@ export interface AdminApiCampaignRow {
 	readonly createdAt: string;
 }
 
-export type PayoutStatus = "PENDING" | "SIGNED_OFF" | "RELEASED";
-
-export interface StatementRequestInput {
-	/** Commission periods use the engine's canonical YYYY-MM key. */
-	readonly period: string;
-}
-
-export interface CommissionLineItem {
-	readonly attributionId: string;
-	readonly campaignId: string;
-	readonly studentId: string;
-	readonly registrationId: string;
-	readonly amountPaise: number;
-	readonly commissionRatePct: number;
-	readonly commissionPaise: number;
-}
-
-export interface Statement {
-	readonly id: string;
-	readonly partnerId: string;
-	readonly period: string;
-	readonly version: number;
-	readonly lineItems: readonly CommissionLineItem[];
-	readonly totalPaise: number;
-	readonly status: "ISSUED";
-	readonly issuedAt: string;
-}
-
-export interface Payout {
-	readonly id: string;
-	readonly partnerId: string;
-	readonly statementId: string;
-	readonly amountPaise: number;
-	readonly status: PayoutStatus;
-	readonly financeSignOffApprover: string | null;
-	readonly financeSignOffAt: string | null;
-	readonly reason: string | null;
-	readonly createdAt: string;
-}
-
 /**
  * Every method takes the partner's raw bearer token and forwards it to
  * `admin-api` (Authorization pass-through) so admin-api independently
@@ -242,14 +202,4 @@ export interface AdminApiClient {
 		input: CampaignUpdateInput,
 		token: string,
 	): Promise<Campaign>;
-
-	requestStatement(
-		partnerId: string,
-		input: StatementRequestInput,
-		token: string,
-	): Promise<Statement>;
-
-	listStatements(partnerId: string, token: string): Promise<Statement[]>;
-
-	listPayouts(partnerId: string, token: string): Promise<Payout[]>;
 }

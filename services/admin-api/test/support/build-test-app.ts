@@ -1,15 +1,16 @@
 import { buildApp } from "../../src/app";
 import { buildContainer, type PartnerAdapters, type PartnerContainer } from "../../src/container";
 import {
+	FakeBankDetailsCrypto,
 	FakeClock,
 	FakeIdGenerator,
 	InMemoryAttributionRepository,
+	InMemoryBankDetailsRepository,
 	InMemoryCampaignRepository,
-	InMemoryCommissionStatementRepository,
 	InMemoryPartnerApplicationRepository,
 	InMemoryPartnerInstitutionAssignmentRepository,
 	InMemoryPartnerRepository,
-	InMemoryPayoutLedgerRepository,
+	InMemoryPayoutRepository,
 	RecordingAuditSink,
 	RecordingEventPublisher,
 } from "./in-memory-repos";
@@ -35,8 +36,9 @@ export function buildTestHarness(): TestHarness {
 		applications: new InMemoryPartnerApplicationRepository(),
 		campaigns: new InMemoryCampaignRepository(),
 		attributions: new InMemoryAttributionRepository(),
-		statements: new InMemoryCommissionStatementRepository(),
-		payouts: new InMemoryPayoutLedgerRepository(),
+		payouts: new InMemoryPayoutRepository(),
+		bankDetails: new InMemoryBankDetailsRepository(),
+		bankDetailsCrypto: new FakeBankDetailsCrypto(),
 		assignments: new InMemoryPartnerInstitutionAssignmentRepository(),
 		clock,
 		ids: new FakeIdGenerator(),

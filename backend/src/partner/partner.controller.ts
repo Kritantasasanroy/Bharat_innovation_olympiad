@@ -12,10 +12,10 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import {
     ApplyPartnerDto,
     DecidePartnerDto,
-    GenerateStatementDto,
+    MarkPayoutPaidDto,
     PartnerLoginDto,
     SetCampaignActiveDto,
-    UpdatePayoutStatusDto,
+    TriggerPayoutDto,
 } from './dto/partner.dto';
 import { PartnerService } from './partner.service';
 
@@ -117,30 +117,47 @@ export class PartnerController {
         return this.partnerService.resendAccess(id, adminId);
     }
 
-    // ── Admin visibility into the partner engine (campaigns/funnel/statements/payouts) ──
+    // ── Admin visibility into the partner engine (campaigns/funnel/payouts/bank details) ──
 
-    /** ADMIN — a partner's whole engine workspace in one call: identity, campaigns, funnel, statements, payouts. */
+    /** ADMIN — a partner's whole engine workspace in one call: identity, campaigns, funnel, payouts, masked bank details. */
     @Get('admin/partners/:partnerId/engine')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    engineSnapshot(@Param('partnerId') partnerId: string) {
-        return this.partnerService.engineSnapshot(partnerId);
+    engineSnapshot(@Param('partnerId') partnerId: string, @CurrentUser('id') adminId: string) {
+        return this.partnerService.engineSnapshot(partnerId, adminId);
     }
 
-    /** ADMIN — close out a commission period for a partner on their behalf. */
-    @Post('admin/partners/:partnerId/statements')
+    /** ADMIN — no fixed commission: admin decides the amount and triggers a payout directly. */
+    @Post('admin/partners/:partnerId/payouts')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    generateStatement(@Param('partnerId') partnerId: string, @Body() dto: GenerateStatementDto) {
-        return this.partnerService.generateStatement(partnerId, dto.period);
+    triggerPayout(
+        @Param('partnerId') partnerId: string,
+        @Body() dto: TriggerPayoutDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.partnerService.triggerPayout(partnerId, dto.amountPaise, dto.note, adminId);
     }
 
-    /** ADMIN/FINANCE — advance a payout: PENDING -> SIGNED_OFF -> RELEASED. */
-    @Patch('admin/payouts/:payoutId/status')
+    /** ADMIN — records that a triggered payout's money has actually gone out. */
+    @Patch('admin/partners/:partnerId/payouts/:payoutId')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-    updatePayoutStatus(@Param('payoutId') payoutId: string, @Body() dto: UpdatePayoutStatusDto) {
-        return this.partnerService.updatePayoutStatus(payoutId, dto.status, dto.approver, dto.reason);
+    markPayoutPaid(
+        @Param('partnerId') partnerId: string,
+        @Param('payoutId') payoutId: string,
+        @Body() _dto: MarkPayoutPaidDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.partnerService.markPayoutPaid(partnerId, payoutId, adminId);
+    }
+
+    /** ADMIN — the decrypted account number + PAN. Audited on admin-api's side. */
+    @Get('admin/partners/:partnerId/bank-details/reveal')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    revealBankDetails(@Param('partnerId') partnerId: string, @CurrentUser('id') adminId: string) {
+        return this.partnerService.revealBankDetails(partnerId, adminId);
     }
 
     /** ADMIN — pause/resume one campaign; revoking the whole partner was previously the only lever. */

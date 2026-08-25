@@ -1,8 +1,8 @@
 import { integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
- * Drizzle schema for the Partner Attribution, Commission & Payout Engine
- * (PRD-046).
+ * Drizzle schema for the Partner Attribution & Payout Engine (PRD-046,
+ * payouts reworked for admin-triggered amounts — see design note below).
  *
  * These are BRAND NEW tables — they do not exist in the legacy Prisma schema
  * (`backend/prisma/schema.prisma`). They live on the SAME shared Neon Postgres
@@ -13,6 +13,11 @@ import { integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "d
  * `services/exam-api/src/adapters/out/persistence/schema/schema.ts`. Unlike
  * those tables, this schema is authoritative: `drizzle-kit generate` owns the
  * migration for these tables.
+ *
+ * Payouts no longer derive from a commission-rate calculation against a
+ * statement: admin decides an amount directly and triggers a `Payout`. The
+ * fixed-rate commission engine (`commissionRatePct`, `CommissionStatement`)
+ * is retired — see the partner-payouts design note for why.
  */
 
 const ts = (name: string) => timestamp(name, { mode: "date", precision: 3 });
@@ -35,8 +40,7 @@ export const attributionRule = pgEnum("AttributionRule", [
 	"COUPON_ONLY",
 	"LINK_ONLY",
 ]);
-export const statementStatus = pgEnum("CommissionStatementStatus", ["ISSUED"]);
-export const payoutStatus = pgEnum("PayoutStatus", ["PENDING", "SIGNED_OFF", "RELEASED"]);
+export const payoutStatus = pgEnum("PayoutStatus", ["TRIGGERED", "PAID"]);
 
 export const partners = pgTable("Partner", {
 	id: text("id").primaryKey(),
@@ -44,7 +48,6 @@ export const partners = pgTable("Partner", {
 	contactPerson: text("contactPerson").notNull(),
 	email: text("email").notNull(),
 	phone: text("phone").notNull(),
-	commissionRatePct: integer("commissionRatePct").notNull(),
 	status: partnerStatus("status").notNull().default("PENDING"),
 	createdAt: ts("createdAt").notNull().defaultNow(),
 });
@@ -106,39 +109,47 @@ export const attributionRecords = pgTable(
 	],
 );
 
-export const commissionStatements = pgTable(
-	"CommissionStatement",
+/**
+ * A specific amount admin decided to send a partner, and whether it has
+ * actually gone out yet. Not derived from any statement or rate — admin sets
+ * `amountPaise` directly when triggering.
+ */
+export const payouts = pgTable("Payout", {
+	id: text("id").primaryKey(),
+	partnerId: text("partnerId").notNull(),
+	amountPaise: integer("amountPaise").notNull(),
+	note: text("note"),
+	status: payoutStatus("status").notNull().default("TRIGGERED"),
+	triggeredBy: text("triggeredBy").notNull(),
+	triggeredAt: ts("triggeredAt").notNull().defaultNow(),
+	paidBy: text("paidBy"),
+	paidAt: ts("paidAt"),
+});
+
+/**
+ * Where a partner's payouts get sent. `accountNumberSealed`/`panSealed` are
+ * AES-256-GCM ciphertext (see `infra/bank-details-encryption.ts`) — the only
+ * two fields sensitive enough to encrypt; holder name, bank name and IFSC are
+ * not secret and are needed unmasked just to render a list row. The masked
+ * companions are derived once at submit time so a list view never decrypts.
+ */
+export const partnerBankDetails = pgTable(
+	"PartnerBankDetails",
 	{
 		id: text("id").primaryKey(),
 		partnerId: text("partnerId").notNull(),
-		period: text("period").notNull(),
-		version: integer("version").notNull(),
-		lineItemsJson: jsonb("lineItemsJson").notNull(),
-		totalPaise: integer("totalPaise").notNull(),
-		status: statementStatus("status").notNull().default("ISSUED"),
-		issuedAt: ts("issuedAt").notNull().defaultNow(),
+		accountHolderName: text("accountHolderName").notNull(),
+		bankName: text("bankName").notNull(),
+		ifscCode: text("ifscCode").notNull(),
+		accountNumberSealed: text("accountNumberSealed").notNull(),
+		accountNumberLast4: text("accountNumberLast4").notNull(),
+		panSealed: text("panSealed").notNull(),
+		panMasked: text("panMasked").notNull(),
+		submittedAt: ts("submittedAt").notNull().defaultNow(),
+		updatedAt: ts("updatedAt").notNull().defaultNow(),
 	},
-	(table) => [
-		// A version is immutable once issued; each partner+period+version is unique.
-		uniqueIndex("statement_partner_period_version_key").on(
-			table.partnerId,
-			table.period,
-			table.version,
-		),
-	],
+	(table) => [uniqueIndex("partner_bank_details_partner_id_key").on(table.partnerId)],
 );
-
-export const payoutLedgerEntries = pgTable("PayoutLedgerEntry", {
-	id: text("id").primaryKey(),
-	partnerId: text("partnerId").notNull(),
-	statementId: text("statementId").notNull(),
-	amountPaise: integer("amountPaise").notNull(),
-	status: payoutStatus("status").notNull().default("PENDING"),
-	financeSignOffApprover: text("financeSignOffApprover"),
-	financeSignOffAt: ts("financeSignOffAt"),
-	reason: text("reason"),
-	createdAt: ts("createdAt").notNull().defaultNow(),
-});
 
 export const partnerInstitutionAssignments = pgTable("PartnerInstitutionAssignment", {
 	id: text("id").primaryKey(),

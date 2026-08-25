@@ -27,7 +27,7 @@ import {
 } from '../common/email-verification-token';
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartnerAdminApiClient } from './admin-api.client';
+import { PartnerAdminApiClient, SubmitBankDetailsInput } from './admin-api.client';
 import {
     ApplyPartnerDto,
     DecidePartnerDto,
@@ -698,32 +698,70 @@ export class PartnerService {
     // ── Admin visibility into the partner engine ─────────────────────────────
     //
     // admin-frontend previously had no view of anything the admin-api engine
-    // (PRD-046) tracks for a partner — campaigns, funnel, commission
-    // statements, payouts — even though staff could approve the partner that
-    // owns all of it. These proxy the engine so the browser only ever talks to
-    // this backend, reusing the retry/staff-token logic already in
-    // `PartnerAdminApiClient` instead of duplicating it client-side.
+    // (PRD-046) tracks for a partner — campaigns, funnel, payouts — even
+    // though staff could approve the partner that owns all of it. These proxy
+    // the engine so the browser only ever talks to this backend, reusing the
+    // retry/staff-token logic already in `PartnerAdminApiClient` instead of
+    // duplicating it client-side.
 
-    /** One fetch for a partner's whole engine workspace: identity, campaigns, funnel, statements, payouts. */
-    async engineSnapshot(partnerId: string) {
-        const [partner, campaigns, funnel, statements, payouts] = await Promise.all([
+    /** One fetch for a partner's whole engine workspace: identity, campaigns, funnel, payouts, masked bank details. */
+    async engineSnapshot(partnerId: string, adminId: string) {
+        const [partner, campaigns, funnel, payouts, bankDetails] = await Promise.all([
             this.adminApi.getPartner(partnerId),
             this.adminApi.listCampaigns(partnerId),
             this.adminApi.getFunnel(partnerId),
-            this.adminApi.listStatements(partnerId),
-            this.adminApi.listPayouts(partnerId),
+            this.adminApi.listPayouts(partnerId, adminId),
+            this.adminApi.getBankDetails(partnerId, false, adminId),
         ]);
-        return { partner, campaigns, funnel, statements, payouts };
+        return { partner, campaigns, funnel, payouts, bankDetails };
     }
 
-    /** ADMIN — close out a commission period for a partner on their behalf. */
-    generateStatement(partnerId: string, period: string) {
-        return this.adminApi.generateStatement(partnerId, period);
+    /** ADMIN — no fixed commission: admin decides the amount and triggers a payout directly. */
+    triggerPayout(partnerId: string, amountPaise: number, note: string | undefined, adminId: string) {
+        return this.adminApi.triggerPayout(partnerId, amountPaise, note, adminId);
     }
 
-    /** ADMIN/FINANCE — advance a payout: PENDING -> SIGNED_OFF -> RELEASED. */
-    updatePayoutStatus(payoutId: string, status: 'SIGNED_OFF' | 'RELEASED', approver?: string, reason?: string) {
-        return this.adminApi.updatePayoutStatus(payoutId, status, approver, reason);
+    /** ADMIN — records that a triggered payout's money has actually gone out. */
+    markPayoutPaid(partnerId: string, payoutId: string, adminId: string) {
+        return this.adminApi.markPayoutPaid(partnerId, payoutId, adminId);
+    }
+
+    /** ADMIN — the decrypted account number + PAN. Audited on admin-api's side. */
+    revealBankDetails(partnerId: string, adminId: string) {
+        return this.adminApi.getBankDetails(partnerId, true, adminId);
+    }
+
+    // ── The partner's own payouts + bank details ─────────────────────────────
+    //
+    // Routed through this backend rather than portal-api's BFF because this is
+    // the only place in the system that can send email — bank-details
+    // submission needs to (a warning-and-confirmation mail, PRD ask). Reads
+    // pass the partner's own id as `actingAs`, so admin-api treats them as
+    // "already theirs" — full detail, no masking, no audit needed.
+
+    /** The partner's own payouts. */
+    myPayouts(partnerId: string) {
+        return this.adminApi.listPayouts(partnerId, partnerId);
+    }
+
+    /** The partner's own bank details, in full — it's already theirs. */
+    myBankDetails(partnerId: string) {
+        return this.adminApi.getBankDetails(partnerId, false, partnerId);
+    }
+
+    /**
+     * The partner submits (or resubmits) their own bank details. Confirms by
+     * email — masked, security-conscious — so a submission the partner didn't
+     * make gets noticed.
+     */
+    async submitMyBankDetails(partnerId: string, input: SubmitBankDetailsInput) {
+        const saved = await this.adminApi.submitBankDetails(partnerId, input, partnerId);
+        const profile = await this.profile(partnerId);
+        await this.notifications.sendPartnerBankDetailsSubmitted(profile.email, {
+            contactPerson: profile.contactPerson,
+            accountNumberLast4: saved.accountNumberLast4,
+        });
+        return saved;
     }
 
     /** ADMIN — pause/resume one campaign, short of revoking the whole partner. */

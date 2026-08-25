@@ -6,8 +6,12 @@ import { requireApprovedPartner } from "./require-approved-partner";
 
 /**
  * Approved-partner dashboard routes (PRD-011): assigned institutions,
- * conversion funnel, referral campaign/link management, and the commission
- * statement / payout ledger view.
+ * conversion funnel, and referral campaign/link management.
+ *
+ * Payouts and bank details are admin-triggered, finance-sensitive flows
+ * that also need to send email — they go through the legacy backend's
+ * `/partner/portal/*` routes instead (it owns the only mailer in this
+ * system), not through this BFF. See `backend/src/partner/partner-portal.*`.
  *
  * Every handler here calls {@link requireApprovedPartner} first — a partner
  * whose application is missing, SUBMITTED, or REJECTED gets a 403 before any
@@ -93,29 +97,5 @@ export function partnerDashboardRoutes(adminApiClient: AdminApiClient, jwtSecret
 					),
 				},
 			)
-			.post(
-				"/statements",
-				async ({ auth, token, body }) => {
-					const partner = await requireApprovedPartner(auth, adminApiClient, token);
-					const data = await adminApiClient.requestStatement(partner.partnerId, body, token ?? "");
-					return { success: true, data };
-				},
-				{
-					body: t.Object(
-						{ period: t.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" }) },
-						{ additionalProperties: false },
-					),
-				},
-			)
-			.get("/statements", async ({ auth, token }) => {
-				const partner = await requireApprovedPartner(auth, adminApiClient, token);
-				const data = await adminApiClient.listStatements(partner.partnerId, token ?? "");
-				return { success: true, data };
-			})
-			.get("/payouts", async ({ auth, token }) => {
-				const partner = await requireApprovedPartner(auth, adminApiClient, token);
-				const data = await adminApiClient.listPayouts(partner.partnerId, token ?? "");
-				return { success: true, data };
-			})
 	);
 }

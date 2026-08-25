@@ -22,7 +22,6 @@ interface Partner {
     contactPerson: string;
     email: string;
     phone: string;
-    commissionRatePct: number;
     status: string;
     createdAt: string;
 }
@@ -53,44 +52,37 @@ interface Funnel {
     byCampaign: FunnelByCampaign[];
 }
 
-interface CommissionLineItem {
-    attributionId: string;
-    campaignId: string;
-    studentId: string;
-    registrationId: string;
-    amountPaise: number;
-    commissionRatePct: number;
-    commissionPaise: number;
-}
-
-interface Statement {
-    id: string;
-    period: string;
-    version: number;
-    lineItems: CommissionLineItem[];
-    totalPaise: number;
-    status: string;
-    issuedAt: string;
-}
-
 interface Payout {
     id: string;
     partnerId: string;
-    statementId: string;
     amountPaise: number;
-    status: 'PENDING' | 'SIGNED_OFF' | 'RELEASED';
-    financeSignOffApprover: string | null;
-    financeSignOffAt: string | null;
-    reason: string | null;
-    createdAt: string;
+    note: string | null;
+    status: 'TRIGGERED' | 'PAID';
+    triggeredBy: string;
+    triggeredAt: string;
+    paidBy: string | null;
+    paidAt: string | null;
+}
+
+interface BankDetails {
+    partnerId: string;
+    accountHolderName: string;
+    bankName: string;
+    ifscCode: string;
+    accountNumberLast4: string;
+    panMasked: string;
+    submittedAt: string;
+    updatedAt: string;
+    accountNumber?: string;
+    pan?: string;
 }
 
 interface EngineSnapshot {
     partner: Partner;
     campaigns: Campaign[];
     funnel: Funnel;
-    statements: Statement[];
     payouts: Payout[];
+    bankDetails: BankDetails | null;
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -98,8 +90,8 @@ const STATUS_CLASS: Record<string, string> = {
     APPROVED: 'badge badge-success',
     INACTIVE: 'badge badge-muted',
     PENDING: 'badge badge-warning',
-    SIGNED_OFF: 'badge badge-success',
-    RELEASED: 'badge badge-success',
+    TRIGGERED: 'badge badge-warning',
+    PAID: 'badge badge-success',
     REJECTED: 'badge badge-danger',
     REVOKED: 'badge badge-danger',
 };
@@ -123,16 +115,14 @@ export default function PartnersPage() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<{ type: 'success' | 'warn'; message: string } | null>(null);
 
-    const [period, setPeriod] = useState('');
-    const [generating, setGenerating] = useState(false);
-
-    const [payoutAction, setPayoutAction] = useState<{
-        payout: Payout;
-        status: 'SIGNED_OFF' | 'RELEASED';
-    } | null>(null);
-    const [approver, setApprover] = useState('');
-    const [payoutReason, setPayoutReason] = useState('');
+    const [triggeringPayout, setTriggeringPayout] = useState(false);
+    const [payoutAmount, setPayoutAmount] = useState('');
+    const [payoutNote, setPayoutNote] = useState('');
     const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+    const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+
+    const [revealing, setRevealing] = useState(false);
+    const [revealed, setRevealed] = useState<{ accountNumber: string; pan: string } | null>(null);
 
     const [editingIdentity, setEditingIdentity] = useState(false);
     const [identitySaving, setIdentitySaving] = useState(false);
@@ -143,6 +133,7 @@ export default function PartnersPage() {
     }, []);
 
     useEffect(() => {
+        setRevealed(null);
         if (!selectedPartnerId) {
             setSnapshot(null);
             return;
@@ -178,48 +169,62 @@ export default function PartnersPage() {
         }
     }
 
-    async function generateStatement(event: FormEvent) {
+    async function submitTriggerPayout(event: FormEvent) {
         event.preventDefault();
-        if (!selectedPartnerId || !period.trim()) return;
-        setGenerating(true);
-        setError(null);
-        setNotice(null);
-        try {
-            await api.post(`/admin/partners/${selectedPartnerId}/statements`, { period: period.trim() });
-            setNotice({ type: 'success', message: `Statement for ${period.trim()} generated. Refreshing…` });
-            setPeriod('');
-            await loadSnapshot(selectedPartnerId);
-        } catch (err) {
-            setError(apiMessage(err, 'Could not generate the statement.'));
-        } finally {
-            setGenerating(false);
-        }
-    }
-
-    async function submitPayoutStatus(event: FormEvent) {
-        event.preventDefault();
-        if (!payoutAction) return;
+        if (!selectedPartnerId) return;
+        const rupees = Number(payoutAmount);
+        if (!rupees || rupees <= 0) return;
         setPayoutSubmitting(true);
         setError(null);
         setNotice(null);
         try {
-            await api.patch(`/admin/payouts/${payoutAction.payout.id}/status`, {
-                status: payoutAction.status,
-                ...(approver.trim() ? { approver: approver.trim() } : {}),
-                ...(payoutReason.trim() ? { reason: payoutReason.trim() } : {}),
+            await api.post(`/admin/partners/${selectedPartnerId}/payouts`, {
+                amountPaise: Math.round(rupees * 100),
+                ...(payoutNote.trim() ? { note: payoutNote.trim() } : {}),
             });
-            setPayoutAction(null);
-            setApprover('');
-            setPayoutReason('');
-            setNotice({
-                type: 'success',
-                message: `Payout advanced to ${payoutAction.status.replace('_', ' ')}.`,
-            });
-            if (selectedPartnerId) await loadSnapshot(selectedPartnerId);
+            setTriggeringPayout(false);
+            setPayoutAmount('');
+            setPayoutNote('');
+            setNotice({ type: 'success', message: 'Payout triggered — the partner can see it now.' });
+            await loadSnapshot(selectedPartnerId);
         } catch (err) {
-            setError(apiMessage(err, 'Could not update the payout.'));
+            setError(apiMessage(err, 'Could not trigger the payout.'));
         } finally {
             setPayoutSubmitting(false);
+        }
+    }
+
+    async function markPaid(payout: Payout) {
+        if (!selectedPartnerId) return;
+        setMarkingPaidId(payout.id);
+        setError(null);
+        setNotice(null);
+        try {
+            await api.patch(`/admin/partners/${selectedPartnerId}/payouts/${payout.id}`, { status: 'PAID' });
+            setNotice({ type: 'success', message: `${rupeesFromPaise(payout.amountPaise)} marked paid.` });
+            await loadSnapshot(selectedPartnerId);
+        } catch (err) {
+            setError(apiMessage(err, 'Could not mark the payout paid.'));
+        } finally {
+            setMarkingPaidId(null);
+        }
+    }
+
+    async function revealBankDetails() {
+        if (!selectedPartnerId) return;
+        setRevealing(true);
+        setError(null);
+        try {
+            const { data } = await api.get<BankDetails>(
+                `/admin/partners/${selectedPartnerId}/bank-details/reveal`,
+            );
+            if (data.accountNumber && data.pan) {
+                setRevealed({ accountNumber: data.accountNumber, pan: data.pan });
+            }
+        } catch (err) {
+            setError(apiMessage(err, 'Could not reveal bank details.'));
+        } finally {
+            setRevealing(false);
         }
     }
 
@@ -280,8 +285,8 @@ export default function PartnersPage() {
                 <div className="page-header">
                     <h1>Partner workspace</h1>
                     <p className="text-muted">
-                        Inspect a partner&apos;s engine record: campaigns, conversion funnel, commission
-                        statements, and payout ledger.
+                        Inspect a partner&apos;s engine record: campaigns, conversion funnel, payouts, and
+                        payout bank details.
                     </p>
                 </div>
 
@@ -360,10 +365,6 @@ export default function PartnersPage() {
                                 <div className="access-card__field">
                                     <dt>Phone</dt>
                                     <dd>{snapshot.partner.phone}</dd>
-                                </div>
-                                <div className="access-card__field">
-                                    <dt>Commission rate</dt>
-                                    <dd>{snapshot.partner.commissionRatePct}%</dd>
                                 </div>
                                 <div className="access-card__field">
                                     <dt>Engine status</dt>
@@ -468,52 +469,59 @@ export default function PartnersPage() {
 
                         <section className="glass-card" style={{ marginBottom: '1.5rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                <h2>Commission statements</h2>
-                                <form
-                                    className="exam-form"
-                                    onSubmit={generateStatement}
-                                    style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+                                <h2>Payouts</h2>
+                                <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => {
+                                        setTriggeringPayout(true);
+                                        setPayoutAmount('');
+                                        setPayoutNote('');
+                                    }}
                                 >
-                                    <input
-                                        className="form-control"
-                                        value={period}
-                                        onChange={(e) => setPeriod(e.target.value)}
-                                        placeholder="YYYY-MM"
-                                        pattern="^\d{4}-(0[1-9]|1[0-2])$"
-                                        title="Period in YYYY-MM form"
-                                        style={{ width: 120 }}
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="btn btn-sm btn-primary"
-                                        disabled={generating || !period.trim()}
-                                    >
-                                        {generating ? 'Generating…' : 'Generate'}
-                                    </button>
-                                </form>
+                                    Trigger payout
+                                </button>
                             </div>
-                            {snapshot.statements.length === 0 ? (
-                                <p className="text-muted">No statements yet.</p>
+                            <p className="text-muted" style={{ marginTop: 0 }}>
+                                No fixed commission — pick the amount yourself. It shows on the partner&apos;s
+                                dashboard the moment you trigger it, and the first one unlocks their bank-details
+                                form.
+                            </p>
+                            {snapshot.payouts.length === 0 ? (
+                                <p className="text-muted">No payouts yet.</p>
                             ) : (
                                 <table className="data-table" style={{ margin: 0 }}>
                                     <thead>
                                         <tr>
-                                            <th>Period</th>
-                                            <th>Version</th>
-                                            <th>Total</th>
+                                            <th>Amount</th>
+                                            <th>Note</th>
                                             <th>Status</th>
+                                            <th>Triggered</th>
+                                            <th style={{ textAlign: 'right' }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {snapshot.statements.map((s) => (
-                                            <tr key={s.id}>
-                                                <td>{s.period}</td>
-                                                <td>{s.version}</td>
-                                                <td>{rupeesFromPaise(s.totalPaise)}</td>
+                                        {snapshot.payouts.map((p) => (
+                                            <tr key={p.id}>
+                                                <td>{rupeesFromPaise(p.amountPaise)}</td>
+                                                <td>{p.note ?? '—'}</td>
                                                 <td>
-                                                    <span className={STATUS_CLASS[s.status] || 'badge badge-muted'}>
-                                                        {s.status}
+                                                    <span className={STATUS_CLASS[p.status] || 'badge badge-muted'}>
+                                                        {p.status}
                                                     </span>
+                                                </td>
+                                                <td>{new Date(p.triggeredAt).toLocaleDateString('en-IN')}</td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    {p.status === 'TRIGGERED' ? (
+                                                        <button
+                                                            className="btn btn-sm btn-primary"
+                                                            disabled={markingPaidId === p.id}
+                                                            onClick={() => markPaid(p)}
+                                                        >
+                                                            {markingPaidId === p.id ? 'Saving…' : 'Mark paid'}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-muted">Paid</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -523,62 +531,54 @@ export default function PartnersPage() {
                         </section>
 
                         <section className="glass-card" style={{ marginBottom: '1.5rem' }}>
-                            <h2>Payouts</h2>
-                            {snapshot.payouts.length === 0 ? (
-                                <p className="text-muted">No payout ledger entries yet.</p>
+                            <h2>Bank details</h2>
+                            {!snapshot.bankDetails ? (
+                                <p className="text-muted">
+                                    Not submitted yet — the partner sees the form once you trigger their first
+                                    payout.
+                                </p>
                             ) : (
-                                <table className="data-table" style={{ margin: 0 }}>
-                                    <thead>
-                                        <tr>
-                                            <th>Amount</th>
-                                            <th>Status</th>
-                                            <th>Sign-off</th>
-                                            <th style={{ textAlign: 'right' }}>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {snapshot.payouts.map((p) => (
-                                            <tr key={p.id}>
-                                                <td>{rupeesFromPaise(p.amountPaise)}</td>
-                                                <td>
-                                                    <span className={STATUS_CLASS[p.status] || 'badge badge-muted'}>
-                                                        {p.status}
-                                                    </span>
-                                                </td>
-                                                <td>{p.financeSignOffApprover ?? '—'}</td>
-                                                <td style={{ textAlign: 'right' }}>
-                                                    {p.status === 'PENDING' && (
-                                                        <button
-                                                            className="btn btn-sm btn-primary"
-                                                            onClick={() => {
-                                                                setPayoutAction({ payout: p, status: 'SIGNED_OFF' });
-                                                                setApprover('');
-                                                                setPayoutReason('');
-                                                            }}
-                                                        >
-                                                            Sign off
-                                                        </button>
-                                                    )}
-                                                    {p.status === 'SIGNED_OFF' && (
-                                                        <button
-                                                            className="btn btn-sm btn-primary"
-                                                            onClick={() => {
-                                                                setPayoutAction({ payout: p, status: 'RELEASED' });
-                                                                setApprover('');
-                                                                setPayoutReason('');
-                                                            }}
-                                                        >
-                                                            Release
-                                                        </button>
-                                                    )}
-                                                    {p.status === 'RELEASED' && (
-                                                        <span className="text-muted">Settled</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <>
+                                    <div className="access-card__grid">
+                                        <div className="access-card__field">
+                                            <dt>Account holder</dt>
+                                            <dd>{snapshot.bankDetails.accountHolderName}</dd>
+                                        </div>
+                                        <div className="access-card__field">
+                                            <dt>Bank</dt>
+                                            <dd>{snapshot.bankDetails.bankName}</dd>
+                                        </div>
+                                        <div className="access-card__field">
+                                            <dt>IFSC</dt>
+                                            <dd className="mono">{snapshot.bankDetails.ifscCode}</dd>
+                                        </div>
+                                        <div className="access-card__field">
+                                            <dt>Account number</dt>
+                                            <dd className="mono">
+                                                {revealed ? revealed.accountNumber : snapshot.bankDetails.accountNumberLast4}
+                                            </dd>
+                                        </div>
+                                        <div className="access-card__field">
+                                            <dt>PAN</dt>
+                                            <dd className="mono">
+                                                {revealed ? revealed.pan : snapshot.bankDetails.panMasked}
+                                            </dd>
+                                        </div>
+                                    </div>
+                                    {!revealed && (
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            style={{ marginTop: '0.75rem' }}
+                                            disabled={revealing}
+                                            onClick={revealBankDetails}
+                                        >
+                                            {revealing ? 'Revealing…' : 'Reveal full details'}
+                                        </button>
+                                    )}
+                                    <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                                        Revealing is logged against your account.
+                                    </p>
+                                </>
                             )}
                         </section>
                     </>
@@ -652,44 +652,43 @@ export default function PartnersPage() {
                 </div>
             )}
 
-            {payoutAction && (
-                <div className="modal-overlay" onClick={() => !payoutSubmitting && setPayoutAction(null)}>
+            {triggeringPayout && (
+                <div className="modal-overlay" onClick={() => !payoutSubmitting && setTriggeringPayout(false)}>
                     <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
-                        <h2>
-                            {payoutAction.status === 'SIGNED_OFF' ? 'Sign off payout' : 'Release payout'} —{' '}
-                            {rupeesFromPaise(payoutAction.payout.amountPaise)}
-                        </h2>
+                        <h2>Trigger a payout</h2>
                         <p className="text-muted">
-                            {payoutAction.status === 'SIGNED_OFF'
-                                ? 'Records finance sign-off. Approver name is required.'
-                                : 'Releases the signed-off payout. Add an optional reason.'}
+                            No fixed commission — pick the amount. It becomes visible to the partner immediately;
+                            mark it paid once you&apos;ve actually sent the money.
                         </p>
-                        <form className="exam-form" onSubmit={submitPayoutStatus}>
+                        <form className="exam-form" onSubmit={submitTriggerPayout}>
                             <div className="form-group">
-                                <label htmlFor="approver">{payoutAction.status === 'SIGNED_OFF' ? 'Approver name *' : 'Approver / reference'}</label>
+                                <label htmlFor="payoutAmount">Amount (₹) *</label>
                                 <input
-                                    id="approver"
+                                    id="payoutAmount"
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
                                     className="form-control"
-                                    value={approver}
-                                    onChange={(e) => setApprover(e.target.value)}
-                                    required={payoutAction.status === 'SIGNED_OFF'}
+                                    value={payoutAmount}
+                                    onChange={(e) => setPayoutAmount(e.target.value)}
+                                    required
                                 />
                             </div>
                             <div className="form-group">
-                                <label htmlFor="payoutReason">Reason</label>
+                                <label htmlFor="payoutNote">Note</label>
                                 <input
-                                    id="payoutReason"
+                                    id="payoutNote"
                                     className="form-control"
-                                    value={payoutReason}
-                                    onChange={(e) => setPayoutReason(e.target.value)}
-                                    placeholder="Optional note"
+                                    value={payoutNote}
+                                    onChange={(e) => setPayoutNote(e.target.value)}
+                                    placeholder="What this covers (optional)"
                                 />
                             </div>
                             <div className="modal-actions">
                                 <button
                                     type="button"
                                     className="btn btn-secondary"
-                                    onClick={() => setPayoutAction(null)}
+                                    onClick={() => setTriggeringPayout(false)}
                                     disabled={payoutSubmitting}
                                 >
                                     Cancel
@@ -697,12 +696,9 @@ export default function PartnersPage() {
                                 <button
                                     type="submit"
                                     className="btn btn-primary"
-                                    disabled={
-                                        payoutSubmitting ||
-                                        (payoutAction.status === 'SIGNED_OFF' && !approver.trim())
-                                    }
+                                    disabled={payoutSubmitting || !payoutAmount.trim()}
                                 >
-                                    {payoutSubmitting ? 'Saving…' : 'Confirm'}
+                                    {payoutSubmitting ? 'Triggering…' : 'Trigger payout'}
                                 </button>
                             </div>
                         </form>

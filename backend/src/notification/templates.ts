@@ -399,6 +399,25 @@ export function partnerSchoolStatusChangedEmail(vars: {
     );
 }
 
+/**
+ * Confirms a bank-details submission — masked, never the account number or
+ * PAN themselves, so a submission the partner didn't make gets noticed
+ * without the email itself becoming something worth stealing.
+ */
+export function partnerBankDetailsSubmittedEmail(vars: {
+    contactPerson: string;
+    accountNumberLast4: string;
+    portalUrl: string;
+}): RenderedEmail {
+    return build(
+        'Your BIO payout bank details were updated',
+        `Hi ${escapeHtml(vars.contactPerson)}`,
+        `<p style="margin:0 0 12px;">Bank details for your payouts were just saved: account number <strong>${escapeHtml(vars.accountNumberLast4)}</strong>.</p>
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away — someone else may have access to your account.</p>`,
+        { label: 'View payouts', url: `${vars.portalUrl}/dashboard/payouts` },
+    );
+}
+
 // ── School lifecycle ─────────────────────────────────────────────────────
 //
 // A partner-submitted school's coordinator has no password: the access token

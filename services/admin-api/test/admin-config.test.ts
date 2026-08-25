@@ -9,6 +9,7 @@ function validEnv(): NodeJS.ProcessEnv {
 		REDIS_URL: "redis://:secret@localhost:6380",
 		CORS_ORIGIN: "http://localhost:5173",
 		JWT_SECRET: "test-jwt-secret-please-rotate",
+		BANK_DETAILS_ENCRYPTION_KEY: "test-bank-details-key-please-rotate",
 		PORT: "3000",
 		LOG_LEVEL: "info",
 		CONTRACT_VERSION: EXPECTED_CONTRACT_VERSION,
@@ -23,6 +24,7 @@ describe("loadAdminConfig (fail-closed)", () => {
 			redisUrl: "redis://:secret@localhost:6380",
 			corsOrigin: "http://localhost:5173",
 			jwtSecret: "test-jwt-secret-please-rotate",
+			bankDetailsEncryptionKey: "test-bank-details-key-please-rotate",
 			port: 3000,
 			logLevel: "info",
 			contractVersion: EXPECTED_CONTRACT_VERSION,
@@ -43,6 +45,7 @@ describe("loadAdminConfig (fail-closed)", () => {
 		"REDIS_URL",
 		"CORS_ORIGIN",
 		"JWT_SECRET",
+		"BANK_DETAILS_ENCRYPTION_KEY",
 		"CONTRACT_VERSION",
 	]) {
 		it(`throws MissingConfigError when ${secret} is absent`, () => {

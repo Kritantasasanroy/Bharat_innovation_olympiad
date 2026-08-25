@@ -28,53 +28,23 @@ describe("CSV exports (PRD-046)", () => {
 		expect(csv).toContain("CREDITED");
 	});
 
-	it("exports commission statements as authenticated CSV", async () => {
+	it("exports payouts as authenticated CSV", async () => {
 		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
-			orgName: "Export Statement Co",
-		});
-		const staff = staffToken();
-
-		await jsonRequest(app, "POST", `/campaigns/${campaignId}/paid-conversion`, {
-			body: { studentId: "s-1", registrationId: "r-1", amountPaise: 100000 },
-			headers: bearer(staff),
-		});
-		await jsonRequest(app, "POST", `/partners/${partnerId}/statements`, {
-			body: { period: "2026-06" },
-			headers: bearer(ownerToken),
-		});
-
-		const response = await jsonRequest(app, "GET", "/exports/statements", {
-			headers: bearer(staff),
-		});
-		expect(response.status).toBe(200);
-		const csv = await response.text();
-		expect(csv).toContain(partnerId);
-		expect(csv).toContain("2026-06");
-		expect(csv).toContain("ISSUED");
-	});
-
-	it("exports the payout ledger as authenticated CSV", async () => {
-		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
+		const { partnerId } = await createApprovedPartnerWithCampaign(app, {
 			orgName: "Export Payout Co",
 		});
 		const staff = staffToken();
 
-		await jsonRequest(app, "POST", `/campaigns/${campaignId}/paid-conversion`, {
-			body: { studentId: "s-1", registrationId: "r-1", amountPaise: 100000 },
+		await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 100000, note: "test payout" },
 			headers: bearer(staff),
-		});
-		await jsonRequest(app, "POST", `/partners/${partnerId}/statements`, {
-			body: { period: "2026-06" },
-			headers: bearer(ownerToken),
 		});
 
 		const response = await jsonRequest(app, "GET", "/exports/payouts", { headers: bearer(staff) });
 		expect(response.status).toBe(200);
 		const csv = await response.text();
 		expect(csv).toContain(partnerId);
-		expect(csv).toContain("PENDING");
+		expect(csv).toContain("TRIGGERED");
 	});
 
 	it("requires authentication and staff privilege for exports", async () => {

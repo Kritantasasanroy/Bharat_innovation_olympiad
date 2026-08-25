@@ -95,31 +95,63 @@ export const partnerRoutes = (container: PartnerContainer) =>
 			const data = await container.attributionService.getFunnel(params.id);
 			return { success: true, data };
 		})
-		.post(
-			"/partners/:id/statements",
-			async ({ params, body, auth }) => {
-				const user = requireAuth(auth);
-				assertOwnsPartner(user, params.id);
-				const data = await container.commissionService.generate({
-					partnerId: params.id,
-					period: body.period,
-				});
-				return { success: true, data };
-			},
-			{ body: t.Object({ period: t.String() }) },
-		)
-		.get("/partners/:id/statements", async ({ params, auth }) => {
-			const user = requireAuth(auth);
-			assertOwnsPartner(user, params.id);
-			const data = await container.commissionService.list(params.id);
-			return { success: true, data };
-		})
 		.get("/partners/:id/payouts", async ({ params, auth }) => {
 			const user = requireAuth(auth);
 			assertOwnsPartner(user, params.id);
 			const data = await container.payoutService.listForPartner(params.id);
 			return { success: true, data };
 		})
+		.get("/partners/:id/bank-details", async ({ params, query, auth }) => {
+			const user = requireAuth(auth);
+			assertOwnsPartner(user, params.id);
+			const data = await container.bankDetailsService.get(params.id);
+			if (!data) return { success: true, data: null };
+
+			// The owning partner reads their own submission back in full — it is
+			// already theirs, no audit needed. A staff caller sees the masked view
+			// by default and must explicitly reveal, which is audited (who, when).
+			const isOwner = user.userId === params.id;
+			if (isOwner || query["reveal"] === "true") {
+				const revealed = await container.bankDetailsService.reveal(params.id);
+				if (!isOwner && revealed) {
+					const now = new Date();
+					await container.audit.record({
+						action: "bank-details.revealed",
+						actor: { id: user.userId, type: "user" },
+						resource: { type: "partner-bank-details", id: params.id },
+						outcome: "success",
+						occurredAt: now.toISOString(),
+					});
+				}
+				return { success: true, data: revealed ? { ...data, ...revealed } : data };
+			}
+			return { success: true, data };
+		})
+		.put(
+			"/partners/:id/bank-details",
+			async ({ params, body, auth }) => {
+				const user = requireAuth(auth);
+				assertOwnsPartner(user, params.id);
+				const data = await container.bankDetailsService.submit({
+					partnerId: params.id,
+					accountHolderName: body.accountHolderName,
+					bankName: body.bankName,
+					ifscCode: body.ifscCode,
+					accountNumber: body.accountNumber,
+					pan: body.pan,
+				});
+				return { success: true, data };
+			},
+			{
+				body: t.Object({
+					accountHolderName: t.String(),
+					bankName: t.String(),
+					ifscCode: t.String(),
+					accountNumber: t.String(),
+					pan: t.String(),
+				}),
+			},
+		)
 		.get("/partners/:id/institutions", async ({ params, auth }) => {
 			const user = requireAuth(auth);
 			assertOwnsPartner(user, params.id);

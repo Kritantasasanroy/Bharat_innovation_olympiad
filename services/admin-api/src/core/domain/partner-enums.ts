@@ -54,16 +54,13 @@ export const AttributionRule = {
 } as const;
 export type AttributionRule = (typeof AttributionRule)[keyof typeof AttributionRule];
 
-/** Status of a `CommissionStatement` version. Every issued version is immutable. */
-export const StatementStatus = {
-	ISSUED: "ISSUED",
-} as const;
-export type StatementStatus = (typeof StatementStatus)[keyof typeof StatementStatus];
-
-/** Status of a `PayoutLedgerEntry`. Transitions are strictly sequential. */
+/**
+ * Status of a `Payout`. Admin decides the amount and triggers it (TRIGGERED);
+ * once the money has actually gone out, admin marks it PAID. Terminal at
+ * PAID — no path back.
+ */
 export const PayoutStatus = {
-	PENDING: "PENDING",
-	SIGNED_OFF: "SIGNED_OFF",
-	RELEASED: "RELEASED",
+	TRIGGERED: "TRIGGERED",
+	PAID: "PAID",
 } as const;
 export type PayoutStatus = (typeof PayoutStatus)[keyof typeof PayoutStatus];

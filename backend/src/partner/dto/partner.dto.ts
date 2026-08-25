@@ -2,10 +2,12 @@ import {
     IsBoolean,
     IsEmail,
     IsIn,
+    IsInt,
     IsNotEmpty,
     IsOptional,
     IsString,
     Matches,
+    Min,
     MinLength,
     ValidateIf,
 } from 'class-validator';
@@ -89,26 +91,42 @@ export class UpdatePartnerProfileDto {
     phone?: string;
 }
 
-/** ADMIN — close out a commission period for a partner (engine proxy). */
-export class GenerateStatementDto {
-    @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'period must be in "YYYY-MM" form, e.g. 2026-06.' })
-    period: string;
+/** ADMIN — no fixed commission: admin decides the amount and triggers a payout directly (engine proxy). */
+export class TriggerPayoutDto {
+    @IsInt()
+    @Min(1)
+    amountPaise: number;
+
+    /** What this covers, freeform — e.g. "August referrals". */
+    @IsOptional()
+    @IsString()
+    note?: string;
 }
 
-/** ADMIN/FINANCE — advance a payout ledger entry (engine proxy). */
-export class UpdatePayoutStatusDto {
-    @IsIn(['SIGNED_OFF', 'RELEASED'])
-    status: 'SIGNED_OFF' | 'RELEASED';
+/** ADMIN — records that a triggered payout's money has actually gone out (engine proxy). */
+export class MarkPayoutPaidDto {
+    @IsIn(['PAID'])
+    status: 'PAID';
+}
 
-    /** Required by the engine when signing off; who approved the payout. */
-    @IsOptional()
+/** A partner submitting (or resubmitting) where their payouts get sent. */
+export class SubmitBankDetailsDto {
     @IsString()
     @IsNotEmpty()
-    approver?: string;
+    accountHolderName: string;
 
-    @IsOptional()
     @IsString()
-    reason?: string;
+    @IsNotEmpty()
+    bankName: string;
+
+    @Matches(/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/, { message: 'ifscCode must be a valid IFSC code (e.g. HDFC0001234).' })
+    ifscCode: string;
+
+    @Matches(/^\d{9,18}$/, { message: 'accountNumber must be 9-18 digits.' })
+    accountNumber: string;
+
+    @Matches(/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/, { message: 'pan must be a valid PAN (e.g. ABCDE1234F).' })
+    pan: string;
 }
 
 /** ADMIN — pause/resume a partner's campaign without revoking the whole partner (engine proxy). */

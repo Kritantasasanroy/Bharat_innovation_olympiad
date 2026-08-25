@@ -2,9 +2,9 @@
 
 import { type FormEvent, useCallback, useState } from "react";
 import { StatusBadge } from "../../../components/status-badge";
-import { ApiError, portalApi } from "../../../lib/api-client";
+import { ApiError, partnerPortalApi } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
-import type { Payout, Statement } from "../../../lib/types";
+import type { BankDetails, Payout } from "../../../lib/types";
 import { usePoll } from "../../../lib/use-poll";
 
 function rupeesFromPaise(paise: number): string {
@@ -16,55 +16,65 @@ function rupeesFromPaise(paise: number): string {
 
 export default function PayoutsPage() {
 	const { token } = useAuth();
-	const [statements, setStatements] = useState<Statement[] | null>(null);
 	const [payouts, setPayouts] = useState<Payout[] | null>(null);
+	const [bankDetails, setBankDetails] = useState<BankDetails | null | undefined>(undefined);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
-	const [period, setPeriod] = useState("");
-	const [requesting, setRequesting] = useState(false);
+	const [editingBankDetails, setEditingBankDetails] = useState(false);
+	const [submitting, setSubmitting] = useState(false);
 
 	const load = useCallback(async () => {
 		if (!token) return;
 		try {
-			const [statementList, payoutList] = await Promise.all([
-				portalApi.listStatements(token),
-				portalApi.listPayouts(token),
+			const [payoutList, details] = await Promise.all([
+				partnerPortalApi.payouts(token),
+				partnerPortalApi.bankDetails(token),
 			]);
-			setStatements(statementList);
 			setPayouts(payoutList);
+			setBankDetails(details);
 			setError(null);
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Could not load your commission records.");
+			setError(err instanceof ApiError ? err.message : "Could not load your payouts.");
 		}
 	}, [token]);
 
 	usePoll(load);
 
-	async function handleGenerate(event: FormEvent<HTMLFormElement>) {
+	async function handleSubmitBankDetails(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (!token || !period) return;
-		setRequesting(true);
+		if (!token) return;
+		setSubmitting(true);
 		setError(null);
 		setNotice(null);
+
+		const form = new FormData(event.currentTarget);
 		try {
-			await portalApi.requestStatement(token, { period });
-			setPeriod("");
-			setNotice(`Statement requested for ${period}. Refreshing the ledger.`);
-			await load();
+			const saved = await partnerPortalApi.submitBankDetails(token, {
+				accountHolderName: String(form.get("accountHolderName") ?? "").trim(),
+				bankName: String(form.get("bankName") ?? "").trim(),
+				ifscCode: String(form.get("ifscCode") ?? "").trim(),
+				accountNumber: String(form.get("accountNumber") ?? "").trim(),
+				pan: String(form.get("pan") ?? "").trim(),
+			});
+			setBankDetails(saved);
+			setEditingBankDetails(false);
+			setNotice("Bank details saved. We've emailed you a confirmation.");
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Could not generate a statement.");
+			setError(err instanceof ApiError ? err.message : "Could not save your bank details.");
 		} finally {
-			setRequesting(false);
+			setSubmitting(false);
 		}
 	}
+
+	const bankDetailsRequired = (payouts?.length ?? 0) > 0 && bankDetails === null;
 
 	return (
 		<main>
 			<div className="page-header">
-				<h1>Payouts &amp; statements</h1>
+				<h1>Payouts</h1>
 				<p>
-					Statements are issued for a calendar month. The payout ledger shows the finance status for
-					each issued statement; only BIO staff can sign off or release a payout.
+					No fixed commission — BIO staff decide each payout amount and trigger it directly. It
+					shows up here the moment it's triggered.
 				</p>
 			</div>
 
@@ -72,78 +82,11 @@ export default function PayoutsPage() {
 			{notice ? <div className="notice notice--success">{notice}</div> : null}
 
 			<div className="card">
-				<h2>Request a statement</h2>
-				<p className="muted">
-					Choose a month in which you had credited paid conversions. If a statement already exists,
-					BIO will issue a new version rather than overwriting the earlier record.
-				</p>
-				<form
-					onSubmit={handleGenerate}
-					style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}
-				>
-					<div>
-						<label htmlFor="period">Statement month</label>
-						<input
-							id="period"
-							type="month"
-							required
-							value={period}
-							onChange={(event) => setPeriod(event.target.value)}
-						/>
-					</div>
-					<button type="submit" className="button" disabled={requesting || !period}>
-						{requesting ? "Requesting…" : "Generate statement"}
-					</button>
-				</form>
-			</div>
-
-			<div className="card">
-				<h2>Commission statements</h2>
-				{statements ? (
-					statements.length === 0 ? (
-						<div className="empty-state">
-							No statements yet. Request your first statement above after a paid conversion is
-							credited.
-						</div>
-					) : (
-						<div className="table-wrap">
-							<table>
-								<thead>
-									<tr>
-										<th>Period</th>
-										<th>Version</th>
-										<th>Commission</th>
-										<th>Status</th>
-										<th>Issued</th>
-									</tr>
-								</thead>
-								<tbody>
-									{statements.map((statement) => (
-										<tr key={statement.id}>
-											<td>{statement.period}</td>
-											<td>{statement.version}</td>
-											<td>{rupeesFromPaise(statement.totalPaise)}</td>
-											<td>
-												<StatusBadge status={statement.status} />
-											</td>
-											<td>{new Date(statement.issuedAt).toLocaleDateString("en-IN")}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)
-				) : !error ? (
-					<p className="muted">Loading statements…</p>
-				) : null}
-			</div>
-
-			<div className="card">
-				<h2>Payout ledger</h2>
+				<h2>Payout history</h2>
 				{payouts ? (
 					payouts.length === 0 ? (
 						<div className="empty-state">
-							No payout entries yet. A ledger entry appears when a statement is issued.
+							No payouts yet. BIO staff trigger one when it's time to pay you — it'll appear here.
 						</div>
 					) : (
 						<div className="table-wrap">
@@ -151,20 +94,20 @@ export default function PayoutsPage() {
 								<thead>
 									<tr>
 										<th>Amount</th>
+										<th>Note</th>
 										<th>Status</th>
-										<th>Finance sign-off</th>
-										<th>Created</th>
+										<th>Triggered</th>
 									</tr>
 								</thead>
 								<tbody>
 									{payouts.map((payout) => (
 										<tr key={payout.id}>
 											<td>{rupeesFromPaise(payout.amountPaise)}</td>
+											<td>{payout.note ?? "—"}</td>
 											<td>
 												<StatusBadge status={payout.status} />
 											</td>
-											<td>{payout.financeSignOffApprover ?? "Pending"}</td>
-											<td>{new Date(payout.createdAt).toLocaleDateString("en-IN")}</td>
+											<td>{new Date(payout.triggeredAt).toLocaleDateString("en-IN")}</td>
 										</tr>
 									))}
 								</tbody>
@@ -172,9 +115,148 @@ export default function PayoutsPage() {
 						</div>
 					)
 				) : !error ? (
-					<p className="muted">Loading payout ledger…</p>
+					<p className="muted">Loading payouts…</p>
 				) : null}
 			</div>
+
+			{bankDetailsRequired || editingBankDetails ? (
+				<div className="card" style={{ borderColor: "var(--accent-500)" }}>
+					<h2>{bankDetails ? "Update bank details" : "Add your bank details"}</h2>
+					{!bankDetails ? (
+						<div className="notice notice--warn" role="alert" style={{ marginBottom: "1rem" }}>
+							A payout has been triggered for you — add where it should be sent. Double-check every
+							field before saving: BIO cannot verify account ownership automatically, and a mistake
+							here could send money to the wrong account.
+						</div>
+					) : null}
+					<form
+						className="form-grid"
+						onSubmit={handleSubmitBankDetails}
+						style={{ maxWidth: "none" }}
+					>
+						<div className="grid-2" style={{ gap: "1rem" }}>
+							<div>
+								<label htmlFor="accountHolderName">Account holder name</label>
+								<input
+									id="accountHolderName"
+									name="accountHolderName"
+									maxLength={200}
+									required
+									defaultValue={bankDetails?.accountHolderName}
+								/>
+							</div>
+							<div>
+								<label htmlFor="bankName">Bank name</label>
+								<input
+									id="bankName"
+									name="bankName"
+									maxLength={200}
+									required
+									defaultValue={bankDetails?.bankName}
+								/>
+							</div>
+						</div>
+						<div className="grid-2" style={{ gap: "1rem" }}>
+							<div>
+								<label htmlFor="ifscCode">IFSC code</label>
+								<input
+									id="ifscCode"
+									name="ifscCode"
+									maxLength={11}
+									required
+									spellCheck={false}
+									style={{ textTransform: "uppercase" }}
+									placeholder="HDFC0001234"
+									defaultValue={bankDetails?.ifscCode}
+								/>
+							</div>
+							<div>
+								<label htmlFor="accountNumber">Account number</label>
+								<input
+									id="accountNumber"
+									name="accountNumber"
+									inputMode="numeric"
+									maxLength={18}
+									required
+									autoComplete="off"
+									placeholder={
+										bankDetails
+											? `Currently ending ${bankDetails.accountNumberLast4.slice(-4)}`
+											: undefined
+									}
+								/>
+							</div>
+						</div>
+						<div>
+							<label htmlFor="pan">PAN</label>
+							<input
+								id="pan"
+								name="pan"
+								maxLength={10}
+								required
+								spellCheck={false}
+								autoComplete="off"
+								style={{ textTransform: "uppercase" }}
+								placeholder="ABCDE1234F"
+							/>
+						</div>
+						<p className="muted" style={{ fontSize: "0.85rem" }}>
+							Your account number and PAN are encrypted before they're stored, and only BIO staff
+							processing your payout can view them.
+						</p>
+						<div className="inline">
+							<button type="submit" className="button" disabled={submitting}>
+								{submitting ? "Saving…" : "Save bank details"}
+							</button>
+							{bankDetails ? (
+								<button
+									type="button"
+									className="button button--secondary"
+									onClick={() => setEditingBankDetails(false)}
+									disabled={submitting}
+								>
+									Cancel
+								</button>
+							) : null}
+						</div>
+					</form>
+				</div>
+			) : bankDetails ? (
+				<div className="card">
+					<div className="row-between">
+						<h2>Bank details on file</h2>
+						<button
+							type="button"
+							className="button button--secondary"
+							onClick={() => setEditingBankDetails(true)}
+						>
+							Update
+						</button>
+					</div>
+					<div className="profile-grid">
+						<div className="profile-field">
+							<span className="profile-field__label">Account holder</span>
+							<span>{bankDetails.accountHolderName}</span>
+						</div>
+						<div className="profile-field">
+							<span className="profile-field__label">Bank</span>
+							<span>{bankDetails.bankName}</span>
+						</div>
+						<div className="profile-field">
+							<span className="profile-field__label">IFSC</span>
+							<span>{bankDetails.ifscCode}</span>
+						</div>
+						<div className="profile-field">
+							<span className="profile-field__label">Account number</span>
+							<span>{bankDetails.accountNumberLast4}</span>
+						</div>
+						<div className="profile-field">
+							<span className="profile-field__label">PAN</span>
+							<span>{bankDetails.panMasked}</span>
+						</div>
+					</div>
+				</div>
+			) : null}
 		</main>
 	);
 }

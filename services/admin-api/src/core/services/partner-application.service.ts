@@ -16,9 +16,6 @@ import type {
 	PartnerRepository,
 } from "../ports/out/partner-repositories.port";
 
-/** Global default commission rate applied to a newly-created partner (PRD-046 decision). */
-export const DEFAULT_COMMISSION_RATE_PCT = 10;
-
 export interface PartnerApplicationServiceDeps {
 	readonly applications: PartnerApplicationRepository;
 	readonly partners: PartnerRepository;
@@ -61,7 +58,6 @@ export class PartnerApplicationService {
 			contactPerson: input.contactPerson,
 			email: input.email,
 			phone: input.phone,
-			commissionRatePct: DEFAULT_COMMISSION_RATE_PCT,
 			createdAt: now,
 		});
 

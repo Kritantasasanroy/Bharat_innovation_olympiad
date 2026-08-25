@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
 	AttributionCreditedPayload,
+	BankDetailsSubmittedPayload,
 	type BioEventEnvelope,
 	CONTRACT_VERSION,
-	CommissionStatementIssuedPayload,
 	PartnerApplicationSubmittedPayload,
 	PartnerStatusChangedPayload,
-	PayoutStatusChangedPayload,
+	PayoutPaidPayload,
+	PayoutTriggeredPayload,
 } from "@bio/domain-contracts";
 import type {
 	PartnerDomainEvent,
@@ -99,40 +100,51 @@ export class ContractPartnerEventPublisher implements PartnerEventPublisher {
 					payload,
 				};
 			}
-			case "CommissionStatementIssued": {
-				const payload = CommissionStatementIssuedPayload.parse({
-					statementId: event.statementId,
+			case "PayoutTriggered": {
+				const payload = PayoutTriggeredPayload.parse({
+					payoutId: event.payoutId,
 					partnerId: event.partnerId,
-					period: event.period,
-					version: event.version,
-					totalPaise: event.totalPaise,
-					issuedAt: event.issuedAt.toISOString(),
+					amountPaise: event.amountPaise,
+					note: event.note,
+					triggeredBy: event.triggeredBy,
+					triggeredAt: event.triggeredAt.toISOString(),
 				});
 				return {
 					...base,
-					eventType: "CommissionStatementIssued",
-					occurredAt: event.issuedAt.toISOString(),
-					correlationId: event.statementId,
-					idempotencyKey: `CommissionStatementIssued:${event.partnerId}:${event.period}:${event.version}`,
+					eventType: "PayoutTriggered",
+					occurredAt: event.triggeredAt.toISOString(),
+					correlationId: event.payoutId,
+					idempotencyKey: `PayoutTriggered:${event.payoutId}`,
 					payload,
 				};
 			}
-			case "PayoutStatusChanged": {
-				const payload = PayoutStatusChangedPayload.parse({
+			case "PayoutPaid": {
+				const payload = PayoutPaidPayload.parse({
 					payoutId: event.payoutId,
 					partnerId: event.partnerId,
-					statementId: event.statementId,
-					previousStatus: event.previousStatus,
-					newStatus: event.newStatus,
-					changedBy: event.changedBy,
-					changedAt: event.changedAt.toISOString(),
+					paidBy: event.paidBy,
+					paidAt: event.paidAt.toISOString(),
 				});
 				return {
 					...base,
-					eventType: "PayoutStatusChanged",
-					occurredAt: event.changedAt.toISOString(),
+					eventType: "PayoutPaid",
+					occurredAt: event.paidAt.toISOString(),
 					correlationId: event.payoutId,
-					idempotencyKey: `PayoutStatusChanged:${event.payoutId}:${event.newStatus}`,
+					idempotencyKey: `PayoutPaid:${event.payoutId}`,
+					payload,
+				};
+			}
+			case "BankDetailsSubmitted": {
+				const payload = BankDetailsSubmittedPayload.parse({
+					partnerId: event.partnerId,
+					submittedAt: event.submittedAt.toISOString(),
+				});
+				return {
+					...base,
+					eventType: "BankDetailsSubmitted",
+					occurredAt: event.submittedAt.toISOString(),
+					correlationId: event.partnerId,
+					idempotencyKey: `BankDetailsSubmitted:${event.partnerId}:${event.submittedAt.toISOString()}`,
 					payload,
 				};
 			}

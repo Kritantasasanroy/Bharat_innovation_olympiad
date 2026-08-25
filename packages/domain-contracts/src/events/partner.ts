@@ -23,9 +23,6 @@ const PartnerStatus = z.enum(["PENDING", "APPROVED", "REJECTED"]);
 /** Which rule resolved an attribution conflict (first-touch link vs. checkout coupon). */
 const AttributionRule = z.enum(["LINK_FIRST_TOUCH", "COUPON_ONLY", "LINK_ONLY"]);
 
-/** Payout ledger entry status. */
-const PayoutStatus = z.enum(["PENDING", "SIGNED_OFF", "RELEASED"]);
-
 /** `PartnerApplicationSubmitted` — a new partner onboarding application lands (SUBMITTED). */
 export const PartnerApplicationSubmittedPayload = z.object({
 	applicationId: id("Submitted application id.", FC.AdminOnly),
@@ -66,36 +63,49 @@ export const AttributionCreditedPayload = z.object({
 });
 export type AttributionCredited = z.infer<typeof AttributionCreditedPayload>;
 
-/** `CommissionStatementIssued` — a new (immutable) commission statement version was issued. */
-export const CommissionStatementIssuedPayload = z.object({
-	statementId: id("Issued statement id.", FC.AdminOnly),
-	partnerId: id("Partner the statement is for.", FC.AdminOnly),
-	period: text("Billing period the statement covers (e.g. 2026-06).", FC.AdminOnly),
-	version: count("Monotonic version for this partner+period.", FC.AdminOnly),
-	totalPaise: count("Total commission amount, in paise.", FC.AdminOnly),
-	issuedAt: timestamp("When this version was issued."),
+/**
+ * `PayoutTriggered` — admin decided an amount and triggered a payout for a
+ * partner. Not derived from any commission calculation.
+ */
+export const PayoutTriggeredPayload = z.object({
+	payoutId: id("Triggered payout id.", FC.AdminOnly),
+	partnerId: id("Partner the payout is for.", FC.AdminOnly),
+	amountPaise: count("Amount admin decided to send, in paise.", FC.AdminOnly),
+	note: field(z.string().nullable(), FC.AdminOnly, "What this payout covers, freeform."),
+	triggeredBy: id("Staff actor who triggered the payout.", FC.AdminOnly),
+	triggeredAt: timestamp("When the payout was triggered."),
 });
-export type CommissionStatementIssued = z.infer<typeof CommissionStatementIssuedPayload>;
+export type PayoutTriggered = z.infer<typeof PayoutTriggeredPayload>;
 
-/** `PayoutStatusChanged` — a payout ledger entry transitioned status. */
-export const PayoutStatusChangedPayload = z.object({
-	payoutId: id("Affected payout ledger entry id.", FC.AdminOnly),
+/** `PayoutPaid` — a triggered payout's money has actually gone out. Terminal. */
+export const PayoutPaidPayload = z.object({
+	payoutId: id("Affected payout id.", FC.AdminOnly),
 	partnerId: id("Partner the payout belongs to.", FC.AdminOnly),
-	statementId: id("Commission statement the payout was created from.", FC.AdminOnly),
-	previousStatus: field(PayoutStatus, FC.AdminOnly, "Status before the transition."),
-	newStatus: field(PayoutStatus, FC.AdminOnly, "Status after the transition."),
-	changedBy: id("Staff actor who made the transition.", FC.AdminOnly),
-	changedAt: timestamp("When the transition was recorded."),
+	paidBy: id("Staff actor who marked it paid.", FC.AdminOnly),
+	paidAt: timestamp("When it was marked paid."),
 });
-export type PayoutStatusChanged = z.infer<typeof PayoutStatusChangedPayload>;
+export type PayoutPaid = z.infer<typeof PayoutPaidPayload>;
+
+/**
+ * `BankDetailsSubmitted` — a partner submitted (or resubmitted) where their
+ * payouts get sent. Deliberately carries no bank fields at all, sensitive or
+ * otherwise — this event exists purely to say "something changed", never to
+ * carry the details themselves.
+ */
+export const BankDetailsSubmittedPayload = z.object({
+	partnerId: id("Partner who submitted bank details.", FC.AdminOnly),
+	submittedAt: timestamp("When the details were submitted."),
+});
+export type BankDetailsSubmitted = z.infer<typeof BankDetailsSubmittedPayload>;
 
 /** Partner-family payload catalog, keyed by canonical `eventType`. */
 export const PARTNER_EVENT_PAYLOADS = defineCatalog({
 	PartnerApplicationSubmitted: PartnerApplicationSubmittedPayload,
 	PartnerStatusChanged: PartnerStatusChangedPayload,
 	AttributionCredited: AttributionCreditedPayload,
-	CommissionStatementIssued: CommissionStatementIssuedPayload,
-	PayoutStatusChanged: PayoutStatusChangedPayload,
+	PayoutTriggered: PayoutTriggeredPayload,
+	PayoutPaid: PayoutPaidPayload,
+	BankDetailsSubmitted: BankDetailsSubmittedPayload,
 });
 
 /** Partner-family event-type names. */

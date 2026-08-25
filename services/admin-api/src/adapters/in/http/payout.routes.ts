@@ -4,32 +4,43 @@ import { authPlugin, requireAuth } from "./auth.plugin";
 import { assertStaffRole } from "./partner-auth.helpers";
 
 /**
- * Payout ledger status transitions (PRD-046): staff-set, audited.
- * `PATCH /payouts/:id/status` moves `PENDING -> SIGNED_OFF -> RELEASED`; the
- * service layer blocks a `RELEASED` transition unless finance sign-off
- * (approver + timestamp) is already recorded. Restricted to FINANCE/
- * SUPER_ADMIN — payout money movement is a finance-sensitive action.
+ * Admin-triggered payouts (no commission rate, no statement): admin decides
+ * an amount and triggers it, then marks it paid once the money has actually
+ * gone out. Both staff-only, audited — money movement is finance-sensitive.
  */
 export const payoutRoutes = (container: PartnerContainer) =>
-	new Elysia({ name: "payout-routes" }).use(authPlugin).patch(
-		"/payouts/:id/status",
-		async ({ params, body, auth }) => {
-			const user = requireAuth(auth);
-			assertStaffRole(user, ["SUPER_ADMIN", "FINANCE"]);
-			const data = await container.payoutService.updateStatus({
-				payoutId: params.id,
-				status: body.status,
-				actor: user.userId,
-				...(body.approver !== undefined ? { approver: body.approver } : {}),
-				...(body.reason !== undefined ? { reason: body.reason } : {}),
-			});
-			return { success: true, data };
-		},
-		{
-			body: t.Object({
-				status: t.Union([t.Literal("SIGNED_OFF"), t.Literal("RELEASED")]),
-				approver: t.Optional(t.String()),
-				reason: t.Optional(t.String()),
-			}),
-		},
-	);
+	new Elysia({ name: "payout-routes" })
+		.use(authPlugin)
+		.post(
+			"/partners/:id/payouts",
+			async ({ params, body, auth }) => {
+				const user = requireAuth(auth);
+				assertStaffRole(user);
+				const data = await container.payoutService.trigger({
+					partnerId: params.id,
+					amountPaise: body.amountPaise,
+					triggeredBy: user.userId,
+					...(body.note !== undefined ? { note: body.note } : {}),
+				});
+				return { success: true, data };
+			},
+			{
+				body: t.Object({
+					amountPaise: t.Number(),
+					note: t.Optional(t.String()),
+				}),
+			},
+		)
+		.patch(
+			"/partners/:id/payouts/:payoutId",
+			async ({ params, auth }) => {
+				const user = requireAuth(auth);
+				assertStaffRole(user);
+				const data = await container.payoutService.markPaid({
+					payoutId: params.payoutId,
+					paidBy: user.userId,
+				});
+				return { success: true, data };
+			},
+			{ body: t.Object({ status: t.Literal("PAID") }) },
+		);

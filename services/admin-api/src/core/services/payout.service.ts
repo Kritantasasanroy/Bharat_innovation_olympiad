@@ -1,113 +1,122 @@
 import { PayoutStatus } from "../domain/partner-enums";
-import type { PayoutLedgerEntry } from "../domain/partner-models";
+import type { Payout } from "../domain/partner-models";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import type { UpdatePayoutStatusInput } from "../ports/in/partner.port";
+import type { MarkPayoutPaidInput, TriggerPayoutInput } from "../ports/in/partner.port";
 import type { AuditSink } from "../ports/out/audit-sink.port";
 import type { PartnerEventPublisher } from "../ports/out/partner-event-publisher.port";
-import type { Clock } from "../ports/out/partner-gateways.port";
-import type {
-	PartnerRepository,
-	PayoutLedgerRepository,
-} from "../ports/out/partner-repositories.port";
+import type { Clock, IdGenerator } from "../ports/out/partner-gateways.port";
+import type { PartnerRepository, PayoutRepository } from "../ports/out/partner-repositories.port";
 
 export interface PayoutServiceDeps {
-	readonly payouts: PayoutLedgerRepository;
+	readonly payouts: PayoutRepository;
 	readonly partners: PartnerRepository;
 	readonly clock: Clock;
+	readonly ids: IdGenerator;
 	readonly events: PartnerEventPublisher;
 	readonly audit: AuditSink;
 }
 
 /**
- * Payout ledger status transitions (PRD-046): `PENDING -> SIGNED_OFF -> RELEASED`,
- * staff-set via an audited API. A transition to `RELEASED` is BLOCKED unless a
- * finance sign-off field (approver + timestamp) is already set.
+ * Admin-triggered payouts: no commission rate, no statement — admin decides
+ * an amount and triggers it directly against a partner (TRIGGERED), then
+ * marks it paid once the money has actually gone out (PAID). Terminal at
+ * PAID; there is no path back.
  */
 export class PayoutService {
 	constructor(private readonly deps: PayoutServiceDeps) {}
 
-	async updateStatus(input: UpdatePayoutStatusInput): Promise<PayoutLedgerEntry> {
-		if (!input.actor) {
+	async trigger(input: TriggerPayoutInput): Promise<Payout> {
+		if (!Number.isInteger(input.amountPaise) || input.amountPaise <= 0) {
 			throw new ValidationError("Validation failed", [
-				{ field: "actor", message: "actor is required" },
+				{ field: "amountPaise", message: "amountPaise must be a positive integer" },
+			]);
+		}
+		if (!input.triggeredBy) {
+			throw new ValidationError("Validation failed", [
+				{ field: "triggeredBy", message: "triggeredBy is required" },
+			]);
+		}
+
+		const partner = await this.deps.partners.findById(input.partnerId);
+		if (!partner) throw new NotFoundError("Partner", input.partnerId);
+
+		const now = this.deps.clock.now();
+		const payout = await this.deps.payouts.create({
+			id: this.deps.ids.uuid(),
+			partnerId: input.partnerId,
+			amountPaise: input.amountPaise,
+			note: input.note?.trim() || null,
+			triggeredBy: input.triggeredBy,
+			triggeredAt: now,
+		});
+
+		await this.deps.events.publish({
+			type: "PayoutTriggered",
+			payoutId: payout.id,
+			partnerId: payout.partnerId,
+			amountPaise: payout.amountPaise,
+			note: payout.note,
+			triggeredBy: payout.triggeredBy,
+			triggeredAt: payout.triggeredAt,
+		});
+
+		await this.deps.audit.record({
+			action: "payout.triggered",
+			actor: { id: input.triggeredBy, type: "user" },
+			resource: { type: "payout", id: payout.id },
+			outcome: "success",
+			occurredAt: now.toISOString(),
+			metadata: { partnerId: payout.partnerId, amountPaise: payout.amountPaise },
+		});
+
+		return payout;
+	}
+
+	async markPaid(input: MarkPayoutPaidInput): Promise<Payout> {
+		if (!input.paidBy) {
+			throw new ValidationError("Validation failed", [
+				{ field: "paidBy", message: "paidBy is required" },
 			]);
 		}
 
 		const payout = await this.deps.payouts.findById(input.payoutId);
 		if (!payout) throw new NotFoundError("Payout", input.payoutId);
-
-		const now = this.deps.clock.now();
-		const previousStatus = payout.status;
-		let updated: PayoutLedgerEntry | null;
-
-		if (input.status === "SIGNED_OFF") {
-			if (payout.status !== PayoutStatus.PENDING) {
-				throw new ConflictError(
-					`Payout ${input.payoutId} must be PENDING to sign off (current: ${payout.status})`,
-					"INVALID_PAYOUT_TRANSITION",
-				);
-			}
-			if (!input.approver) {
-				throw new ValidationError("Validation failed", [
-					{ field: "approver", message: "approver is required to sign off a payout" },
-				]);
-			}
-			updated = await this.deps.payouts.update(input.payoutId, {
-				status: PayoutStatus.SIGNED_OFF,
-				financeSignOffApprover: input.approver,
-				financeSignOffAt: now,
-				reason: input.reason ?? payout.reason,
-			});
-		} else {
-			// RELEASED — blocked unless finance sign-off (approver + timestamp) is
-			// already recorded on the ledger entry.
-			if (payout.financeSignOffApprover === null || payout.financeSignOffAt === null) {
-				throw new ConflictError(
-					`Payout ${input.payoutId} cannot be released before finance sign-off (approver + timestamp) is recorded`,
-					"PAYOUT_NOT_SIGNED_OFF",
-				);
-			}
-			if (payout.status !== PayoutStatus.SIGNED_OFF) {
-				throw new ConflictError(
-					`Payout ${input.payoutId} must be SIGNED_OFF before it can be RELEASED (current: ${payout.status})`,
-					"INVALID_PAYOUT_TRANSITION",
-				);
-			}
-			updated = await this.deps.payouts.update(input.payoutId, {
-				status: PayoutStatus.RELEASED,
-				reason: input.reason ?? payout.reason,
-			});
+		if (payout.status !== PayoutStatus.TRIGGERED) {
+			throw new ConflictError(
+				`Payout ${input.payoutId} is already ${payout.status}`,
+				"PAYOUT_ALREADY_PAID",
+			);
 		}
 
+		const now = this.deps.clock.now();
+		const updated = await this.deps.payouts.markPaid(input.payoutId, input.paidBy, now);
 		if (!updated) throw new NotFoundError("Payout", input.payoutId);
 
 		await this.deps.events.publish({
-			type: "PayoutStatusChanged",
+			type: "PayoutPaid",
 			payoutId: updated.id,
 			partnerId: updated.partnerId,
-			statementId: updated.statementId,
-			previousStatus,
-			newStatus: updated.status,
-			changedBy: input.actor,
-			changedAt: now,
+			paidBy: input.paidBy,
+			paidAt: now,
 		});
 
 		await this.deps.audit.record({
-			action: `payout.${input.status.toLowerCase()}`,
-			actor: { id: input.actor, type: "user" },
+			action: "payout.paid",
+			actor: { id: input.paidBy, type: "user" },
 			resource: { type: "payout", id: updated.id },
 			outcome: "success",
 			occurredAt: now.toISOString(),
-			metadata: { previousStatus, newStatus: updated.status, partnerId: updated.partnerId },
+			metadata: { partnerId: updated.partnerId, amountPaise: updated.amountPaise },
 		});
 
 		return updated;
 	}
 
-	/** Every payout ledger entry for a partner, newest statement first. */
-	async listForPartner(partnerId: string): Promise<readonly PayoutLedgerEntry[]> {
+	/** Every payout for a partner, newest first. */
+	async listForPartner(partnerId: string): Promise<readonly Payout[]> {
 		const partner = await this.deps.partners.findById(partnerId);
 		if (!partner) throw new NotFoundError("Partner", partnerId);
-		return this.deps.payouts.findByPartnerId(partnerId);
+		const payouts = await this.deps.payouts.findByPartnerId(partnerId);
+		return [...payouts].sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime());
 	}
 }

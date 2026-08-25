@@ -1,4 +1,4 @@
-import type { AttributionRule, PartnerStatus, PayoutStatus } from "../../domain/partner-enums";
+import type { AttributionRule, PartnerStatus } from "../../domain/partner-enums";
 
 /**
  * Domain events emitted by the partner engine (producer `bio-admin`, PRD-046).
@@ -38,23 +38,25 @@ export type PartnerDomainEvent =
 			readonly convertedAt: Date;
 	  }
 	| {
-			readonly type: "CommissionStatementIssued";
-			readonly statementId: string;
-			readonly partnerId: string;
-			readonly period: string;
-			readonly version: number;
-			readonly totalPaise: number;
-			readonly issuedAt: Date;
-	  }
-	| {
-			readonly type: "PayoutStatusChanged";
+			readonly type: "PayoutTriggered";
 			readonly payoutId: string;
 			readonly partnerId: string;
-			readonly statementId: string;
-			readonly previousStatus: PayoutStatus;
-			readonly newStatus: PayoutStatus;
-			readonly changedBy: string;
-			readonly changedAt: Date;
+			readonly amountPaise: number;
+			readonly note: string | null;
+			readonly triggeredBy: string;
+			readonly triggeredAt: Date;
+	  }
+	| {
+			readonly type: "PayoutPaid";
+			readonly payoutId: string;
+			readonly partnerId: string;
+			readonly paidBy: string;
+			readonly paidAt: Date;
+	  }
+	| {
+			readonly type: "BankDetailsSubmitted";
+			readonly partnerId: string;
+			readonly submittedAt: Date;
 	  };
 
 /** Outbound port for emitting partner-engine domain events to the cross-service bus. */

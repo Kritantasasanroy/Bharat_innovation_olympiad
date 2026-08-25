@@ -26,10 +26,14 @@
  */
 export interface RuntimeConfig {
 	readonly jwtSecret: string;
+	readonly bankDetailsEncryptionKey: string;
 }
 
 export const config: RuntimeConfig = {
 	get jwtSecret(): string {
 		return process.env["JWT_SECRET"] ?? "";
+	},
+	get bankDetailsEncryptionKey(): string {
+		return process.env["BANK_DETAILS_ENCRYPTION_KEY"] ?? "";
 	},
 };

@@ -20,7 +20,6 @@ function toPartner(row: PartnerRow): Partner {
 		contactPerson: row.contactPerson,
 		email: row.email,
 		phone: row.phone,
-		commissionRatePct: row.commissionRatePct,
 		status: row.status as PartnerStatus,
 		createdAt: row.createdAt,
 	};
@@ -58,7 +57,6 @@ export class DrizzlePartnerRepository implements PartnerRepository {
 		readonly contactPerson: string;
 		readonly email: string;
 		readonly phone: string;
-		readonly commissionRatePct: number;
 		readonly createdAt: Date;
 	}): Promise<Partner> {
 		const rows = await this.db
@@ -69,7 +67,6 @@ export class DrizzlePartnerRepository implements PartnerRepository {
 				contactPerson: input.contactPerson,
 				email: input.email,
 				phone: input.phone,
-				commissionRatePct: input.commissionRatePct,
 				status: "PENDING",
 				createdAt: input.createdAt,
 			})

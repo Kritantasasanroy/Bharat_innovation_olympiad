@@ -12,6 +12,7 @@ import {
     partnerAccessResentEmail,
     partnerAccessTokenRotatedEmail,
     partnerApplicationReceivedEmail,
+    partnerBankDetailsSubmittedEmail,
     partnerEmailVerificationEmail,
     partnerApprovedEmail,
     partnerRejectedEmail,
@@ -381,6 +382,21 @@ export class NotificationService implements OnModuleInit {
         return this.deliver(
             to,
             partnerSchoolStatusChangedEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
+        );
+    }
+
+    /**
+     * A masked confirmation — never the account number or PAN themselves — so
+     * a submission the partner didn't make gets noticed without the email
+     * itself becoming something worth stealing.
+     */
+    async sendPartnerBankDetailsSubmitted(
+        to: string,
+        vars: { contactPerson: string; accountNumberLast4: string },
+    ): Promise<boolean> {
+        return this.deliver(
+            to,
+            partnerBankDetailsSubmittedEmail({ ...vars, portalUrl: this.partnerPortalUrl }),
         );
     }
 

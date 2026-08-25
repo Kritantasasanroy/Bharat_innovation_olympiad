@@ -6,16 +6,16 @@ import type {
 } from "../../src/core/domain/partner-enums";
 import type {
 	AttributionRecord,
+	BankDetails,
 	Campaign,
 	CampaignCaps,
-	CommissionLineItem,
-	CommissionStatement,
 	Partner,
 	PartnerApplication,
 	PartnerInstitutionAssignment,
-	PayoutLedgerEntry,
+	Payout,
 } from "../../src/core/domain/partner-models";
 import type { AuditEvent, AuditSink } from "../../src/core/ports/out/audit-sink.port";
+import type { BankDetailsCrypto } from "../../src/core/ports/out/bank-details-crypto.port";
 import type {
 	PartnerDomainEvent,
 	PartnerEventPublisher,
@@ -23,14 +23,14 @@ import type {
 import type { Clock, IdGenerator } from "../../src/core/ports/out/partner-gateways.port";
 import type {
 	AttributionRepository,
+	BankDetailsRepository,
 	CampaignRepository,
-	CommissionStatementRepository,
 	NewCampaign,
 	NewPartnerApplication,
 	PartnerApplicationRepository,
 	PartnerInstitutionAssignmentRepository,
 	PartnerRepository,
-	PayoutLedgerRepository,
+	PayoutRepository,
 } from "../../src/core/ports/out/partner-repositories.port";
 
 /** Deterministic clock — starts at a fixed instant and only advances when told to. */
@@ -90,7 +90,6 @@ export class InMemoryPartnerRepository implements PartnerRepository {
 		readonly contactPerson: string;
 		readonly email: string;
 		readonly phone: string;
-		readonly commissionRatePct: number;
 		readonly createdAt: Date;
 	}): Promise<Partner> {
 		const partner: Partner = { ...input, status: "PENDING" };
@@ -338,98 +337,105 @@ export class InMemoryAttributionRepository implements AttributionRepository {
 	}
 }
 
-export class InMemoryCommissionStatementRepository implements CommissionStatementRepository {
-	private readonly rows = new Map<string, CommissionStatement>();
+export class InMemoryPayoutRepository implements PayoutRepository {
+	private readonly rows = new Map<string, Payout>();
 
-	async findById(id: string): Promise<CommissionStatement | null> {
-		return this.rows.get(id) ?? null;
-	}
-
-	async latestVersion(partnerId: string, period: string): Promise<number> {
-		const versions = [...this.rows.values()]
-			.filter((s) => s.partnerId === partnerId && s.period === period)
-			.map((s) => s.version);
-		return versions.length === 0 ? 0 : Math.max(...versions);
-	}
-
-	async create(input: {
-		readonly id: string;
-		readonly partnerId: string;
-		readonly period: string;
-		readonly version: number;
-		readonly lineItems: readonly CommissionLineItem[];
-		readonly totalPaise: number;
-		readonly issuedAt: Date;
-	}): Promise<CommissionStatement> {
-		const statement: CommissionStatement = { ...input, status: "ISSUED" };
-		this.rows.set(statement.id, statement);
-		return statement;
-	}
-
-	async findByPartnerId(partnerId: string): Promise<readonly CommissionStatement[]> {
-		return [...this.rows.values()].filter((s) => s.partnerId === partnerId);
-	}
-
-	async findAll(): Promise<readonly CommissionStatement[]> {
-		return [...this.rows.values()];
-	}
-}
-
-export class InMemoryPayoutLedgerRepository implements PayoutLedgerRepository {
-	private readonly rows = new Map<string, PayoutLedgerEntry>();
-
-	async findById(id: string): Promise<PayoutLedgerEntry | null> {
+	async findById(id: string): Promise<Payout | null> {
 		return this.rows.get(id) ?? null;
 	}
 
 	async create(input: {
 		readonly id: string;
 		readonly partnerId: string;
-		readonly statementId: string;
 		readonly amountPaise: number;
-		readonly createdAt: Date;
-	}): Promise<PayoutLedgerEntry> {
-		const entry: PayoutLedgerEntry = {
-			...input,
-			status: "PENDING",
-			financeSignOffApprover: null,
-			financeSignOffAt: null,
-			reason: null,
-		};
-		this.rows.set(entry.id, entry);
-		return entry;
+		readonly note: string | null;
+		readonly triggeredBy: string;
+		readonly triggeredAt: Date;
+	}): Promise<Payout> {
+		const payout: Payout = { ...input, status: "TRIGGERED", paidBy: null, paidAt: null };
+		this.rows.set(payout.id, payout);
+		return payout;
 	}
 
-	async update(
-		id: string,
-		patch: {
-			readonly status: PayoutLedgerEntry["status"];
-			readonly financeSignOffApprover?: string | null;
-			readonly financeSignOffAt?: Date | null;
-			readonly reason?: string | null;
-		},
-	): Promise<PayoutLedgerEntry | null> {
+	async markPaid(id: string, paidBy: string, paidAt: Date): Promise<Payout | null> {
 		const existing = this.rows.get(id);
 		if (!existing) return null;
-		const updated: PayoutLedgerEntry = {
-			...existing,
-			status: patch.status,
-			...(patch.financeSignOffApprover !== undefined
-				? { financeSignOffApprover: patch.financeSignOffApprover }
-				: {}),
-			...(patch.financeSignOffAt !== undefined ? { financeSignOffAt: patch.financeSignOffAt } : {}),
-			...(patch.reason !== undefined ? { reason: patch.reason } : {}),
-		};
+		const updated: Payout = { ...existing, status: "PAID", paidBy, paidAt };
 		this.rows.set(id, updated);
 		return updated;
 	}
 
-	async findByPartnerId(partnerId: string): Promise<readonly PayoutLedgerEntry[]> {
+	async findByPartnerId(partnerId: string): Promise<readonly Payout[]> {
 		return [...this.rows.values()].filter((p) => p.partnerId === partnerId);
 	}
 
-	async findAll(): Promise<readonly PayoutLedgerEntry[]> {
+	async findAll(): Promise<readonly Payout[]> {
 		return [...this.rows.values()];
+	}
+}
+
+export class InMemoryBankDetailsRepository implements BankDetailsRepository {
+	private readonly rows = new Map<string, BankDetails>();
+	private readonly sealed = new Map<
+		string,
+		{ readonly accountNumberSealed: string; readonly panSealed: string }
+	>();
+
+	async findByPartnerId(partnerId: string): Promise<BankDetails | null> {
+		return this.rows.get(partnerId) ?? null;
+	}
+
+	async findSealedByPartnerId(
+		partnerId: string,
+	): Promise<{ readonly accountNumberSealed: string; readonly panSealed: string } | null> {
+		return this.sealed.get(partnerId) ?? null;
+	}
+
+	async upsert(input: {
+		readonly id: string;
+		readonly partnerId: string;
+		readonly accountHolderName: string;
+		readonly bankName: string;
+		readonly ifscCode: string;
+		readonly accountNumberSealed: string;
+		readonly accountNumberLast4: string;
+		readonly panSealed: string;
+		readonly panMasked: string;
+		readonly now: Date;
+	}): Promise<BankDetails> {
+		const existing = this.rows.get(input.partnerId);
+		const record: BankDetails = {
+			partnerId: input.partnerId,
+			accountHolderName: input.accountHolderName,
+			bankName: input.bankName,
+			ifscCode: input.ifscCode,
+			accountNumberLast4: input.accountNumberLast4,
+			panMasked: input.panMasked,
+			submittedAt: existing?.submittedAt ?? input.now,
+			updatedAt: input.now,
+		};
+		this.rows.set(input.partnerId, record);
+		this.sealed.set(input.partnerId, {
+			accountNumberSealed: input.accountNumberSealed,
+			panSealed: input.panSealed,
+		});
+		return record;
+	}
+}
+
+/** Reversible, non-cryptographic fake — real enough to test seal/reveal round-tripping. */
+export class FakeBankDetailsCrypto implements BankDetailsCrypto {
+	seal(plaintext: string): string {
+		return `sealed:${plaintext}`;
+	}
+	open(sealed: string): string {
+		return sealed.replace(/^sealed:/, "");
+	}
+	maskAccountNumber(accountNumber: string): string {
+		return `XXXXXXXX${accountNumber.slice(-4)}`;
+	}
+	maskPan(pan: string): string {
+		return pan.length === 10 ? `${pan.slice(0, 5)}****${pan.slice(-1)}` : "*".repeat(pan.length);
 	}
 }
 

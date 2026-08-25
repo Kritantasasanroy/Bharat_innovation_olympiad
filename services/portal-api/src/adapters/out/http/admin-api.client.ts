@@ -10,9 +10,6 @@ import type {
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerFunnel,
-	Payout,
-	Statement,
-	StatementRequestInput,
 } from "../../../core/ports/out/index.ts";
 
 /**
@@ -207,35 +204,6 @@ export class HttpAdminApiClient implements AdminApiClient {
 			`/partners/${encodeURIComponent(partnerId)}/campaigns/${encodeURIComponent(campaignId)}`,
 			token,
 			body,
-		);
-	}
-
-	requestStatement(
-		partnerId: string,
-		input: StatementRequestInput,
-		token: string,
-	): Promise<Statement> {
-		return this.#request<Statement>(
-			"POST",
-			`/partners/${encodeURIComponent(partnerId)}/statements`,
-			token,
-			input,
-		);
-	}
-
-	listStatements(partnerId: string, token: string): Promise<Statement[]> {
-		return this.#request<Statement[]>(
-			"GET",
-			`/partners/${encodeURIComponent(partnerId)}/statements`,
-			token,
-		);
-	}
-
-	listPayouts(partnerId: string, token: string): Promise<Payout[]> {
-		return this.#request<Payout[]>(
-			"GET",
-			`/partners/${encodeURIComponent(partnerId)}/payouts`,
-			token,
 		);
 	}
 

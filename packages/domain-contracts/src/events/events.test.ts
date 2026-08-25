@@ -65,8 +65,9 @@ const CANONICAL_CATALOG = [
 	"PartnerApplicationSubmitted",
 	"PartnerStatusChanged",
 	"AttributionCredited",
-	"CommissionStatementIssued",
-	"PayoutStatusChanged",
+	"PayoutTriggered",
+	"PayoutPaid",
+	"BankDetailsSubmitted",
 ] as const;
 
 describe("catalog coverage", () => {

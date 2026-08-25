@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Put, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { PartnerDirectoryService } from './partner-directory.service';
 import { PartnerPortalService } from './partner-portal.service';
 import { AuthenticatedPartner, CurrentPartner, PartnerJwtGuard } from './partner-jwt.guard';
 import { PartnerService } from './partner.service';
-import { UpdatePartnerProfileDto } from './dto/partner.dto';
+import { SubmitBankDetailsDto, UpdatePartnerProfileDto } from './dto/partner.dto';
 
 /**
  * The partner's own view of its footprint: its schools, their students, and the
@@ -85,8 +85,8 @@ export class PartnerPortalController {
     }
 
     /**
-     * A partner edits its own contact details. The org's *status* and commission
-     * are staff decisions and are not writable here.
+     * A partner edits its own contact details. The org's *status* is a staff
+     * decision and is not writable here.
      */
     @Patch('profile')
     updateProfile(
@@ -94,5 +94,31 @@ export class PartnerPortalController {
         @Body() dto: UpdatePartnerProfileDto,
     ) {
         return this.partnerService.updateProfile(partner.partnerId, dto);
+    }
+
+    // ── Payouts + bank details (item: admin-triggered payouts) ───────────────
+
+    /** The partner's own payouts — no fixed commission, admin decides and triggers each one. */
+    @Get('payouts')
+    payouts(@CurrentPartner() partner: AuthenticatedPartner) {
+        return this.partnerService.myPayouts(partner.partnerId);
+    }
+
+    /**
+     * The partner's own bank details, in full. `null` until the partner has
+     * submitted them — which the frontend only asks for once a payout exists.
+     */
+    @Get('bank-details')
+    bankDetails(@CurrentPartner() partner: AuthenticatedPartner) {
+        return this.partnerService.myBankDetails(partner.partnerId);
+    }
+
+    /** The partner submits (or resubmits) where their payouts get sent. Confirmed by email. */
+    @Put('bank-details')
+    submitBankDetails(
+        @CurrentPartner() partner: AuthenticatedPartner,
+        @Body() dto: SubmitBankDetailsDto,
+    ) {
+        return this.partnerService.submitMyBankDetails(partner.partnerId, dto);
     }
 }

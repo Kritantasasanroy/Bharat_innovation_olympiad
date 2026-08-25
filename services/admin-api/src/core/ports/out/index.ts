@@ -26,6 +26,7 @@ export {
 	ADMIN_CAPABILITY_MAP,
 	ADMIN_ROLES,
 } from "./authorization-policy.port.ts";
+export type { BankDetailsCrypto } from "./bank-details-crypto.port.ts";
 export type {
 	PartnerAuthContext,
 	PartnerAuthorizationDecision,
@@ -36,12 +37,12 @@ export type { PartnerDomainEvent, PartnerEventPublisher } from "./partner-event-
 export type { Clock, IdGenerator } from "./partner-gateways.port.ts";
 export type {
 	AttributionRepository,
+	BankDetailsRepository,
 	CampaignRepository,
-	CommissionStatementRepository,
 	NewCampaign,
 	NewPartnerApplication,
 	PartnerApplicationRepository,
 	PartnerInstitutionAssignmentRepository,
 	PartnerRepository,
-	PayoutLedgerRepository,
+	PayoutRepository,
 } from "./partner-repositories.port.ts";

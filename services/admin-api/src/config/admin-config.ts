@@ -37,6 +37,11 @@ const adminConfigSchema = z.object({
 	JWT_SECRET: z
 		.string({ message: "JWT_SECRET is required" })
 		.min(1, "JWT_SECRET must not be empty"),
+	// Deliberately its own secret, not derived from JWT_SECRET: a leaked bank-
+	// details key must not also let someone forge session tokens, or vice versa.
+	BANK_DETAILS_ENCRYPTION_KEY: z
+		.string({ message: "BANK_DETAILS_ENCRYPTION_KEY is required" })
+		.min(1, "BANK_DETAILS_ENCRYPTION_KEY must not be empty"),
 	PORT: z.coerce
 		.number({ message: "PORT must be a number" })
 		.int("PORT must be an integer")
@@ -62,6 +67,7 @@ export interface AdminConfig {
 	readonly redisUrl: string;
 	readonly corsOrigin: string;
 	readonly jwtSecret: string;
+	readonly bankDetailsEncryptionKey: string;
 	readonly port: number;
 	readonly logLevel: (typeof LOG_LEVELS)[number];
 	readonly contractVersion: string;
@@ -106,6 +112,7 @@ export function loadAdminConfig(env: NodeJS.ProcessEnv = process.env): AdminConf
 		REDIS_URL: env["REDIS_URL"],
 		CORS_ORIGIN: env["CORS_ORIGIN"],
 		JWT_SECRET: env["JWT_SECRET"],
+		BANK_DETAILS_ENCRYPTION_KEY: env["BANK_DETAILS_ENCRYPTION_KEY"],
 		PORT: env["PORT"],
 		LOG_LEVEL: env["LOG_LEVEL"],
 		CONTRACT_VERSION: env["CONTRACT_VERSION"],
@@ -125,6 +132,7 @@ export function loadAdminConfig(env: NodeJS.ProcessEnv = process.env): AdminConf
 		redisUrl: parsed.REDIS_URL,
 		corsOrigin: parsed.CORS_ORIGIN,
 		jwtSecret: parsed.JWT_SECRET,
+		bankDetailsEncryptionKey: parsed.BANK_DETAILS_ENCRYPTION_KEY,
 		port: parsed.PORT,
 		logLevel: parsed.LOG_LEVEL,
 		contractVersion: parsed.CONTRACT_VERSION,

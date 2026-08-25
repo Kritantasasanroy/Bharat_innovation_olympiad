@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ApiSuccessResponse } from "@bio/admin-shared-types";
-import type { buildApp } from "../src/app";
-import type { CommissionStatement, PayoutLedgerEntry } from "../src/core/domain/partner-models";
+import type { Payout } from "../src/core/domain/partner-models";
 import { buildTestHarness, jsonRequest } from "./support/build-test-app";
-import { parseCsv } from "./support/csv";
 import { bearer, signTestJwt } from "./support/jwt";
 import { createApprovedPartnerWithCampaign, staffToken } from "./support/scenarios";
 
@@ -11,140 +9,104 @@ function ok<T>(response: unknown): asserts response is ApiSuccessResponse<T> {
 	expect((response as { success: boolean }).success).toBe(true);
 }
 
-/** Issue a statement, then look up the payout ledger entry it auto-created via the CSV export. */
-async function issueStatementAndFindPayoutId(
-	app: ReturnType<typeof buildApp>,
-	partnerId: string,
-	campaignId: string,
-	ownerToken: string,
-	staff: string,
-): Promise<{ readonly payoutId: string; readonly statementId: string }> {
-	await jsonRequest(app, "POST", `/campaigns/${campaignId}/paid-conversion`, {
-		body: { studentId: "s-1", registrationId: "r-1", amountPaise: 1000000 },
-		headers: bearer(staff),
-	});
-	const statementResponse = await jsonRequest(app, "POST", `/partners/${partnerId}/statements`, {
-		body: { period: "2026-06" },
-		headers: bearer(ownerToken),
-	});
-	const statementBody = (await statementResponse.json()) as ApiSuccessResponse<CommissionStatement>;
-	ok(statementBody);
-	const statementId = statementBody.data.id;
-
-	const exportResponse = await jsonRequest(app, "GET", "/exports/payouts", {
-		headers: bearer(staff),
-	});
-	const { rows } = parseCsv(await exportResponse.text());
-	const row = rows.find((r) => r["statementId"] === statementId);
-	if (!row) throw new Error("payout ledger entry not found in export");
-	return { payoutId: row["id"] ?? "", statementId };
-}
-
-describe("payout ledger (PRD-046)", () => {
-	it("blocks RELEASED unless finance sign-off (approver + timestamp) is already set", async () => {
+describe("payouts (admin-triggered, no commission engine)", () => {
+	it("trigger creates a TRIGGERED payout with the admin-chosen amount and note", async () => {
 		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
-			orgName: "Payout Block Co",
-		});
-		const finance = staffToken("FINANCE");
-		const { payoutId } = await issueStatementAndFindPayoutId(
-			app,
-			partnerId,
-			campaignId,
-			ownerToken,
-			finance,
-		);
+		const { partnerId } = await createApprovedPartnerWithCampaign(app, { orgName: "Payout Co" });
+		const staff = staffToken();
 
-		const blocked = await jsonRequest(app, "PATCH", `/payouts/${payoutId}/status`, {
-			body: { status: "RELEASED" },
-			headers: bearer(finance),
+		const response = await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 500000, note: "August referrals" },
+			headers: bearer(staff),
 		});
-		expect(blocked.status).toBe(409);
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as ApiSuccessResponse<Payout>;
+		ok(body);
+		expect(body.data.status).toBe("TRIGGERED");
+		expect(body.data.amountPaise).toBe(500000);
+		expect(body.data.note).toBe("August referrals");
+		expect(body.data.paidAt).toBeNull();
 	});
 
-	it("transitions PENDING -> SIGNED_OFF -> RELEASED once sign-off is recorded", async () => {
+	it("rejects a non-positive amount", async () => {
 		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
-			orgName: "Payout Flow Co",
+		const { partnerId } = await createApprovedPartnerWithCampaign(app, {
+			orgName: "Bad Amount Co",
 		});
-		const finance = staffToken("FINANCE");
-		const { payoutId } = await issueStatementAndFindPayoutId(
-			app,
-			partnerId,
-			campaignId,
-			ownerToken,
-			finance,
-		);
 
-		const signOff = await jsonRequest(app, "PATCH", `/payouts/${payoutId}/status`, {
-			body: { status: "SIGNED_OFF", approver: "finance-approver-1" },
-			headers: bearer(finance),
+		const response = await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 0 },
+			headers: bearer(staffToken()),
 		});
-		expect(signOff.status).toBe(200);
-		const signOffBody = (await signOff.json()) as ApiSuccessResponse<PayoutLedgerEntry>;
-		ok(signOffBody);
-		expect(signOffBody.data.status).toBe("SIGNED_OFF");
-		expect(signOffBody.data.financeSignOffApprover).toBe("finance-approver-1");
-		expect(signOffBody.data.financeSignOffAt).not.toBeNull();
-
-		const release = await jsonRequest(app, "PATCH", `/payouts/${payoutId}/status`, {
-			body: { status: "RELEASED" },
-			headers: bearer(finance),
-		});
-		expect(release.status).toBe(200);
-		const releaseBody = (await release.json()) as ApiSuccessResponse<PayoutLedgerEntry>;
-		ok(releaseBody);
-		expect(releaseBody.data.status).toBe("RELEASED");
+		expect(response.status).toBe(400);
 	});
 
-	it("rejects a payout status change from a non-finance staff role (403) and unauthenticated (401)", async () => {
+	it("marks a triggered payout paid, and refuses to pay it twice", async () => {
 		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
+		const { partnerId } = await createApprovedPartnerWithCampaign(app, { orgName: "Mark Paid Co" });
+		const staff = staffToken();
+
+		const triggered = await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 250000 },
+			headers: bearer(staff),
+		});
+		const triggeredBody = (await triggered.json()) as ApiSuccessResponse<Payout>;
+		ok(triggeredBody);
+		const payoutId = triggeredBody.data.id;
+
+		const paid = await jsonRequest(app, "PATCH", `/partners/${partnerId}/payouts/${payoutId}`, {
+			body: { status: "PAID" },
+			headers: bearer(staff),
+		});
+		expect(paid.status).toBe(200);
+		const paidBody = (await paid.json()) as ApiSuccessResponse<Payout>;
+		ok(paidBody);
+		expect(paidBody.data.status).toBe("PAID");
+		expect(paidBody.data.paidAt).not.toBeNull();
+
+		const again = await jsonRequest(app, "PATCH", `/partners/${partnerId}/payouts/${payoutId}`, {
+			body: { status: "PAID" },
+			headers: bearer(staff),
+		});
+		expect(again.status).toBe(409);
+	});
+
+	it("rejects trigger and mark-paid from a non-staff caller (403) and unauthenticated (401)", async () => {
+		const { app } = buildTestHarness();
+		const { partnerId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
 			orgName: "Payout Auth Co",
 		});
-		const finance = staffToken("FINANCE");
-		const { payoutId } = await issueStatementAndFindPayoutId(
-			app,
-			partnerId,
-			campaignId,
-			ownerToken,
-			finance,
-		);
 
-		const contentAdmin = staffToken("CONTENT_ADMIN");
-		const forbidden = await jsonRequest(app, "PATCH", `/payouts/${payoutId}/status`, {
-			body: { status: "SIGNED_OFF", approver: "x" },
-			headers: bearer(contentAdmin),
+		const asOwner = await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 1000 },
+			headers: bearer(ownerToken),
 		});
-		expect(forbidden.status).toBe(403);
+		expect(asOwner.status).toBe(403);
 
-		const unauth = await jsonRequest(app, "PATCH", `/payouts/${payoutId}/status`, {
-			body: { status: "SIGNED_OFF", approver: "x" },
+		const unauth = await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 1000 },
 		});
 		expect(unauth.status).toBe(401);
 	});
 
-	it("lists a partner's payout ledger entries, scoped by ownership (admin visibility)", async () => {
+	it("lists a partner's payouts, scoped by ownership (admin visibility)", async () => {
 		const { app } = buildTestHarness();
-		const { partnerId, campaignId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
+		const { partnerId, ownerToken } = await createApprovedPartnerWithCampaign(app, {
 			orgName: "Payout List Co",
 		});
-		const finance = staffToken("FINANCE");
-		const { statementId } = await issueStatementAndFindPayoutId(
-			app,
-			partnerId,
-			campaignId,
-			ownerToken,
-			finance,
-		);
+		const staff = staffToken();
+		await jsonRequest(app, "POST", `/partners/${partnerId}/payouts`, {
+			body: { amountPaise: 100000 },
+			headers: bearer(staff),
+		});
 
 		const asOwner = await jsonRequest(app, "GET", `/partners/${partnerId}/payouts`, {
 			headers: bearer(ownerToken),
 		});
 		expect(asOwner.status).toBe(200);
-		const ownerBody = (await asOwner.json()) as ApiSuccessResponse<PayoutLedgerEntry[]>;
+		const ownerBody = (await asOwner.json()) as ApiSuccessResponse<Payout[]>;
 		ok(ownerBody);
-		expect(ownerBody.data.some((entry) => entry.statementId === statementId)).toBe(true);
+		expect(ownerBody.data).toHaveLength(1);
 
 		const asStaff = await jsonRequest(app, "GET", `/partners/${partnerId}/payouts`, {
 			headers: bearer(staffToken("SUPER_ADMIN")),

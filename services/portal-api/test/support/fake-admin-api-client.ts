@@ -8,9 +8,6 @@ import type {
 	PartnerApplication,
 	PartnerApplicationInput,
 	PartnerFunnel,
-	Payout,
-	Statement,
-	StatementRequestInput,
 } from "../../src/core/ports/out/index.ts";
 
 export interface RecordedCall {
@@ -34,8 +31,6 @@ export class FakeAdminApiClient implements AdminApiClient {
 	readonly #partners = new Map<string, Partner>();
 	readonly #funnels = new Map<string, PartnerFunnel>();
 	readonly #campaigns = new Map<string, Campaign[]>();
-	readonly #statements = new Map<string, Statement[]>();
-	readonly #payouts = new Map<string, Payout[]>();
 	readonly #institutions = new Map<string, AssignedInstitution[]>();
 
 	seedApplication(partnerId: string, application: PartnerApplication): void {
@@ -54,14 +49,6 @@ export class FakeAdminApiClient implements AdminApiClient {
 
 	seedFunnel(partnerId: string, funnel: PartnerFunnel): void {
 		this.#funnels.set(partnerId, funnel);
-	}
-
-	seedStatements(partnerId: string, statements: Statement[]): void {
-		this.#statements.set(partnerId, statements);
-	}
-
-	seedPayouts(partnerId: string, payouts: Payout[]): void {
-		this.#payouts.set(partnerId, payouts);
 	}
 
 	seedInstitutions(partnerId: string, institutions: AssignedInstitution[]): void {
@@ -110,7 +97,6 @@ export class FakeAdminApiClient implements AdminApiClient {
 			email: application.email,
 			phone: application.phone,
 			status: application.status === "SUBMITTED" ? "PENDING" : application.status,
-			commissionRatePct: 10,
 			createdAt: application.submittedAt,
 		});
 	}
@@ -157,37 +143,5 @@ export class FakeAdminApiClient implements AdminApiClient {
 			list.map((campaign) => (campaign.id === campaignId ? updated : campaign)),
 		);
 		return Promise.resolve(updated);
-	}
-
-	requestStatement(
-		partnerId: string,
-		input: StatementRequestInput,
-		token: string,
-	): Promise<Statement> {
-		this.calls.push({ method: "requestStatement", partnerId, token });
-		const list = this.#statements.get(partnerId) ?? [];
-		const statement: Statement = {
-			id: `stmt_${partnerId}_${list.length + 1}`,
-			partnerId,
-			period: input.period,
-			version: list.length + 1,
-			lineItems: [],
-			totalPaise: 0,
-			status: "ISSUED",
-			issuedAt: new Date().toISOString(),
-		};
-		list.push(statement);
-		this.#statements.set(partnerId, list);
-		return Promise.resolve(statement);
-	}
-
-	listStatements(partnerId: string, token: string): Promise<Statement[]> {
-		this.calls.push({ method: "listStatements", partnerId, token });
-		return Promise.resolve([...(this.#statements.get(partnerId) ?? [])]);
-	}
-
-	listPayouts(partnerId: string, token: string): Promise<Payout[]> {
-		this.calls.push({ method: "listPayouts", partnerId, token });
-		return Promise.resolve([...(this.#payouts.get(partnerId) ?? [])]);
 	}
 }

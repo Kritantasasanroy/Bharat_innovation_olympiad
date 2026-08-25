@@ -5,9 +5,10 @@ import { assertStaffRole } from "./partner-auth.helpers";
 
 /**
  * CSV export endpoints (PRD-046): `GET /exports/:kind` for
- * `attribution | statements | payouts`. These are cross-partner, aggregate
- * exports — authenticated AND staff-only (any recognised admin role), so a
- * partner cannot use them to see another partner's ledger.
+ * `attribution | payouts`. These are cross-partner, aggregate exports —
+ * authenticated AND staff-only (any recognised admin role), so a partner
+ * cannot use them to see another partner's ledger. Bank details are
+ * deliberately never exportable (masked-by-default extends to exports too).
  */
 export const exportRoutes = (container: PartnerContainer) =>
 	new Elysia({ name: "export-routes" }).use(authPlugin).get(
@@ -22,7 +23,7 @@ export const exportRoutes = (container: PartnerContainer) =>
 		},
 		{
 			params: t.Object({
-				kind: t.Union([t.Literal("attribution"), t.Literal("statements"), t.Literal("payouts")]),
+				kind: t.Union([t.Literal("attribution"), t.Literal("payouts")]),
 			}),
 		},
 	);

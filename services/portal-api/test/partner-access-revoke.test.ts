@@ -10,12 +10,11 @@ function partner(partnerId: string, status: Partner["status"]): Partner {
 		email: `${partnerId}@example.com`,
 		phone: "1",
 		status,
-		commissionRatePct: 10,
 		createdAt: new Date().toISOString(),
 	};
 }
 
-const DASHBOARD_ROUTES = ["/partner/institutions", "/partner/funnel", "/partner/statements"];
+const DASHBOARD_ROUTES = ["/partner/institutions", "/partner/funnel"];
 
 /**
  * The dashboard gate reads `Partner.status` (admin-api), not the onboarding

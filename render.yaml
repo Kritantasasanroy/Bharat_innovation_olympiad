@@ -220,6 +220,12 @@ services:
         value: "0.1.0"
       - key: PORT
         value: "3000"
+      # AES-256-GCM key for partner bank-details encryption at rest
+      # (services/admin-api/src/infra/bank-details-encryption.ts) — a
+      # dedicated key, separate from JWT_SECRET and the legacy backend's
+      # access-token seal key. Fails closed on boot without it.
+      - key: BANK_DETAILS_ENCRYPTION_KEY
+        sync: false
 
   # Note: there is no separate proctor service. All AI proctoring (face
   # detection, gaze estimation, identity matching) runs client-side in the

@@ -3,17 +3,18 @@ import { ValidationError } from "../errors";
 import type { ExportKind } from "../ports/in/partner.port";
 import type {
 	AttributionRepository,
-	CommissionStatementRepository,
-	PayoutLedgerRepository,
+	PayoutRepository,
 } from "../ports/out/partner-repositories.port";
 
 export interface ExportServiceDeps {
 	readonly attributions: AttributionRepository;
-	readonly statements: CommissionStatementRepository;
-	readonly payouts: PayoutLedgerRepository;
+	readonly payouts: PayoutRepository;
 }
 
-/** CSV export of attribution records, commission statements, and payout ledger entries (PRD-046). */
+/**
+ * CSV export of attribution records and payouts (PRD-046). Bank details are
+ * deliberately never exportable — masked-by-default extends to exports too.
+ */
 export class ExportService {
 	constructor(private readonly deps: ExportServiceDeps) {}
 
@@ -21,8 +22,6 @@ export class ExportService {
 		switch (kind) {
 			case "attribution":
 				return this.exportAttribution();
-			case "statements":
-				return this.exportStatements();
 			case "payouts":
 				return this.exportPayouts();
 			default: {
@@ -64,44 +63,30 @@ export class ExportService {
 		);
 	}
 
-	private async exportStatements(): Promise<string> {
-		const statements = await this.deps.statements.findAll();
-		return toCsv(
-			["id", "partnerId", "period", "version", "totalPaise", "status", "issuedAt"],
-			statements.map((s) => [
-				s.id,
-				s.partnerId,
-				s.period,
-				s.version,
-				s.totalPaise,
-				s.status,
-				s.issuedAt.toISOString(),
-			]),
-		);
-	}
-
 	private async exportPayouts(): Promise<string> {
 		const payouts = await this.deps.payouts.findAll();
 		return toCsv(
 			[
 				"id",
 				"partnerId",
-				"statementId",
 				"amountPaise",
+				"note",
 				"status",
-				"financeSignOffApprover",
-				"financeSignOffAt",
-				"createdAt",
+				"triggeredBy",
+				"triggeredAt",
+				"paidBy",
+				"paidAt",
 			],
 			payouts.map((p) => [
 				p.id,
 				p.partnerId,
-				p.statementId,
 				p.amountPaise,
+				p.note ?? "",
 				p.status,
-				p.financeSignOffApprover ?? "",
-				p.financeSignOffAt?.toISOString() ?? "",
-				p.createdAt.toISOString(),
+				p.triggeredBy,
+				p.triggeredAt.toISOString(),
+				p.paidBy ?? "",
+				p.paidAt?.toISOString() ?? "",
 			]),
 		);
 	}

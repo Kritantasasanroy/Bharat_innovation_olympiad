@@ -3,18 +3,16 @@ import type {
 	AttributionRule,
 	CampaignStatus,
 	PartnerStatus,
-	PayoutStatus,
 } from "../../domain/partner-enums";
 import type {
 	AttributionRecord,
+	BankDetails,
 	Campaign,
 	CampaignCaps,
-	CommissionLineItem,
-	CommissionStatement,
 	Partner,
 	PartnerApplication,
 	PartnerInstitutionAssignment,
-	PayoutLedgerEntry,
+	Payout,
 } from "../../domain/partner-models";
 
 // ── Partner + application ───────────────────────────────────────────────────
@@ -39,7 +37,6 @@ export interface PartnerRepository {
 		readonly contactPerson: string;
 		readonly email: string;
 		readonly phone: string;
-		readonly commissionRatePct: number;
 		readonly createdAt: Date;
 	}): Promise<Partner>;
 	/** Update status (APPROVED/REJECTED). Returns the updated row, or null if not found. */
@@ -130,50 +127,48 @@ export interface AttributionRepository {
 	findAll(): Promise<readonly AttributionRecord[]>;
 }
 
-// ── Commission statements ───────────────────────────────────────────────────
+// ── Payouts ──────────────────────────────────────────────────────────────────
 
-/** Outbound port: immutable, versioned commission statement persistence. */
-export interface CommissionStatementRepository {
-	findById(id: string): Promise<CommissionStatement | null>;
-	/** Highest existing version for this partner+period, or 0 when none exist yet. */
-	latestVersion(partnerId: string, period: string): Promise<number>;
-	/** Insert a brand-new version. Never mutates a prior version (immutability). */
+/** Outbound port: payout persistence. */
+export interface PayoutRepository {
+	findById(id: string): Promise<Payout | null>;
+	/** Insert a newly-triggered payout (status TRIGGERED). */
 	create(input: {
 		readonly id: string;
 		readonly partnerId: string;
-		readonly period: string;
-		readonly version: number;
-		readonly lineItems: readonly CommissionLineItem[];
-		readonly totalPaise: number;
-		readonly issuedAt: Date;
-	}): Promise<CommissionStatement>;
-	findByPartnerId(partnerId: string): Promise<readonly CommissionStatement[]>;
-	findAll(): Promise<readonly CommissionStatement[]>;
+		readonly amountPaise: number;
+		readonly note: string | null;
+		readonly triggeredBy: string;
+		readonly triggeredAt: Date;
+	}): Promise<Payout>;
+	/** Record that the money has gone out. Only legal from TRIGGERED. */
+	markPaid(id: string, paidBy: string, paidAt: Date): Promise<Payout | null>;
+	findByPartnerId(partnerId: string): Promise<readonly Payout[]>;
+	findAll(): Promise<readonly Payout[]>;
 }
 
-// ── Payout ledger ────────────────────────────────────────────────────────────
+// ── Bank details ─────────────────────────────────────────────────────────────
 
-/** Outbound port: payout ledger persistence. */
-export interface PayoutLedgerRepository {
-	findById(id: string): Promise<PayoutLedgerEntry | null>;
-	create(input: {
+/** Outbound port: encrypted-at-rest bank details persistence, one row per partner. */
+export interface BankDetailsRepository {
+	findByPartnerId(partnerId: string): Promise<BankDetails | null>;
+	/** The sealed account number + PAN, for an authorised reveal. Null when none submitted. */
+	findSealedByPartnerId(
+		partnerId: string,
+	): Promise<{ readonly accountNumberSealed: string; readonly panSealed: string } | null>;
+	/** Upsert: a partner may resubmit (bank change, typo fix) — overwrites, bumps `updatedAt`. */
+	upsert(input: {
 		readonly id: string;
 		readonly partnerId: string;
-		readonly statementId: string;
-		readonly amountPaise: number;
-		readonly createdAt: Date;
-	}): Promise<PayoutLedgerEntry>;
-	update(
-		id: string,
-		patch: {
-			readonly status: PayoutStatus;
-			readonly financeSignOffApprover?: string | null;
-			readonly financeSignOffAt?: Date | null;
-			readonly reason?: string | null;
-		},
-	): Promise<PayoutLedgerEntry | null>;
-	findByPartnerId(partnerId: string): Promise<readonly PayoutLedgerEntry[]>;
-	findAll(): Promise<readonly PayoutLedgerEntry[]>;
+		readonly accountHolderName: string;
+		readonly bankName: string;
+		readonly ifscCode: string;
+		readonly accountNumberSealed: string;
+		readonly accountNumberLast4: string;
+		readonly panSealed: string;
+		readonly panMasked: string;
+		readonly now: Date;
+	}): Promise<BankDetails>;
 }
 
 // ── Institution assignment ──────────────────────────────────────────────────

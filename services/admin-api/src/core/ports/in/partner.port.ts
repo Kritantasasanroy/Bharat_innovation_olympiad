@@ -1,14 +1,14 @@
 import type { ApplicationStatus } from "../../domain/partner-enums";
 import type {
 	AttributionRecord,
+	BankDetails,
 	Campaign,
 	CampaignCaps,
-	CommissionStatement,
 	Partner,
 	PartnerApplication,
 	PartnerFunnel,
 	PartnerInstitutionAssignment,
-	PayoutLedgerEntry,
+	Payout,
 } from "../../domain/partner-models";
 
 // ── Partner applications (PRD-046: no review UI/queue — a minimal audited hook) ──
@@ -80,30 +80,45 @@ export interface AttributionUseCase {
 	getFunnel(partnerId: string): Promise<PartnerFunnel>;
 }
 
-// ── Commission statements ───────────────────────────────────────────────────
-
-export interface GenerateStatementInput {
-	readonly partnerId: string;
-	readonly period: string;
-}
-
-export interface CommissionUseCase {
-	generate(input: GenerateStatementInput): Promise<CommissionStatement>;
-	list(partnerId: string): Promise<readonly CommissionStatement[]>;
-}
-
 // ── Payouts ──────────────────────────────────────────────────────────────────
 
-export interface UpdatePayoutStatusInput {
+export interface TriggerPayoutInput {
+	readonly partnerId: string;
+	readonly amountPaise: number;
+	readonly note?: string;
+	readonly triggeredBy: string;
+}
+
+export interface MarkPayoutPaidInput {
 	readonly payoutId: string;
-	readonly status: "SIGNED_OFF" | "RELEASED";
-	readonly actor: string;
-	readonly approver?: string;
-	readonly reason?: string;
+	readonly paidBy: string;
 }
 
 export interface PayoutUseCase {
-	updateStatus(input: UpdatePayoutStatusInput): Promise<PayoutLedgerEntry>;
+	trigger(input: TriggerPayoutInput): Promise<Payout>;
+	markPaid(input: MarkPayoutPaidInput): Promise<Payout>;
+	listForPartner(partnerId: string): Promise<readonly Payout[]>;
+}
+
+// ── Bank details ─────────────────────────────────────────────────────────────
+
+export interface SubmitBankDetailsInput {
+	readonly partnerId: string;
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumber: string;
+	readonly pan: string;
+}
+
+export interface BankDetailsUseCase {
+	submit(input: SubmitBankDetailsInput): Promise<BankDetails>;
+	/** Masked view — safe for any caller who already owns or may see this partner. */
+	get(partnerId: string): Promise<BankDetails | null>;
+	/** Decrypts the account number + PAN. Callers are responsible for audit-logging who/why. */
+	reveal(
+		partnerId: string,
+	): Promise<{ readonly accountNumber: string; readonly pan: string } | null>;
 }
 
 // ── Institution assignment ──────────────────────────────────────────────────
@@ -132,7 +147,7 @@ export interface GetPartnerUseCase {
 	execute(partnerId: string): Promise<Partner>;
 }
 
-export type ExportKind = "attribution" | "statements" | "payouts";
+export type ExportKind = "attribution" | "payouts";
 
 export interface ExportUseCase {
 	execute(kind: ExportKind): Promise<string>;

@@ -5,7 +5,6 @@ import type {
 	CampaignStatus,
 	PartnerStatus,
 	PayoutStatus,
-	StatementStatus,
 } from "./partner-enums";
 
 /** A channel partner (PRD-046 §14 `Partner`). */
@@ -15,8 +14,6 @@ export interface Partner {
 	readonly contactPerson: string;
 	readonly email: string;
 	readonly phone: string;
-	/** Overrides the platform default commission rate for this partner. */
-	readonly commissionRatePct: number;
 	readonly status: PartnerStatus;
 	readonly createdAt: Date;
 }
@@ -88,42 +85,39 @@ export interface PartnerFunnel {
 	readonly byCampaign: readonly CampaignFunnel[];
 }
 
-/** A single commission line item, one per credited attribution. */
-export interface CommissionLineItem {
-	readonly attributionId: string;
-	readonly campaignId: string;
-	readonly studentId: string;
-	readonly registrationId: string;
-	readonly amountPaise: number;
-	readonly commissionRatePct: number;
-	readonly commissionPaise: number;
-}
-
-/** An immutable, versioned commission statement for a partner+period. */
-export interface CommissionStatement {
+/**
+ * A specific amount admin decided to send a partner, and whether it has
+ * actually gone out yet. Not derived from any commission calculation — admin
+ * sets `amountPaise` directly when triggering.
+ */
+export interface Payout {
 	readonly id: string;
 	readonly partnerId: string;
-	/** Billing period, e.g. "2026-06". */
-	readonly period: string;
-	/** Monotonic version for this partner+period; version 1 never changes once issued. */
-	readonly version: number;
-	readonly lineItems: readonly CommissionLineItem[];
-	readonly totalPaise: number;
-	readonly status: StatementStatus;
-	readonly issuedAt: Date;
-}
-
-/** A payout ledger entry created from an issued commission statement. */
-export interface PayoutLedgerEntry {
-	readonly id: string;
-	readonly partnerId: string;
-	readonly statementId: string;
 	readonly amountPaise: number;
+	/** What this covers, freeform — e.g. "August referrals". */
+	readonly note: string | null;
 	readonly status: PayoutStatus;
-	readonly financeSignOffApprover: string | null;
-	readonly financeSignOffAt: Date | null;
-	readonly reason: string | null;
-	readonly createdAt: Date;
+	readonly triggeredBy: string;
+	readonly triggeredAt: Date;
+	readonly paidBy: string | null;
+	readonly paidAt: Date | null;
+}
+
+/**
+ * Where a partner's payouts get sent. Account number and PAN are the only
+ * fields sensitive enough to encrypt (see `infra/bank-details-encryption.ts`)
+ * — this shape carries only their masked companions; the plaintext is
+ * reachable solely through `BankDetailsService.reveal`.
+ */
+export interface BankDetails {
+	readonly partnerId: string;
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumberLast4: string;
+	readonly panMasked: string;
+	readonly submittedAt: Date;
+	readonly updatedAt: Date;
 }
 
 /** A partner<->institution assignment (self-service, audited). */

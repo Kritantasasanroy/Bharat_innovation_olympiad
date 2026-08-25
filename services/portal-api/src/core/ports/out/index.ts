@@ -7,7 +7,6 @@ export type {
 	CampaignInput,
 	CampaignStatus,
 	CampaignUpdateInput,
-	CommissionLineItem,
 	Partner,
 	PartnerAccessStatus,
 	PartnerApplication,
@@ -15,10 +14,6 @@ export type {
 	PartnerApplicationStatus,
 	PartnerFunnel,
 	PartnerFunnelTotals,
-	Payout,
-	PayoutStatus,
-	Statement,
-	StatementRequestInput,
 } from "./admin-api-client.port.ts";
 export type {
 	SupportRequest,

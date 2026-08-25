@@ -38,7 +38,6 @@ export interface AdminApiPartner {
     contactPerson: string;
     email: string;
     phone: string;
-    commissionRatePct: number;
     status: string;
     createdAt: string;
 }
@@ -59,37 +58,39 @@ export interface AdminApiFunnel {
     byCampaign: AdminApiCampaignFunnel[];
 }
 
-export interface AdminApiCommissionLineItem {
-    attributionId: string;
-    campaignId: string;
-    studentId: string;
-    registrationId: string;
-    amountPaise: number;
-    commissionRatePct: number;
-    commissionPaise: number;
-}
-
-export interface AdminApiStatement {
-    id: string;
-    partnerId: string;
-    period: string;
-    version: number;
-    lineItems: AdminApiCommissionLineItem[];
-    totalPaise: number;
-    status: string;
-    issuedAt: string;
-}
-
 export interface AdminApiPayout {
     id: string;
     partnerId: string;
-    statementId: string;
     amountPaise: number;
-    status: 'PENDING' | 'SIGNED_OFF' | 'RELEASED';
-    financeSignOffApprover: string | null;
-    financeSignOffAt: string | null;
-    reason: string | null;
-    createdAt: string;
+    note: string | null;
+    status: 'TRIGGERED' | 'PAID';
+    triggeredBy: string;
+    triggeredAt: string;
+    paidBy: string | null;
+    paidAt: string | null;
+}
+
+/** Masked view — the two sensitive fields are absent unless the call revealed them. */
+export interface AdminApiBankDetails {
+    partnerId: string;
+    accountHolderName: string;
+    bankName: string;
+    ifscCode: string;
+    accountNumberLast4: string;
+    panMasked: string;
+    submittedAt: string;
+    updatedAt: string;
+    /** Present only on a revealing read (the owning partner's own, or staff `?reveal=true`). */
+    accountNumber?: string;
+    pan?: string;
+}
+
+export interface SubmitBankDetailsInput {
+    accountHolderName: string;
+    bankName: string;
+    ifscCode: string;
+    accountNumber: string;
+    pan: string;
 }
 
 export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
@@ -124,20 +125,29 @@ export class PartnerAdminApiClient {
 
     constructor(private jwt: JwtService) {}
 
-    private staffToken(): string {
+    /**
+     * `actingAs` becomes the token's `sub`, so admin-api's own owner-vs-staff
+     * distinction (see `partner.routes.ts` bank-details GET) sees who is really
+     * asking: a partner's own portal call passes its own partnerId (so admin-api
+     * treats it as "their own data, no audit needed"), an admin-console call
+     * passes the real admin's user id (so a bank-details reveal is audited
+     * against a real person, not a generic "system"). Defaults to 'system' for
+     * calls where no specific actor applies (attribution capture, etc.).
+     */
+    private staffToken(actingAs = 'system'): string {
         // admin-api's verifyJwt reads `sub` + `role`; SUPER_ADMIN is a staff role.
-        return this.jwt.sign({ sub: 'system', role: 'SUPER_ADMIN' }, { expiresIn: '5m' });
+        return this.jwt.sign({ sub: actingAs, role: 'SUPER_ADMIN' }, { expiresIn: '5m' });
     }
 
     /** One attempt. Resolves the raw Response, or null when the socket failed. */
-    private async attempt(path: string, init: RequestInit): Promise<Response | null> {
+    private async attempt(path: string, init: RequestInit, actingAs?: string): Promise<Response | null> {
         try {
             return await fetch(`${ADMIN_API_URL}${path}`, {
                 ...init,
                 headers: {
                     'content-type': 'application/json',
                     // Minted per attempt: a slow cold start must not outlive the token.
-                    authorization: `Bearer ${this.staffToken()}`,
+                    authorization: `Bearer ${this.staffToken(actingAs)}`,
                     ...(init.headers ?? {}),
                 },
             });
@@ -150,12 +160,13 @@ export class PartnerAdminApiClient {
         path: string,
         init: RequestInit,
         policy: RetryPolicy = 'patient',
+        actingAs?: string,
     ): Promise<T> {
         const backoff = BACKOFF_MS[policy];
         let res: Response | null = null;
 
         for (let i = 0; i <= backoff.length; i += 1) {
-            res = await this.attempt(path, init);
+            res = await this.attempt(path, init, actingAs);
 
             const isColdStart = res === null || RETRY_STATUSES.has(res.status);
             if (!isColdStart) break;
@@ -255,38 +266,73 @@ export class PartnerAdminApiClient {
         });
     }
 
-    listStatements(partnerId: string): Promise<AdminApiStatement[]> {
-        return this.call<AdminApiStatement[]>(
-            `/partners/${encodeURIComponent(partnerId)}/statements`,
+    /** `actingAs` is the caller's own id (partner reading their own, or the admin doing the reading). */
+    listPayouts(partnerId: string, actingAs?: string): Promise<AdminApiPayout[]> {
+        return this.call<AdminApiPayout[]>(
+            `/partners/${encodeURIComponent(partnerId)}/payouts`,
             { method: 'GET' },
+            'patient',
+            actingAs,
         );
     }
 
-    /** Staff can trigger a statement for a partner too, e.g. to close out a period on their behalf. */
-    generateStatement(partnerId: string, period: string): Promise<AdminApiStatement> {
-        return this.call<AdminApiStatement>(
-            `/partners/${encodeURIComponent(partnerId)}/statements`,
-            { method: 'POST', body: JSON.stringify({ period }) },
-        );
-    }
-
-    listPayouts(partnerId: string): Promise<AdminApiPayout[]> {
-        return this.call<AdminApiPayout[]>(`/partners/${encodeURIComponent(partnerId)}/payouts`, {
-            method: 'GET',
-        });
-    }
-
-    /** `SIGNED_OFF` needs `approver`; `RELEASED` is blocked until sign-off is on file (finance-only route). */
-    updatePayoutStatus(
-        payoutId: string,
-        status: 'SIGNED_OFF' | 'RELEASED',
-        approver?: string,
-        reason?: string,
+    /** No fixed commission — admin decides the amount directly. Staff-only, audited on admin-api's side. */
+    triggerPayout(
+        partnerId: string,
+        amountPaise: number,
+        note: string | undefined,
+        adminId: string,
     ): Promise<AdminApiPayout> {
-        return this.call<AdminApiPayout>(`/payouts/${encodeURIComponent(payoutId)}/status`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status, approver, reason }),
-        });
+        return this.call<AdminApiPayout>(
+            `/partners/${encodeURIComponent(partnerId)}/payouts`,
+            { method: 'POST', body: JSON.stringify({ amountPaise, note }) },
+            'patient',
+            adminId,
+        );
+    }
+
+    /** Records that a triggered payout's money has actually gone out. Staff-only. */
+    markPayoutPaid(partnerId: string, payoutId: string, adminId: string): Promise<AdminApiPayout> {
+        return this.call<AdminApiPayout>(
+            `/partners/${encodeURIComponent(partnerId)}/payouts/${encodeURIComponent(payoutId)}`,
+            { method: 'PATCH', body: JSON.stringify({ status: 'PAID' }) },
+            'patient',
+            adminId,
+        );
+    }
+
+    /**
+     * `actingAs = partnerId` (their own portal) gets the full details back,
+     * unaudited — it's already theirs. `actingAs` = a real admin id with
+     * `reveal: true` gets the full details too, but audited on admin-api's
+     * side. Anything else gets the masked view.
+     */
+    getBankDetails(
+        partnerId: string,
+        reveal: boolean,
+        actingAs?: string,
+    ): Promise<AdminApiBankDetails | null> {
+        const query = reveal ? '?reveal=true' : '';
+        return this.call<AdminApiBankDetails | null>(
+            `/partners/${encodeURIComponent(partnerId)}/bank-details${query}`,
+            { method: 'GET' },
+            'patient',
+            actingAs,
+        );
+    }
+
+    /** Only the owning partner submits their own — `actingAs` is always their own partnerId. */
+    submitBankDetails(
+        partnerId: string,
+        input: SubmitBankDetailsInput,
+        actingAs: string,
+    ): Promise<AdminApiBankDetails> {
+        return this.call<AdminApiBankDetails>(
+            `/partners/${encodeURIComponent(partnerId)}/bank-details`,
+            { method: 'PUT', body: JSON.stringify(input) },
+            'patient',
+            actingAs,
+        );
     }
 
     // ── Referral attribution ────────────────────────────────────────────────

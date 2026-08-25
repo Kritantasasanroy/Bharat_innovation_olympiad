@@ -87,43 +87,51 @@ export interface Campaign {
 	readonly createdAt: string;
 }
 
-export type PayoutStatus = "PENDING" | "SIGNED_OFF" | "RELEASED";
-
-export interface StatementRequestInput {
-	readonly period: string;
-}
-
-export interface CommissionLineItem {
-	readonly attributionId: string;
-	readonly campaignId: string;
-	readonly studentId: string;
-	readonly registrationId: string;
-	readonly amountPaise: number;
-	readonly commissionRatePct: number;
-	readonly commissionPaise: number;
-}
-
-export interface Statement {
-	readonly id: string;
-	readonly partnerId: string;
-	readonly period: string;
-	readonly version: number;
-	readonly lineItems: readonly CommissionLineItem[];
-	readonly totalPaise: number;
-	readonly status: "ISSUED";
-	readonly issuedAt: string;
-}
+/**
+ * No fixed commission: admin decides an amount and triggers it directly
+ * against the partner (TRIGGERED), then marks it paid once the money has
+ * actually gone out (PAID). Terminal at PAID.
+ */
+export type PayoutStatus = "TRIGGERED" | "PAID";
 
 export interface Payout {
 	readonly id: string;
 	readonly partnerId: string;
-	readonly statementId: string;
 	readonly amountPaise: number;
+	/** What this covers, freeform — e.g. "August referrals". */
+	readonly note: string | null;
 	readonly status: PayoutStatus;
-	readonly financeSignOffApprover: string | null;
-	readonly financeSignOffAt: string | null;
-	readonly reason: string | null;
-	readonly createdAt: string;
+	readonly triggeredBy: string;
+	readonly triggeredAt: string;
+	readonly paidBy: string | null;
+	readonly paidAt: string | null;
+}
+
+/**
+ * Where this partner's payouts get sent. Account number and PAN are the only
+ * two fields encrypted at rest — this shape carries only their masked
+ * companions unless the read explicitly reveals them (the partner's own read
+ * always does; it's already theirs).
+ */
+export interface BankDetails {
+	readonly partnerId: string;
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumberLast4: string;
+	readonly panMasked: string;
+	readonly submittedAt: string;
+	readonly updatedAt: string;
+	readonly accountNumber?: string;
+	readonly pan?: string;
+}
+
+export interface SubmitBankDetailsInput {
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumber: string;
+	readonly pan: string;
 }
 
 export type SupportRequestCategory = "CAMPAIGN" | "PRICING" | "OTHER";
