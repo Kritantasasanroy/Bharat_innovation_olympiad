@@ -904,7 +904,7 @@ export class SchoolService {
             tokenIssuedAt: request.tokenIssuedAt,
             tokenLastUsedAt: request.tokenLastUsedAt,
             approvedAt: request.decidedAt,
-            portalUrl: process.env.SCHOOL_PORTAL_URL || 'https://bio-school-portal.vercel.app',
+            portalUrl: process.env.SCHOOL_PORTAL_URL || 'https://school.innovationolympiad.in/',
         };
     }
 

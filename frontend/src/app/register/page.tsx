@@ -486,7 +486,7 @@ export default function RegisterPage() {
                                 ))}
                             </select>
                             <p className="input-hint">
-                                You will sit the Class {formData.classBand} paper. Choose carefully, you
+                                You will sit the Class {formData.classBand} Innovation Olympiad exam. Choose carefully, you
                                 will be asked to confirm this before the exam starts, and it cannot be
                                 changed afterwards.
                             </p>

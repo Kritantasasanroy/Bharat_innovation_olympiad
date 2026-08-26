@@ -114,7 +114,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                     ) : (
                         <p className="text-muted">
                             Your score is not published yet. It appears on your results page as soon as
-                            marking for this paper is released, we will email you.
+                            marking for this Innovation Olympiad exam is released, we will email you.
                         </p>
                     )}
                 </section>
@@ -144,7 +144,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                                         {result.violationCount} violation
                                         {result.violationCount === 1 ? '' : 's'} recorded.
                                     </strong>{' '}
-                                    These are the warnings you saw during the paper: leaving fullscreen,
+                                    These are the warnings you saw during the Innovation Olympiad exam: leaving fullscreen,
                                     switching away, a camera or face issue, or a screenshot attempt.
                                 </p>
                                 <p className="text-muted" style={{ fontSize: '0.85rem' }}>
@@ -164,14 +164,14 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                     <ol className="submitted-steps">
                         <li>
                             <strong>Marking</strong>
-                            <p>Your paper is marked automatically as soon as it is submitted.</p>
+                            <p>Your Innovation Olympiad exam is marked automatically as soon as it is submitted.</p>
                         </li>
                         <li>
                             <strong>Verification</strong>
                             <p>
-                                Once the exam window closes, every paper goes through fair-score
+                                Once the exam window closes, every Innovation Olympiad exam goes through fair-score
                                 normalisation so students who sat different sittings are compared
-                                fairly. Any paper the proctoring flagged is reviewed by a person, not
+                                fairly. Any Innovation Olympiad exam the proctoring flagged is reviewed by a person, not
                                 by the computer, before anything is concluded from it.
                             </p>
                         </li>
@@ -202,7 +202,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                             question about it can be answered from the record rather than from memory.
                         </li>
                         <li>
-                            Nothing is decided automatically. A flagged paper is looked at by a person,
+                            Nothing is decided automatically. A flagged Innovation Olympiad exam is looked at by a person,
                             who has to write down their reasoning either way.
                         </li>
                         <li>

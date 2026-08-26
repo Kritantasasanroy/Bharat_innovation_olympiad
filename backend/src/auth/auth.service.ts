@@ -395,7 +395,7 @@ export class AuthService {
                 classBandUpdate = { classBand: dto.classBand };
             } else if (current.classBand !== dto.classBand) {
                 throw new BadRequestException(
-                    'Your class cannot be changed once it is set, because it decides which paper you sit and who you are ranked against. Raise a support ticket and we will correct it for you.',
+                    'Your class cannot be changed once it is set, because it decides which Innovation Olympiad exam you sit and who you are ranked against. Raise a support ticket and we will correct it for you.',
                 );
             }
         }

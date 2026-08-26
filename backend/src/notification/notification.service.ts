@@ -204,14 +204,14 @@ export class NotificationService implements OnModuleInit {
     private get partnerPortalUrl(): string {
         return (
             process.env.PARTNER_PORTAL_URL?.replace(/\/$/, '') ||
-            'https://bio-partner-portal.vercel.app'
+            'https://partner.innovationolympiad.in'
         );
     }
 
     private get schoolPortalUrl(): string {
         return (
             process.env.SCHOOL_PORTAL_URL?.replace(/\/$/, '') ||
-            'https://bio-school-portal.vercel.app'
+            'https://school.innovationolympiad.in'
         );
     }
 

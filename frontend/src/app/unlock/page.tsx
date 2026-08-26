@@ -26,7 +26,7 @@ const POLL_MS = 4000;
 
 const BENEFITS = [
     'Sit every published olympiad exam this season, no per-exam fee',
-    'Unlimited practice attempts on the practice paper',
+    'Unlimited practice attempts on the practice Innovation Olympiad exam',
     'Full score reports and rank breakdown after each exam',
     'Downloadable certificates for every exam you complete',
 ];

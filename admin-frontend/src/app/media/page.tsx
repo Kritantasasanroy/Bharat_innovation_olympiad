@@ -197,7 +197,7 @@ function MediaPage() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
                     Images referenced by an <code>Image Link</code> or <code>Image Filename</code> in a question
                     workbook are matched against this folder. Syncing copies them into permanent storage, so
-                    exams never depend on Drive being reachable while a student is sitting the paper.
+                    exams never depend on Drive being reachable while a student is sitting the Innovation Olympiad exam.
                     {drive && !drive.configured && (
                         <>
                             {' '}<strong style={{ color: 'var(--warning-400)' }}>{drive.hint}</strong>

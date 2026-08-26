@@ -724,7 +724,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                     `This workbook covers ${result.parts.length} parts ` +
                         `(${result.parts.map((p) => p.name).join(', ')}).\n\n` +
                         'Importing here puts all of them into this one section. To create a ' +
-                        'section per part instead, cancel and use "Import full paper" at the top.\n\n' +
+                        'section per part instead, cancel and use "Import full Innovation Olympiad exam" at the top.\n\n' +
                         'Import everything into this section anyway?',
                 );
                 if (!ok) return;
@@ -811,7 +811,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                         : ''),
             );
         } catch (err: any) {
-            setError(err?.response?.data?.message || err?.message || 'Paper import failed.');
+            setError(err?.response?.data?.message || err?.message || 'Innovation Olympiad exam import failed.');
         } finally {
             setPaperImporting(false);
             if (paperFileRef.current) paperFileRef.current.value = '';
@@ -842,7 +842,7 @@ function ExamQuestionsContent({ examId }: { examId: string }) {
                         title="Import a full Olympiad workbook — one section per Part Name"
                     >
                         <Upload size={15} style={{ marginRight: '0.4rem' }} />
-                        {paperImporting ? 'Importing…' : 'Import full paper'}
+                        {paperImporting ? 'Importing…' : 'Import full Innovation Olympiad exam'}
                     </button>
                     <a href="/questions" className="btn btn-secondary" title="Browse all questions in the bank">
                         <BookOpen size={15} style={{ marginRight: '0.4rem' }} /> Question Bank

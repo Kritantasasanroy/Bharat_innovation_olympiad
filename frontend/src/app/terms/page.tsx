@@ -36,7 +36,7 @@ const SECTIONS: { heading: string; paragraphs: string[]; list?: string[] }[] = [
         paragraphs: [
             'The registration fee is a one-time platform fee. Paying it unlocks every published Olympiad exam on the account for the current season. There is no per-exam charge and no renewal within the season.',
             'The fee is NON-REFUNDABLE and NON-TRANSFERABLE. It cannot be moved to another participant, another account, or a later season. This applies whether or not the participant goes on to sit an exam.',
-            'The free practice paper is available without payment.',
+            'The free practice Innovation Olympiad exam is available without payment.',
         ],
     },
     {
@@ -90,7 +90,7 @@ const SECTIONS: { heading: string; paragraphs: string[]; list?: string[] }[] = [
         heading: '9. Technology requirements',
         paragraphs: [
             'It is the participant\'s responsibility to have a suitable device, browser and internet connection, as published on the registration and instructions pages. We are not responsible for an exam disrupted by the participant\'s own equipment, power supply or internet connection.',
-            'The practice paper exists so these can be checked in advance, and we strongly recommend using it on the same device the participant intends to use for the real exam.',
+            'The practice Innovation Olympiad exam exists so these can be checked in advance, and we strongly recommend using it on the same device the participant intends to use for the real exam.',
         ],
     },
     {

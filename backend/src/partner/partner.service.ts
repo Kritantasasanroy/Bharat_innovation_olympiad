@@ -597,7 +597,7 @@ export class PartnerService {
             tokenIssuedAt: request.tokenIssuedAt,
             tokenLastUsedAt: request.tokenLastUsedAt,
             approvedAt: request.decidedAt,
-            portalUrl: process.env.PARTNER_PORTAL_URL || 'https://bio-partner-portal.vercel.app',
+            portalUrl: process.env.PARTNER_PORTAL_URL || 'https://partner.innovationolympiad.in/',
         };
     }
 

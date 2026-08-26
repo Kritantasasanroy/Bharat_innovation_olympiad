@@ -366,8 +366,8 @@ host in `docker-compose.yml`).
 |---|---|---|
 | Student portal | https://olympiad-student-frontend.vercel.app | existing, redeployed |
 | Admin portal | https://olympiad-admin-frontend.vercel.app | existing, redeployed |
-| **Partner portal** | https://bio-partner-portal.vercel.app | new (`apps/partner-portal-web`) |
-| **School portal** | https://bio-school-portal.vercel.app | new (`apps/school-portal-web`) |
+| **Partner portal** | https://partner.innovationolympiad.in | new (`apps/partner-portal-web`) |
+| **School portal** | https://school.innovationolympiad.in | new (`apps/school-portal-web`) |
 | Backend (NestJS) | https://olympiad-backend-wsvn.onrender.com | existing, redeployed; `/api/proctor/health` 200 |
 | **admin-api** (Bun) | https://bio-admin-api.onrender.com | new; + Render Key Value `bio-admin-redis` |
 | **portal-api** (Bun) | https://bio-portal-api.onrender.com | new; `/partner/*` → 401 unauthenticated ✓ |
@@ -1793,7 +1793,7 @@ Student Browser
 | `RAZORPAY_KEY_SECRET` | Razorpay API key secret | from Razorpay dashboard |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | from Razorpay dashboard |
 | `DEFAULT_PARTNER_ID` | The **house partner** every school with no partner of its own falls back to (§0.25). Overridable so staging is not pointed at the live partner. | `e95c5ab7-9edc-438e-a846-9f770ebbce11` |
-| `PARTNER_APP_URL` | Partner portal origin, shown on a school's partner card | `https://bio-partner-portal.vercel.app` |
+| `PARTNER_APP_URL` | Partner portal origin, shown on a school's partner card | `https://partner.innovationolympiad.in` |
 | `AWS_REGION` | Legacy alias for `STORAGE_REGION` | `ap-south-1` |
 | `AWS_ACCESS_KEY_ID` | Legacy alias for `STORAGE_ACCESS_KEY_ID` | from provider console |
 | `AWS_SECRET_ACCESS_KEY` | Legacy alias for `STORAGE_SECRET_ACCESS_KEY` | from provider console |

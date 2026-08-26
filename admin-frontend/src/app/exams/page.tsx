@@ -363,8 +363,8 @@ export default function AdminExamsPage() {
                                     </span>
                                     {exam.isArchived && <span className="badge badge-muted">Archived</span>}
                                     {exam.isTrial && (
-                                        <span className="badge badge-primary" title="The rehearsal paper students sit before a real exam">
-                                            Trial paper
+                                        <span className="badge badge-primary" title="The rehearsal Innovation Olympiad exam students sit before a real exam">
+                                            Trial Innovation Olympiad exam
                                         </span>
                                     )}
                                     {!exam.isTrial && exam.requiresTrial && (

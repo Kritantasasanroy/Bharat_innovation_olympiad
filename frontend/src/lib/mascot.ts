@@ -53,7 +53,7 @@ export interface MascotIdentity {
 export const MASCOT: MascotIdentity = {
     name: 'Limon',
     avatar: '🍋',
-    watchingLine: 'Limon is keeping an eye out, so just focus on your paper.',
+    watchingLine: 'Limon is keeping an eye out, so just focus on your Innovation Olympiad exam.',
 };
 
 /**
@@ -117,7 +117,7 @@ const CUE_COPY: Record<MascotCueId, { title: string; encouragement: string }> = 
     'final-warning': {
         title: `${FINAL_WARNING_MINUTES} minutes left`,
         encouragement:
-            'Finish the question you are on, then check that every question has an answer. Your paper is submitted automatically when the timer runs out.',
+            'Finish the question you are on, then check that every question has an answer. Your Innovation Olympiad exam is submitted automatically when the timer runs out.',
     },
 };
 

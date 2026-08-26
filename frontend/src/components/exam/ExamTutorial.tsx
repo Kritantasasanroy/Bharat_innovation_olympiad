@@ -41,13 +41,13 @@ interface Marker {
 const MARKERS: Marker[] = [
     {
         n: 1,
-        title: 'Which paper you are on',
-        body: 'Your grade and the exam name, so you can check at any moment that you are sitting the right paper.',
+        title: 'Which Innovation Olympiad exam you are on',
+        body: 'Your grade and the exam name, so you can check at any moment that you are sitting the right Innovation Olympiad exam.',
     },
     {
         n: 2,
         title: 'Which question you are on',
-        body: 'Question 7 of 50. This number counts across the whole paper, not just the part you are in, so question 7 always means the same question.',
+        body: 'Question 7 of 50. This number counts across the whole Innovation Olympiad exam, not just the part you are in, so question 7 always means the same question.',
     },
     {
         n: 3,
@@ -62,7 +62,7 @@ const MARKERS: Marker[] = [
     {
         n: 5,
         title: 'Time left',
-        body: 'Counts down from the start of the paper. It turns orange with five minutes left and red with one. It is kept on our servers, so a brief internet drop cannot cost you time.',
+        body: 'Counts down from the start of the Innovation Olympiad exam. It turns orange with five minutes left and red with one. It is kept on our servers, so a brief internet drop cannot cost you time.',
     },
     {
         n: 6,
@@ -77,7 +77,7 @@ const MARKERS: Marker[] = [
     {
         n: 8,
         title: 'Moving around',
-        body: 'Previous and Next step through the paper one question at a time. Clear removes your answer to this question and leaves it blank.',
+        body: 'Previous and Next step through the Innovation Olympiad exam one question at a time. Clear removes your answer to this question and leaves it blank.',
     },
     {
         n: 9,
@@ -87,7 +87,7 @@ const MARKERS: Marker[] = [
     {
         n: 10,
         title: 'Jump to any question',
-        body: 'Every question in the paper, grouped by part. Click any number to go straight there, in any order, as many times as you like.',
+        body: 'Every question in the Innovation Olympiad exam, grouped by part. Click any number to go straight there, in any order, as many times as you like.',
     },
     {
         n: 11,
@@ -102,7 +102,7 @@ const MARKERS: Marker[] = [
     {
         n: 13,
         title: 'Submit',
-        body: 'Ends the paper. You are asked to confirm first, and told how many questions are still blank, so one accidental click cannot end your exam.',
+        body: 'Ends the Innovation Olympiad exam. You are asked to confirm first, and told how many questions are still blank, so one accidental click cannot end your exam.',
     },
 ];
 
@@ -150,7 +150,7 @@ export default function ExamTutorial() {
                     <h2 style={{ margin: 0 }}>🗺️ What the exam screen looks like</h2>
                     <span className="exam-tutorial__sub">
                         A quick tour of where everything is, before you start. Worth two minutes if
-                        this is your first paper.
+                        this is your first Innovation Olympiad exam.
                     </span>
                 </span>
                 <span className="exam-tutorial__chevron" aria-hidden="true">{open ? '▲' : '▼'}</span>
@@ -162,7 +162,7 @@ export default function ExamTutorial() {
                         <svg
                             viewBox="0 0 620 290"
                             role="img"
-                            aria-label="Diagram of the exam screen: a header with the paper name, question number, warning count, reload button, timer and camera preview; a question area with answer options and navigation buttons; and a sidebar listing every question number."
+                            aria-label="Diagram of the exam screen: a header with the Innovation Olympiad exam name, question number, warning count, reload button, timer and camera preview; a question area with answer options and navigation buttons; and a sidebar listing every question number."
                             className="exam-tutorial__svg"
                         >
                             {/* Screen outline */}
@@ -252,12 +252,12 @@ export default function ExamTutorial() {
                         <strong>If a message appears mid-exam, read it, do not panic.</strong> Small
                         notices in the corner are telling you something (your camera cannot see you,
                         your identity was checked) and go away by themselves. A message across the
-                        middle of the screen means the paper has paused and is waiting for you, and
+                        middle of the screen means the Innovation Olympiad exam has paused and is waiting for you, and
                         it always says what to do to carry on. Neither one takes your answers away.
                     </div>
 
                     <div className="exam-tutorial__note exam-tutorial__note--practice">
-                        <strong>The best version of this tour is the practice paper.</strong> It is
+                        <strong>The best version of this tour is the practice Innovation Olympiad exam.</strong> It is
                         free, unlimited, and runs in exactly this screen with a real timer and a real
                         camera. Sit it once on the device you plan to use, and none of the above will
                         be new on exam day.

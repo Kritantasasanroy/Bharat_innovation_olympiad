@@ -295,8 +295,8 @@
 - [ ] Admin: fair-score normalization / result-release gating, certificate generation, refund-request review, exam-day + KYC/payment ops queues, partner management view
 
 **Phase 4 — Deploy (done 2026-07-10):**
-- [x] Partner portal → Vercel `https://bio-partner-portal.vercel.app` (env `NEXT_PUBLIC_PORTAL_API_URL` → portal-api)
-- [x] School portal → Vercel `https://bio-school-portal.vercel.app` (env `NEXT_PUBLIC_API_URL` → backend)
+- [x] Partner portal → Vercel `https://partner.innovationolympiad.in` (env `NEXT_PUBLIC_PORTAL_API_URL` → portal-api)
+- [x] School portal → Vercel `https://school.innovationolympiad.in` (env `NEXT_PUBLIC_API_URL` → backend)
 - [x] `services/admin-api` → Render `https://bio-admin-api.onrender.com` (+ Render Key Value `bio-admin-redis`)
 - [x] `services/portal-api` → Render `https://bio-portal-api.onrender.com` (`ADMIN_API_URL` → admin-api; `/partner/*` returns 401 unauthenticated ✓)
 - [x] Redeployed existing: `olympiad-backend` (Render, health 200), `olympiad-student-frontend` + `olympiad-admin-frontend` (Vercel, 200)

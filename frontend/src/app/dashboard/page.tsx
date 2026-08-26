@@ -223,7 +223,7 @@ export default function StudentDashboard() {
                             <strong>One step left: parent or guardian details.</strong>
                             <p>
                                 Required before any exam can be started, including the free practice
-                                paper. It takes about two minutes.
+                                Innovation Olympiad exam. It takes about two minutes.
                             </p>
                         </div>
                         <Link href="/guardian" className="btn btn-primary btn-sm">

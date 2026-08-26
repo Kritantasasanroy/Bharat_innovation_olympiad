@@ -444,7 +444,7 @@ export default function GuardianForm({
                         proctoring. I understand the webcam stays on for the exam, that face analysis
                         runs in their own browser, that no video is ever recorded or stored, and
                         that a still photo is saved only at the moment an exam violation is
-                        recorded, to be reviewed by a person alongside that paper. Separately, one
+                        recorded, to be reviewed by a person alongside that Innovation Olympiad exam. Separately, one
                         photo is captured once at registration, alongside the face scan, and is kept
                         and printed on their certificate.
                     </span>

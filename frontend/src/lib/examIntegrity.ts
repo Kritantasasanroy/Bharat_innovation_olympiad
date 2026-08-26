@@ -75,7 +75,7 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
         icon: '⚠️',
         title: 'The face on camera did not match your profile',
         what: 'The face in frame did not match the photo you enrolled when you registered.',
-        fix: 'Only the registered participant may sit this paper. Make sure it is you in frame, well lit.',
+        fix: 'Only the registered participant may sit this Innovation Olympiad exam. Make sure it is you in frame, well lit.',
     },
     multiple_faces: {
         icon: '👥',
@@ -116,9 +116,9 @@ export function violationCopy(kind: ViolationKind): ViolationCopy {
 export function violationConsequence(count: number, threshold: number): string {
     const noun = count === 1 ? 'violation' : 'violations';
     if (count >= threshold) {
-        return `That is ${count} ${noun} recorded on this paper. Your exam has not been stopped and you can carry on, but it has passed the point where a person will review what was recorded before your result is confirmed.`;
+        return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Your exam has not been stopped and you can carry on, but it has passed the point where a person will review what was recorded before your result is confirmed.`;
     }
-    return `That is ${count} ${noun} recorded on this paper. Nothing has been taken away, keep going. Violations are only a record, and a person reads them before anything is concluded.`;
+    return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Nothing has been taken away, keep going. Violations are only a record, and a person reads them before anything is concluded.`;
 }
 
 // ── Submission errors ───────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ export function autoSubmitCopy(
             return {
                 icon: '⏱️',
                 title: 'Time is up',
-                reason: 'Your allotted time for this paper has run out, so the exam was submitted for you.',
+                reason: 'Your allotted time for this Innovation Olympiad exam has run out, so the exam was submitted for you.',
                 detail: 'Every answer you selected before the timer reached zero has been saved and counted. Unanswered questions are simply left blank.',
             };
         case 'paused_too_long': {

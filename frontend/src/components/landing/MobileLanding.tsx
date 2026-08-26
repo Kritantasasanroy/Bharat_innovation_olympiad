@@ -37,9 +37,9 @@ const JOURNEY = [
 ];
 
 const TRUST = [
-    { Icon: Target, title: 'Fairness', body: 'Every participant sits the same paper under the same conditions, on a server-run timer.' },
-    { Icon: BadgeCheck, title: 'Authenticity', body: 'A face scan at registration confirms the registered participant sat the paper.' },
-    { Icon: ScrollText, title: 'Credibility', body: 'Flagged papers are reviewed by a person, with written reasons, before anything is concluded.' },
+    { Icon: Target, title: 'Fairness', body: 'Every participant sits the same Innovation Olympiad exam under the same conditions, on a server-run timer.' },
+    { Icon: BadgeCheck, title: 'Authenticity', body: 'A face scan at registration confirms the registered participant sat the Innovation Olympiad exam.' },
+    { Icon: ScrollText, title: 'Credibility', body: 'Flagged Innovation Olympiad exams are reviewed by a person, with written reasons, before anything is concluded.' },
     { Icon: Users, title: 'Child-friendly', body: "No warnings pile up mid-exam and no video is ever recorded." },
 ];
 

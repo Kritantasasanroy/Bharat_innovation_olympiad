@@ -54,7 +54,7 @@ export class PartnerDirectoryService {
 
     private get portalUrl(): string {
         return (
-            this.config.get<string>('PARTNER_APP_URL') || 'https://bio-partner-portal.vercel.app'
+            this.config.get<string>('PARTNER_APP_URL') || 'https://partner.innovationolympiad.in'
         );
     }
 

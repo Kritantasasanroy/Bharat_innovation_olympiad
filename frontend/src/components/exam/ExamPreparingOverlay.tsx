@@ -99,7 +99,7 @@ export default function ExamPreparingOverlay({
                     <div className="exam-preparing__ring" aria-hidden="true" />
                     <h2 className="exam-preparing__title">Starting your exam…</h2>
                     <p className="exam-preparing__sub">
-                        Everything is set up. Fetching your question paper now.
+                        Everything is set up. Fetching your Innovation Olympiad exam now.
                     </p>
                 </div>
             </div>
@@ -115,7 +115,7 @@ export default function ExamPreparingOverlay({
 
                 <h2 className="exam-preparing__title">Getting your exam ready</h2>
                 <p className="exam-preparing__sub">
-                    Setting up your camera and proctoring before the paper opens. Your exam timer has
+                    Setting up your camera and proctoring before the Innovation Olympiad exam opens. Your exam timer has
                     not started yet, it starts when your questions appear.
                 </p>
 

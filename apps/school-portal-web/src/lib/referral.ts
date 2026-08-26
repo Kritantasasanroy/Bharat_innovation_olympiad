@@ -2,7 +2,7 @@
  * Partner campaign capture for schools (PRD-046 attribution).
  *
  * A partner shares a school onboarding link like
- * `https://bio-school-portal.vercel.app/activate?ref=ref_<uuid>`. The code is
+ * `https://school.innovationolympiad.in/activate?ref=ref_<uuid>`. The code is
  * captured the moment a coordinator lands (they may read for a while before
  * applying), persisted, and replayed on `POST /school/apply`, where the backend
  * resolves it to the referring partner and stamps the request's

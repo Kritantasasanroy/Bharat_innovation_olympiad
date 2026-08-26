@@ -232,7 +232,7 @@ export default function ProfilePage() {
                                 style={{ opacity: 0.7, cursor: 'not-allowed' }}
                             />
                             <small className="text-muted" style={{ marginTop: '0.25rem', display: 'block' }}>
-                                Your class is final: it decides which paper you sit and who you are
+                                Your class is final: it decides which Innovation Olympiad exam you sit and who you are
                                 ranked against. If it is wrong,{' '}
                                 <Link href="/support">raise a support ticket</Link> and we will
                                 correct it before your exam.
@@ -248,7 +248,7 @@ export default function ProfilePage() {
                         <>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
                                 A parent or guardian has to give consent before you can start any exam,
-                                including the practice paper. It takes about two minutes and only needs
+                                including the practice Innovation Olympiad exam. It takes about two minutes and only needs
                                 doing once.
                             </p>
                             <Link href="/guardian?next=/profile" className="btn btn-primary">

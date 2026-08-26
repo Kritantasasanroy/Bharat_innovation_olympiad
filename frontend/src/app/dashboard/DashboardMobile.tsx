@@ -46,7 +46,7 @@ export default function DashboardMobile({
             {guardianComplete === false && (
                 <div className="mob-card mob-dash-notice">
                     <strong>One step left: parent or guardian details.</strong>
-                    <p>Required before any exam can be started, including the free practice paper.</p>
+                    <p>Required before any exam can be started, including the free practice Innovation Olympiad exam.</p>
                     <Link href="/guardian" className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: '0.6rem' }}>
                         Complete it now
                     </Link>

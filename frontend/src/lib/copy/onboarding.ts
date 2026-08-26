@@ -35,7 +35,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '🧑‍💻',
         title: 'The participant must be present',
-        body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their paper and may be disqualified.',
+        body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their Innovation Olympiad exam and may be disqualified.',
     },
     {
         icon: '📷',
@@ -44,7 +44,7 @@ export const PRESENCE_POINTS = [
         // said no picture is ever saved, which stopped being true the moment
         // violations started capturing a frame — and a privacy promise that is
         // quietly false is worse than one that is narrower than you would like.
-        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers used to verify the participant during their exam, and this one photo is kept and printed on their certificate. During an exam a further photo is saved only if a violation is recorded, and it is kept with that paper for the review team.',
+        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers used to verify the participant during their exam, and this one photo is kept and printed on their certificate. During an exam a further photo is saved only if a violation is recorded, and it is kept with that Innovation Olympiad exam for the review team.',
     },
     {
         icon: '👨‍👩‍👧',
@@ -70,12 +70,12 @@ export const NEXT_STEPS = [
         body: 'Places in each sitting are limited. Once you confirm a schedule it cannot be changed from your account, so pick a time you are certain about.',
     },
     {
-        title: 'Take the practice paper',
-        body: 'It runs in exactly the same environment as the real exam: fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real paper will start.',
+        title: 'Take the practice Innovation Olympiad exam',
+        body: 'It runs in exactly the same environment as the real exam: fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real Innovation Olympiad exam will start.',
     },
     {
         title: 'Check your device early',
-        body: 'Do not leave the camera and internet check until exam day. Run the practice paper on the device you actually intend to use.',
+        body: 'Do not leave the camera and internet check until exam day. Run the practice Innovation Olympiad exam on the device you actually intend to use.',
     },
     {
         title: 'On the day',
@@ -106,6 +106,6 @@ export const MONITORED_ACTIVITIES = [
     // Both were genuinely detected and neither was listed, which is exactly the
     // surprise this list exists to prevent — a student met the screenshot rule
     // for the first time as a warning telling them they had broken it.
-    'Taking a screenshot, or trying to print the paper',
+    'Taking a screenshot, or trying to print the Innovation Olympiad exam',
     'Nothing moving on your screen for a long stretch',
 ] as const;

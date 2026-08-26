@@ -205,7 +205,7 @@ function AnswerKey({ attemptId }: { attemptId: string }) {
             })}
 
             {questions?.length === 0 && !loading && (
-                <p className="text-muted">The answer key for this paper is not published yet.</p>
+                <p className="text-muted">The answer key for this Innovation Olympiad exam is not published yet.</p>
             )}
         </div>
     );

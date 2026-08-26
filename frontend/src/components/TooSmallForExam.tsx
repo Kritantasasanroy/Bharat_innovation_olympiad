@@ -63,8 +63,8 @@ export default function TooSmallForExam() {
                     <>
                         <h1>This device is too small for the exam</h1>
                         <p className="too-small__lede">
-                            The Olympiad paper needs a laptop, desktop, or a tablet. A phone screen
-                            cannot show the question list and the paper side by side, and we would
+                            The Olympiad Innovation Olympiad exam needs a laptop, desktop, or a tablet. A phone screen
+                            cannot show the question list and the Innovation Olympiad exam side by side, and we would
                                 rather tell you now than halfway through your exam.
                         </p>
                     </>

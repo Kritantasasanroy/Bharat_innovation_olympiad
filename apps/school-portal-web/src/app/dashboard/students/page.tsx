@@ -64,10 +64,11 @@ export default function StudentsPage() {
 	const fileInput = useRef<HTMLInputElement>(null);
 
 	const schoolCode = profile?.code ?? "";
-	const referralUrl =
-		typeof window !== "undefined" && schoolCode
-			? `${window.location.origin.replace("4002", "3000").replace("school-portal", "www")}/register?school=${schoolCode}`
-			: `https://www.innovationolympiad.in/register?school=${schoolCode || "YOUR_CODE"}`;
+	const referralUrl = schoolCode
+		? typeof window !== "undefined" && window.location.origin.includes("localhost")
+			? `${window.location.origin.replace("4002", "3000")}/register?school=${schoolCode}`
+			: `https://www.innovationolympiad.in/register?school=${schoolCode}`
+		: "https://www.innovationolympiad.in/register?school=YOUR_CODE";
 
 	const copyReferralLink = () => {
 		navigator.clipboard.writeText(referralUrl);

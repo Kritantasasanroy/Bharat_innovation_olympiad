@@ -36,7 +36,7 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
                 </li>
                 {!compact && (
                     <li>
-                        <strong>The practice paper stays free.</strong> You can take it as many times
+                        <strong>The practice Innovation Olympiad exam stays free.</strong> You can take it as many times
                         as you like, before or after paying.
                     </li>
                 )}

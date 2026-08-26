@@ -94,7 +94,7 @@ export function welcomeEmail(vars: {
      <p style="margin:16px 0 0;font-weight:600;color:#111827;">What happens next</p>
      ${steps([
          'Pick your exam schedule — places in each sitting are limited, and once confirmed a schedule cannot be changed.',
-         'Take the free practice paper. It runs in exactly the same environment as the real exam, so nothing on the day is a surprise.',
+         'Take the free practice Innovation Olympiad exam. It runs in exactly the same environment as the real exam, so nothing on the day is a surprise.',
          'Check your device ahead of time: a laptop, desktop or tablet with a working webcam, on Chrome or Edge, and at least 2 Mbps of internet.',
          'On exam day, sit somewhere quiet and well-lit with a plain background, and keep a school or photo ID nearby.',
      ])}
@@ -133,7 +133,7 @@ export function slotConfirmedEmail(vars: {
      ])}
      <p style="margin:16px 0 0;font-weight:600;color:#111827;">Before the day</p>
      ${steps([
-         'Finish the practice paper if you have not already — it is required before the real exam will start.',
+         'Finish the practice Innovation Olympiad exam if you have not already — it is required before the real exam will start.',
          'Test your webcam and microphone on the device you will actually use.',
          'Use Google Chrome or Microsoft Edge, updated to the latest version.',
          'Find a quiet, well-lit spot with a plain background behind you.',

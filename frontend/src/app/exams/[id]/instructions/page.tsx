@@ -59,9 +59,9 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         </>,
         <>
             <strong>Your camera stays on the whole time.</strong> It checks that it is you sitting
-            the paper and that you are alone. Nothing is filmed, and nobody watches you live. A
+            the Innovation Olympiad exam and that you are alone. Nothing is filmed, and nobody watches you live. A
             single photo is saved <strong>only</strong> at the moment a violation is recorded, and
-            is kept with your paper for the review team.
+            is kept with your Innovation Olympiad exam for the review team.
         </>,
         <>
             <strong>Sit in front of a plain wall, with light on your face.</strong> If the camera
@@ -74,7 +74,7 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
             on.
         </>,
         <>
-            <strong>If you stay away longer than {EXAM_PAUSE_TIMEOUT_SEC} seconds, your paper is
+            <strong>If you stay away longer than {EXAM_PAUSE_TIMEOUT_SEC} seconds, your Innovation Olympiad exam is
             sent in for you</strong> and you cannot go back to it. A countdown shows you exactly
             how long you have left to return. Along with your time running out, this is the{' '}
             <strong>only</strong> way your exam can end by itself.
@@ -92,7 +92,7 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         // answer. It no longer ends the paper, but it is still recorded.
         <>
             <strong>Try not to refresh the page or press your browser&apos;s Back button.</strong>{' '}
-            Your answers and your time survive it, but it is recorded on your paper. If something
+            Your answers and your time survive it, but it is recorded on your Innovation Olympiad exam. If something
             looks broken, use the <strong>↻ Reload</strong> button inside the exam instead: it does
             the same job and is not counted against you.
         </>,
@@ -109,7 +109,7 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         ...(exam?.sectionCount && exam.sectionCount > 1
             ? [
                   <>
-                      <strong>The paper has {exam.sectionCount} parts.</strong> You go through them
+                      <strong>The Innovation Olympiad exam has {exam.sectionCount} parts.</strong> You go through them
                       in order, and you can move back and forth between questions as much as you
                       like.
                   </>,
@@ -121,7 +121,7 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         </>,
         exam?.negativeMarking
             ? <>
-                  <strong>A wrong answer loses you marks on this paper.</strong> If you truly have
+                  <strong>A wrong answer loses you marks on this Innovation Olympiad exam.</strong> If you truly have
                   no idea, leaving it blank costs you less than guessing.
               </>
             : <>
@@ -483,7 +483,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                               : trialState === 'done'
                                 ? 'Trial test completed: you can practise again as often as you like'
                                 : trialState === 'unavailable'
-                                  ? 'The trial paper is not open yet: you can still start this exam'
+                                  ? 'The trial Innovation Olympiad exam is not open yet: you can still start this exam'
                                   : 'Required: a short practice run starts when you click below',
                       passed:
                           trialState === 'checking'
@@ -575,7 +575,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                             <h2>👨‍👩‍👧 Parent consent needed</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
                                 A parent or guardian has to give consent before you can start any
-                                exam, including the practice paper. It takes about two minutes and
+                                exam, including the practice Innovation Olympiad exam. It takes about two minutes and
                                 only needs doing once.
                             </p>
                             <button
@@ -682,7 +682,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                             <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.05rem' }}>🔒 Exam access locked</h3>
                             <p style={{ color: 'var(--text-secondary)', margin: '0 0 1rem', fontSize: '0.92rem' }}>
                                 One payment unlocks every olympiad exam for the current season. You only
-                                pay once per season, the free practice paper stays available either way.
+                                pay once per season, the free practice Innovation Olympiad exam stays available either way.
                             </p>
                             <button className="btn btn-primary" onClick={() => router.push('/unlock')}>
                                 Unlock Exams
@@ -710,7 +710,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                         <p className="start-note">
                             {trialState === 'required'
                                 ? 'A short trial test runs first, in the same environment as the real exam.'
-                                : 'You will be asked to confirm the exam rules before the paper opens.'}
+                                : 'You will be asked to confirm the exam rules before the Innovation Olympiad exam opens.'}
                         </p>
 
                         {/* The practice run, offered every time.
@@ -791,13 +791,13 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                         <span>
                                             I confirm I am in <strong>Class {user.classBand}</strong> and
                                             that the <strong>Grade {user.classBand} Olympiad</strong> is
-                                            the correct paper for me.
+                                            the correct Innovation Olympiad exam for me.
                                         </span>
                                     </label>
                                     <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: '0 0 1rem' }}>
                                         This cannot be changed once the exam starts. If your class is
                                         wrong, <Link href="/support">contact support</Link> before
-                                        starting. Do not sit the wrong paper.
+                                        starting. Do not sit the wrong Innovation Olympiad exam.
                                     </p>
                                 </>
                             )}

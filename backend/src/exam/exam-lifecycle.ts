@@ -121,7 +121,7 @@ export function canPublish(check: PublishCheck): { ok: boolean; reason?: string 
         return {
             ok: false,
             reason:
-                'This exam has no questions. Add a question paper (Manage Questions & Sections) before publishing.',
+                'This exam has no questions. Add an Innovation Olympiad exam (Manage Questions & Sections) before publishing.',
         };
     }
     if (check.instanceCount === 0) {

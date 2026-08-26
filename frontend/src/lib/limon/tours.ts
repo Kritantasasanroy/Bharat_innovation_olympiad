@@ -76,7 +76,7 @@ const REGISTER_TOUR: Tour = {
         {
             target: 'register-class',
             title: 'Choose your class carefully',
-            body: "This decides which paper you sit and who you're ranked against, and it's final once it's set. If you pick the wrong one you'll need to raise a support ticket to fix it.",
+            body: "This decides which Innovation Olympiad exam you sit and who you're ranked against, and it's final once it's set. If you pick the wrong one you'll need to raise a support ticket to fix it.",
             mood: 'concerned',
             placement: 'top',
         },
@@ -93,7 +93,7 @@ const REGISTER_TOUR: Tour = {
         },
         {
             title: 'One thing I have to be firm about',
-            body: "The face scan at step 4 has to be done by you, not a parent. It's what I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your paper.",
+            body: "The face scan at step 4 has to be done by you, not a parent. It's what I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam.",
             mood: 'concerned',
         },
     ],
@@ -128,7 +128,7 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'dashboard-exams',
             title: 'Your exams',
-            body: "Everything you can sit. Start with the free practice paper: it runs in exactly the same screen as the real thing, and you can retake it as often as you like.",
+            body: "Everything you can sit. Start with the free practice Innovation Olympiad exam: it runs in exactly the same screen as the real thing, and you can retake it as often as you like.",
             mood: 'talking',
             placement: 'top',
         },
@@ -168,7 +168,7 @@ const DASHBOARD_TOUR: Tour = {
             placement: 'bottom',
         },
     ],
-    outro: "That's the whole portal. Take the practice paper when you're ready, and I'll walk you through the exam screen there.",
+    outro: "That's the whole portal. Take the practice Innovation Olympiad exam when you're ready, and I'll walk you through the exam screen there.",
 };
 
 /**
@@ -207,7 +207,7 @@ const EXAM_TOUR: Tour = {
         {
             target: 'exam-navigator',
             title: 'Jump anywhere',
-            body: 'Every question in the paper. Click any number to go straight there, in any order, as often as you like. Green is answered, orange is marked, grey you have not opened yet.',
+            body: 'Every question in the Innovation Olympiad exam. Click any number to go straight there, in any order, as often as you like. Green is answered, orange is marked, grey you have not opened yet.',
             mood: 'talking',
             placement: 'left',
         },
@@ -235,12 +235,12 @@ const EXAM_TOUR: Tour = {
         {
             target: 'exam-submit',
             title: 'Finishing',
-            body: "Submit when you are done. I will tell you how many questions are still blank and ask you to confirm, so one stray click cannot end your paper.",
+            body: "Submit when you are done. I will tell you how many questions are still blank and ask you to confirm, so one stray click cannot end your Innovation Olympiad exam.",
             mood: 'happy',
             placement: 'left',
         },
     ],
-    outro: "That is the lot. Have a go at these questions, nothing here counts. When you are comfortable, your real paper will feel like somewhere you have already been.",
+    outro: "That is the lot. Have a go at these questions, nothing here counts. When you are comfortable, your real Innovation Olympiad exam will feel like somewhere you have already been.",
 };
 
 /**
@@ -306,10 +306,10 @@ const TRAINING_TOUR: Tour = {
 
 const EXAMS_TOUR: Tour = {
     id: 'exams',
-    intro: 'This is every paper open to you.',
+    intro: 'This is every Innovation Olympiad exam open to you.',
     steps: [
         {
-            title: 'Start with the practice paper',
+            title: 'Start with the practice Innovation Olympiad exam',
             body: "It's free, you can take it as many times as you like, and it runs in exactly the same screen as the real exam: fullscreen, camera, timer and all.",
             mood: 'talking',
         },
@@ -320,7 +320,7 @@ const EXAMS_TOUR: Tour = {
         },
         {
             title: 'Check your device early',
-            body: "Don't leave the camera and internet check until exam day. Run the practice paper on the device you actually plan to use.",
+            body: "Don't leave the camera and internet check until exam day. Run the practice Innovation Olympiad exam on the device you actually plan to use.",
             mood: 'talking',
         },
     ],
@@ -342,7 +342,7 @@ const RESULTS_TOUR: Tour = {
         },
         {
             title: 'If something looks wrong',
-            body: 'A power cut during your paper, a score that does not look right: raise it from Support and a person will read it and reply.',
+            body: 'A power cut during your Innovation Olympiad exam, a score that does not look right: raise it from Support and a person will read it and reply.',
             mood: 'concerned',
         },
     ],
@@ -371,7 +371,7 @@ const SUPPORT_TOUR: Tour = {
     steps: [
         {
             title: 'What to raise here',
-            body: 'A wrong class on your account, something that went wrong during your paper, a schedule you cannot make, a score you want looked at. Anything a page cannot fix by itself.',
+            body: 'A wrong class on your account, something that went wrong during your Innovation Olympiad exam, a schedule you cannot make, a score you want looked at. Anything a page cannot fix by itself.',
             mood: 'talking',
         },
         {
@@ -393,7 +393,7 @@ const PROFILE_TOUR: Tour = {
         },
         {
             title: 'What you cannot',
-            body: 'Your email, your school and your class. Your class decides which paper you sit and who you are ranked against, so it is final once set. Raise a support ticket if it is wrong.',
+            body: 'Your email, your school and your class. Your class decides which Innovation Olympiad exam you sit and who you are ranked against, so it is final once set. Raise a support ticket if it is wrong.',
             mood: 'concerned',
         },
         {

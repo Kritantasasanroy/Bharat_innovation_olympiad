@@ -216,17 +216,17 @@ export default function LandingPage() {
               {
                 Icon: Target,
                 title: 'Fairness',
-                body: 'Every participant sits the same paper under the same conditions, on their booked schedule, on a server-run timer that does not stop if their internet does.',
+                body: 'Every participant sits the same Innovation Olympiad exam under the same conditions, on their booked schedule, on a server-run timer that does not stop if their internet does.',
               },
               {
                 Icon: BadgeCheck,
                 title: 'Authenticity',
-                body: 'A face scan taken at registration confirms the registered participant is the one sitting the paper, so a rank belongs to the person who earned it.',
+                body: 'A face scan taken at registration confirms the registered participant is the one sitting the Innovation Olympiad exam, so a rank belongs to the person who earned it.',
               },
               {
                 Icon: ScrollText,
                 title: 'Credibility',
-                body: 'Papers flagged during the exam are reviewed by a person, with written reasons, before anything is concluded. Nothing is decided by the computer alone.',
+                body: 'Innovation Olympiad exams flagged during the exam are reviewed by a person, with written reasons, before anything is concluded. Nothing is decided by the computer alone.',
               },
               {
                 Icon: Users,
@@ -341,7 +341,7 @@ export default function LandingPage() {
           </h2>
           <div className="lp-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20, fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
             <p style={{ margin: 0 }}>
-              <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no question paper.</b>{' '}
+              <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no fixed Innovation Olympiad exam.</b>{' '}
               The Bharat Innovation Olympiad reflects this belief by moving beyond conventional
               examinations that reward memorisation. Instead, it assesses curiosity, creativity,
               adaptability and real-world thinking, preparing participants not just for the next exam,
@@ -383,7 +383,7 @@ export default function LandingPage() {
           </h2>
           <p className="lp-fade-up" style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: '0 auto 46px', maxWidth: 560, textAlign: 'center' }}>
             Every participant is assessed across five future-focused dimensions, the same five sections
-            that make up the paper.
+            that make up the Innovation Olympiad exam.
           </p>
 
           <div className="lp-dimensions">

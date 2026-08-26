@@ -58,8 +58,8 @@ const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
  * was noted.
  */
 const BREACH_COPY: Record<LockdownBreach, string> = {
-    reload: 'The exam page was reloaded. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your paper, so use the ↻ Reload button above if you need to refresh again.',
-    back: 'You navigated back into the exam. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your paper.',
+    reload: 'The exam page was reloaded. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your Innovation Olympiad exam, so use the ↻ Reload button above if you need to refresh again.',
+    back: 'You navigated back into the exam. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your Innovation Olympiad exam.',
 };
 
 function formatTime(secs: number): string {
@@ -716,7 +716,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             key: `photo-${photoCapturedAt}`,
             icon: '📸',
             title: 'Photo taken',
-            message: 'A photo was taken because a violation was recorded just now. It is kept with your paper for the review team, and it is the only time a picture of you is stored.',
+            message: 'A photo was taken because a violation was recorded just now. It is kept with your Innovation Olympiad exam for the review team, and it is the only time a picture of you is stored.',
             durationMs: 4500,
         });
     }, [photoCapturedAt]);
@@ -914,7 +914,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <h2 style={{ marginBottom: '1rem' }}>Exam Access Locked</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         Your exam access pass is not active yet. One payment unlocks every olympiad
-                        exam for the current season, the practice paper stays free.
+                        exam for the current season, the practice Innovation Olympiad exam stays free.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/unlock'}>
                         Unlock Exams
@@ -973,7 +973,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
                     <h2 style={{ marginBottom: '1rem' }}>This exam is closed</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        You have already sat this paper. An exam can only be attempted once, so it
+                        You have already sat this Innovation Olympiad exam. An exam can only be attempted once, so it
                         cannot be reopened, going back to this page will not start it again.
                     </p>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.75rem' }}>
@@ -1361,7 +1361,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                         <li>Leaving fullscreen, or switching to another tab, window or app</li>
                                         <li>Your face not visible, someone else in the picture, or a face that is not yours</li>
                                         <li>Looking away from the screen for a long stretch</li>
-                                        <li>Taking a screenshot, or printing the paper</li>
+                                        <li>Taking a screenshot, or printing the Innovation Olympiad exam</li>
                                         <li>Refreshing the page, or using the browser Back button</li>
                                     </ul>
                                     <strong style={{ color: 'var(--text-primary)' }}>This number does not end your exam.</strong>{' '}

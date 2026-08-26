@@ -899,7 +899,7 @@ h4 {
      recover the questions from the print stylesheet's leftovers. */
   body * { display: none !important; }
   body::after {
-    content: 'Bharat Innovation Olympiad: exam papers cannot be printed. This attempt has been recorded.';
+    content: 'Bharat Innovation Olympiad: the Innovation Olympiad exam cannot be printed. This attempt has been recorded.';
     display: block !important;
     font-family: sans-serif;
     font-size: 14pt;
