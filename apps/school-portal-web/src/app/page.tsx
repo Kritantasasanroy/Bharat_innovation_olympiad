@@ -30,8 +30,8 @@ const FEATURES = [
 		),
 	},
 	{
-		title: "Pick your own slot",
-		body: "See every window's seats left and claim one that suits your school day.",
+		title: "Exam slot calendar",
+		body: "View upcoming exam dates, see which students are scheduled for each slot, and export the list.",
 		icon: (
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 				<rect
@@ -157,8 +157,8 @@ export default function HomePage() {
 							marginBottom: "1.75rem",
 						}}
 					>
-						Register students, pick your exam slot, and track results — without chasing spreadsheets
-						or email threads. Built for coordinators, not IT departments.
+						Register students, view your exam slot calendar, and track results — without chasing
+						spreadsheets or email threads. Built for coordinators, not IT departments.
 					</p>
 					<div
 						className="hero__actions"
