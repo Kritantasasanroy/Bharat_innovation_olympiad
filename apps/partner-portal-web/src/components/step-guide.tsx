@@ -44,7 +44,7 @@ const PARTNER_STEPS: Step[] = [
 		title: "Track Funnel & Milestones",
 		tagline: "Live conversion analytics",
 		description:
-			"Monitor the 4-step conversion funnel: Signups → Registrations → Paid Pass Holders → Exam Completions, plus institutional approvals.",
+			"Monitor the conversion funnel: Signups → Registrations → Exam Completions, plus institutional approvals.",
 		actionHref: "/dashboard/funnel",
 		actionLabel: "View funnel",
 	},
