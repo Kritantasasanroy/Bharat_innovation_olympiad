@@ -314,7 +314,7 @@ export default function CampaignsPage() {
 													<span className="stat-tile__value">{campaign.registrations}</span>
 												</div>
 												<div className="stat-tile">
-													<span className="stat-tile__label">Paid pass holders</span>
+													<span className="stat-tile__label">Exams completed</span>
 													<span className="stat-tile__value">{campaign.paid}</span>
 												</div>
 											</div>

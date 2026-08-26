@@ -56,17 +56,6 @@ const ICONS: Record<string, ReactNode> = {
 			/>
 		</svg>
 	),
-	"/dashboard/slots": (
-		<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-			<rect x="4" y="5" width="16" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-			<path
-				d="M4 10h16M9 3v4M15 3v4"
-				stroke="currentColor"
-				strokeWidth="1.8"
-				strokeLinecap="round"
-			/>
-		</svg>
-	),
 	"/dashboard/monitoring": (
 		<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 			<circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
@@ -127,7 +116,6 @@ export function SchoolNav() {
 			label: "Manage",
 			links: [
 				{ href: "/dashboard/students", label: "Students" },
-				{ href: "/dashboard/slots", label: "Slot Calendar" },
 				{ href: "/dashboard/monitoring", label: "Live monitoring" },
 				{ href: "/dashboard/results", label: "Results & analytics" },
 				{ href: "/dashboard/announcements", label: "Announcements" },

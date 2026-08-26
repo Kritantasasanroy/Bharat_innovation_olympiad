@@ -213,7 +213,7 @@ export default function ProfilePage() {
 					</div>
 					<p className="muted" style={{ marginTop: 0 }}>
 						{partner.isDefault
-							? "Your school is run directly by the Bharat Innovation Olympiad team. Contact them for anything about your exams, slots or results."
+							? "Your school is run directly by the Bharat Innovation Olympiad team. Contact them for anything about your exams or results."
 							: "Your school was onboarded by this partner. They can see your students and, once released, your results."}
 					</p>
 					<div className="profile-grid">

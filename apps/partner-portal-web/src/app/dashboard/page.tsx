@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { PartnerStepGuide } from "../../components/step-guide";
-import { ApiError, type PartnerSchool, partnerSchoolApi, portalApi } from "../../lib/api-client";
+import {
+	ApiError,
+	type PartnerOverview,
+	type PartnerSchool,
+	partnerPortalApi,
+	partnerSchoolApi,
+	portalApi,
+} from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 import type { PartnerFunnel } from "../../lib/types";
 import { usePoll } from "../../lib/use-poll";
@@ -18,14 +25,20 @@ const STATUS_BADGE: Record<PartnerSchool["status"], string> = {
 export default function DashboardOverviewPage() {
 	const { token } = useAuth();
 	const [funnel, setFunnel] = useState<PartnerFunnel | null>(null);
+	const [overview, setOverview] = useState<PartnerOverview | null>(null);
 	const [schools, setSchools] = useState<PartnerSchool[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		if (!token) return;
 		try {
-			const [f, s] = await Promise.all([portalApi.getFunnel(token), partnerSchoolApi.list(token)]);
+			const [f, o, s] = await Promise.all([
+				portalApi.getFunnel(token),
+				partnerPortalApi.overview(token),
+				partnerSchoolApi.list(token),
+			]);
 			setFunnel(f);
+			setOverview(o);
 			setSchools(s);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load");
@@ -58,8 +71,12 @@ export default function DashboardOverviewPage() {
 							<span className="stat-tile__value">{funnel.totals.signups}</span>
 						</div>
 						<div className="stat-tile">
-							<span className="stat-tile__label">Paid conversions</span>
-							<span className="stat-tile__value">{funnel.totals.paid}</span>
+							<span className="stat-tile__label">Registrations</span>
+							<span className="stat-tile__value">{funnel.totals.registrations}</span>
+						</div>
+						<div className="stat-tile">
+							<span className="stat-tile__label">Exams completed</span>
+							<span className="stat-tile__value">{overview?.completed ?? 0}</span>
 						</div>
 						<div className="stat-tile">
 							<span className="stat-tile__label">Schools onboarded</span>

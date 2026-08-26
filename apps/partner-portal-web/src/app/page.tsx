@@ -252,7 +252,7 @@ export default function HomePage() {
 									fontWeight: 600,
 								}}
 							>
-								Paid
+								Completed
 							</div>
 							<div
 								style={{

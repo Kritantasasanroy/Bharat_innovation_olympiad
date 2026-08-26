@@ -32,15 +32,6 @@ const SCHOOL_STEPS: Step[] = [
 	},
 	{
 		number: "03",
-		title: "Exam Windows & Slot Calendar",
-		tagline: "Check dates & scheduled students",
-		description:
-			"View upcoming exam dates in the Slot Calendar. Check the list of your students scheduled for each date and slot window.",
-		actionHref: "/dashboard/slots",
-		actionLabel: "View slot calendar",
-	},
-	{
-		number: "04",
 		title: "Live Exam-Day Monitoring",
 		tagline: "Watch attempts in real time",
 		description:
@@ -49,7 +40,7 @@ const SCHOOL_STEPS: Step[] = [
 		actionLabel: "Live monitoring",
 	},
 	{
-		number: "05",
+		number: "04",
 		title: "Results, Analytics & Certificates",
 		tagline: "Scores, percentiles & awards",
 		description:
@@ -58,7 +49,7 @@ const SCHOOL_STEPS: Step[] = [
 		actionLabel: "View results",
 	},
 	{
-		number: "06",
+		number: "05",
 		title: "Payouts & Institutional Rewards",
 		tagline: "Claim institutional incentives",
 		description:
@@ -84,7 +75,7 @@ export function SchoolStepGuide({ defaultOpen = false }: { defaultOpen?: boolean
 							School Workflow &amp; Step-by-Step Guide
 						</h3>
 						<p className="muted mb-0" style={{ fontSize: "0.82rem" }}>
-							6 easy steps to manage your school's Bharat Innovation Olympiad participation
+							5 easy steps to manage your school's Bharat Innovation Olympiad participation
 						</p>
 					</div>
 				</div>

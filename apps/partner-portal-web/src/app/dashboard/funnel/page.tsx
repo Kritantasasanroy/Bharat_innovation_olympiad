@@ -4,8 +4,20 @@ import { useCallback, useState } from "react";
 import { StatusBadge } from "../../../components/status-badge";
 import { ApiError, type PartnerSchool, partnerSchoolApi, portalApi } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
-import type { PartnerFunnel } from "../../../lib/types";
+import type { CampaignFunnelBreakdown, PartnerFunnel } from "../../../lib/types";
 import { usePoll } from "../../../lib/use-poll";
+
+function getCampaignType(cName: string): "STUDENT" | "SCHOOL" {
+	const lower = cName.toLowerCase();
+	if (
+		lower.startsWith("[")
+			? lower.startsWith("[school]")
+			: lower.includes("school") || lower.includes("institution")
+	) {
+		return "SCHOOL";
+	}
+	return "STUDENT";
+}
 
 export default function FunnelPage() {
 	const { token } = useAuth();
@@ -26,9 +38,15 @@ export default function FunnelPage() {
 
 	usePoll(load);
 
-	const schoolsApproved = schools.filter((s) => s.status === "APPROVED").length;
 	const schoolsForCode = (code: string) =>
-		schools.filter((s) => s.submittedViaReferralCode === code).length;
+		schools.filter((s) => s.submittedViaReferralCode === code);
+
+	const studentCampaigns = (funnel?.campaigns ?? []).filter(
+		(c) => getCampaignType(c.name) === "STUDENT",
+	);
+	const schoolCampaigns = (funnel?.campaigns ?? []).filter(
+		(c) => getCampaignType(c.name) === "SCHOOL",
+	);
 
 	return (
 		<main>
@@ -51,20 +69,17 @@ export default function FunnelPage() {
 							<span className="stat-tile__value">{funnel.totals.registrations}</span>
 						</div>
 						<div className="stat-tile">
-							<span className="stat-tile__label">Paid conversions</span>
+							<span className="stat-tile__label">Exams completed</span>
 							<span className="stat-tile__value">{funnel.totals.paid}</span>
 						</div>
 						<div className="stat-tile">
 							<span className="stat-tile__label">Schools onboarded</span>
 							<span className="stat-tile__value">{schools.length}</span>
-							<span className="muted" style={{ fontSize: "0.72rem" }}>
-								{schoolsApproved} approved
-							</span>
 						</div>
 					</div>
 
-					<div className="card">
-						<h2>Per-campaign breakdown</h2>
+					<div className="card" style={{ marginBottom: "1.5rem" }}>
+						<h2>Student campaign breakdown</h2>
 						<div className="table-wrap">
 							<table>
 								<thead>
@@ -73,29 +88,60 @@ export default function FunnelPage() {
 										<th>Status</th>
 										<th>Signups</th>
 										<th>Registrations</th>
-										<th>Paid</th>
-										<th>Schools</th>
-										<th>Paid rate</th>
+										<th>Exams completed</th>
+										<th>Completion rate</th>
 									</tr>
 								</thead>
 								<tbody>
-									{funnel.campaigns.map((campaign) => (
-										<tr key={campaign.campaignId}>
-											<td>{campaign.name}</td>
-											<td>
-												<StatusBadge status={campaign.status} />
-											</td>
-											<td>{campaign.signups}</td>
-											<td>{campaign.registrations}</td>
-											<td>{campaign.paid}</td>
-											<td>{schoolsForCode(campaign.code)}</td>
-											<td>{formatRate(campaign.paid, campaign.signups)}</td>
-										</tr>
+									{studentCampaigns.map((campaign) => (
+										<CampaignRow key={campaign.campaignId} campaign={campaign} type="STUDENT" />
 									))}
-									{funnel.campaigns.length === 0 ? (
+									{studentCampaigns.length === 0 ? (
 										<tr>
-											<td colSpan={7} className="muted">
-												No campaigns yet.
+											<td colSpan={6} className="muted">
+												No student campaigns yet.
+											</td>
+										</tr>
+									) : null}
+								</tbody>
+							</table>
+						</div>
+					</div>
+
+					<div className="card">
+						<h2>School campaign breakdown</h2>
+						<div className="table-wrap">
+							<table>
+								<thead>
+									<tr>
+										<th>Campaign</th>
+										<th>Status</th>
+										<th>Schools onboarded</th>
+										<th>Approved schools</th>
+									</tr>
+								</thead>
+								<tbody>
+									{schoolCampaigns.map((campaign) => {
+										const matched = schoolsForCode(campaign.code);
+										return (
+											<tr key={campaign.campaignId}>
+												<td>{campaign.name.replace(/^\[(Student|School)\]\s*/i, "")}</td>
+												<td>
+													<StatusBadge status={campaign.status} />
+												</td>
+												<td>{matched.length}</td>
+												<td>
+													<span style={{ color: "var(--success-400)" }}>
+														{matched.filter((s) => s.status === "APPROVED").length}
+													</span>
+												</td>
+											</tr>
+										);
+									})}
+									{schoolCampaigns.length === 0 ? (
+										<tr>
+											<td colSpan={4} className="muted">
+												No school campaigns yet.
 											</td>
 										</tr>
 									) : null}
@@ -108,6 +154,31 @@ export default function FunnelPage() {
 				<p className="muted">Loading…</p>
 			) : null}
 		</main>
+	);
+}
+
+function CampaignRow({
+	campaign,
+	type,
+}: {
+	campaign: CampaignFunnelBreakdown;
+	type: "STUDENT" | "SCHOOL";
+}) {
+	return (
+		<tr>
+			<td>{campaign.name.replace(/^\[(Student|School)\]\s*/i, "")}</td>
+			<td>
+				<StatusBadge status={campaign.status} />
+			</td>
+			{type === "STUDENT" ? (
+				<>
+					<td>{campaign.signups}</td>
+					<td>{campaign.registrations}</td>
+					<td>{campaign.paid}</td>
+					<td>{formatRate(campaign.paid, campaign.signups)}</td>
+				</>
+			) : null}
+		</tr>
 	);
 }
 

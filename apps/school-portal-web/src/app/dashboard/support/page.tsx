@@ -6,7 +6,14 @@ import { useAuth } from "../../../lib/auth-context";
 import { useResource } from "../../../lib/use-resource";
 
 const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SCHOOL_SUPPORT_EMAIL ?? "schools@bharatolympiad.in";
-const CATEGORIES = ["Roster", "Scheduling", "Payments", "Results", "Technical", "Other"] as const;
+const CATEGORIES = [
+	"Registration",
+	"Scheduling",
+	"Payments",
+	"Results",
+	"Technical",
+	"Other",
+] as const;
 
 const STATUS_BADGE: Record<SupportTicket["status"], string> = {
 	OPEN: "badge",

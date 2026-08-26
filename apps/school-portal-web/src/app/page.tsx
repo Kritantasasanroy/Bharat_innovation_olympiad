@@ -30,29 +30,6 @@ const FEATURES = [
 		),
 	},
 	{
-		title: "Exam slot calendar",
-		body: "View upcoming exam dates, see which students are scheduled for each slot, and export the list.",
-		icon: (
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-				<rect
-					x="4"
-					y="5"
-					width="16"
-					height="16"
-					rx="2.5"
-					stroke="var(--terracotta-500)"
-					strokeWidth="1.8"
-				/>
-				<path
-					d="M4 10h16M9 3v4M15 3v4"
-					stroke="var(--terracotta-500)"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-				/>
-			</svg>
-		),
-	},
-	{
 		title: "Results, class by class",
 		body: "See how your school did against the national cohort, exportable to Excel.",
 		icon: (
@@ -157,7 +134,7 @@ export default function HomePage() {
 							marginBottom: "1.75rem",
 						}}
 					>
-						Register students, view your exam slot calendar, and track results — without chasing
+						Register students, track exam participation, and view results — without chasing
 						spreadsheets or email threads. Built for coordinators, not IT departments.
 					</p>
 					<div

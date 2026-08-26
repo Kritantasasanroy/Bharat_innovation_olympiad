@@ -18,7 +18,7 @@ const lexend = Lexend({
 export const metadata = {
 	title: "BIO School Portal | Bharat Innovation Olympiad",
 	description:
-		"Bharat Innovation Olympiad school portal — activate your school, manage students, slots, and results.",
+		"Bharat Innovation Olympiad school portal — activate your school, manage students, and results.",
 };
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
