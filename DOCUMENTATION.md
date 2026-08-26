@@ -364,7 +364,7 @@ host in `docker-compose.yml`).
 
 | Service | URL | Notes |
 |---|---|---|
-| Student portal | https://olympiad-student-frontend.vercel.app | existing, redeployed |
+| Student portal | https://www.innovationolympiad.in | existing, redeployed |
 | Admin portal | https://olympiad-admin-frontend.vercel.app | existing, redeployed |
 | **Partner portal** | https://partner.innovationolympiad.in | new (`apps/partner-portal-web`) |
 | **School portal** | https://school.innovationolympiad.in | new (`apps/school-portal-web`) |
@@ -3200,7 +3200,7 @@ useSocket() → { socket, isConnected }
 | Service | Platform | URL | Auto-deploy on push? |
 |---|---|---|---|
 | Backend (NestJS) | Render.com (Blueprint, `render.yaml`) | `https://olympiad-backend-wsvn.onrender.com` | Yes — service is Blueprint-managed |
-| Student Frontend | Vercel | `https://olympiad-student-frontend.vercel.app` | **No** — project has no Git integration ("Connect Git" is still unclicked in the dashboard); deploys are manual only |
+| Student Frontend | Vercel | `https://www.innovationolympiad.in` | **No** — project has no Git integration ("Connect Git" is still unclicked in the dashboard); deploys are manual only |
 | Admin Frontend | Vercel | `https://olympiad-admin-frontend.vercel.app` | **No** — same as above |
 | Database | Neon.tech (PostgreSQL) | Managed connection string | — |
 
