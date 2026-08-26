@@ -348,7 +348,46 @@ export const portalApi = {
 
 	/** Admin announcements visible to this audience. */
 	announcements: (token: string) => authed<Announcement[]>("/school/portal/announcements", token),
+
+	/** School payouts (triggered by BIO admin). */
+	payouts: (token: string) => authed<Payout[]>("/school/portal/payouts", token),
+	/** Masked bank details for payouts. */
+	bankDetails: (token: string) => authed<BankDetails | null>("/school/portal/bank-details", token),
+	/** Submit or update bank details for payouts. */
+	submitBankDetails: (token: string, input: SubmitBankDetailsInput) =>
+		authedPost<BankDetails>("/school/portal/bank-details", token, input),
 };
+
+export interface Payout {
+	readonly id: string;
+	readonly partnerId: string;
+	readonly amountPaise: number;
+	readonly note: string | null;
+	readonly status: "TRIGGERED" | "PAID";
+	readonly triggeredBy: string;
+	readonly triggeredAt: string;
+	readonly paidBy: string | null;
+	readonly paidAt: string | null;
+}
+
+export interface BankDetails {
+	readonly partnerId: string;
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumberLast4: string;
+	readonly panMasked: string;
+	readonly submittedAt: string;
+	readonly updatedAt: string;
+}
+
+export interface SubmitBankDetailsInput {
+	readonly accountHolderName: string;
+	readonly bankName: string;
+	readonly ifscCode: string;
+	readonly accountNumber: string;
+	readonly pan: string;
+}
 
 /** What a coordinator may change about their school. Name/pincode/code are staff-only. */
 export interface SchoolProfileUpdate {

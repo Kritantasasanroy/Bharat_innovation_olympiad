@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttemptStatus, Role } from '@prisma/client';
 import { PartnerDirectoryService } from '../partner/partner-directory.service';
+import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultsExportService } from '../results/results-export.service';
 import { SchoolSlotService } from '../slot/school-slot.service';
@@ -34,6 +35,7 @@ export class SchoolPortalService {
         private partners: PartnerDirectoryService,
         private schoolSlots: SchoolSlotService,
         private exportService: ResultsExportService,
+        private adminApi: PartnerAdminApiClient,
     ) {}
 
     /** The profile, built from what the school filled in when requesting access. */
@@ -498,5 +500,29 @@ export class SchoolPortalService {
         }
 
         return { added: added.length, skipped, addedStudents: added };
+    }
+
+    /** The school's own payouts (triggered by BIO admin). */
+    async myPayouts(schoolId: string) {
+        return this.adminApi.listPayouts(schoolId, schoolId);
+    }
+
+    /** The school's own bank details. */
+    async myBankDetails(schoolId: string) {
+        return this.adminApi.getBankDetails(schoolId, false, schoolId);
+    }
+
+    /** The school submits or updates their bank details for payouts. */
+    async submitBankDetails(
+        schoolId: string,
+        input: {
+            accountHolderName: string;
+            bankName: string;
+            ifscCode: string;
+            accountNumber: string;
+            pan: string;
+        },
+    ) {
+        return this.adminApi.submitBankDetails(schoolId, input, schoolId);
     }
 }

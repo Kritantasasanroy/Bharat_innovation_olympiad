@@ -219,7 +219,7 @@ describe("field classification", () => {
 		expect(classificationOf(Email)).toBe(FieldClassification.AuthenticatedStudent);
 		// classification survives JSON Schema generation (OpenAPI-compatible)
 		const json = z.toJSONSchema(Email) as Record<string, unknown>;
-		expect(json.bioFieldClassification).toBe("authenticated-student");
+		expect(json["bioFieldClassification"]).toBe("authenticated-student");
 	});
 
 	it("returns undefined for an unclassified schema", () => {

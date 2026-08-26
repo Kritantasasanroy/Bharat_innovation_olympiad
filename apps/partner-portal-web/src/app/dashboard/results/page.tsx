@@ -31,6 +31,11 @@ export default function PartnerResultsPage() {
 	const [rows, setRows] = useState<PartnerResultRow[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [downloading, setDownloading] = useState(false);
+	const [classFilter, setClassFilter] = useState<string>("ALL");
+	const [sortKey, setSortKey] = useState<
+		"rank" | "name" | "school" | "class" | "score" | "percentile"
+	>("rank");
+	const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
 	const load = useCallback(async () => {
 		if (!token) return;
@@ -46,6 +51,35 @@ export default function PartnerResultsPage() {
 	}, [token]);
 
 	usePoll(load);
+
+	const handleSort = (key: "rank" | "name" | "school" | "class" | "score" | "percentile") => {
+		if (sortKey === key) {
+			setSortDir(sortDir === "asc" ? "desc" : "asc");
+		} else {
+			setSortKey(key);
+			setSortDir(key === "score" || key === "percentile" ? "desc" : "asc");
+		}
+	};
+
+	const sortedRows = (rows ?? [])
+		.filter((r) => classFilter === "ALL" || String(r.classBand) === classFilter)
+		.sort((a, b) => {
+			let res = 0;
+			if (sortKey === "rank") {
+				res = (a.rank ?? 999999) - (b.rank ?? 999999);
+			} else if (sortKey === "name") {
+				res = a.studentName.localeCompare(b.studentName);
+			} else if (sortKey === "school") {
+				res = a.schoolName.localeCompare(b.schoolName);
+			} else if (sortKey === "class") {
+				res = (a.classBand ?? 0) - (b.classBand ?? 0);
+			} else if (sortKey === "score") {
+				res = (a.normalizedScore ?? a.rawScore ?? 0) - (b.normalizedScore ?? b.rawScore ?? 0);
+			} else if (sortKey === "percentile") {
+				res = (a.percentile ?? 0) - (b.percentile ?? 0);
+			}
+			return sortDir === "asc" ? res : -res;
+		});
 
 	// Load the rows for whichever exam is selected.
 	useEffect(() => {
@@ -192,28 +226,106 @@ export default function PartnerResultsPage() {
 
 			{current && (
 				<div className="card">
+					<div className="section-title" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+						<h2>Exam Results ({sortedRows.length})</h2>
+						<div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+							<select
+								value={classFilter}
+								onChange={(e) => setClassFilter(e.target.value)}
+								style={{
+									padding: "0.35rem 0.6rem",
+									fontSize: "0.85rem",
+									borderRadius: "var(--radius-sm)",
+								}}
+							>
+								<option value="ALL">All Grades / Classes</option>
+								{[6, 7, 8, 9, 10, 11, 12].map((cls) => (
+									<option key={cls} value={String(cls)}>
+										Class {cls}
+									</option>
+								))}
+							</select>
+
+							<select
+								value={`${sortKey}-${sortDir}`}
+								onChange={(e) => {
+									const [k, d] = e.target.value.split("-") as [
+										"rank" | "name" | "school" | "class" | "score" | "percentile",
+										"asc" | "desc",
+									];
+									setSortKey(k);
+									setSortDir(d);
+								}}
+								style={{
+									padding: "0.35rem 0.6rem",
+									fontSize: "0.85rem",
+									borderRadius: "var(--radius-sm)",
+								}}
+							>
+								<option value="rank-asc">Sort: Rank (#1 Best First)</option>
+								<option value="score-desc">Sort: Score (High → Low)</option>
+								<option value="score-asc">Sort: Score (Low → High)</option>
+								<option value="class-asc">Sort: Grade (6 → 12)</option>
+								<option value="class-desc">Sort: Grade (12 → 6)</option>
+								<option value="percentile-desc">Sort: Percentile (High → Low)</option>
+								<option value="name-asc">Sort: Student Name (A → Z)</option>
+								<option value="school-asc">Sort: School (A → Z)</option>
+							</select>
+						</div>
+					</div>
+
 					{!rows ? (
 						<p className="muted mb-0">Loading results…</p>
-					) : rows.length === 0 ? (
-						<p className="muted mb-0">No students from your schools sat this exam.</p>
+					) : sortedRows.length === 0 ? (
+						<p className="muted mb-0">No students match this filter.</p>
 					) : (
 						<div className="table-wrap">
 							<table>
 								<thead>
 									<tr>
-										<th>Rank</th>
-										<th>Student</th>
-										<th>School</th>
-										<th>Class</th>
-										<th>Score</th>
+										<th
+											onClick={() => handleSort("rank")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											Rank {sortKey === "rank" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+										</th>
+										<th
+											onClick={() => handleSort("name")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											Student {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+										</th>
+										<th
+											onClick={() => handleSort("school")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											School {sortKey === "school" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+										</th>
+										<th
+											onClick={() => handleSort("class")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											Class/Grade {sortKey === "class" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+										</th>
+										<th
+											onClick={() => handleSort("score")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											Score {sortKey === "score" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+										</th>
 										<th>Normalized</th>
-										<th>Percentile</th>
+										<th
+											onClick={() => handleSort("percentile")}
+											style={{ cursor: "pointer", userSelect: "none" }}
+										>
+											Percentile {sortKey === "percentile" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+										</th>
 									</tr>
 								</thead>
 								<tbody>
-									{rows.map((row) => (
+									{sortedRows.map((row) => (
 										<tr key={`${row.email}-${row.examTitle}`}>
-											<td>{row.rank ?? "—"}</td>
+											<td>{row.rank ? `#${row.rank}` : "—"}</td>
 											<td>
 												<strong>{row.studentName}</strong>
 												<br />
@@ -222,15 +334,30 @@ export default function PartnerResultsPage() {
 												</span>
 											</td>
 											<td>{row.schoolName}</td>
-											<td>{row.classBand ?? "—"}</td>
 											<td>
-												{row.rawScore ?? "—"}
+												{row.classBand ? (
+													<span
+														className="badge"
+														style={{ background: "var(--bg-elevated)", fontWeight: 600 }}
+													>
+														Class {row.classBand}
+													</span>
+												) : (
+													"—"
+												)}
+											</td>
+											<td>
+												<strong>{row.rawScore ?? "—"}</strong>
 												<span className="muted">/{row.maxScore ?? "—"}</span>
 											</td>
-											{/* Normalization makes scores comparable across students who
-											    sat different question sets — it is the number that ranks. */}
 											<td>{pct(row.normalizedScore)}</td>
-											<td>{pct(row.percentile)}</td>
+											<td>
+												{row.percentile != null ? (
+													<span className="badge badge--positive">{pct(row.percentile)} %ile</span>
+												) : (
+													"—"
+												)}
+											</td>
 										</tr>
 									))}
 								</tbody>

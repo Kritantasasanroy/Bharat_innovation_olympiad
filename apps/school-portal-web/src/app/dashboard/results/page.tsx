@@ -29,35 +29,30 @@ export default function ResultsPage() {
 	// Which exams have been released *to schools* — the Excel sheet is per exam.
 	const { data: released } = useResource(portalApi.resultInstances);
 
-	const [sortByScore, setSortByScore] = useState(true);
+	const [sortKey, setSortKey] = useState<"score" | "class" | "percentile" | "rank" | "name">(
+		"score",
+	);
+	const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+	const [classFilter, setClassFilter] = useState<string>("ALL");
 	const [downloading, setDownloading] = useState<string | null>(null);
 	const [downloadError, setDownloadError] = useState<string | null>(null);
 
 	const rows = results ?? [];
 	const instances = released ?? [];
 
-	/**
-	 * Downloads the real `.xlsx` the backend builds — typed number cells, a frozen
-	 * header, and the normalized score and percentile, which the flat CSV above
-	 * does not carry. If several exams have been released, the most recent wins;
-	 * the CSV remains for a quick, unformatted dump of what is on screen.
-	 */
-	async function downloadExcel() {
-		const target = instances[0];
-		if (!token || !target) return;
-
-		setDownloading(target.examInstanceId);
-		setDownloadError(null);
-		try {
-			await portalApi.downloadResults(token, target.examInstanceId, target.examTitle);
-		} catch (err) {
-			setDownloadError(
-				err instanceof ApiError ? err.message : "Could not build the results sheet.",
-			);
-		} finally {
-			setDownloading(null);
+	const handleSort = (key: "score" | "class" | "percentile" | "rank" | "name") => {
+		if (sortKey === key) {
+			setSortDir(sortDir === "asc" ? "desc" : "asc");
+		} else {
+			setSortKey(key);
+			setSortDir(key === "class" || key === "rank" || key === "name" ? "asc" : "desc");
 		}
-	}
+	};
+
+	const filteredRows = useMemo(() => {
+		if (classFilter === "ALL") return rows;
+		return rows.filter((r) => String(r.classBand) === classFilter);
+	}, [rows, classFilter]);
 
 	const classPerformance = useMemo<ClassRow[]>(() => {
 		const byClass = new Map<number, { total: number; count: number }>();
@@ -78,15 +73,40 @@ export default function ResultsPage() {
 
 	const maxAvg = Math.max(...classPerformance.map((c) => c.avgScore), 1);
 
-	const sorted = useMemo(
-		() =>
-			[...rows].sort((a, b) =>
-				sortByScore
-					? (b.normalizedScore ?? 0) - (a.normalizedScore ?? 0)
-					: a.classBand - b.classBand,
-			),
-		[rows, sortByScore],
-	);
+	const sorted = useMemo(() => {
+		return [...filteredRows].sort((a, b) => {
+			let res = 0;
+			if (sortKey === "score") {
+				res = (a.normalizedScore ?? a.score ?? 0) - (b.normalizedScore ?? b.score ?? 0);
+			} else if (sortKey === "class") {
+				res = a.classBand - b.classBand;
+			} else if (sortKey === "percentile") {
+				res = (a.percentile ?? 0) - (b.percentile ?? 0);
+			} else if (sortKey === "rank") {
+				res = (a.rank ?? 999999) - (b.rank ?? 999999);
+			} else if (sortKey === "name") {
+				res = a.name.localeCompare(b.name);
+			}
+			return sortDir === "asc" ? res : -res;
+		});
+	}, [filteredRows, sortKey, sortDir]);
+
+	async function downloadExcel() {
+		const target = instances[0];
+		if (!token || !target) return;
+
+		setDownloading(target.examInstanceId);
+		setDownloadError(null);
+		try {
+			await portalApi.downloadResults(token, target.examInstanceId, target.examTitle);
+		} catch (err) {
+			setDownloadError(
+				err instanceof ApiError ? err.message : "Could not build the results sheet.",
+			);
+		} finally {
+			setDownloading(null);
+		}
+	}
 
 	function exportCsv() {
 		const header = "Name,Class,Exam,Score,Max,Percentile,Rank";
@@ -178,49 +198,116 @@ export default function ResultsPage() {
 			</div>
 
 			<div className="card">
-				<div className="section-title">
-					<h2>Student-wise scores &amp; percentile</h2>
-					<div className="inline">
-						<button
-							type="button"
-							className={sortByScore ? "pill pill--active" : "pill"}
-							onClick={() => setSortByScore(true)}
+				<div className="section-title" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+					<h2>Student-wise scores &amp; percentile ({sorted.length})</h2>
+					<div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+						<select
+							value={classFilter}
+							onChange={(e) => setClassFilter(e.target.value)}
+							style={{
+								padding: "0.35rem 0.6rem",
+								fontSize: "0.85rem",
+								borderRadius: "var(--radius-sm)",
+							}}
 						>
-							By score
-						</button>
-						<button
-							type="button"
-							className={!sortByScore ? "pill pill--active" : "pill"}
-							onClick={() => setSortByScore(false)}
+							<option value="ALL">All Grades / Classes</option>
+							{[6, 7, 8, 9, 10, 11, 12].map((cls) => (
+								<option key={cls} value={String(cls)}>
+									Class {cls}
+								</option>
+							))}
+						</select>
+
+						<select
+							value={`${sortKey}-${sortDir}`}
+							onChange={(e) => {
+								const [k, d] = e.target.value.split("-") as [
+									"score" | "class" | "percentile" | "rank" | "name",
+									"asc" | "desc",
+								];
+								setSortKey(k);
+								setSortDir(d);
+							}}
+							style={{
+								padding: "0.35rem 0.6rem",
+								fontSize: "0.85rem",
+								borderRadius: "var(--radius-sm)",
+							}}
 						>
-							By class
-						</button>
+							<option value="score-desc">Sort: Score (High → Low)</option>
+							<option value="score-asc">Sort: Score (Low → High)</option>
+							<option value="class-asc">Sort: Grade (6 → 12)</option>
+							<option value="class-desc">Sort: Grade (12 → 6)</option>
+							<option value="percentile-desc">Sort: Percentile (High → Low)</option>
+							<option value="rank-asc">Sort: Rank (Best #1 First)</option>
+							<option value="name-asc">Sort: Name (A → Z)</option>
+						</select>
 					</div>
 				</div>
 				<div className="table-wrap">
 					<table>
 						<thead>
 							<tr>
-								<th>Rank</th>
-								<th>Student</th>
-								<th>Class</th>
-								<th className="text-right">Score</th>
-								<th className="text-right">Percentile</th>
+								<th
+									onClick={() => handleSort("rank")}
+									style={{ cursor: "pointer", userSelect: "none" }}
+								>
+									Rank {sortKey === "rank" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+								</th>
+								<th
+									onClick={() => handleSort("name")}
+									style={{ cursor: "pointer", userSelect: "none" }}
+								>
+									Student {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+								</th>
+								<th
+									onClick={() => handleSort("class")}
+									style={{ cursor: "pointer", userSelect: "none" }}
+								>
+									Class/Grade {sortKey === "class" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+								</th>
+								<th
+									className="text-right"
+									onClick={() => handleSort("score")}
+									style={{ cursor: "pointer", userSelect: "none" }}
+								>
+									Score {sortKey === "score" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+								</th>
+								<th
+									className="text-right"
+									onClick={() => handleSort("percentile")}
+									style={{ cursor: "pointer", userSelect: "none" }}
+								>
+									Percentile {sortKey === "percentile" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{sorted.map((s) => (
 								<tr key={s.studentId}>
 									<td>{s.rank ? `#${s.rank}` : "—"}</td>
-									<td>{s.name}</td>
-									<td>Class {s.classBand}</td>
-									<td className="text-right">
+									<td>
+										<strong>{s.name}</strong>
+									</td>
+									<td>
+										<span
+											className="badge"
+											style={{ background: "var(--bg-elevated)", fontWeight: 600 }}
+										>
+											Class {s.classBand}
+										</span>
+									</td>
+									<td className="text-right" style={{ fontWeight: 700 }}>
 										{s.score ?? "—"}
-										<span className="muted">/{s.totalMarks}</span>
+										<span className="muted" style={{ fontWeight: 400 }}>
+											/{s.totalMarks}
+										</span>
 									</td>
 									<td className="text-right">
 										{s.percentile != null ? (
-											<span className="badge badge--positive">{Math.round(s.percentile)}th</span>
+											<span className="badge badge--positive">
+												{Math.round(s.percentile)}th %ile
+											</span>
 										) : (
 											"—"
 										)}

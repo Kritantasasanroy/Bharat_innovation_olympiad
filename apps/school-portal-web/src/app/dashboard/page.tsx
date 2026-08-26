@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SchoolStepGuide } from "../../components/step-guide";
 import { portalApi } from "../../lib/api-client";
 import { useResource } from "../../lib/use-resource";
 
@@ -12,7 +13,6 @@ export default function OverviewPage() {
 	const tiles = [
 		{ label: "Invited students", value: overview?.invited ?? 0 },
 		{ label: "Registered", value: overview?.registered ?? 0 },
-		{ label: "Paid", value: overview?.paid ?? 0 },
 		{ label: "Completed", value: overview?.completed ?? 0 },
 	];
 
@@ -57,6 +57,8 @@ export default function OverviewPage() {
 						: error}
 				</div>
 			)}
+
+			<SchoolStepGuide defaultOpen={false} />
 
 			<div className="stat-row">
 				{tiles.map((t) => (

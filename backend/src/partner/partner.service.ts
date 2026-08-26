@@ -775,6 +775,15 @@ export class PartnerService {
         return this.adminApi.markPayoutPaid(partnerId, payoutId, adminId);
     }
 
+    /** ADMIN — lists a school's payouts and bank details. */
+    async listSchoolPayouts(schoolId: string, adminId: string) {
+        const [payouts, bankDetails] = await Promise.all([
+            this.adminApi.listPayouts(schoolId, adminId),
+            this.adminApi.getBankDetails(schoolId, false, adminId),
+        ]);
+        return { payouts, bankDetails };
+    }
+
     /** ADMIN — the decrypted account number + PAN. Audited on admin-api's side. */
     revealBankDetails(partnerId: string, adminId: string) {
         return this.adminApi.getBankDetails(partnerId, true, adminId);

@@ -96,7 +96,7 @@ describe("createHttpClient — request wiring", () => {
 		});
 		await client.request(GET_SLOT, { headers: { "x-extra": "2" } });
 		const headers = calls[0]?.init?.headers ?? {};
-		expect(headers.authorization).toBe("Bearer t");
+		expect(headers["authorization"]).toBe("Bearer t");
 		expect(headers["x-keep"]).toBe("1");
 		expect(headers["x-extra"]).toBe("2");
 		expect(headers[CONTRACT_VERSION_HEADER]).toBe(CONTRACT_VERSION);
@@ -154,7 +154,7 @@ describe("createHttpClient — contract-version guard (FR-8 fail-closed)", () =>
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.code).toBe("UNSUPPORTED_CONTRACT_VERSION");
-			expect(result.error.details?.declared).toBe("1.0.0");
+			expect(result.error.details?.["declared"]).toBe("1.0.0");
 		}
 	});
 

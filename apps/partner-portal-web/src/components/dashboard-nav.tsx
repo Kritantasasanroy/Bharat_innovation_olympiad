@@ -3,7 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { partnerPortalApi } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
+import type { Payout } from "../lib/types";
 
 const ICONS: Record<string, ReactNode> = {
 	"/dashboard": (
@@ -121,36 +124,49 @@ const ICONS: Record<string, ReactNode> = {
 	),
 };
 
-const GROUPS = [
-	{ label: "Overview", links: [{ href: "/dashboard", label: "Dashboard" }] },
-	{
-		label: "Grow",
-		links: [
-			{ href: "/dashboard/campaigns", label: "Campaigns & links" },
-			{ href: "/dashboard/funnel", label: "Funnel" },
-		],
-	},
-	{
-		label: "Manage",
-		links: [
-			{ href: "/dashboard/schools", label: "Schools" },
-			{ href: "/dashboard/students", label: "Students" },
-			{ href: "/dashboard/results", label: "Results" },
-			{ href: "/dashboard/announcements", label: "Announcements" },
-		],
-	},
-	{
-		label: "Account",
-		links: [
-			{ href: "/dashboard/payouts", label: "Payouts & statements" },
-			{ href: "/dashboard/profile", label: "Profile" },
-			{ href: "/dashboard/support", label: "Support" },
-		],
-	},
-] as const;
-
 export function DashboardNav() {
 	const pathname = usePathname();
+	const { token } = useAuth();
+	const [payouts, setPayouts] = useState<Payout[] | null>(null);
+
+	useEffect(() => {
+		if (!token) return;
+		partnerPortalApi
+			.payouts(token)
+			.then(setPayouts)
+			.catch(() => setPayouts(null));
+	}, [token]);
+
+	const hasPayouts = (payouts?.length ?? 0) > 0;
+
+	const groups = [
+		{ label: "Overview", links: [{ href: "/dashboard", label: "Dashboard" }] },
+		{
+			label: "Grow",
+			links: [
+				{ href: "/dashboard/campaigns", label: "Campaigns & links" },
+				{ href: "/dashboard/funnel", label: "Funnel" },
+			],
+		},
+		{
+			label: "Manage",
+			links: [
+				{ href: "/dashboard/schools", label: "Schools" },
+				{ href: "/dashboard/students", label: "Students" },
+				{ href: "/dashboard/results", label: "Results" },
+				{ href: "/dashboard/announcements", label: "Announcements" },
+			],
+		},
+		{
+			label: "Account",
+			links: [
+				...(hasPayouts ? [{ href: "/dashboard/payouts", label: "Payouts & statements" }] : []),
+				{ href: "/dashboard/profile", label: "Profile" },
+				{ href: "/dashboard/support", label: "Support" },
+			],
+		},
+	];
+
 	return (
 		<nav className="dashboard-nav">
 			<Link href="/dashboard" className="dashboard-nav__brand">
@@ -175,7 +191,7 @@ export function DashboardNav() {
 				<span className="dashboard-nav__brand-text">Bharat Innovation Olympiad</span>
 				<span className="dashboard-nav__brand-sub">Partner Portal</span>
 			</Link>
-			{GROUPS.map((group) => (
+			{groups.map((group) => (
 				<div key={group.label} style={{ marginBottom: "0.25rem" }}>
 					<div
 						style={{

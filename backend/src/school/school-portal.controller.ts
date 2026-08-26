@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { SubmitBankDetailsDto } from '../partner/dto/partner.dto';
 import { PickSlotDto, RegisterStudentsDto, UpdateSchoolProfileDto } from './dto/school.dto';
 import { SchoolPortalService } from './school-portal.service';
 
@@ -128,5 +129,26 @@ export class SchoolPortalController {
         @Body() dto: RegisterStudentsDto,
     ) {
         return this.portal.registerStudents(this.schoolOf(schoolId), dto);
+    }
+
+    /** The school's own payouts (only visible when triggered). */
+    @Get('payouts')
+    payouts(@CurrentUser('schoolId') schoolId: string) {
+        return this.portal.myPayouts(this.schoolOf(schoolId));
+    }
+
+    /** The school's own bank details. */
+    @Get('bank-details')
+    bankDetails(@CurrentUser('schoolId') schoolId: string) {
+        return this.portal.myBankDetails(this.schoolOf(schoolId));
+    }
+
+    /** The school submits or updates their bank details for payouts. */
+    @Post('bank-details')
+    submitBankDetails(
+        @CurrentUser('schoolId') schoolId: string,
+        @Body() dto: SubmitBankDetailsDto,
+    ) {
+        return this.portal.submitBankDetails(this.schoolOf(schoolId), dto);
     }
 }

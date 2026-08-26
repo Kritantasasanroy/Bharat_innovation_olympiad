@@ -3,7 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { type Payout, portalApi } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
 
 const ICONS: Record<string, ReactNode> = {
 	"/dashboard": (
@@ -81,7 +83,7 @@ const ICONS: Record<string, ReactNode> = {
 			<path d="M8 12h8M8 16h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
 		</svg>
 	),
-	"/dashboard/billing": (
+	"/dashboard/payouts": (
 		<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 			<rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
 			<path d="M3 10h18" stroke="currentColor" strokeWidth="1.8" />
@@ -101,33 +103,46 @@ const ICONS: Record<string, ReactNode> = {
 	),
 };
 
-const GROUPS = [
-	{
-		label: "Overview",
-		links: [{ href: "/dashboard", label: "Dashboard" }],
-	},
-	{
-		label: "Manage",
-		links: [
-			{ href: "/dashboard/students", label: "Students" },
-			{ href: "/dashboard/slots", label: "Slots & windows" },
-			{ href: "/dashboard/monitoring", label: "Live monitoring" },
-			{ href: "/dashboard/results", label: "Results & analytics" },
-			{ href: "/dashboard/announcements", label: "Announcements" },
-		],
-	},
-	{
-		label: "Account",
-		links: [
-			{ href: "/dashboard/profile", label: "Profile & roles" },
-			{ href: "/dashboard/billing", label: "Sponsorship" },
-			{ href: "/dashboard/support", label: "Support" },
-		],
-	},
-] as const;
-
 export function SchoolNav() {
 	const pathname = usePathname();
+	const { token } = useAuth();
+	const [payouts, setPayouts] = useState<Payout[] | null>(null);
+
+	useEffect(() => {
+		if (!token) return;
+		portalApi
+			.payouts(token)
+			.then(setPayouts)
+			.catch(() => setPayouts(null));
+	}, [token]);
+
+	const hasPayouts = (payouts?.length ?? 0) > 0;
+
+	const groups = [
+		{
+			label: "Overview",
+			links: [{ href: "/dashboard", label: "Dashboard" }],
+		},
+		{
+			label: "Manage",
+			links: [
+				{ href: "/dashboard/students", label: "Students" },
+				{ href: "/dashboard/slots", label: "Slot Calendar" },
+				{ href: "/dashboard/monitoring", label: "Live monitoring" },
+				{ href: "/dashboard/results", label: "Results & analytics" },
+				{ href: "/dashboard/announcements", label: "Announcements" },
+			],
+		},
+		{
+			label: "Account",
+			links: [
+				{ href: "/dashboard/profile", label: "Profile & roles" },
+				...(hasPayouts ? [{ href: "/dashboard/payouts", label: "Payouts & rewards" }] : []),
+				{ href: "/dashboard/support", label: "Support" },
+			],
+		},
+	];
+
 	return (
 		<nav className="dashboard-nav">
 			<Link href="/dashboard" className="dashboard-nav__brand">
@@ -147,7 +162,7 @@ export function SchoolNav() {
 				<span className="dashboard-nav__brand-text">Bharat Innovation Olympiad</span>
 				<span className="dashboard-nav__brand-sub">School Portal</span>
 			</Link>
-			{GROUPS.map((group) => (
+			{groups.map((group) => (
 				<div key={group.label} style={{ marginBottom: "0.25rem" }}>
 					<div
 						style={{

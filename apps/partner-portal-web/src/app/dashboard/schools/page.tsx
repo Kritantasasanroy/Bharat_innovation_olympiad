@@ -36,6 +36,10 @@ export default function PartnerSchoolsPage() {
 	const [pincode, setPincode] = useState("");
 	const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
 	const [locating, setLocating] = useState(false);
+	const [query, setQuery] = useState("");
+	const [statusFilter, setStatusFilter] = useState("");
+	const [sortKey, setSortKey] = useState<"name" | "status" | "location">("name");
+	const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
 	const load = useCallback(async () => {
 		if (!token) return;
@@ -48,6 +52,40 @@ export default function PartnerSchoolsPage() {
 
 	// Auto-refresh so an admin's approval/rejection shows without a manual reload.
 	usePoll(load);
+
+	const handleSort = (key: "name" | "status" | "location") => {
+		if (sortKey === key) {
+			setSortDir(sortDir === "asc" ? "desc" : "asc");
+		} else {
+			setSortKey(key);
+			setSortDir("asc");
+		}
+	};
+
+	const visibleSchools = (schools ?? [])
+		.filter((s) => {
+			if (statusFilter && s.status !== statusFilter) return false;
+			if (
+				query &&
+				!s.schoolName.toLowerCase().includes(query.toLowerCase()) &&
+				!s.city.toLowerCase().includes(query.toLowerCase()) &&
+				!s.coordinatorName.toLowerCase().includes(query.toLowerCase())
+			) {
+				return false;
+			}
+			return true;
+		})
+		.sort((a, b) => {
+			let res = 0;
+			if (sortKey === "name") {
+				res = a.schoolName.localeCompare(b.schoolName);
+			} else if (sortKey === "status") {
+				res = a.status.localeCompare(b.status);
+			} else if (sortKey === "location") {
+				res = `${a.city}, ${a.state}`.localeCompare(`${b.city}, ${b.state}`);
+			}
+			return sortDir === "asc" ? res : -res;
+		});
 
 	function exportCsv() {
 		downloadCsv(
@@ -234,31 +272,89 @@ export default function PartnerSchoolsPage() {
 			</div>
 
 			<div className="card">
-				<div className="section-title">
-					<h2>Schools you&apos;ve brought in</h2>
-					<button
-						type="button"
-						className="button button--secondary button--small"
-						onClick={exportCsv}
-						disabled={!schools || schools.length === 0}
-					>
-						Download CSV
-					</button>
+				<div className="section-title" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+					<h2>Schools you&apos;ve brought in ({visibleSchools.length})</h2>
+					<div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+						<input
+							placeholder="Search school, city, coordinator…"
+							value={query}
+							onChange={(e) => setQuery(e.target.value)}
+							style={{ maxWidth: 200, fontSize: "0.85rem" }}
+						/>
+						<select
+							value={statusFilter}
+							onChange={(e) => setStatusFilter(e.target.value)}
+							style={{
+								padding: "0.35rem 0.6rem",
+								fontSize: "0.85rem",
+								borderRadius: "var(--radius-sm)",
+							}}
+						>
+							<option value="">All Statuses</option>
+							<option value="APPROVED">Approved</option>
+							<option value="PENDING">Pending Review</option>
+							<option value="REJECTED">Rejected</option>
+						</select>
+						<select
+							value={`${sortKey}-${sortDir}`}
+							onChange={(e) => {
+								const [k, d] = e.target.value.split("-") as [
+									"name" | "status" | "location",
+									"asc" | "desc",
+								];
+								setSortKey(k);
+								setSortDir(d);
+							}}
+							style={{
+								padding: "0.35rem 0.6rem",
+								fontSize: "0.85rem",
+								borderRadius: "var(--radius-sm)",
+							}}
+						>
+							<option value="name-asc">Sort: School Name (A → Z)</option>
+							<option value="name-desc">Sort: School Name (Z → A)</option>
+							<option value="location-asc">Sort: Location (City/State)</option>
+							<option value="status-asc">Sort: Status</option>
+						</select>
+						<button
+							type="button"
+							className="button button--secondary button--small"
+							onClick={exportCsv}
+							disabled={!schools || schools.length === 0}
+						>
+							Download CSV
+						</button>
+					</div>
 				</div>
-				{schools && schools.length > 0 ? (
+				{visibleSchools.length > 0 ? (
 					<div className="table-wrap">
 						<table>
 							<thead>
 								<tr>
-									<th>School</th>
+									<th
+										onClick={() => handleSort("name")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										School {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+									</th>
 									<th>Coordinator</th>
-									<th>Location</th>
+									<th
+										onClick={() => handleSort("location")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										Location {sortKey === "location" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+									</th>
 									<th>Code</th>
-									<th>Status</th>
+									<th
+										onClick={() => handleSort("status")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+									</th>
 								</tr>
 							</thead>
 							<tbody>
-								{schools.map((school) => (
+								{visibleSchools.map((school) => (
 									<tr key={school.id}>
 										<td>
 											<strong>{school.schoolName}</strong>
@@ -289,7 +385,9 @@ export default function PartnerSchoolsPage() {
 				) : (
 					<div className="empty-state">
 						<span className="empty-state__icon">🏫</span>
-						No schools yet. Onboard your first one above.
+						{schools && schools.length === 0
+							? "No schools onboarded yet. Fill in the form above to onboard your first partner school."
+							: "No schools match the filter."}
 					</div>
 				)}
 			</div>

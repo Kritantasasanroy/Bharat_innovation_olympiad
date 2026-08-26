@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { PartnerStepGuide } from "../../components/step-guide";
 import { ApiError, type PartnerSchool, partnerSchoolApi, portalApi } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 import type { PartnerFunnel } from "../../lib/types";
@@ -46,6 +47,8 @@ export default function DashboardOverviewPage() {
 			</div>
 
 			{error ? <div className="notice notice--error">{error}</div> : null}
+
+			<PartnerStepGuide defaultOpen={false} />
 
 			{funnel ? (
 				<>

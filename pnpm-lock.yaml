@@ -17,6 +17,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.4.8
         version: 2.4.8
+      bun-types:
+        specifier: ^1.4.0
+        version: 1.4.0
       lefthook:
         specifier: ^2.1.4
         version: 2.1.9
@@ -238,12 +241,20 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.2.9
+        version: 1.3.14
 
   packages/domain-contracts:
     dependencies:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.2.9
+        version: 1.3.14
 
   packages/exam-contract-fixtures:
     devDependencies:
@@ -253,15 +264,27 @@ importers:
 
   packages/exam-shared-types: {}
 
-  packages/portal-contract-fixtures: {}
+  packages/portal-contract-fixtures:
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.2.9
+        version: 1.3.14
 
-  packages/portal-domain: {}
+  packages/portal-domain:
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.2.9
+        version: 1.3.14
 
   packages/shared-types:
     dependencies:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.2.9
+        version: 1.3.14
 
   packages/ui-kit: {}
 
@@ -287,7 +310,7 @@ importers:
         version: 1.4.2(elysia@1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0)
+        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.4.0)(kysely@0.28.17)(pg@8.22.0)
       elysia:
         specifier: ^1.2.25
         version: 1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
@@ -389,7 +412,7 @@ importers:
         version: 1.4.2(elysia@1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0)
+        version: 0.45.2(@types/pg@8.20.0)(bun-types@1.4.0)(kysely@0.28.17)(pg@8.22.0)
       elysia:
         specifier: ^1.2.25
         version: 1.4.29(@sinclair/typebox@0.34.49)(@types/bun@1.3.14)(exact-mirror@1.2.2)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
@@ -1683,6 +1706,9 @@ packages:
 
   bun-types@1.3.14:
     resolution: {integrity: sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ==}
+
+  bun-types@1.4.0:
+    resolution: {integrity: sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q==}
 
   callsites@3.1.0:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
@@ -3503,6 +3529,10 @@ snapshots:
     dependencies:
       '@types/node': 24.13.2
 
+  bun-types@1.4.0:
+    dependencies:
+      '@types/node': 24.13.2
+
   callsites@3.1.0: {}
 
   caniuse-lite@1.0.30001800: {}
@@ -3566,10 +3596,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.22.5
 
-  drizzle-orm@0.45.2(@types/pg@8.20.0)(bun-types@1.3.14)(kysely@0.28.17)(pg@8.22.0):
+  drizzle-orm@0.45.2(@types/pg@8.20.0)(bun-types@1.4.0)(kysely@0.28.17)(pg@8.22.0):
     optionalDependencies:
       '@types/pg': 8.20.0
-      bun-types: 1.3.14
+      bun-types: 1.4.0
       kysely: 0.28.17
       pg: 8.22.0
 

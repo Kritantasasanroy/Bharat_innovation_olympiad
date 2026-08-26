@@ -65,29 +65,67 @@ export class AdminManagementService {
                 invitedAt: true,
                 activatedAt: true,
                 createdAt: true,
-                school: { select: { name: true, code: true } },
+                school: { select: { name: true, code: true, partnerId: true } },
                 _count: { select: { attempts: true, payments: true, bookings: true } },
             },
         });
 
-        return users.map((u) => ({
-            id: u.id,
-            firstName: u.firstName,
-            lastName: u.lastName,
-            email: u.email,
-            role: u.role,
-            classBand: u.classBand,
-            schoolId: u.schoolId,
-            schoolName: u.school?.name ?? null,
-            schoolCode: u.school?.code ?? null,
-            isActive: u.isActive,
-            invitedAt: u.invitedAt,
-            activatedAt: u.activatedAt,
-            createdAt: u.createdAt,
-            attempts: u._count.attempts,
-            payments: u._count.payments,
-            bookings: u._count.bookings,
-        }));
+        const userIds = users.map((u) => u.id);
+        const [attributions, partners] = await Promise.all([
+            this.prisma.attributionRecord.findMany({
+                where: { studentId: { in: userIds } },
+                select: { studentId: true, partnerId: true },
+            }),
+            this.prisma.partnerRequest.findMany({
+                where: { partnerId: { not: null } },
+                select: { partnerId: true, orgName: true },
+            }),
+        ]);
+
+        const partnerNameById = new Map<string, string>();
+        for (const p of partners) {
+            if (p.partnerId) partnerNameById.set(p.partnerId, p.orgName);
+        }
+
+        const attributionByStudentId = new Map<string, string>();
+        for (const a of attributions) {
+            attributionByStudentId.set(a.studentId, a.partnerId);
+        }
+
+        return users.map((u) => {
+            const directPartnerId = attributionByStudentId.get(u.id);
+            const schoolPartnerId = u.school?.partnerId ?? null;
+            const effectivePartnerId = directPartnerId ?? schoolPartnerId;
+            const partnerName = effectivePartnerId ? (partnerNameById.get(effectivePartnerId) ?? null) : null;
+
+            let onboardedBy: 'PARTNER' | 'SCHOOL' | 'SELF' = 'SELF';
+            if (directPartnerId) {
+                onboardedBy = 'PARTNER';
+            } else if (u.schoolId || u.school) {
+                onboardedBy = 'SCHOOL';
+            }
+
+            return {
+                id: u.id,
+                firstName: u.firstName,
+                lastName: u.lastName,
+                email: u.email,
+                role: u.role,
+                classBand: u.classBand,
+                schoolId: u.schoolId,
+                schoolName: u.school?.name ?? null,
+                schoolCode: u.school?.code ?? null,
+                isActive: u.isActive,
+                invitedAt: u.invitedAt,
+                activatedAt: u.activatedAt,
+                createdAt: u.createdAt,
+                attempts: u._count.attempts,
+                payments: u._count.payments,
+                bookings: u._count.bookings,
+                onboardedBy,
+                partnerName,
+            };
+        });
     }
 
     /** Edit a user. Email uniqueness and a valid target school are enforced. */

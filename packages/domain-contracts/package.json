@@ -11,5 +11,8 @@
 	},
 	"dependencies": {
 		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.9"
 	}
 }

@@ -8,7 +8,18 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!**/dist", "!!**/build", "!!**/.next", "!!**/coverage", "!!ai/output/prds", "!!backend", "!!frontend", "!!admin-frontend", "!!bio-repos-mirror"]
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!**/build",
+			"!!**/.next",
+			"!!**/coverage",
+			"!!ai/output/prds",
+			"!!backend",
+			"!!frontend",
+			"!!admin-frontend",
+			"!!bio-repos-mirror"
+		]
 	},
 	"formatter": {
 		"enabled": true,

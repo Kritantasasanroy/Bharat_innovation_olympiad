@@ -48,6 +48,7 @@ function setup() {
             {} as never, // PartnerDirectoryService
             {} as never, // SchoolSlotService
             {} as never, // ResultsExportService
+            {} as never, // PartnerAdminApiClient
         ),
     };
 }

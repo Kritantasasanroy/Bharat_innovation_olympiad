@@ -26,6 +26,16 @@ const STATUS_TONE: Record<string, string> = {
 	COMPLETED: "badge badge--positive",
 };
 
+const STATUS_WEIGHT: Record<string, number> = {
+	COMPLETED: 4,
+	PAID: 3,
+	REGISTERED: 2,
+	INVITED: 1,
+};
+
+type SortField = "class" | "status" | "name" | "school";
+type SortOrder = "asc" | "desc";
+
 export default function PartnerStudentsPage() {
 	const { token } = useAuth();
 
@@ -35,7 +45,10 @@ export default function PartnerStudentsPage() {
 
 	const [schoolFilter, setSchoolFilter] = useState("");
 	const [statusFilter, setStatusFilter] = useState("");
+	const [classFilter, setClassFilter] = useState("");
 	const [query, setQuery] = useState("");
+	const [sortField, setSortField] = useState<SortField>("class");
+	const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
 	const load = useCallback(async () => {
 		if (!token) return;
@@ -54,23 +67,48 @@ export default function PartnerStudentsPage() {
 
 	usePoll(load);
 
+	const handleSort = (field: SortField) => {
+		if (sortField === field) {
+			setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+		} else {
+			setSortField(field);
+			setSortOrder(field === "status" ? "desc" : "asc");
+		}
+	};
+
 	const rows = useMemo(() => {
 		const all = students ?? [];
 		const needle = query.trim().toLowerCase();
 
-		return all.filter((s) => {
+		const filtered = all.filter((s) => {
 			if (schoolFilter && s.schoolId !== schoolFilter) return false;
 			if (statusFilter && s.status !== statusFilter) return false;
+			if (classFilter && String(s.classBand) !== classFilter) return false;
 			if (
 				needle &&
 				!s.name.toLowerCase().includes(needle) &&
-				!s.email.toLowerCase().includes(needle)
+				!s.email.toLowerCase().includes(needle) &&
+				!s.schoolName.toLowerCase().includes(needle)
 			) {
 				return false;
 			}
 			return true;
 		});
-	}, [students, schoolFilter, statusFilter, query]);
+
+		return [...filtered].sort((a, b) => {
+			let res = 0;
+			if (sortField === "class") {
+				res = (a.classBand ?? 0) - (b.classBand ?? 0);
+			} else if (sortField === "status") {
+				res = (STATUS_WEIGHT[a.status] ?? 0) - (STATUS_WEIGHT[b.status] ?? 0);
+			} else if (sortField === "name") {
+				res = a.name.localeCompare(b.name);
+			} else if (sortField === "school") {
+				res = a.schoolName.localeCompare(b.schoolName);
+			}
+			return sortOrder === "asc" ? res : -res;
+		});
+	}, [students, schoolFilter, statusFilter, classFilter, query, sortField, sortOrder]);
 
 	if (!token) return null;
 
@@ -117,11 +155,19 @@ export default function PartnerStudentsPage() {
 			<div className="card">
 				<div className="row" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
 					<input
-						placeholder="Search by name or email…"
+						placeholder="Search by name, email, or school…"
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
-						style={{ flex: 1, minWidth: 220 }}
+						style={{ flex: 1, minWidth: 200 }}
 					/>
+					<select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+						<option value="">All Classes/Grades</option>
+						{[6, 7, 8, 9, 10, 11, 12].map((cls) => (
+							<option key={cls} value={String(cls)}>
+								Class {cls}
+							</option>
+						))}
+					</select>
 					<select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)}>
 						<option value="">All schools</option>
 						{(schools ?? []).map((school) => (
@@ -136,6 +182,21 @@ export default function PartnerStudentsPage() {
 						<option value="REGISTERED">Registered</option>
 						<option value="PAID">Paid</option>
 						<option value="COMPLETED">Completed</option>
+					</select>
+					<select
+						value={`${sortField}-${sortOrder}`}
+						onChange={(e) => {
+							const [f, o] = e.target.value.split("-") as [SortField, SortOrder];
+							setSortField(f);
+							setSortOrder(o);
+						}}
+					>
+						<option value="class-asc">Sort: Grade (6 → 12)</option>
+						<option value="class-desc">Sort: Grade (12 → 6)</option>
+						<option value="status-desc">Sort: Exam Completed First</option>
+						<option value="status-asc">Sort: Invited First</option>
+						<option value="name-asc">Sort: Name (A → Z)</option>
+						<option value="school-asc">Sort: School (A → Z)</option>
 					</select>
 				</div>
 
@@ -160,11 +221,31 @@ export default function PartnerStudentsPage() {
 						<table>
 							<thead>
 								<tr>
-									<th>Student</th>
-									<th>School</th>
-									<th>Class</th>
+									<th
+										onClick={() => handleSort("name")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										Student {sortField === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+									</th>
+									<th
+										onClick={() => handleSort("school")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										School {sortField === "school" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+									</th>
+									<th
+										onClick={() => handleSort("class")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										Class/Grade {sortField === "class" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+									</th>
 									<th>Contact</th>
-									<th>Status</th>
+									<th
+										onClick={() => handleSort("status")}
+										style={{ cursor: "pointer", userSelect: "none" }}
+									>
+										Exam Status {sortField === "status" ? (sortOrder === "desc" ? "↓" : "↑") : ""}
+									</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -188,7 +269,18 @@ export default function PartnerStudentsPage() {
 												</>
 											)}
 										</td>
-										<td>{student.classBand ?? "—"}</td>
+										<td>
+											{student.classBand ? (
+												<span
+													className="badge"
+													style={{ background: "var(--bg-elevated)", fontWeight: 600 }}
+												>
+													Class {student.classBand}
+												</span>
+											) : (
+												"—"
+											)}
+										</td>
 										<td>{student.phone ?? "—"}</td>
 										<td>
 											<span className={STATUS_TONE[student.status] ?? "badge badge--neutral"}>

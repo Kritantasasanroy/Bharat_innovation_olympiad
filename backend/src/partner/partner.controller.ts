@@ -171,6 +171,39 @@ export class PartnerController {
         return this.partnerService.markPayoutPaid(partnerId, payoutId, adminId);
     }
 
+    /** ADMIN — trigger a payout directly for a school. */
+    @Post('admin/schools/:schoolId/payouts')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    triggerSchoolPayout(
+        @Param('schoolId') schoolId: string,
+        @Body() dto: TriggerPayoutDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.partnerService.triggerPayout(schoolId, dto.amountPaise, dto.note, adminId);
+    }
+
+    /** ADMIN — records that a triggered school payout's money has actually gone out. */
+    @Patch('admin/schools/:schoolId/payouts/:payoutId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    markSchoolPayoutPaid(
+        @Param('schoolId') schoolId: string,
+        @Param('payoutId') payoutId: string,
+        @Body() _dto: MarkPayoutPaidDto,
+        @CurrentUser('id') adminId: string,
+    ) {
+        return this.partnerService.markPayoutPaid(schoolId, payoutId, adminId);
+    }
+
+    /** ADMIN — lists a school's payouts and bank details. */
+    @Get('admin/schools/:schoolId/payouts')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    schoolPayouts(@Param('schoolId') schoolId: string, @CurrentUser('id') adminId: string) {
+        return this.partnerService.listSchoolPayouts(schoolId, adminId);
+    }
+
     /** ADMIN — the decrypted account number + PAN. Audited on admin-api's side. */
     @Get('admin/partners/:partnerId/bank-details/reveal')
     @UseGuards(JwtAuthGuard, RolesGuard)

@@ -7,6 +7,9 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
 type RoleFilter = 'STUDENT' | 'SCHOOL' | 'ALL';
+type SourceFilter = 'ALL' | 'SELF' | 'SCHOOL' | 'PARTNER';
+type SortField = 'name' | 'classBand' | 'attempts' | 'status' | 'createdAt' | 'onboardedBy';
+type SortOrder = 'asc' | 'desc';
 
 interface ManagedUser {
     id: string;
@@ -25,6 +28,8 @@ interface ManagedUser {
     attempts: number;
     payments: number;
     bookings: number;
+    onboardedBy?: 'SELF' | 'SCHOOL' | 'PARTNER';
+    partnerName?: string | null;
 }
 
 interface SchoolOption {
@@ -48,6 +53,10 @@ export default function StudentsAdminPage() {
 
     const [editing, setEditing] = useState<ManagedUser | null>(null);
     const [deleting, setDeleting] = useState<ManagedUser | null>(null);
+    const [classFilter, setClassFilter] = useState<string>('ALL');
+    const [sourceFilter, setSourceFilter] = useState<SourceFilter>('ALL');
+    const [sortField, setSortField] = useState<SortField>('createdAt');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
     const load = useCallback(async (background = false) => {
         if (!background) setLoading(true);
@@ -75,15 +84,53 @@ export default function StudentsAdminPage() {
         api.get<SchoolOption[]>('/admin/schools').then(({ data }) => setSchools(data)).catch(() => {});
     }, []);
 
-    const visible = users.filter((u) => {
-        const q = query.toLowerCase();
-        return (
-            !q ||
-            `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
-            u.email.toLowerCase().includes(q) ||
-            (u.schoolName ?? '').toLowerCase().includes(q)
-        );
-    });
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder(field === 'attempts' || field === 'createdAt' ? 'desc' : 'asc');
+        }
+    };
+
+    const visible = users
+        .filter((u) => {
+            const q = query.toLowerCase();
+            const matchesQuery =
+                !q ||
+                `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q) ||
+                (u.schoolName ?? '').toLowerCase().includes(q) ||
+                (u.partnerName ?? '').toLowerCase().includes(q);
+
+            const matchesClass =
+                classFilter === 'ALL' ||
+                (classFilter === 'NONE' && u.classBand === null) ||
+                String(u.classBand) === classFilter;
+
+            const matchesSource =
+                sourceFilter === 'ALL' ||
+                (u.onboardedBy ?? (u.schoolId ? 'SCHOOL' : 'SELF')) === sourceFilter;
+
+            return matchesQuery && matchesClass && matchesSource;
+        })
+        .sort((a, b) => {
+            let res = 0;
+            if (sortField === 'name') {
+                res = `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+            } else if (sortField === 'classBand') {
+                res = (a.classBand ?? 0) - (b.classBand ?? 0);
+            } else if (sortField === 'attempts') {
+                res = (a.attempts ?? 0) - (b.attempts ?? 0);
+            } else if (sortField === 'status') {
+                res = Number(b.isActive) - Number(a.isActive);
+            } else if (sortField === 'onboardedBy') {
+                res = (a.onboardedBy ?? '').localeCompare(b.onboardedBy ?? '');
+            } else if (sortField === 'createdAt') {
+                res = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            }
+            return sortOrder === 'asc' ? res : -res;
+        });
 
     return (
         <AuthGuard allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
@@ -97,7 +144,7 @@ export default function StudentsAdminPage() {
                     </p>
                 </div>
 
-                <div className="analytics-toolbar">
+                <div className="analytics-toolbar" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div className="class-pills">
                         {(['STUDENT', 'SCHOOL', 'ALL'] as RoleFilter[]).map((r) => (
                             <button
@@ -109,11 +156,61 @@ export default function StudentsAdminPage() {
                             </button>
                         ))}
                     </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <select
+                            className="search-input"
+                            style={{ padding: '0.45rem 0.75rem', width: 'auto', minWidth: 120 }}
+                            value={classFilter}
+                            onChange={(e) => setClassFilter(e.target.value)}
+                        >
+                            <option value="ALL">All Grades/Classes</option>
+                            {[6, 7, 8, 9, 10, 11, 12].map((cls) => (
+                                <option key={cls} value={String(cls)}>Class {cls}</option>
+                            ))}
+                            <option value="NONE">No Class Assigned</option>
+                        </select>
+
+                        <select
+                            className="search-input"
+                            style={{ padding: '0.45rem 0.75rem', width: 'auto', minWidth: 140 }}
+                            value={sourceFilter}
+                            onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+                        >
+                            <option value="ALL">All Onboard Sources</option>
+                            <option value="SELF">Onboarded: Self</option>
+                            <option value="SCHOOL">Onboarded: School</option>
+                            <option value="PARTNER">Onboarded: Partner</option>
+                        </select>
+
+                        <select
+                            className="search-input"
+                            style={{ padding: '0.45rem 0.75rem', width: 'auto', minWidth: 150 }}
+                            value={`${sortField}-${sortOrder}`}
+                            onChange={(e) => {
+                                const [f, o] = e.target.value.split('-') as [SortField, SortOrder];
+                                setSortField(f);
+                                setSortOrder(o);
+                            }}
+                        >
+                            <option value="createdAt-desc">Newest First</option>
+                            <option value="createdAt-asc">Oldest First</option>
+                            <option value="classBand-asc">Grade/Class (6 → 12)</option>
+                            <option value="classBand-desc">Grade/Class (12 → 6)</option>
+                            <option value="attempts-desc">Exams Submitted (High → Low)</option>
+                            <option value="attempts-asc">Exams Submitted (Low → High)</option>
+                            <option value="name-asc">Name (A → Z)</option>
+                            <option value="name-desc">Name (Z → A)</option>
+                            <option value="onboardedBy-asc">Onboarding Source</option>
+                        </select>
+                    </div>
+
                     <input
                         className="search-input"
-                        placeholder="Search name, email, or school…"
+                        placeholder="Search name, email, school, partner…"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        style={{ flex: 1, minWidth: 200 }}
                     />
                     <span className="stats-pill">{visible.length} shown</span>
                 </div>
@@ -134,62 +231,106 @@ export default function StudentsAdminPage() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Name</th>
+                                    <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Name {sortField === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
                                     <th>Email</th>
-                                    <th>Class</th>
+                                    <th onClick={() => handleSort('classBand')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Class/Grade {sortField === 'classBand' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
                                     <th>School</th>
-                                    <th>Status</th>
-                                    <th>Activity</th>
+                                    <th onClick={() => handleSort('onboardedBy')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Onboarded By {sortField === 'onboardedBy' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
+                                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Status {sortField === 'status' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
+                                    <th onClick={() => handleSort('attempts')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Exams Submitted / Activity {sortField === 'attempts' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {visible.map((u) => (
-                                    <tr key={u.id}>
-                                        <td>
-                                            <div className="student-name">
-                                                <Link href={`/students/${u.id}`} style={{ textDecoration: 'none' }}>
-                                                    <strong style={{ color: 'var(--primary-400)' }}>
-                                                        {u.firstName} {u.lastName}
-                                                    </strong>
-                                                </Link>
-                                                <span className="join-date">{u.role}</span>
-                                            </div>
-                                        </td>
-                                        <td className="text-muted">{u.email}</td>
-                                        <td>{u.classBand ? `Class ${u.classBand}` : '—'}</td>
-                                        <td>
-                                            {u.schoolName ? (
-                                                <span title={u.schoolCode ?? ''}>{u.schoolName}</span>
-                                            ) : (
-                                                <span className="text-muted">Independent</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>
-                                                {u.isActive ? 'Active' : 'Inactive'}
-                                            </span>
-                                            {!u.activatedAt && u.invitedAt && (
-                                                <span className="badge badge-warning" style={{ marginLeft: 4 }}>
-                                                    Invited
+                                {visible.map((u) => {
+                                    const source = u.onboardedBy ?? (u.schoolId ? 'SCHOOL' : 'SELF');
+                                    return (
+                                        <tr key={u.id}>
+                                            <td>
+                                                <div className="student-name">
+                                                    <Link href={`/students/${u.id}`} style={{ textDecoration: 'none' }}>
+                                                        <strong style={{ color: 'var(--primary-400)' }}>
+                                                            {u.firstName} {u.lastName}
+                                                        </strong>
+                                                    </Link>
+                                                    <span className="join-date">{u.role}</span>
+                                                </div>
+                                            </td>
+                                            <td className="text-muted">{u.email}</td>
+                                            <td>
+                                                {u.classBand ? (
+                                                    <span className="badge" style={{ background: 'rgba(125,200,50,0.15)', color: '#7dc832', fontWeight: 600 }}>
+                                                        Class {u.classBand}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted">—</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {u.schoolName ? (
+                                                    <span title={u.schoolCode ?? ''}>{u.schoolName}</span>
+                                                ) : (
+                                                    <span className="text-muted">Independent</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {source === 'PARTNER' ? (
+                                                    <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', fontWeight: 600 }}>
+                                                        Partner{u.partnerName ? `: ${u.partnerName}` : ''}
+                                                    </span>
+                                                ) : source === 'SCHOOL' ? (
+                                                    <span className="badge" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc', fontWeight: 600 }}>
+                                                        School{u.schoolName ? `: ${u.schoolName}` : ''}
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge" style={{ background: 'rgba(156,163,175,0.15)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                                        Self Registered
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>
+                                                    {u.isActive ? 'Active' : 'Inactive'}
                                                 </span>
-                                            )}
-                                        </td>
-                                        <td className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                            {u.attempts} exam{u.attempts === 1 ? '' : 's'} · {u.payments} paid
-                                        </td>
-                                        <td style={{ textAlign: 'right' }}>
-                                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                                <button className="btn btn-sm btn-secondary" onClick={() => setEditing(u)}>
-                                                    Edit
-                                                </button>
-                                                <button className="btn btn-sm btn-danger" onClick={() => setDeleting(u)}>
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                {!u.activatedAt && u.invitedAt && (
+                                                    <span className="badge badge-warning" style={{ marginLeft: 4 }}>
+                                                        Invited
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                    <strong style={{ fontSize: '0.85rem', color: u.attempts > 0 ? 'var(--success-400)' : 'var(--text-secondary)' }}>
+                                                        {u.attempts} exam{u.attempts === 1 ? '' : 's'} submitted
+                                                    </strong>
+                                                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                                        {u.payments} paid · {u.bookings} booking{u.bookings === 1 ? '' : 's'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td style={{ textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                                                    <button className="btn btn-sm btn-secondary" onClick={() => setEditing(u)}>
+                                                        Edit
+                                                    </button>
+                                                    <button className="btn btn-sm btn-danger" onClick={() => setDeleting(u)}>
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     )}

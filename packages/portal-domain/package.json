@@ -4,5 +4,8 @@
 	"type": "module",
 	"scripts": {
 		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.9"
 	}
 }

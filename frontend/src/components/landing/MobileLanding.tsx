@@ -9,7 +9,7 @@ import { TECH_REQUIREMENTS } from '@/lib/copy/onboarding';
 import {
     Rocket, Trophy, BarChart3, Lightbulb, Users, Medal, Globe,
     Target, ScrollText, ArrowRight, CheckCircle2, XCircle,
-    GraduationCap, FlaskConical, BadgeCheck, Menu, X,
+    GraduationCap, FlaskConical, BadgeCheck, Menu, X, LogIn,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -65,6 +65,24 @@ export default function MobileLanding() {
                     <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={30} width={100} style={{ height: 30, width: 'auto' }} />
                 </div>
                 <div className="mob-lp-nav__actions">
+                    <Link
+                        href="/login"
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 12px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-default)',
+                            background: 'var(--bg-elevated)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        <LogIn size={13} /> Login
+                    </Link>
                     <ThemeToggle />
                     <button type="button" className="mob-lp-nav__burger" aria-label="Menu" onClick={() => setMenuOpen((v) => !v)}>
                         {menuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -96,9 +114,26 @@ export default function MobileLanding() {
                     Discover your potential beyond academics: the mindset, skills and awareness to
                     innovate, solve real-world problems and shape the future.
                 </p>
-                <Link href="/register" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center', marginBottom: '1rem' }}>
-                    <Rocket size={17} /> Register Now <ArrowRight size={15} />
-                </Link>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.2rem', width: '100%' }}>
+                    <Link href="/register" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+                        <Rocket size={17} /> Register Now <ArrowRight size={15} />
+                    </Link>
+                    <Link
+                        href="/login"
+                        className="btn btn-secondary btn-lg"
+                        style={{
+                            width: '100%',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            border: '1.5px solid var(--border-default)',
+                            background: 'var(--bg-elevated)',
+                            color: 'var(--text-primary)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                        }}
+                    >
+                        <LogIn size={17} /> Participant Login
+                    </Link>
+                </div>
                 <div className="mob-lp-stats">
                     <div><strong>2,400+</strong><span>Partner Schools</span></div>
                     <div><strong>1.8L+</strong><span>Young Innovators</span></div>
@@ -200,9 +235,25 @@ export default function MobileLanding() {
 
             <section className="mob-lp-cta">
                 <h2>Every idea starts small. Every innovator starts somewhere.</h2>
-                <Link href="/register" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
-                    <Rocket size={17} /> Register Now <ArrowRight size={15} />
-                </Link>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', width: '100%' }}>
+                    <Link href="/register" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+                        <Rocket size={17} /> Register Now <ArrowRight size={15} />
+                    </Link>
+                    <Link
+                        href="/login"
+                        className="btn btn-secondary btn-lg"
+                        style={{
+                            width: '100%',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            border: '1.5px solid var(--border-default)',
+                            background: 'var(--bg-elevated)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        <LogIn size={17} /> Participant Login
+                    </Link>
+                </div>
             </section>
 
             <footer className="mob-lp-footer">
