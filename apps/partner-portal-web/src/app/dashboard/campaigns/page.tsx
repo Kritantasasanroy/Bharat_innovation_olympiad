@@ -138,6 +138,7 @@ export default function CampaignsPage() {
 											: "1px solid var(--border-default)",
 									background: targetType === "STUDENT" ? "rgba(59,130,246,0.08)" : "var(--bg-card)",
 									cursor: "pointer",
+									flex: 1,
 								}}
 							>
 								<input
@@ -168,6 +169,7 @@ export default function CampaignsPage() {
 											: "1px solid var(--border-default)",
 									background: targetType === "SCHOOL" ? "rgba(168,85,247,0.08)" : "var(--bg-card)",
 									cursor: "pointer",
+									flex: 1,
 								}}
 							>
 								<input
