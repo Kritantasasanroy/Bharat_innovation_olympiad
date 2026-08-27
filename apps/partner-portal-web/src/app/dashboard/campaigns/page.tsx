@@ -292,11 +292,6 @@ export default function CampaignsPage() {
 										</button>
 									</div>
 
-									<div style={{ marginTop: "0.75rem" }}>
-										<CopyField label="Referral Code" value={campaign.code} />
-									</div>
-
-									{/* Dedicated Student Link Section */}
 									{isStudentCampaign && (
 										<div style={{ marginTop: "0.5rem" }}>
 											<CopyField label="Student Registration Link" value={campaign.shareUrl} />

@@ -49,6 +49,26 @@ const FEATURES = [
 			</svg>
 		),
 	},
+	{
+		title: "School support, when you need it",
+		body: "Raise tickets for registration, payments, results, or technical help — all from your dashboard.",
+		icon: (
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
+					stroke="var(--success-400)"
+					strokeWidth="1.8"
+				/>
+				<path
+					d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"
+					stroke="var(--success-400)"
+					strokeWidth="1.8"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
 ];
 
 export default function HomePage() {

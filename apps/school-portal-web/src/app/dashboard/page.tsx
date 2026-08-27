@@ -34,6 +34,12 @@ export default function OverviewPage() {
 			title: "Results & analytics",
 			desc: "Scores, percentiles, benchmarking",
 		},
+		{
+			href: "/dashboard/support",
+			icon: "🎧",
+			title: "Support",
+			desc: "Get help with registration, payments, results",
+		},
 	];
 
 	return (
