@@ -85,6 +85,7 @@ type AuditRow = Record<string, unknown>;
 
 type FakePrisma = {
     schoolRequest: {
+        findFirst(args: StoreArgs): Promise<SchoolRequestRow | null>;
         findUnique(args: StoreArgs): Promise<SchoolRequestRow | null>;
         findMany(args?: StoreArgs): Promise<readonly SchoolRequestRow[]>;
         create(args: StoreArgs): Promise<SchoolRequestRow>;
@@ -97,6 +98,7 @@ type FakePrisma = {
         update(args: StoreArgs): Promise<SchoolRow>;
     };
     user: {
+        findFirst(args: StoreArgs): Promise<UserRow | null>;
         findUnique(args: StoreArgs): Promise<UserRow | null>;
         create(args: StoreArgs): Promise<UserRow>;
         update(args: StoreArgs): Promise<UserRow>;
@@ -134,6 +136,13 @@ function booleanValue(data: Record<string, unknown>, key: string, fallback: bool
     return typeof data[key] === 'boolean' ? data[key] : fallback;
 }
 
+function valuesEqual(actual: unknown, expected: unknown, mode?: string): boolean {
+    if (mode === 'insensitive' && typeof actual === 'string' && typeof expected === 'string') {
+        return actual.toLowerCase() === expected.toLowerCase();
+    }
+    return actual === expected;
+}
+
 function createFakeDb() {
     let seq = 0;
     const nextId = (prefix: string) => `${prefix}-${++seq}`;
@@ -146,6 +155,9 @@ function createFakeDb() {
     const match = (row: Record<string, unknown>, where: Record<string, unknown> = {}) =>
         Object.entries(where).every(([key, value]) => {
             if (isRecord(value)) {
+                if ('equals' in value) {
+                    return valuesEqual(row[key], value.equals, value.mode as string | undefined);
+                }
                 return Object.entries(value).every(([nestedKey, nestedValue]) => row[nestedKey] === nestedValue);
             }
             return row[key] === value;
@@ -158,6 +170,8 @@ function createFakeDb() {
 
     const prisma: FakePrisma = {
         schoolRequest: {
+            findFirst: async ({ where, include }: StoreArgs) =>
+                hydrate(schoolRequests.find((row) => match(row, where)) ?? null, include),
             findUnique: async ({ where, include }: StoreArgs) =>
                 hydrate(schoolRequests.find((row) => match(row, where)) ?? null, include),
             findMany: async () => [...schoolRequests],
@@ -237,6 +251,7 @@ function createFakeDb() {
             },
         },
         user: {
+            findFirst: async ({ where = {} }: StoreArgs) => users.find((user) => match(user, where)) ?? null,
             findUnique: async ({ where = {} }: StoreArgs) => users.find((user) => match(user, where)) ?? null,
             create: async ({ data = {} }: StoreArgs) => {
                 const row: UserRow = {

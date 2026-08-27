@@ -32,7 +32,7 @@ export default function FunnelPage() {
 			setFunnel(f);
 			setSchools(s);
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to load");
+			setError(err instanceof ApiError ? err.message : "Could not load your funnel.");
 		}
 	}, [token]);
 

@@ -60,8 +60,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 	if (!response.ok) {
 		const error = (raw ?? {}) as NestErrorBody;
 		const message = Array.isArray(error.message)
-			? (error.message[0] ?? "Request failed.")
-			: (error.message ?? `Request failed with status ${response.status}.`);
+			? (error.message[0] ?? "Something went wrong. Please try again.")
+			: (error.message ??
+				`We couldn't complete that request (status ${response.status}). Please try again.`);
 		throw new ApiError(message, response.status);
 	}
 	return raw as T;
@@ -149,8 +150,9 @@ async function authed<T>(path: string, token: string): Promise<T> {
 	if (!response.ok) {
 		const error = (raw ?? {}) as NestErrorBody;
 		const message = Array.isArray(error.message)
-			? (error.message[0] ?? "Request failed.")
-			: (error.message ?? `Request failed with status ${response.status}.`);
+			? (error.message[0] ?? "Something went wrong. Please try again.")
+			: (error.message ??
+				`We couldn't complete that request (status ${response.status}). Please try again.`);
 		throw new ApiError(message, response.status);
 	}
 	return raw as T;
@@ -172,8 +174,9 @@ async function authedPost<T>(path: string, token: string, body: unknown): Promis
 	if (!response.ok) {
 		const error = (raw ?? {}) as NestErrorBody;
 		const message = Array.isArray(error.message)
-			? (error.message[0] ?? "Request failed.")
-			: (error.message ?? `Request failed with status ${response.status}.`);
+			? (error.message[0] ?? "Something went wrong. Please try again.")
+			: (error.message ??
+				`We couldn't complete that request (status ${response.status}). Please try again.`);
 		throw new ApiError(message, response.status);
 	}
 	return raw as T;
@@ -238,7 +241,10 @@ export const backendApi = {
 			);
 		} catch (cause) {
 			if (cause instanceof ApiError) throw cause;
-			throw new ApiError("Could not reach the pincode service.", 0);
+			throw new ApiError(
+				"Could not reach the pincode service. Please check your internet and try again.",
+				0,
+			);
 		}
 		const raw: unknown = await response.json().catch(() => null);
 		if (!response.ok) {
@@ -292,8 +298,9 @@ async function authedPatch<T>(path: string, token: string, body: unknown): Promi
 	if (!response.ok) {
 		const error = (raw ?? {}) as NestErrorBody;
 		const message = Array.isArray(error.message)
-			? (error.message[0] ?? "Request failed.")
-			: (error.message ?? `Request failed with status ${response.status}.`);
+			? (error.message[0] ?? "Something went wrong. Please try again.")
+			: (error.message ??
+				`We couldn't complete that request (status ${response.status}). Please try again.`);
 		throw new ApiError(message, response.status);
 	}
 	return raw as T;

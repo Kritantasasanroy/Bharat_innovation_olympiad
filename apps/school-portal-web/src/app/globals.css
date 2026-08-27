@@ -525,9 +525,10 @@ textarea {
 }
 
 .notice--error {
-	border-color: rgba(220, 38, 38, 0.25);
-	background: rgba(220, 38, 38, 0.06);
-	color: var(--danger-500);
+	border-color: var(--danger-500);
+	background: var(--danger-500);
+	color: #ffffff;
+	font-weight: 500;
 }
 
 .notice--positive,

@@ -77,7 +77,7 @@ async function request<T>(path: string, token: string | null, init: RequestInit 
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: `Could not reach portal-api at ${PORTAL_API_URL}. Is it running?`,
+			message: "Could not reach the BIO server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}
@@ -222,7 +222,7 @@ async function backendRequest<T>(
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: `Could not reach the BIO backend at ${BACKEND_API_URL}. Is it running?`,
+			message: "Could not reach the BIO server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}
@@ -231,8 +231,9 @@ async function backendRequest<T>(
 	if (!response.ok) {
 		const err = (raw ?? {}) as NestErrorBody;
 		const message = Array.isArray(err.message)
-			? (err.message[0] ?? "Request failed.")
-			: (err.message ?? `Request failed with status ${response.status}.`);
+			? (err.message[0] ?? "Something went wrong. Please try again.")
+			: (err.message ??
+				`We couldn't complete that request (status ${response.status}). Please try again.`);
 		throw new ApiError({
 			code: err.error ?? "REQUEST_FAILED",
 			message,
@@ -489,7 +490,7 @@ async function downloadXlsx(path: string, token: string, filename: string): Prom
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: `Could not reach the BIO backend at ${BACKEND_API_URL}. Is it running?`,
+			message: "Could not reach the BIO server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}

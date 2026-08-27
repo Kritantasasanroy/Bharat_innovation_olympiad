@@ -27,7 +27,7 @@ export default function SupportPage() {
 		try {
 			setTickets(await partnerSupportApi.list(token));
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to load your requests.");
+			setError(err instanceof ApiError ? err.message : "Could not load your support requests.");
 		}
 	}, [token]);
 

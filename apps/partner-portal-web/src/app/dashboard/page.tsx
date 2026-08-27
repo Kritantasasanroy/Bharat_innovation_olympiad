@@ -41,7 +41,7 @@ export default function DashboardOverviewPage() {
 			setOverview(o);
 			setSchools(s);
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to load");
+			setError(err instanceof ApiError ? err.message : "Could not load your dashboard.");
 		}
 	}, [token]);
 

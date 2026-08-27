@@ -10,7 +10,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { assertAccessTransition, hasVerifiedEmail } from '../common/access-lifecycle';
 import { issueActivationTicket, verifyActivationTicket } from '../common/activation-ticket';
@@ -128,6 +128,7 @@ type SchoolTransactionStore = {
         update(args: StoreArgs): Promise<SchoolRecord>;
     };
     user: {
+        findFirst(args: StoreArgs): Promise<UserRecord | null>;
         findUnique(args: StoreArgs): Promise<UserRecord | null>;
         create(args: StoreArgs): Promise<UserRecord>;
         update(args: StoreArgs): Promise<UserRecord>;
@@ -139,6 +140,7 @@ type SchoolTransactionStore = {
 
 type SchoolPersistence = SchoolTransactionStore & {
     schoolRequest: SchoolTransactionStore['schoolRequest'] & {
+        findFirst(args: StoreArgs): Promise<SchoolRequestRecord | null>;
         findUnique(args: StoreArgs): Promise<SchoolRequestRecord | null>;
         findMany(args?: StoreArgs): Promise<readonly SchoolRequestRecord[]>;
         create(args: StoreArgs): Promise<SchoolRequestRecord>;
@@ -174,6 +176,24 @@ export class SchoolService {
     ) {}
 
     /**
+     * Create a SchoolRequest and, if a concurrent request wins the race on the
+     * unique `coordinatorEmail`, translate the Prisma P2002 into a clear
+     * ConflictException so the caller always sees a layman message instead of a 500.
+     */
+    private async createSchoolRequest(data: Prisma.SchoolRequestUncheckedCreateInput) {
+        try {
+            return await this.prisma.schoolRequest.create({ data } as StoreArgs);
+        } catch (e) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+                throw new ConflictException(
+                    'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+                );
+            }
+            throw e;
+        }
+    }
+
+    /**
      * Self-service application. Two shapes, depending on who is submitting:
      *
      * - **Self-applying coordinator** (public `/school/apply`, no
@@ -191,20 +211,28 @@ export class SchoolService {
     async apply(dto: ApplySchoolDto, submittedByPartnerId?: string) {
         const coordinatorEmail = dto.coordinatorEmail.trim().toLowerCase();
 
-        const existing = await this.prisma.schoolRequest.findUnique({
-            where: { coordinatorEmail },
+        const existing = await this.prisma.schoolRequest.findFirst({
+            where: {
+                coordinatorEmail: { equals: coordinatorEmail, mode: 'insensitive' },
+            },
         });
         if (existing) {
-            throw new ConflictException('A school request already exists for this coordinator email.');
+            throw new ConflictException(
+                'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+            );
         }
 
         // Approval provisions a coordinator User under this address. Refusing here
-        // rather than at approval keeps us from ever mutating someone's existing
-        // account (a student's, say) into a school coordinator behind their back.
-        const claimed = await this.prisma.user.findUnique({ where: { email: coordinatorEmail } });
+        // rather than at approval keeps us from ever mutating someone else's
+        // existing account (a student's, say) into a school coordinator behind their back.
+        const claimed = await this.prisma.user.findFirst({
+            where: {
+                email: { equals: coordinatorEmail, mode: 'insensitive' },
+            },
+        });
         if (claimed) {
             throw new ConflictException(
-                'That email already has a BIO account. Use a different coordinator email.',
+                'This email already has a BIO account. Use a different coordinator email, or sign in if this is your account.',
             );
         }
 
@@ -248,8 +276,10 @@ export class SchoolService {
             }
 
             const passwordHash = await bcrypt.hash(dto.password, 10);
-            const request = await this.prisma.schoolRequest.create({
-                data: { ...baseData, passwordHash, emailVerifiedAt: now },
+            const request = await this.createSchoolRequest({
+                ...baseData,
+                passwordHash,
+                emailVerifiedAt: now,
             });
             const emailSent = await this.notifications.sendSchoolApplicationReceived(
                 request.coordinatorEmail,
@@ -265,13 +295,11 @@ export class SchoolService {
         }
 
         const challenge = createEmailVerificationChallenge(now);
-        const request = await this.prisma.schoolRequest.create({
-            data: {
-                ...baseData,
-                emailVerificationTokenHash: challenge.tokenHash,
-                emailVerificationTokenExpiresAt: challenge.expiresAt,
-                emailVerificationSentAt: challenge.sentAt,
-            },
+        const request = await this.createSchoolRequest({
+            ...baseData,
+            emailVerificationTokenHash: challenge.tokenHash,
+            emailVerificationTokenExpiresAt: challenge.expiresAt,
+            emailVerificationSentAt: challenge.sentAt,
         });
 
         const emailSent =
@@ -299,16 +327,24 @@ export class SchoolService {
     async startVerification(emailAddress: string) {
         const coordinatorEmail = emailAddress.trim().toLowerCase();
 
-        const existingRequest = await this.prisma.schoolRequest.findUnique({
-            where: { coordinatorEmail },
+        const existingRequest = await this.prisma.schoolRequest.findFirst({
+            where: {
+                coordinatorEmail: { equals: coordinatorEmail, mode: 'insensitive' },
+            },
         });
         if (existingRequest) {
-            throw new ConflictException('A school request already exists for this coordinator email.');
+            throw new ConflictException(
+                'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+            );
         }
-        const claimed = await this.prisma.user.findUnique({ where: { email: coordinatorEmail } });
+        const claimed = await this.prisma.user.findFirst({
+            where: {
+                email: { equals: coordinatorEmail, mode: 'insensitive' },
+            },
+        });
         if (claimed) {
             throw new ConflictException(
-                'That email already has a BIO account. Use a different coordinator email.',
+                'This email already has a BIO account. Use a different coordinator email, or sign in if this is your account.',
             );
         }
 

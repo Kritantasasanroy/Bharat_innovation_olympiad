@@ -107,7 +107,9 @@ function StartStep({
 			setPhase("code");
 		} catch (cause) {
 			setError(
-				cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.",
+				cause instanceof ApiError
+					? cause.message
+					: "We couldn't send the code. Please check your internet and try again.",
 			);
 		} finally {
 			setSubmitting(false);
@@ -127,7 +129,11 @@ function StartStep({
 			setActivationTicket(confirmed.ticket, confirmed.email);
 			onVerified(confirmed);
 		} catch (cause) {
-			setError(cause instanceof ApiError ? cause.message : "That code didn't work. Try again.");
+			setError(
+				cause instanceof ApiError
+					? cause.message
+					: "That code didn't work. Double-check it and try again.",
+			);
 		} finally {
 			setSubmitting(false);
 		}
@@ -141,7 +147,11 @@ function StartStep({
 			await backendApi.startVerification(email.trim());
 			setResent(true);
 		} catch (cause) {
-			setError(cause instanceof ApiError ? cause.message : "Could not resend the code. Try again.");
+			setError(
+				cause instanceof ApiError
+					? cause.message
+					: "We couldn't resend the code. Please try again.",
+			);
 		} finally {
 			setResending(false);
 		}
@@ -343,7 +353,9 @@ function DetailsStep({
 				return;
 			}
 			setError(
-				cause instanceof ApiError ? cause.message : "Something went wrong. Please try again.",
+				cause instanceof ApiError
+					? cause.message
+					: "We couldn't submit the application. Please check your internet and try again.",
 			);
 		} finally {
 			setSubmitting(false);

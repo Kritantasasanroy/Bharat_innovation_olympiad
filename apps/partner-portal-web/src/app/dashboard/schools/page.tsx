@@ -170,11 +170,19 @@ export default function PartnerSchoolsPage() {
 			setPincode("");
 			setLocation(null);
 		} catch (cause) {
-			// A 409 means this coordinator's school is already in the system —
-			// often because a cold-start retry created it. That's not an error:
-			// tell the partner it's already submitted, and the reload below shows it.
+			// 409 can mean one of two things:
+			// 1) This coordinator's school is already in the review queue (cold-start retry)
+			//    — not an error, just show it in the list.
+			// 2) The email already belongs to another BIO account.
+			//    — a real error the partner can act on, so show it in red.
 			if (cause instanceof ApiError && cause.statusCode === 409) {
-				setSuccess("This school has already been submitted — see it in the list below.");
+				if (cause.message.toLowerCase().includes("bio account")) {
+					setError(
+						"This email already has a BIO account. Use a different coordinator email, or ask the coordinator to sign in with their existing account.",
+					);
+				} else {
+					setSuccess("This school is already in the BIO review queue — see it in the list below.");
+				}
 				formEl.reset();
 				setPincode("");
 				setLocation(null);
