@@ -38,3 +38,21 @@ export class ResetPasswordDto {
     @MinLength(8, { message: 'Password must be at least 8 characters.' })
     newPassword: string;
 }
+
+/**
+ * First-time password creation for a partner-submitted school, issued
+ * immediately after the email verification link succeeds and no password
+ * exists yet. Same short-lived ticket shape as `ResetPasswordDto`.
+ */
+export class SetPasswordDto {
+    @IsEmail()
+    email: string;
+
+    @IsString()
+    @IsNotEmpty()
+    setPasswordTicket: string;
+
+    @IsString()
+    @MinLength(8, { message: 'Password must be at least 8 characters.' })
+    newPassword: string;
+}

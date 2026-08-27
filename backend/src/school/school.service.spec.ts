@@ -524,7 +524,7 @@ describe('email verification (partner-submitted)', () => {
         ).rejects.toThrow('Confirm the coordinator email');
     });
 
-    it('verifies once, sends the review notification, and makes replay idempotent', async () => {
+    it('verifies once, sends the review notification, and asks to set a password on every visit', async () => {
         const { service, schoolRequests, notifications } = setup();
         await service.apply(APPLICATION, 'partner-99');
         const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
@@ -532,10 +532,36 @@ describe('email verification (partner-submitted)', () => {
         const first = await service.verifyEmail(token);
         const second = await service.verifyEmail(token);
 
-        expect(first.status).toBe('PENDING');
-        expect(second.status).toBe('ALREADY_VERIFIED');
+        expect(first.status).toBe('SET_PASSWORD');
+        expect(second.status).toBe('SET_PASSWORD');
+        expect(first.setPasswordTicket).toBeDefined();
+        expect(second.setPasswordTicket).toBeDefined();
         expect(schoolRequests[0].emailVerifiedAt).toBeInstanceOf(Date);
         expect(notifications.sendSchoolApplicationReceived).toHaveBeenCalledTimes(1);
+    });
+
+    it('a partner-submitted school can set a password and then sign in with email + password', async () => {
+        const { service, schoolRequests, notifications } = setup();
+        await service.apply(APPLICATION, 'partner-99');
+        const token = notifications.sendSchoolEmailVerification.mock.calls[0][1].token;
+
+        const verified = await service.verifyEmail(token);
+        expect(verified.status).toBe('SET_PASSWORD');
+
+        const password = 'a brand new password ';
+        await expect(
+            service.setPassword(APPLICATION.coordinatorEmail, verified.setPasswordTicket!, password),
+        ).resolves.toEqual({ status: 'PASSWORD_SET' });
+
+        expect(schoolRequests[0].passwordHash).toBeTruthy();
+
+        await service.decide(schoolRequests[0].id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
+
+        const result = await service.login({
+            coordinatorEmail: APPLICATION.coordinatorEmail,
+            password,
+        });
+        expect(result.school.name).toBe('Delhi Public School, Sector 12');
     });
 
     it('rejects an expired verification token', async () => {
@@ -811,7 +837,7 @@ describe('login with email + password (self-applied school)', () => {
         ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
-    it('a partner-submitted school has no password to sign in with', async () => {
+    it('a partner-submitted school cannot sign in with email until a password is set', async () => {
         const { service } = setup();
         await service.apply(APPLICATION, 'partner-99');
         const [request] = await service.list();
@@ -837,16 +863,26 @@ describe('forgotPassword + confirmPasswordReset + resetPassword', () => {
         await expect(service.forgotPassword('nobody@example.com')).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('a partner-submitted school has no password to reset', async () => {
+    it('a partner-submitted school can set its first password through the forgot flow', async () => {
         const { service } = setup();
         await service.apply(APPLICATION, 'partner-99');
         const [request] = await service.list();
         request.emailVerifiedAt = new Date();
         await service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1');
 
-        await expect(service.forgotPassword(APPLICATION.coordinatorEmail)).rejects.toBeInstanceOf(
-            BadRequestException,
-        );
+        await service.forgotPassword(APPLICATION.coordinatorEmail);
+        const confirmed = await service.confirmPasswordReset(APPLICATION.coordinatorEmail, '123456');
+
+        const newPassword = 'a brand new password ';
+        await expect(
+            service.resetPassword(APPLICATION.coordinatorEmail, confirmed.resetTicket, newPassword),
+        ).resolves.toEqual({ status: 'PASSWORD_RESET' });
+
+        const result = await service.login({
+            coordinatorEmail: APPLICATION.coordinatorEmail,
+            password: newPassword,
+        });
+        expect(result.school.name).toBe('Delhi Public School, Sector 12');
     });
 
     it('sends the OTP scoped to SCHOOL_RESET, distinct from the activation OTP', async () => {

@@ -12,9 +12,9 @@ import { useAuth } from "../../lib/auth-context";
  * Coordinator sign-in.
  *
  * Two credentials resolve to the same session JWT (`role: SCHOOL`): the
- * access token staff issue on approval, or (for a self-applied school) the
- * email + password chosen at activation. A partner-submitted school has no
- * password, so it can only ever sign in with the token.
+ * access token staff issue on approval, or the coordinator email + password
+ * set during activation or email confirmation. Every approved school supports
+ * both options.
  */
 export default function LoginPage() {
 	const { setToken } = useAuth();
@@ -61,9 +61,9 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>
 				<p>
-					Use the email and password chosen at activation, or the access token BIO issued you. The
-					coordinator email must be confirmed before BIO staff can approve an application. New to
-					the platform? <Link href="/activate">Activate your school</Link>.
+					Use your coordinator email and the password you set, or the access token BIO issued you.
+					The coordinator email must be confirmed before BIO staff can approve an application. New
+					to the platform? <Link href="/activate">Activate your school</Link>.
 				</p>
 			</div>
 

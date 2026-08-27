@@ -49,12 +49,13 @@ const ABSENT_SCHOOL_HASH = bcrypt.hashSync('bio-timing-equalizer', 10);
  * requests, and approval provisions the `School` row, a coordinator `User`
  * (role `SCHOOL`), and exactly one access token.
  *
- * A self-applying coordinator also chooses a password (verified email +
- * password is the second, equally valid way in — see `findByPassword`); a
- * partner-submitted school has none, so its coordinator can only sign in with
- * the access token issued on approval. Either way, the token's digest is
- * uniquely indexed, so a token resolves to at most one school and can never
- * sign a different one in.
+ * A self-applying coordinator chooses a password during activation. A
+ * partner-submitted coordinator is invited to set a password when they confirm
+ * their email, and can also create or reset one at any time through the
+ * forgot-password flow. Either way, every approved school can sign in with the
+ * coordinator email + password or with the access token BIO staff issue on
+ * approval. The token's digest is uniquely indexed, so a token resolves to at
+ * most one school and can never sign a different one in.
  */
 type SchoolRequestRecord = {
     id: string;
@@ -337,6 +338,18 @@ export class SchoolService {
      * someone else's inbox up front. A self-applying coordinator never reaches
      * this — they confirm inline with `confirmVerification` before submitting.
      */
+    /**
+     * PUBLIC — confirm a coordinator email via the legacy link flow: only
+     * reachable when a partner submitted the school on the coordinator's
+     * behalf. A self-applying coordinator never reaches this — they confirm
+     * inline with `confirmVerification` before submitting.
+     *
+     * After a partner-submitted school verifies the email, if the coordinator
+     * has not yet set a password, we hand back a short-lived set-password
+     * ticket so the first sign-in can use the email too. Once a password is set,
+     * the coordinator can sign in with either email + password or the access
+     * token issued on approval.
+     */
     async verifyEmail(rawToken: string) {
         const token = rawToken.trim();
         if (!token || token.length > 256) {
@@ -351,6 +364,13 @@ export class SchoolService {
         }
 
         if (request.emailVerifiedAt) {
+            if (!request.passwordHash) {
+                return {
+                    status: 'SET_PASSWORD' as const,
+                    email: request.coordinatorEmail,
+                    setPasswordTicket: issuePasswordResetTicket('SCHOOL', request.coordinatorEmail),
+                };
+            }
             return { status: 'ALREADY_VERIFIED' as const, email: request.coordinatorEmail };
         }
         if (
@@ -375,6 +395,13 @@ export class SchoolService {
         if (claimed.count === 0) {
             const current = await this.prisma.schoolRequest.findUnique({ where: { id: request.id } });
             if (current?.emailVerifiedAt) {
+                if (!current.passwordHash) {
+                    return {
+                        status: 'SET_PASSWORD' as const,
+                        email: current.coordinatorEmail,
+                        setPasswordTicket: issuePasswordResetTicket('SCHOOL', current.coordinatorEmail),
+                    };
+                }
                 return {
                     status: 'ALREADY_VERIFIED' as const,
                     email: current.coordinatorEmail,
@@ -395,6 +422,15 @@ export class SchoolService {
             request.coordinatorName,
             request.schoolName,
         );
+
+        if (!request.passwordHash) {
+            return {
+                status: 'SET_PASSWORD' as const,
+                email: request.coordinatorEmail,
+                setPasswordTicket: issuePasswordResetTicket('SCHOOL', request.coordinatorEmail),
+                emailSent,
+            };
+        }
 
         return { status: 'PENDING' as const, email: request.coordinatorEmail, emailSent };
     }
@@ -480,10 +516,10 @@ export class SchoolService {
     }
 
     /**
-     * PUBLIC — the access token staff issue on approval, or (for a
-     * self-applied school) the email + password chosen at activation time.
-     * A partner-submitted school has no password, so it can only ever sign in
-     * with the token.
+     * PUBLIC — the access token staff issue on approval, or the coordinator
+     * email + password. Every approved school supports both credentials; a
+     * partner-submitted coordinator sets the password when confirming email or
+     * later through the forgot-password flow.
      */
     async login(dto: SchoolLoginDto) {
         const request = dto.accessToken
@@ -575,20 +611,16 @@ export class SchoolService {
 
     /**
      * PUBLIC — forgot-password step 1: send a 6-digit code, same shape as the
-     * verify-first step. Only accounts that actually have a password can reset
-     * one — a partner-submitted school signs in with its access token only, so
-     * there is nothing here for `resetPassword` to change.
+     * verify-first step. This also covers a partner-submitted school that never
+     * set a password; after the OTP is confirmed, `resetPassword` creates or
+     * replaces the password so every school can sign in with email + password
+     * as well as the access token.
      */
     async forgotPassword(rawEmail: string) {
         const coordinatorEmail = rawEmail.trim().toLowerCase();
         const request = await this.prisma.schoolRequest.findUnique({ where: { coordinatorEmail } });
         if (!request) {
             throw new BadRequestException('No school account found with that email.');
-        }
-        if (!request.passwordHash) {
-            throw new BadRequestException(
-                'This school signs in with an access token, not a password. Contact BIO support if you need it resent.',
-            );
         }
         return this.emailOtp.sendOtp('SCHOOL_RESET', coordinatorEmail);
     }
@@ -611,19 +643,46 @@ export class SchoolService {
         }
 
         const request = await this.prisma.schoolRequest.findUnique({ where: { coordinatorEmail } });
-        if (!request || !request.passwordHash) {
+        if (!request) {
             throw new BadRequestException('No school account found with that email.');
         }
 
         const passwordHash = await bcrypt.hash(newPassword, 10);
         await this.prisma.schoolRequest.update({ where: { id: request.id }, data: { passwordHash } });
 
-        await this.notifications.sendSchoolPasswordChanged(request.coordinatorEmail, {
-            coordinatorName: request.coordinatorName,
-            schoolName: request.schoolName,
-        });
+        // Only notify "changed" when there was a previous password; the first-time
+        // set path is silent because the school was just creating the password.
+        if (request.passwordHash) {
+            await this.notifications.sendSchoolPasswordChanged(request.coordinatorEmail, {
+                coordinatorName: request.coordinatorName,
+                schoolName: request.schoolName,
+            });
+        }
 
         return { status: 'PASSWORD_RESET' as const };
+    }
+
+    /**
+     * PUBLIC — first-time password creation for a partner-submitted school, issued
+     * immediately after `verifyEmail` succeeds and the school has no password yet.
+     * Uses the same short-lived ticket shape as `resetPassword`.
+     */
+    async setPassword(rawEmail: string, setPasswordTicket: string, newPassword: string) {
+        const coordinatorEmail = rawEmail.trim().toLowerCase();
+        const now = new Date();
+        if (!verifyPasswordResetTicket(setPasswordTicket, 'SCHOOL', coordinatorEmail, now)) {
+            throw new BadRequestException('This set-password link has expired. Request a new one.');
+        }
+
+        const request = await this.prisma.schoolRequest.findUnique({ where: { coordinatorEmail } });
+        if (!request) {
+            throw new BadRequestException('No school account found with that email.');
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await this.prisma.schoolRequest.update({ where: { id: request.id }, data: { passwordHash } });
+
+        return { status: 'PASSWORD_SET' as const };
     }
 
     /** ADMIN — the school half of the Access Management queue. */

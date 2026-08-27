@@ -416,8 +416,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     // ── School lifecycle ───────────────────────────────────────────────────
-    // A school has no password — the access token in the approval/rotation/
-    // resend mails below is the only way a coordinator ever signs in.
+    // School coordinators sign in with the access token and/or the email +
+    // password they set during email confirmation or the forgot-password flow.
 
     async sendSchoolEmailVerification(
         to: string,

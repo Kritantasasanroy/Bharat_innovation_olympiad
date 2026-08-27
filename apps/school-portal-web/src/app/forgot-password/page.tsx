@@ -7,10 +7,10 @@ import { ThemeToggle } from "../../components/theme-toggle";
 import { ApiError, backendApi } from "../../lib/api-client";
 
 /**
- * Coordinator password reset — three steps, same OTP shape as activation:
- * email a code, confirm it for a short-lived `resetTicket`, then set the new
- * password. Only accounts that self-activated with a password can reach the
- * final step; a partner-submitted school has none to reset.
+ * Coordinator password set / reset — three steps, same OTP shape as activation:
+ * email a code, confirm it for a short-lived `resetTicket`, then set the
+ * password. This is also the path for partner-submitted schools that have never
+ * created a password: the same flow creates one.
  */
 export default function ForgotPasswordPage() {
 	const [phase, setPhase] = useState<"email" | "code" | "password" | "done">("email");
@@ -102,8 +102,11 @@ export default function ForgotPasswordPage() {
 			{phase === "email" ? (
 				<>
 					<div className="page-header">
-						<h1>Reset your password</h1>
-						<p>Enter your coordinator email and we&apos;ll send you a 6-digit code.</p>
+						<h1>Create or reset your password</h1>
+						<p>
+							Enter your coordinator email and we&apos;ll send you a 6-digit code. If you don&apos;t
+							have a password yet, this creates one.
+						</p>
 					</div>
 					<div className="card" style={{ maxWidth: 480 }}>
 						<form className="form-grid" onSubmit={sendCode} style={{ maxWidth: "none" }}>
@@ -192,8 +195,8 @@ export default function ForgotPasswordPage() {
 				<>
 					<div className="page-header">
 						<p className="eyebrow">Step 3 of 3</p>
-						<h1>Choose a new password</h1>
-						<p>This replaces your current password immediately.</p>
+						<h1>Choose a password</h1>
+						<p>This is the password you will use with your coordinator email.</p>
 					</div>
 					<div className="card" style={{ maxWidth: 480 }}>
 						<form className="form-grid" onSubmit={submitNewPassword} style={{ maxWidth: "none" }}>
@@ -230,8 +233,11 @@ export default function ForgotPasswordPage() {
 			{phase === "done" ? (
 				<>
 					<div className="page-header">
-						<h1>Password reset</h1>
-						<p>Your password has been changed. Sign in with your new password.</p>
+						<h1>Password saved</h1>
+						<p>
+							Your password has been set. Sign in with your coordinator email and password, or with
+							your access token.
+						</p>
 					</div>
 					<div className="card" style={{ maxWidth: 480 }}>
 						<Link href="/login" className="button">

@@ -123,9 +123,10 @@ export interface SchoolApplicationResult {
 
 /** Legacy link-based confirmation — only for a school a partner submitted on the coordinator's behalf. */
 export interface EmailVerificationResult {
-	readonly status: "PENDING" | "ALREADY_VERIFIED";
+	readonly status: "PENDING" | "ALREADY_VERIFIED" | "SET_PASSWORD";
 	readonly email: string;
 	readonly emailSent?: boolean;
+	readonly setPasswordTicket?: string;
 }
 
 export interface ConfirmPasswordResetResult {
@@ -216,6 +217,14 @@ export const backendApi = {
 		post<{ status: "PASSWORD_RESET" }>("/school/reset-password", {
 			email,
 			resetTicket,
+			newPassword,
+		}),
+
+	/** First-time password creation for a partner-submitted school right after email verification. */
+	setPassword: (email: string, setPasswordTicket: string, newPassword: string) =>
+		post<{ status: "PASSWORD_SET" }>("/school/set-password", {
+			email,
+			setPasswordTicket,
 			newPassword,
 		}),
 

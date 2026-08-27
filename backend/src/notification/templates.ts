@@ -442,11 +442,10 @@ export function partnerBankDetailsSubmittedEmail(vars: {
 
 // ── School lifecycle ─────────────────────────────────────────────────────
 //
-// A partner-submitted school's coordinator has no password: the access token
-// issued on approval is the only credential they ever get, so — unlike the
-// partner mails above — the approval mail's token is not optional context for
-// them, it's the only way in. A self-applied coordinator additionally chose a
-// password at activation and can sign in with either.
+// Every approved school can sign in with either the access token or the
+// coordinator email + password. Partner-submitted schools create that password
+// when they confirm their email; self-applying coordinators choose one during
+// activation. Both paths can also reset the password through the forgot flow.
 
 export function schoolEmailVerificationEmail(vars: {
     coordinatorName: string;
@@ -454,12 +453,12 @@ export function schoolEmailVerificationEmail(vars: {
     verificationUrl: string;
 }): RenderedEmail {
     return build(
-        "Confirm your school's BIO application email",
+        "Confirm your school's BIO application email and create your password",
         `Confirm your email, ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">Someone requested school portal access for <strong>${escapeHtml(vars.schoolName)}</strong> on the Bharat Innovation Olympiad.</p>
-     <p style="margin:0 0 12px;">Confirm that you own this coordinator email. After confirmation, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0 0 12px;">Confirm that you own this coordinator email and choose a password. After that, the application will enter the BIO staff review queue.</p>
      <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
-        { label: 'Confirm email address', url: vars.verificationUrl },
+        { label: 'Confirm email and create password', url: vars.verificationUrl },
     );
 }
 
@@ -525,15 +524,15 @@ export function schoolApprovedEmail(vars: {
     return build(
         'Your BIO school portal access is ready',
         `Welcome, ${escapeHtml(vars.coordinatorName)}`,
-        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong> is now approved on the Bharat Innovation Olympiad. Your access token below is the only credential you need — there is no separate password.</p>
+        `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong> is now approved on the Bharat Innovation Olympiad. You can sign in with either your coordinator email + password or the access token below.</p>
      ${factTable([
          ...(vars.schoolCode ? [factRow('School code', vars.schoolCode)] : []),
          factRow('Access token', vars.accessToken),
      ])}
      <p style="margin:16px 0 0;font-weight:600;color:#111827;">What happens next</p>
      ${steps([
-         'Sign in with the access token above.',
-         'Add your students to the roster — they claim their own account by registering with the same email.',
+         'Sign in with your email and password or the access token above.',
+         'Add your students to the school — they claim their own account by registering with the same email.',
          'Pick an exam slot; your whole school sits together in it.',
      ])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">Keep this token private — anyone who has it can sign in as your school. Contact us if it ever needs to be rotated.</p>`,

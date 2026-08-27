@@ -4,6 +4,7 @@ import {
     ConfirmEmailOtpDto,
     ResendEmailVerificationDto,
     ResetPasswordDto,
+    SetPasswordDto,
     VerifyEmailDto,
 } from '../common/dto/email-verification.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -63,6 +64,12 @@ export class SchoolController {
     @Post('school/reset-password')
     resetPassword(@Body() dto: ResetPasswordDto) {
         return this.schoolService.resetPassword(dto.email, dto.resetTicket, dto.newPassword);
+    }
+
+    /** PUBLIC — first-time password creation for a partner-submitted school right after email verification. */
+    @Post('school/set-password')
+    setPassword(@Body() dto: SetPasswordDto) {
+        return this.schoolService.setPassword(dto.email, dto.setPasswordTicket, dto.newPassword);
     }
 
     /** PUBLIC — legacy link-based confirmation, for a school a partner submitted on the coordinator's behalf. */
