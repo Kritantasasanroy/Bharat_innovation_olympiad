@@ -228,9 +228,10 @@ export class AdminManagementService {
 
     // ── Schools ──────────────────────────────────────────────────────────────
 
-    /** Every school, with its partner and roster size. Powers the admin schools page. */
+    /** Every onboarded school, with its partner and roster size. Powers the admin schools page. */
     async listSchools(params: { q?: string; partnerId?: string } = {}) {
-        const where: Prisma.SchoolWhereInput = {};
+        // Student-added schools are reviewed on the "Student-onboarded schools" page.
+        const where: Prisma.SchoolWhereInput = { onboardedAt: { not: null } };
         if (params.partnerId) where.partnerId = params.partnerId;
         if (params.q?.trim()) {
             const q = params.q.trim();
