@@ -53,6 +53,11 @@ export class SyncUserDto {
     @IsOptional()
     schoolCode?: string;
 
+    /** Direct school id, used when a student adds an unlisted school. */
+    @IsString()
+    @IsOptional()
+    schoolId?: string;
+
     /**
      * Class section as the school writes it — "A", "B2", "Rose".
      *

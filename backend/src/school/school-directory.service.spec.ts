@@ -105,7 +105,7 @@ describe('addToDirectory', () => {
             pincode: '441108',
             onboarded: false,
         });
-        expect(entry.code).toMatch(/^SCH-[0-9A-HJKMNP-TV-Z]{6}$/);
+        expect(entry.code).toBeNull();
         expect(schools).toHaveLength(1);
     });
 
@@ -185,7 +185,9 @@ describe('findByCode', () => {
     it('resolves a code however the student typed it', async () => {
         const { service, schools } = setup();
         const added = await service.addToDirectory({ name: 'Bright Future', pincode: '441108' });
-        const code = schools[0].code;
+        // Student-added schools have no code; only onboarded schools do.
+        const code = 'SCH-AAAAAA';
+        schools[0].code = code;
 
         for (const typed of [code, code.toLowerCase(), code.replace('-', ''), ` ${code} `]) {
             await expect(service.findByCode(typed)).resolves.toMatchObject({ id: added.id });

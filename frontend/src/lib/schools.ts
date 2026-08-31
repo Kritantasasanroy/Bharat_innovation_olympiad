@@ -11,7 +11,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
  */
 export interface DirectorySchool {
     id: string;
-    code: string;
+    code: string | null;
     name: string;
     city: string;
     state: string;

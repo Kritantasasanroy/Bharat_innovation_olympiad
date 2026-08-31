@@ -36,14 +36,26 @@ export class AuthService {
     ) { }
 
     /**
-     * Resolve the school code a student typed or picked. Codes come off printed
-     * cards and forwarded messages, so matching tolerates case, spacing and a
-     * missing hyphen.
+     * Resolve the school a student picked or added. Prefer a direct school id
+     * (used when a student adds an unlisted school); fall back to the printed
+     * school code for onboarded schools.
      */
-    private async resolveSchoolId(schoolCode?: string): Promise<string | undefined> {
-        if (!schoolCode?.trim()) return undefined;
+    private async resolveSchoolId(dto: {
+        schoolId?: string;
+        schoolCode?: string;
+    }): Promise<string | undefined> {
+        if (dto.schoolId?.trim()) {
+            const school = await this.prisma.school.findUnique({
+                where: { id: dto.schoolId.trim() },
+                select: { id: true },
+            });
+            if (school) return school.id;
+        }
+        if (!dto.schoolCode?.trim()) return undefined;
+        const code = normalizeSchoolCode(dto.schoolCode);
+        if (!code) return undefined;
         const school = await this.prisma.school.findUnique({
-            where: { code: normalizeSchoolCode(schoolCode) },
+            where: { code },
             select: { id: true },
         });
         if (!school) {
@@ -101,7 +113,7 @@ export class AuthService {
         const isStudent = (role ?? 'STUDENT') === 'STUDENT';
         if (isStudent && !schoolId) {
             throw new BadRequestException(
-                'Choose your school to continue. Search for it by name, city or pincode, enter your school code, or add it if it is not listed.',
+                'Choose your school to continue. Search for it by name, city or pincode, enter your school code, or select it if it is not listed.',
             );
         }
     }
@@ -162,7 +174,7 @@ export class AuthService {
             // (or a student who picked one at registration) still needs linking,
             // otherwise they stay invisible to every school-scoped query.
             const schoolId =
-                existing.schoolId ?? (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+                existing.schoolId ?? (await this.resolveSchoolId(dto)) ?? null;
             this.assertSchoolResolved(existing.role, schoolId);
             const phone = await this.resolveVerifiedPhone(dto.phone, existing.id);
             // Store the raw number unconditionally so WhatsApp can reach the
@@ -218,7 +230,7 @@ export class AuthService {
             return { ...claimed, rollNumber };
         }
 
-        const schoolId = (await this.resolveSchoolId(dto.schoolCode)) ?? null;
+        const schoolId = (await this.resolveSchoolId(dto)) ?? null;
         this.assertSchoolResolved(dto.role, schoolId);
         const section = this.normaliseSection(dto.section, schoolId);
         this.assertSectionResolved(dto.role, schoolId, section);

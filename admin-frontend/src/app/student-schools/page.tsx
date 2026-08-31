@@ -10,6 +10,7 @@ interface Student {
     firstName: string;
     lastName: string;
     email: string;
+    phone: string | null;
     classBand: number | null;
     section: string | null;
     createdAt: string;
@@ -18,7 +19,7 @@ interface Student {
 interface StudentSchool {
     id: string;
     name: string;
-    code: string;
+    code: string | null;
     city: string;
     state: string;
     pincode: string;
@@ -133,7 +134,7 @@ export default function AdminStudentSchoolsPage() {
                                                 <td>
                                                     <div className="student-name">
                                                         <strong>{school.name}</strong>
-                                                        <span className="join-date">{school.code}</span>
+                                                        {school.code && <span className="join-date">{school.code}</span>}
                                                     </div>
                                                 </td>
                                                 <td>
@@ -171,6 +172,7 @@ export default function AdminStudentSchoolsPage() {
                                                                         <tr>
                                                                             <th>Student</th>
                                                                             <th>Email</th>
+                                                                            <th>Phone</th>
                                                                             <th>Class</th>
                                                                             <th>Section</th>
                                                                             <th>Registered</th>
@@ -183,6 +185,7 @@ export default function AdminStudentSchoolsPage() {
                                                                                     {student.firstName} {student.lastName}
                                                                                 </td>
                                                                                 <td>{student.email}</td>
+                                                                                <td>{student.phone ?? '—'}</td>
                                                                                 <td>{student.classBand ? `Class ${student.classBand}` : '—'}</td>
                                                                                 <td>{student.section ?? '—'}</td>
                                                                                 <td>{new Date(student.createdAt).toLocaleDateString()}</td>

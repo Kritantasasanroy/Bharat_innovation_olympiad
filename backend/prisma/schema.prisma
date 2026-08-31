@@ -188,7 +188,7 @@ model School {
   id              String                 @id @default(uuid())
   name            String
   nameKey         String
-  code            String                 @unique
+  code            String?                @unique
   city            String
   state           String
   pincode         String

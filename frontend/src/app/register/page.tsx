@@ -190,7 +190,7 @@ export default function RegisterPage() {
         // School is required — checked here as well as server-side so the student
         // is told before an OTP is spent rather than after.
         if (!school) {
-            setError('Please choose your school. Search for it, enter a school code, or add it.');
+            setError('Please choose your school. Search for it, enter a school code, or select it.');
             return;
         }
         // Section is required too. Results are reported to schools class by
@@ -249,7 +249,12 @@ export default function RegisterPage() {
             const referralCode = getReferralCode();
             await register({
                 ...formData,
-                ...(school ? { schoolCode: school.code } : {}),
+                ...(school
+                    ? {
+                          schoolId: school.id,
+                          ...(school.code ? { schoolCode: school.code } : {}),
+                      }
+                    : {}),
                 section: section.trim(),
                 // The version actually shown on the presence step, so a later
                 // revision is distinguishable from what was agreed to.

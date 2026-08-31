@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomCode } from '../common/access-token';
 import { PincodeService } from '../geo/pincode.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddSchoolDto } from './dto/school.dto';
@@ -9,7 +8,7 @@ import { isValidPincode, normalizeSchoolCode, schoolNameKey } from './school-dir
 /** What a student sees when choosing their school. Never exposes the coordinator. */
 export interface DirectoryEntry {
     id: string;
-    code: string;
+    code: string | null;
     name: string;
     city: string;
     state: string;
@@ -43,7 +42,7 @@ export interface SearchSchoolsQuery {
 
 const toEntry = (s: {
     id: string;
-    code: string;
+    code: string | null;
     name: string;
     city: string;
     state: string;
@@ -164,6 +163,7 @@ export class SchoolDirectoryService {
      */
     async findByCode(rawCode: string): Promise<DirectoryEntry> {
         const code = normalizeSchoolCode(rawCode);
+        if (!code) throw new NotFoundException('No school has that code.');
         const school = await this.prisma.school.findUnique({
             where: { code },
             select: {
@@ -226,7 +226,9 @@ export class SchoolDirectoryService {
                 data: {
                     name,
                     nameKey,
-                    code: await this.allocateCode(),
+                    // Student-added schools are not assigned a code. They are only
+                    // visible to staff in the "Student-onboarded schools" section.
+                    code: null,
                     city: location.city,
                     state: location.state,
                     pincode,
@@ -248,8 +250,8 @@ export class SchoolDirectoryService {
             return entry;
         } catch (error) {
             // Someone added the same school between our read and our write. Only
-            // the (nameKey, pincode) index means that — a clash on `code` is a
-            // different bug and must not be swallowed, nor retried forever.
+            // the (nameKey, pincode) index means that — a clash on `code` should
+            // not happen because student-added schools do not receive codes.
             const target = this.conflictTarget(error);
             if (target?.includes('nameKey')) {
                 const raced = await this.prisma.school.findUnique({
@@ -280,13 +282,5 @@ export class SchoolDirectoryService {
         return typeof target === 'string' ? [target] : null;
     }
 
-    /** `SCH-XXXXXX` over the unambiguous alphabet; retried on the rare collision. */
-    async allocateCode(): Promise<string> {
-        for (let attempt = 0; attempt < 5; attempt += 1) {
-            const code = `SCH-${randomCode(6)}`;
-            const taken = await this.prisma.school.findUnique({ where: { code } });
-            if (!taken) return code;
-        }
-        throw new BadRequestException('Could not allocate a unique school code. Try again.');
-    }
+
 }

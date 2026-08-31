@@ -315,6 +315,8 @@ export class AdminManagementService {
                         firstName: true,
                         lastName: true,
                         email: true,
+                        phoneRaw: true,
+                        phone: true,
                         classBand: true,
                         section: true,
                         createdAt: true,
@@ -333,7 +335,16 @@ export class AdminManagementService {
             pincode: s.pincode,
             members: s._count.users,
             createdAt: s.createdAt,
-            students: s.users,
+            students: s.users.map((u) => ({
+                id: u.id,
+                firstName: u.firstName,
+                lastName: u.lastName,
+                email: u.email,
+                phone: u.phoneRaw || u.phone || null,
+                classBand: u.classBand,
+                section: u.section,
+                createdAt: u.createdAt,
+            })),
         }));
     }
 
@@ -371,7 +382,7 @@ export class AdminManagementService {
             });
             if (clash && clash.id !== id) {
                 throw new ConflictException(
-                    `Another school ("${clash.name}", ${clash.code}) already exists at pincode ${nextPincode}. Merge them instead of renaming.`,
+                    `Another school ("${clash.name}"${clash.code ? `, ${clash.code}` : ''}) already exists at pincode ${nextPincode}. Merge them instead of renaming.`,
                 );
             }
             data.name = nextName;

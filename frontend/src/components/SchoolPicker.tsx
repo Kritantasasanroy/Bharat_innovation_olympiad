@@ -196,7 +196,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
         try {
             select(await addSchool(newName, addPincode.replace(/\D/g, '')));
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not add your school.');
+            setError(cause instanceof Error ? cause.message : 'Could not select your school.');
         } finally {
             setBusy(false);
         }
@@ -211,8 +211,9 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         <div className="school-chip__text">
                             <strong>{value.name}</strong>
                             <span>
-                                {value.code} · {value.city}, {value.state}
-                                {value.onboarded ? ' · Onboarded' : ' · Student added'}
+                                {value.code ? `${value.code} · ` : ''}
+                                {value.city}, {value.state}
+                                {value.onboarded ? ' · Onboarded' : ' · Pending review'}
                             </span>
                         </div>
                         <button
@@ -342,7 +343,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                    what is on their address, and is done. */
                 <div className="school-add">
                     <p className="school-add__intro">
-                        <strong>Adding your school</strong>
+                        <strong>Select your school</strong>
                         <span>
                             Type the full name as your school writes it, and the pincode of the
                             area it is in. We fill in the city and state for you. Your school will
@@ -402,7 +403,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                             disabled={busy || !newName.trim() || !location}
                             onClick={() => void submitNewSchool()}
                         >
-                            {busy ? 'Adding…' : 'Add school'}
+                            {busy ? 'Saving…' : 'Select school'}
                         </button>
                     </div>
                 </div>
@@ -487,7 +488,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                         setOpen(false);
                                     }}
                                 >
-                                    + My school isn’t listed, add it
+                                    + My school isn’t listed, select it
                                 </button>
                             )}
                         </div>
@@ -506,7 +507,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                     setOpen(false);
                                 }}
                             >
-                                Add your school
+                                Select your school
                             </button>{' '}
                             (it takes the name and a pincode).
                         </p>
