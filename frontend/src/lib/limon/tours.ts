@@ -69,14 +69,14 @@ const REGISTER_TOUR: Tour = {
         {
             target: 'register-steps',
             title: 'Six steps, in this order',
-            body: "Your details, your email code, a face scan, payment, then your parent's section. You can stop after the face scan and finish the rest later from your dashboard.",
+            body: "Your details, your email code, a face scan, payment, then your parent's section. You may stop after the face scan and finish the rest later from your dashboard. It is best to finish the entire process in one go.",
             mood: 'talking',
             placement: 'bottom',
         },
         {
             target: 'register-class',
-            title: 'Choose your class carefully',
-            body: "This decides which Innovation Olympiad exam you sit and who you're ranked against, and it's final once it's set. If you pick the wrong one you'll need to raise a support ticket to fix it.",
+            title: 'Please choose your class/grade carefully',
+            body: "This decides which Innovation Olympiad exam you appear for and who you're ranked against, and it cannot be changed.",
             mood: 'concerned',
             placement: 'top',
         },
@@ -86,14 +86,14 @@ const REGISTER_TOUR: Tour = {
             // step pointing at a field that does not exist yet gets dropped
             // when the tour starts, and the student would never hear about it.
             target: 'register-school',
-            title: 'Find your school, then your section',
-            body: "Just type the school's name. Only use a school code if your school actually gave you one. Most participants don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
+            title: 'Find your school, then add your section',
+            body: "Just type the school's name. Only use a school code if your school actually gave you one. If you don't have a school code, you can add your school if it isn't listed. Put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections.",
             mood: 'talking',
             placement: 'top',
         },
         {
             title: 'One thing I have to be firm about',
-            body: "The face scan at step 4 has to be done by you, not a parent. It's what I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam.",
+            body: "The face scan at step 4 has to be done by you, not a parent. It's what Limon/I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam and may be disqualified.",
             mood: 'concerned',
         },
     ],
@@ -109,12 +109,12 @@ const REGISTER_TOUR: Tour = {
  */
 const DASHBOARD_TOUR: Tour = {
     id: 'dashboard',
-    intro: "Welcome in! I'm Limon. Let me show you around, it's quick, and then you'll know where everything lives.",
+    intro: "Welcome in! I'm Limon- your smart buddy. Let me show you around, it's quick, and then you'll know where everything lives.",
     steps: [
         {
             target: 'dashboard-roll',
             title: 'Your roll number',
-            body: "This is you, for the whole season. Support will ask for it, so keep the email we sent you.",
+            body: "This is you for the whole season. Store it carefully; the exam team will verify your roll number at later stages.",
             mood: 'happy',
             placement: 'bottom',
         },
@@ -128,28 +128,28 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'dashboard-exams',
             title: 'Your exams',
-            body: "Everything you can sit. Start with the free practice Innovation Olympiad exam: it runs in exactly the same screen as the real thing, and you can retake it as often as you like.",
+            body: "Everything you can take. Start with the practice Innovation Olympiad exam: it runs in the same screen as the real thing, and you can retake it as often as you like.",
             mood: 'talking',
             placement: 'top',
         },
         {
             target: 'nav-training',
             title: 'Training',
-            body: 'Tick off the training sessions you have attended here. Your school and the review team can see it, and it appears on your certificates page.',
+            body: 'Tick off the training sessions you have attended here. Your school and the review team can see it, and it appears on your certificate as well.',
             mood: 'talking',
             placement: 'bottom',
         },
         {
             target: 'nav-exams',
             title: 'Exams',
-            body: 'The full list, with schedules and instructions. This is where you book your sitting once you have paid.',
+            body: 'The full list, with schedules and instructions. This is where you book your schedule once you have registered & paid.',
             mood: 'talking',
             placement: 'bottom',
         },
         {
             target: 'nav-results',
             title: 'Results',
-            body: "Your scores appear here once marking is released. Provisional first, then your final rank and a breakdown across the five pillars when the season closes.",
+            body: "Your scores appear here once marking is released. Provisional first, then your final verified result and a breakdown across the five pillars when the season closes.",
             mood: 'talking',
             placement: 'bottom',
         },
@@ -163,7 +163,7 @@ const DASHBOARD_TOUR: Tour = {
         {
             target: 'nav-support',
             title: 'Support',
-            body: "If anything goes wrong (a power cut during your exam, a wrong class, a score that looks off), tell us here and a person will answer.",
+            body: "If anything goes wrong (a power cut during your exam, a wrong class, a score that looks off), tell us here and our team will extend support to you.",
             mood: 'happy',
             placement: 'bottom',
         },
@@ -181,7 +181,7 @@ const DASHBOARD_TOUR: Tour = {
  */
 const EXAM_TOUR: Tour = {
     id: 'exam',
-    intro: "This is the real exam screen: same buttons, same timer, same camera. Nothing here is scored, so let me show you what each part does.",
+    intro: "This is the actual exam screen: same buttons, same timer, same camera. Nothing here is scored, so let me show you what each part does.",
     steps: [
         {
             target: 'exam-question',
@@ -221,7 +221,7 @@ const EXAM_TOUR: Tour = {
         {
             target: 'exam-violations',
             title: 'This number',
-            body: "Things I have to record: leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam. A person just reads it afterwards. Hover the little i for the full list.",
+            body: "Violations/warnings I have to record: leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam. A person just reviews it afterwards. Hover over it a little for the full list.",
             mood: 'concerned',
             placement: 'bottom',
         },
@@ -235,12 +235,12 @@ const EXAM_TOUR: Tour = {
         {
             target: 'exam-submit',
             title: 'Finishing',
-            body: "Submit when you are done. I will tell you how many questions are still blank and ask you to confirm, so one stray click cannot end your Innovation Olympiad exam.",
+            body: "Submit when you are done. I will tell you how many questions are still blank and ask you to confirm, so one stray click cannot end your Bharat Innovation Olympiad exam.",
             mood: 'happy',
             placement: 'left',
         },
     ],
-    outro: "That is the lot. Have a go at these questions, nothing here counts. When you are comfortable, your real Innovation Olympiad exam will feel like somewhere you have already been.",
+    outro: "That is the lot. Have a go at these questions, nothing here counts. When you are comfortable, your actual Innovation Olympiad exam will feel like somewhere you have already been.",
 };
 
 /**

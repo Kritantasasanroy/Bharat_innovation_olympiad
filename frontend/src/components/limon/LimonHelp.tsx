@@ -73,7 +73,7 @@ export default function LimonHelp() {
                     className="limon-help-circle"
                     onClick={open}
                     aria-haspopup="dialog"
-                    aria-label="Need help? Click me for a guided tour of this page."
+                    aria-label="Need help? Click me . I am Limon ready to take a guided tour of this page."
                 >
                     <svg className="limon-help-circle__ring" viewBox="0 0 100 100" aria-hidden="true">
                         <circle className="limon-help-circle__bg" cx="50" cy="50" r="46" />

@@ -53,7 +53,7 @@ export default function LoginMobile({
                 </h1>
                 <p className="mob-auth__subtitle">
                     {step === 'identifier'
-                        ? 'Use the email you registered with.'
+                        ? 'Use the email you used during the registration process'
                         : `We sent a 6-digit code to ${email}`}
                 </p>
 

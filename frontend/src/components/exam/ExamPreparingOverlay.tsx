@@ -115,7 +115,7 @@ export default function ExamPreparingOverlay({
 
                 <h2 className="exam-preparing__title">Getting your exam ready</h2>
                 <p className="exam-preparing__sub">
-                    Setting up your camera and proctoring before the Innovation Olympiad exam opens. Your exam timer has
+                    Limon is setting up your camera and proctoring before the Innovation Olympiad exam opens. Your exam timer has
                     not started yet, it starts when your questions appear.
                 </p>
 

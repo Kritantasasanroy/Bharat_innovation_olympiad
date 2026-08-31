@@ -151,7 +151,7 @@ export default function AutoSubmitNotice({
                             I understand, continue
                         </button>
                         <p className="exam-terminal-fineprint">
-                            Continuing automatically in {secondsLeft}s
+                            Submitting automatically in {secondsLeft}s
                         </p>
                     </>
                 )}
@@ -164,7 +164,7 @@ export default function AutoSubmitNotice({
                         <p className="exam-terminal-error">{state.error}</p>
                         <p className="exam-terminal-detail">
                             Every answer you gave is already saved on the server, nothing is lost.
-                            Check your internet connection and submit again.
+                            Check your internet connection and try again.
                         </p>
                         <button
                             type="button"

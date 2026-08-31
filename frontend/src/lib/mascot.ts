@@ -117,7 +117,7 @@ const CUE_COPY: Record<MascotCueId, { title: string; encouragement: string }> = 
     'final-warning': {
         title: `${FINAL_WARNING_MINUTES} minutes left`,
         encouragement:
-            'Finish the question you are on, then check that every question has an answer. Your Innovation Olympiad exam is submitted automatically when the timer runs out.',
+            'Finish the question you are on, then check that every question has been answered. Your Innovation Olympiad exam is submitted automatically when the timer runs out.',
     },
 };
 

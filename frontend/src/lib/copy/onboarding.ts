@@ -19,7 +19,7 @@ export const TECH_REQUIREMENTS = [
     { label: 'Microphone', value: 'Working' },
     { label: 'Internet', value: 'At least 2 Mbps' },
     { label: 'Browser', value: 'Google Chrome or Microsoft Edge, latest version' },
-    { label: 'Screen', value: '1024 × 768 or larger' },
+    { label: 'Screen Resolution', value: '1024 x 768 or larger' },
     { label: 'Operating system', value: 'Windows 10+, macOS 10.14+, or ChromeOS' },
 ] as const;
 
@@ -34,7 +34,7 @@ export const TECH_REQUIREMENTS = [
 export const PRESENCE_POINTS = [
     {
         icon: '🧑‍💻',
-        title: 'The participant must be present',
+        title: 'The exam participant must be present',
         body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their Innovation Olympiad exam and may be disqualified.',
     },
     {
@@ -49,17 +49,17 @@ export const PRESENCE_POINTS = [
     {
         icon: '👨‍👩‍👧',
         title: 'A parent or guardian is needed too',
-        body: 'One section of the form is for a parent or guardian, including their consent. The participant cannot sit an exam until it is completed.',
+        body: 'One section in the registration process is for a parent or guardian, including their consent. The participant cannot sit an exam until parent/guardian consent is completed.',
     },
     {
         icon: '🪪',
         title: 'Keep a school or photo ID card handy',
-        body: 'You will need it to fill in your school and class details accurately, and to have ready on exam day for verification.',
+        body: 'The ID is uploaded during the registration process for verification of identity and is needed on exam day for verification.',
     },
     {
         icon: '⏱️',
-        title: 'Set aside about ten minutes',
-        body: 'Registration runs in one sitting: details, email verification, face scan, the parent section, and payment.',
+        title: 'Set aside about ten minutes - Registration runs in one sitting',
+        body: 'details, email verification, face scan, the parent consent, and payment.',
     },
 ] as const;
 
@@ -67,26 +67,26 @@ export const PRESENCE_POINTS = [
 export const NEXT_STEPS = [
     {
         title: 'Choose your exam schedule',
-        body: 'Places in each sitting are limited. Once you confirm a schedule it cannot be changed from your account, so pick a time you are certain about.',
+        body: 'Slots in each sitting are limited. Once you confirm a schedule, it cannot be changed from your account, so pick a time you are certain about.',
     },
     {
-        title: 'Take the practice Innovation Olympiad exam',
-        body: 'It runs in exactly the same environment as the real exam: fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real Innovation Olympiad exam will start.',
+        title: 'Take the practice Innovation Olympiad exam to acclimatise with the online exam environment. It runs in exactly the same environment as the actual exam',
+        body: 'fullscreen, webcam, timer and all. It is not scored; you can retake it, and it is mandatory before your Bharat Innovation Olympiad exam commences.',
     },
     {
-        title: 'Check your device early',
-        body: 'Do not leave the camera and internet check until exam day. Run the practice Innovation Olympiad exam on the device you actually intend to use.',
+        title: 'Check your devices early',
+        body: 'Do not wait until exam day. Test your camera and internet connection. Appear for the practice tests on the device you intend to use for the Bharat Innovation Olympiad exam.',
     },
     {
         title: 'On the day',
-        body: 'Sit somewhere quiet and well-lit with a plain wall behind you, keep a school or photo ID nearby, and be signed in fifteen minutes before your schedule opens.',
+        body: 'On exam day, Take the exam in a quiet, well-lit place with a plain wall behind you, keep a school or photo ID nearby, and be sign in 15 minutes before your scheduled time.',
     },
 ] as const;
 
 /** The thank-you shown once registration is fully complete. */
 export const THANK_YOU = {
-    heading: 'You\'re registered. Welcome to the Olympiad.',
-    body: 'Your place is confirmed and your roll number is issued. We have emailed it to you, so keep that email, as support will ask for it.',
+    heading: 'You\'re registered. Welcome to the Bharat Innovation Olympiad by Lemon Ideas.',
+    body: 'Your registration is confirmed, and your roll number has been issued. We have emailed it to you, so keep that email safe for further reference.',
 } as const;
 
 /**

@@ -76,7 +76,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
             <main className="container page-content animate-fade-in" style={{ maxWidth: '760px' }}>
                 <div className="submitted-hero">
                     <div className="submitted-hero__tick" aria-hidden="true">✓</div>
-                    <h1>Your exam has been submitted</h1>
+                    <h1>Congratulations! Your exam has been submitted</h1>
                     <p>
                         Every answer you gave is saved on our servers. There is nothing more you need
                         to do{user?.rollNumber ? <>, {user.firstName}</> : null}.
@@ -102,19 +102,19 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                                 <span className="submitted-score__total">/ {result.total}</span>
                             </div>
                             <p className="submitted-provisional">
-                                <strong>This is a provisional, unverified score.</strong> It can still
-                                change while proctoring reviews and grievances are settled.
+                                <strong>This is a provisional, unverified score.</strong> It may
+                                change while violations and warnings are reviewed by the exam team and grievances are settled.
                             </p>
                         </>
                     ) : result?.isDisqualified ? (
                         <p className="text-muted">
                             {result.disqualificationNote ??
-                                'This attempt was disqualified after review, so it carries no score.'}
+                                'Sorry! This attempt was disqualified after review, so it carries no score.'}
                         </p>
                     ) : (
                         <p className="text-muted">
                             Your score is not published yet. It appears on your results page as soon as
-                            marking for this Innovation Olympiad exam is released, we will email you.
+                            marking for this Innovation Olympiad exam is released, you will receive details by email.
                         </p>
                     )}
                 </section>
@@ -148,7 +148,7 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                                     switching away, a camera or face issue, or a screenshot attempt.
                                 </p>
                                 <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                    A violation is not a decision. A person reviews anything serious
+                                    A violation is not a decision. Exam team reviews anything serious
                                     before any conclusion is drawn, and most are ordinary
                                     interruptions. If something went wrong during your exam, tell us
                                     from the support page and it will be read alongside this record.
@@ -170,22 +170,22 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                             <strong>Verification</strong>
                             <p>
                                 Once the exam window closes, every Innovation Olympiad exam goes through fair-score
-                                normalisation so students who sat different sittings are compared
-                                fairly. Any Innovation Olympiad exam the proctoring flagged is reviewed by a person, not
+                                normalisation so students who sat different schedules are compared
+                                fairly. All exam violations &amp; warnings are reviewed by the exam team, not
                                 by the computer, before anything is concluded from it.
                             </p>
                         </li>
                         <li>
                             <strong>Provisional result</strong>
                             <p>
-                                Your score is published first as provisional. It is a real score, but
-                                it can still move while reviews and grievances are settled.
+                                Your score is released first as provisional &amp; unverified. The score is subject to
+                                change while exam violations are reviewed and grievances are settled.
                             </p>
                         </li>
                         <li>
                             <strong>Final report</strong>
                             <p>
-                                When the season closes we publish your final score, your rank and
+                                When the season ends we publish your final score, your rank and
                                 percentile, your breakdown across the five dimensions, and the answer
                                 key with an explanation for every question.
                             </p>
@@ -199,15 +199,15 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                     <ul className="submitted-list">
                         <li>
                             Everything recorded during your exam is kept with your attempt, so any
-                            question about it can be answered from the record rather than from memory.
+                            question about it can be answered from the record/evidence rather than from memory.
                         </li>
                         <li>
-                            Nothing is decided automatically. A flagged Innovation Olympiad exam is looked at by a person,
-                            who has to write down their reasoning either way.
+                            Nothing is decided automatically. A flagged Innovation Olympiad exam is looked at by the review team,
+                            who have to look at evidence and justify actions thereafter.
                         </li>
                         <li>
                             If you think something has gone wrong (a power cut, a connection drop, a
-                            score that looks wrong) you can raise it and a person will respond.
+                            score that looks wrong) you can raise it through the support section on the portal and a person will respond.
                         </li>
                     </ul>
                 </section>

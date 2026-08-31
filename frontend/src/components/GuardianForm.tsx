@@ -226,7 +226,7 @@ export default function GuardianForm({
             return;
         }
         if (!bothConsents) {
-            setLocalError('Both consents are required before the ward can sit an exam.');
+            setLocalError('Both consents are required before the participant can appear for the exam');
             return;
         }
         await onSubmit(values);
@@ -240,7 +240,7 @@ export default function GuardianForm({
 
             <p className="guardian-form__lede">
                 This section is for a parent or legal guardian. It is required before
-                {studentName ? ` ${studentName}` : ' the ward'} can sit an exam.
+                {studentName ? ` ${studentName}` : ' the ward'} can appear for the olympiad exam.
             </p>
 
             <fieldset className="guardian-fieldset">
@@ -299,7 +299,7 @@ export default function GuardianForm({
                     </div>
                 </div>
                 <p className="input-hint">
-                    We use these to reach you about the ward&apos;s exam, not for marketing.
+                    We use these to share updates on the olympiad and other useful information for your ward
                 </p>
             </fieldset>
 
@@ -308,7 +308,7 @@ export default function GuardianForm({
                 <p className="input-hint" style={{ marginTop: 0 }}>
                     Both are required. Neither affects the ward&apos;s score or rank. The date
                     of birth has to match the ID you upload below, which is how we confirm the
-                    ward is who they registered as.
+                    participant&apos;s identity for the Bharat Innovation Olympiad.
                 </p>
 
                 <div className="form-row">
@@ -363,7 +363,7 @@ export default function GuardianForm({
                 <p className="input-hint">
                     <strong>Both sides are required.</strong> The back of a school card usually
                     carries the class, section and the school&apos;s stamp, and the back of an
-                    Aadhaar card carries the address, so one side on its own is not enough to check.
+                    Aadhaar card carries the address, so one side on its own is not enough to verify.
                 </p>
 
                 <div className="input-group">
@@ -394,7 +394,7 @@ export default function GuardianForm({
                                 <label className="input-label" htmlFor={`idDocument-${side}`}>
                                     {side === 'front' ? 'Front of the card' : 'Back of the card'}{' '}
                                     <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
-                                        (JPG, PNG, HEIC or PDF · max {MAX_DOCUMENT_MB} MB)
+                                        (Accepted file formats- JPG, PNG, HEIC or PDF - max {MAX_DOCUMENT_MB} MB)
                                     </span>
                                 </label>
                                 <input

@@ -53,7 +53,7 @@ const STEPS: { id: Step; label: string }[] = [
     { id: 'verify', label: 'Verify email' },
     { id: 'face', label: 'Face scan' },
     { id: 'payment', label: 'Payment' },
-    { id: 'guardian', label: 'Parent details' },
+    { id: 'guardian', label: 'Parent consent' },
 ];
 
 const SUBTITLES: Record<Step, string> = {
@@ -61,7 +61,7 @@ const SUBTITLES: Record<Step, string> = {
     details: 'Create your participant account',
     verify: 'Verify your email',
     face: 'Enrol your face',
-    guardian: 'Parent or guardian details',
+    guardian: 'Parent or guardian consent',
     payment: 'Complete your registration',
 };
 
@@ -369,7 +369,7 @@ export default function RegisterPage() {
                         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor used to verify
                             you during the exam, and this one photo is kept and printed on your certificate. This step cannot be skipped, and{' '}
-                            <strong>the participant must do it themselves</strong>.
+                            <strong>the participant must do it themselves ( Not parents or somebody else)</strong>.
                         </p>
 
                         {faceMsg && (

@@ -365,7 +365,7 @@ export default function StudentDashboard() {
                                     ))
                                 ) : (
                                     <div className="glass-card exam-item" style={{ justifyContent: 'center', color: 'var(--text-muted)', padding: 'var(--space-8)' }}>
-                                        No results yet. Complete an exam to see your performance here.
+                                        No results yet. Complete an exam, and then verified results are published here
                                     </div>
                                 )}
                             </div>

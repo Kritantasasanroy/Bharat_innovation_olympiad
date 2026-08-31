@@ -235,8 +235,7 @@ export default function ResultsPage() {
             <main className="container animate-fade-in" style={{ padding: 'var(--space-8) var(--space-6)' }}>
                 <h1>Your Results Dashboard</h1>
                 <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)', marginBottom: 'var(--space-8)' }}>
-                    Your performance across every exam you have taken. Scores are provisional until the
-                    season closes and the final report is published.
+                    Your performance across every exam you have taken. Scores are provisional &amp; unverified until the season closes and the final results/report is published.
                 </p>
 
                 {loading ? (
@@ -311,8 +310,8 @@ export default function ResultsPage() {
                                             exists to prevent. */}
                                         {result.isProvisional && (
                                             <div className="result-provisional-banner">
-                                                <strong>Provisional: unverified score.</strong> This can still
-                                                change while proctoring reviews and grievances are settled.
+                                                <strong>Provisional & unverified score.</strong> This score may still
+                                                change while exam violations & warnings are reviewed by the team and grievances are settled.
                                                 Your rank, full analysis and the answer key are published once
                                                 the season closes.
                                             </div>

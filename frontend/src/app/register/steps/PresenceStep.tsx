@@ -61,7 +61,7 @@ export default function PresenceStep({
                 aria-expanded={showTech}
                 onClick={() => setShowTech((v) => !v)}
             >
-                {showTech ? '▾' : '▸'} What you need to take the exam
+                {showTech ? '▾' : '▸'} What you need to appear for  the olympiad exam
             </button>
             {showTech && (
                 <dl className="tech-req-list">
@@ -82,8 +82,7 @@ export default function PresenceStep({
                         onChange={(e) => onAcknowledgedChange(e.target.checked)}
                     />
                     <span>
-                        <strong>The ward is here with me now</strong>, and will do the face scan
-                        themselves.
+                        <strong>The ward is here with me now, and will do the face scan himself/herself</strong>
                     </span>
                 </label>
 
@@ -99,7 +98,7 @@ export default function PresenceStep({
                             terms &amp; conditions
                         </Link>
                         , including that the registration fee is <strong>non-refundable and
-                        non-transferable</strong> and that a confirmed exam slot cannot be changed.
+                        non-transferable</strong> and that a confirmed exam schedule cannot be changed.
                     </span>
                 </label>
 
@@ -112,7 +111,7 @@ export default function PresenceStep({
                     <span>
                         I agree that the details entered here may be processed to run the Olympiad,
                         registering the participant, proctoring their exam, marking, ranking and issuing
-                        certificates. A parent or guardian confirms this again later in the form.
+                        certificates, reports, as well as other programs as part of the ecosystem . A parent or guardian confirms this again later in the form.
                     </span>
                 </label>
             </div>

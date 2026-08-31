@@ -42,10 +42,10 @@ const PAUSE_TIMEOUT_SEC = EXAM_PAUSE_TIMEOUT_SEC;
 const BLOCKED_ACTION_COPY: Record<BlockedAction, string> = {
     reload: 'Reloading is disabled during the exam. Use the ↻ Reload button in the header if the page looks wrong, it keeps your answers and your timer.',
     back: 'The browser Back button is disabled during the exam. You cannot leave this page until you submit.',
-    print: 'Printing the exam is not allowed. This attempt has been recorded.',
-    capture: 'Screenshots are not allowed during the exam. This attempt has been recorded.',
+    print: 'Printing,  screenshots & video sharing are not allowed during the exam. This attempt has been recorded as violation.',
+    capture: 'Screenshots, printing, video sharing are not allowed during the exam. This attempt has been recorded as violation.',
     devtools: 'Developer tools are disabled during the exam.',
-    copy: 'Copying exam content is not allowed.',
+    copy: 'Copying exam content is not allowed. Its recorded as unfair exam practice.',
 };
 
 /**
@@ -913,7 +913,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
                     <h2 style={{ marginBottom: '1rem' }}>Exam Access Locked</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        Your exam access pass is not active yet. One payment unlocks every olympiad
+                        Your exam access pass is not active yet. One payment unlocks the olympiad
                         exam for the current season, the practice Innovation Olympiad exam stays free.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/unlock'}>
@@ -939,9 +939,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👨‍👩‍👧</div>
                     <h2 style={{ marginBottom: '1rem' }}>Parent consent needed first</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        Every participant is a school ward, so a parent or guardian has to give
+                        Every participant is a minor, so a parent or guardian has to give
                         consent before we can proctor an exam. It takes about two minutes and only
-                        needs doing once.
+                        needs to be done just once.
                     </p>
                     <button
                         className="btn btn-primary"
@@ -973,12 +973,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
                     <h2 style={{ marginBottom: '1rem' }}>This exam is closed</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        You have already sat this Innovation Olympiad exam. An exam can only be attempted once, so it
+                        You have already submitted the Innovation Olympiad exam. An exam can only be attempted once, so it
                         cannot be reopened, going back to this page will not start it again.
                     </p>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.75rem' }}>
-                        Your answers were saved and submitted. Your result will appear under Results
-                        once marking is complete.
+                        Your answers were saved and submitted. Your result will appear after verification, normalisation, and final publishing of scores, reports, &amp; ranking.
                     </p>
                     <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => window.location.href = '/results'}>
                         Go to My Results
@@ -1356,17 +1355,17 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
                                     fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5,
                                 }}>
-                                    <strong style={{ color: 'var(--text-primary)' }}>What gets counted here</strong>
+                                    <strong style={{ color: 'var(--text-primary)' }}>What violations get counted here by Limon</strong>
                                     <ul style={{ margin: '0.5rem 0 0.5rem 1rem', padding: 0 }}>
-                                        <li>Leaving fullscreen, or switching to another tab, window or app</li>
-                                        <li>Your face not visible, someone else in the picture, or a face that is not yours</li>
-                                        <li>Looking away from the screen for a long stretch</li>
-                                        <li>Taking a screenshot, or printing the Innovation Olympiad exam</li>
-                                        <li>Refreshing the page, or using the browser Back button</li>
+                                        <li>leaving fullscreen/switching tab or app</li>
+                                        <li>face not visible / other person / wrong face</li>
+                                        <li>looking away</li>
+                                        <li>screenshot/print; video sharing</li>
+                                        <li>refresh/browser Back</li>
                                     </ul>
                                     <strong style={{ color: 'var(--text-primary)' }}>This number does not end your exam.</strong>{' '}
-                                    It is a record. Past {VIOLATION_REVIEW_THRESHOLD}, a person reads what was recorded before
-                                    your result is confirmed, and most of what lands here is an ordinary interruption.
+                                    It is a record. Past {VIOLATION_REVIEW_THRESHOLD}, an exam team will review your violations before
+                                    your result is verified. Make sure you do not violate the exam code of conduct.
                                     <br /><br />
                                     <strong style={{ color: 'var(--text-primary)' }}>What does end your exam</strong>
                                     <br />
@@ -1377,7 +1376,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     <strong style={{ color: 'var(--text-primary)' }}>Does not count at all</strong>
                                     <br />
                                     Sitting still. If nothing moves for {EXAM_IDLE_NUDGE_SEC} seconds Limon checks you are
-                                    still there, but reading and thinking are not against the rules.
+                                    still there, but reading and thinking are not against the rules. All this is recorded.
                                 </div>
                             )}
                         </div>
@@ -1617,7 +1616,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                             </p>
                             <p style={{ fontSize: '0.85rem', color: 'var(--warning-400)', marginTop: '8px' }}>
                                 This is the only safe way to reload. Pressing F5 or your browser&apos;s
-                                reload button will end and lock your exam.
+                                reload button will end and lock your exam. Be cautious!
                             </p>
                             <div className="modal-actions">
                                 <button className="btn btn-secondary" onClick={() => setShowReloadConfirm(false)}>Go Back</button>
@@ -1665,7 +1664,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                     <span className="submit-status__icon" aria-hidden="true">!</span>
                                     <div>
                                         <strong>
-                                            {unansweredCount} question{unansweredCount === 1 ? '' : 's'} still blank
+                                            {unansweredCount} question{unansweredCount === 1 ? '' : 's'} still not marked
                                         </strong>
                                         <p>
                                             You have answered {answeredCount} of {questions.length}. There is no

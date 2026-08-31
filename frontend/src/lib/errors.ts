@@ -84,7 +84,7 @@ export function describeError(err: unknown, action: string): string {
             return fromServer ?? `That's already been done, so we didn't ${action} again. Refresh the page to see the current state.`;
 
         case status === 413:
-            return `That file is too large to upload. Pick a smaller one, or photograph the document again at a lower resolution, and try again.`;
+            return `That file is too large to upload. Pick a smaller one, or save the document again at a lower resolution, and try again.`;
 
         case status === 429:
             return `You've tried a few times in quick succession. Wait about a minute, then try again.`;
@@ -118,7 +118,7 @@ export function describeCameraError(err: unknown): string {
         case 'TrackStartError':
             return 'Your camera is already being used by another app. Close Zoom, Meet, Teams or any other tab using the camera, then try again.';
         case 'OverconstrainedError':
-            return "Your camera doesn't support the quality we need. Try a different camera if you have one.";
+            return "Your camera doesn't support the quality we need. Try a different camera or a different device.";
         case 'SecurityError':
             return 'The camera can only be used on a secure connection. Make sure the address starts with https:// and try again.';
         default:
@@ -129,5 +129,5 @@ export function describeCameraError(err: unknown): string {
 /** File too big, said before an upload is attempted rather than after. */
 export function describeOversizeFile(bytes: number, maxBytes: number): string {
     const mb = (n: number) => (n / (1024 * 1024)).toFixed(1).replace(/\.0$/, '');
-    return `That file is ${mb(bytes)} MB, and the limit is ${mb(maxBytes)} MB. Take the photo again at a lower resolution, or use your phone's built-in option to reduce the image size, then upload it again.`;
+    return `That file is ${mb(bytes)} MB, and the limit is ${mb(maxBytes)} MB. Take the photo again at a lower resolution, or use your phone's built-in option to reduce the image size or upload an alternative document with a smaller size, then upload it again.`;
 }

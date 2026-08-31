@@ -44,8 +44,8 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
     exit_fullscreen: {
         icon: '🖥️',
         title: 'You left fullscreen',
-        what: 'The exam window stopped being fullscreen, usually the Escape key, F11, or the Windows/Command key.',
-        fix: 'Return to fullscreen and stay there until you submit.',
+        what: 'The exam window stopped being fullscreen, usually due to the Escape key, F11, or the Windows/Command key.',
+        fix: 'Return to fullscreen and stay there until you submit your exam.',
     },
     tab_switch: {
         icon: '🔀',
@@ -75,13 +75,13 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
         icon: '⚠️',
         title: 'The face on camera did not match your profile',
         what: 'The face in frame did not match the photo you enrolled when you registered.',
-        fix: 'Only the registered participant may sit this Innovation Olympiad exam. Make sure it is you in frame, well lit.',
+        fix: 'Only the registered participants are allowed to appear in the Bharat Innovation Olympiad exam. Make sure it is you in the frame, well lit.',
     },
     multiple_faces: {
         icon: '👥',
         title: 'More than one person was on camera',
         what: 'The camera saw more than one face in the frame.',
-        fix: 'Sit alone. Ask anyone else in the room to move out of the camera view.',
+        fix: 'You need to appear for the exam alone without any assistance. Another person needs to go out of the room to avoid an exam violation.',
     },
     screen_capture: {
         icon: '📷',
@@ -94,7 +94,7 @@ const VIOLATION_COPY: Record<ViolationKind, ViolationCopy> = {
 export function violationCopy(kind: ViolationKind): ViolationCopy {
     return VIOLATION_COPY[kind] ?? {
         icon: '⚠️',
-        title: 'Exam rule broken',
+        title: 'Exam code violation',
         what: 'An exam integrity rule was broken.',
         fix: 'Follow the on-screen instructions and keep the exam in fullscreen.',
     };
@@ -116,9 +116,9 @@ export function violationCopy(kind: ViolationKind): ViolationCopy {
 export function violationConsequence(count: number, threshold: number): string {
     const noun = count === 1 ? 'violation' : 'violations';
     if (count >= threshold) {
-        return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Your exam has not been stopped and you can carry on, but it has passed the point where a person will review what was recorded before your result is confirmed.`;
+        return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Your exam has not been stopped, and you can carry on, but your violations will be reviewed by the team before your result is confirmed.`;
     }
-    return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Nothing has been taken away, keep going. Violations are only a record, and a person reads them before anything is concluded.`;
+    return `That is ${count} ${noun} recorded on this Innovation Olympiad exam. Nothing has been taken away, keep going. Violations are only a record, and the exam team will review them before the result is confirmed.`;
 }
 
 // ── Submission errors ───────────────────────────────────────────────────────

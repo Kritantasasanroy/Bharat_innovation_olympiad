@@ -18,26 +18,23 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
             <h3 className="payment-terms__heading">Before you pay</h3>
             <ul className="payment-terms__list">
                 <li>
-                    <strong>One-time fee.</strong> It unlocks every published Olympiad exam on your
-                    account for this season. There is no per-exam charge and nothing to renew.
+                    <strong>One-time fee.</strong> It unlocks the published Olympiad exam on your
+                    account for this season.
                 </li>
                 <li>
-                    <strong>Non-refundable.</strong> The fee cannot be refunded once paid, whether or
-                    not you go on to sit an exam.
+                    <strong>Non-refundable.</strong> The fee cannot be refunded once paid under any circumstances.
                 </li>
                 <li>
                     <strong>Non-transferable.</strong> It cannot be moved to another participant, another
                     account, or a later season.
                 </li>
                 <li>
-                    <strong>Your schedule is separate, and final.</strong> After paying you choose a
-                    sitting for each exam. Once confirmed, a schedule cannot be changed from your
+                    <strong>Your schedule is fixed and final.</strong> After paying you choose/allot an exam schedule for your exam. Once confirmed, a schedule cannot be changed from your
                     account.
                 </li>
                 {!compact && (
                     <li>
-                        <strong>The practice Innovation Olympiad exam stays free.</strong> You can take it as many times
-                        as you like, before or after paying.
+                        <strong>The practice Innovation Olympiad exam stays free.</strong> You can appear for it to get used to the online exam environment.
                     </li>
                 )}
             </ul>

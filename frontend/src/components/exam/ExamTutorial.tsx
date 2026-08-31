@@ -51,7 +51,7 @@ const MARKERS: Marker[] = [
     },
     {
         n: 3,
-        title: 'Your warnings',
+        title: 'Your violations & warnings',
         body: 'Starts at 0 of 3 and goes up if you break a rule. Each time it rises, a message tells you exactly what happened. Hover the small "i" for the full list.',
     },
     {
@@ -67,7 +67,7 @@ const MARKERS: Marker[] = [
     {
         n: 6,
         title: 'Your camera',
-        body: 'A small preview so you can see what the camera sees. Green dot means it can see one face, yours. Red means it cannot see you.',
+        body: 'A small preview so you can see what the camera sees. Green dot means it can see one face, yours. Red means it cannot see you. Limon is your smart invigilator for the exam.',
     },
     {
         n: 7,
@@ -87,7 +87,7 @@ const MARKERS: Marker[] = [
     {
         n: 10,
         title: 'Jump to any question',
-        body: 'Every question in the Innovation Olympiad exam, grouped by part. Click any number to go straight there, in any order, as many times as you like.',
+        body: 'Every question in the Innovation Olympiad exam, grouped by sections. Click any number to go straight there, in any order, as many times as you like.',
     },
     {
         n: 11,
@@ -147,7 +147,7 @@ export default function ExamTutorial() {
                 aria-expanded={open}
             >
                 <span>
-                    <h2 style={{ margin: 0 }}>🗺️ What the exam screen looks like</h2>
+                    <h2 style={{ margin: 0 }}>What the exam screen looks like - A quick tour of where everything is, before you start. Worth two minutes if this is your first online Innovation Olympiad exam.</h2>
                     <span className="exam-tutorial__sub">
                         A quick tour of where everything is, before you start. Worth two minutes if
                         this is your first Innovation Olympiad exam.
@@ -162,7 +162,7 @@ export default function ExamTutorial() {
                         <svg
                             viewBox="0 0 620 290"
                             role="img"
-                            aria-label="Diagram of the exam screen: a header with the Innovation Olympiad exam name, question number, warning count, reload button, timer and camera preview; a question area with answer options and navigation buttons; and a sidebar listing every question number."
+                            aria-label="Diagram of the exam screen: a header with the Bharat Innovation Olympiad exam name, question number, warning count, reload button, timer and camera preview; a question area with answer options and navigation buttons; and a sidebar listing every question number."
                             className="exam-tutorial__svg"
                         >
                             {/* Screen outline */}
@@ -258,9 +258,9 @@ export default function ExamTutorial() {
 
                     <div className="exam-tutorial__note exam-tutorial__note--practice">
                         <strong>The best version of this tour is the practice Innovation Olympiad exam.</strong> It is
-                        free, unlimited, and runs in exactly this screen with a real timer and a real
+                        free, and runs in exactly this screen with a real timer and a real
                         camera. Sit it once on the device you plan to use, and none of the above will
-                        be new on exam day.
+                        be new on exam day. It will help you get used to the online exam environment.
                     </div>
                 </div>
             )}

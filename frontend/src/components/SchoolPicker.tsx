@@ -273,8 +273,8 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                 School
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
-                Your results are grouped by school, so your teachers can see how your class did.
-                Every participant needs one. Search by name, pincode, or both.
+                Your results are grouped by school, so school level ranking & reports can be made.
+                Every participant needs one. Most participants should just search by name: a school code is only for participants whose school handed them one.
             </p>
 
             <div className="school-tabs">

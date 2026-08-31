@@ -88,7 +88,7 @@ function GuardianPageInner() {
                             <h2 style={{ margin: 0 }}>Parent consent recorded</h2>
                             <p className="text-muted" style={{ margin: 0 }}>
                                 {saved
-                                    ? 'Thank you. The ward can now sit their exams.'
+                                    ? 'Thank you. Your child can now take the Olympiad exam'
                                     : 'This is already complete, there is nothing more to do here.'}
                             </p>
                         </div>
@@ -115,10 +115,10 @@ function GuardianPageInner() {
     return (
         <main className="container page-content animate-fade-in" style={{ maxWidth: '720px' }}>
             <div className="page-header">
-                <h1>Parent / guardian details</h1>
+                <h1>Parent / guardian consent</h1>
                 <p className="text-muted">
-                    One more step before an exam can be started. It takes about two minutes, and only
-                    needs doing once.
+                    One more step before an exam can be started. It takes about two minutes and is
+                    one-time only.
                 </p>
             </div>
 
@@ -128,7 +128,7 @@ function GuardianPageInner() {
                 style={{ padding: '1rem 1.25rem', marginBottom: 'var(--space-5)', borderLeft: '4px solid var(--color-primary)' }}
             >
                 <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
-                    Every participant is a school ward, so the law requires a parent or guardian
+                    Every participant is a minor, so the law requires a parent or guardian
                     to consent before we can proctor an exam or process their data. You can read what
                     that covers in the{' '}
                     <Link href="/terms" target="_blank" rel="noopener noreferrer">

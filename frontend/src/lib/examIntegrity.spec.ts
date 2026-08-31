@@ -54,7 +54,7 @@ describe('violationCopy', () => {
     });
 
     it('falls back rather than throwing on an unknown kind', () => {
-        expect(violationCopy('nonsense' as ViolationKind).title).toBe('Exam rule broken');
+        expect(violationCopy('nonsense' as ViolationKind).title).toBe('Exam code violation');
     });
 });
 

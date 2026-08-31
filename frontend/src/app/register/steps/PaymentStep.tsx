@@ -86,7 +86,7 @@ export default function PaymentStep({
 
     useEffect(() => {
         loadPass()
-            .catch(() => setError('We could not check whether you have already paid. You can still pay below, if you have already paid, use “I have paid, check now”.'))
+            .catch(() => setError('We could not verify your payment status. You can still pay below, if you have already paid, use "I have paid, check now".'))
             .finally(() => setLoading(false));
         // Always clear the timer on unmount — a poll firing after the student has
         // navigated away sets state on a dead component.
@@ -145,9 +145,7 @@ export default function PaymentStep({
             const p = await loadPass();
             if (!p.isActive) {
                 setError(
-                    "We can't see your payment yet. Bank confirmations can take a minute or two, " +
-                        'wait a moment and check again. If you have already been charged, use ' +
-                        '“Already paid but still locked?” below and we will unlock it by hand.',
+                    "We can't see your payment yet. Bank confirmations can take a minute or two, wait a moment and check again. If you have already been charged, use \"Already paid but still locked?\" below and the system will verify & unlock.",
                 );
             }
         } catch (err) {
@@ -245,8 +243,7 @@ export default function PaymentStep({
                 politeness — a different email means the unlock cannot find them. */}
             <div className="pay-callout">
                 On the payment page, enter this exact email address:
-                <strong className="pay-callout__email">{studentEmail}</strong>
-                That is how your account is unlocked automatically once you pay.
+                <strong className="pay-callout__email">{studentEmail}</strong>. That is how your registration is confirmed automatically once you pay.
             </div>
 
             {error && <div className="auth-error">{error}</div>}
@@ -285,11 +282,11 @@ export default function PaymentStep({
                 showing it earlier would invite tickets for payments about to land. */}
             {(pollsExhausted || claimOpen) && !claimSent && (
                 <div className="pay-claim">
-                    <h4>Paid, but still locked?</h4>
+                    <h4>Paid, but exam is still locked?</h4>
                     <p>
                         Your payment is safe. Give us the Razorpay payment id from your confirmation
                         message or email (it looks like <code>pay_XXXXXXXXXXXX</code>) and we will
-                        unlock your account by hand.
+                        verify your exam schedule from the admin side.
                     </p>
                     <input
                         className="input-field"

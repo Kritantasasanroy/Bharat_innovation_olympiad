@@ -74,8 +74,8 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
             on.
         </>,
         <>
-            <strong>If you stay away longer than {EXAM_PAUSE_TIMEOUT_SEC} seconds, your Innovation Olympiad exam is
-            sent in for you</strong> and you cannot go back to it. A countdown shows you exactly
+            <strong>If you stay away longer than {EXAM_PAUSE_TIMEOUT_SEC} seconds, your Innovation Olympiad exam will
+            be submitted for you and you cannot go back to it.</strong> A countdown shows you exactly
             how long you have left to return. Along with your time running out, this is the{' '}
             <strong>only</strong> way your exam can end by itself.
         </>,
@@ -83,9 +83,9 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
             <strong>Some things are recorded as violations, but none of them stops your
             exam.</strong> Leaving fullscreen, switching tab or app, your face not being visible or
             not matching, more than one person on camera, a screenshot, or refreshing the page.
-            Each one tells you on screen what happened, and a photo is taken at that moment. Once
+            Each violation warning tells you on screen what happened, and a photo is taken at that moment. Once
             you pass {VIOLATION_REVIEW_THRESHOLD}, a person reads the record before your result is
-            confirmed. Keep answering, and tell us afterwards if something went wrong.
+            confirmed &amp; verified. Keep answering, and tell us afterwards if something went wrong.
         </>,
         // Named separately because it is the one thing students most often do by
         // reflex when a page looks stuck, and the in-exam ↻ Reload button is the
@@ -103,13 +103,13 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
         </>,
         <>
             <strong>Your time does not start until you see your first question.</strong> There is a
-            &ldquo;Getting your exam ready&rdquo; screen first, while your camera starts up. None of
-            that comes out of your exam time.
+            &quot;Getting your exam ready&quot; screen first, while your camera starts up. None of
+            that counts in your exam time.
         </>,
         ...(exam?.sectionCount && exam.sectionCount > 1
             ? [
                   <>
-                      <strong>The Innovation Olympiad exam has {exam.sectionCount} parts.</strong> You go through them
+                      <strong>The Innovation Olympiad exam has {exam.sectionCount} multiple sections.</strong> You go through them
                       in order, and you can move back and forth between questions as much as you
                       like.
                   </>,
