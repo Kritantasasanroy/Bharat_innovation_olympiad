@@ -19,6 +19,7 @@ export interface DirectoryEntry {
 }
 
 const SEARCH_LIMIT = 25;
+const NAME_MIN_LENGTH = 3;
 
 /** How long search results are kept in the in-process cache (ms). */
 const CACHE_TTL_MS = 60_000;
@@ -30,6 +31,15 @@ interface CacheEntry {
 
 /** Tiny in-process LRU-free cache keyed by normalised query string. */
 const searchCache = new Map<string, CacheEntry>();
+
+export interface SearchSchoolsQuery {
+    /** Legacy single-field search (name, city or pincode). Kept for backward compatibility. */
+    q?: string;
+    /** Search by school or city name. Optional. */
+    name?: string;
+    /** Search by exact pincode. Optional. */
+    pincode?: string;
+}
 
 const toEntry = (s: {
     id: string;
@@ -66,32 +76,65 @@ export class SchoolDirectoryService {
     ) {}
 
     /**
-     * Search by name or pincode, case-insensitively. An empty query lists the
-     * directory, onboarded schools first — those are the ones with a portal, and
-     * the ones a student is most likely to want.
+     * Search the directory of **onboarded** schools. Student-added schools that
+     * have not yet been approved (onboardedAt is null) are intentionally excluded,
+     * so a school only appears once staff or a partner has officially onboarded it.
+     *
+     * Searches by legacy single query (`q`) or by `name` and/or `pincode`. If both
+     * `name` and `pincode` are provided they are combined with AND. The directory
+     * never returns an unfiltered "all schools" list — at least one search term is
+     * required, which keeps the initial load instant.
      */
-    async search(query?: string): Promise<DirectoryEntry[]> {
-        const q = (query ?? '').trim();
+    async search(query?: SearchSchoolsQuery): Promise<DirectoryEntry[]> {
+        const q = query?.q?.trim();
+        const name = query?.name?.trim();
+        const pincode = query?.pincode?.trim();
+
+        const cacheKey = JSON.stringify({ q, name, pincode });
 
         // Fast path: serve from cache while the entry is fresh.
-        const cached = searchCache.get(q);
+        const cached = searchCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.results;
         }
 
-        const where: Prisma.SchoolWhereInput = q
-            ? {
-                  OR: [
-                      { name: { contains: q, mode: 'insensitive' } },
-                      { pincode: { startsWith: q } },
-                      { city: { contains: q, mode: 'insensitive' } },
-                  ],
-              }
-            : {};
+        const where: Prisma.SchoolWhereInput = {
+            // Only officially onboarded schools are visible in the student directory.
+            onboardedAt: { not: null },
+        };
+
+        if (q) {
+            where.OR = [
+                { name: { contains: q, mode: 'insensitive' } },
+                { pincode: { startsWith: q } },
+                { city: { contains: q, mode: 'insensitive' } },
+            ];
+        } else {
+            const filters: Prisma.SchoolWhereInput[] = [];
+            if (name && name.length >= NAME_MIN_LENGTH) {
+                filters.push({
+                    OR: [
+                        { name: { contains: name, mode: 'insensitive' } },
+                        { city: { contains: name, mode: 'insensitive' } },
+                    ],
+                });
+            }
+            if (pincode && isValidPincode(pincode)) {
+                filters.push({ pincode });
+            }
+
+            if (filters.length) {
+                where.AND = filters;
+            } else {
+                // No usable search terms: return an empty list immediately rather
+                // than loading every school. This keeps the first open instant.
+                return [];
+            }
+        }
 
         const schools = await this.prisma.school.findMany({
             where,
-            orderBy: [{ onboardedAt: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }],
+            orderBy: { name: 'asc' },
             take: SEARCH_LIMIT,
             select: {
                 id: true,
@@ -110,7 +153,7 @@ export class SchoolDirectoryService {
         for (const [key, entry] of searchCache) {
             if (entry.expiresAt <= now) searchCache.delete(key);
         }
-        searchCache.set(q, { results, expiresAt: now + CACHE_TTL_MS });
+        searchCache.set(cacheKey, { results, expiresAt: now + CACHE_TTL_MS });
 
         return results;
     }

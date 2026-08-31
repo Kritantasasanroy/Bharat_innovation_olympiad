@@ -2723,9 +2723,24 @@ h4 {
 }
 
 .school-code-row,
-.school-add__actions {
+.school-add__actions,
+.school-search-row {
   display: flex;
   gap: var(--space-2);
+}
+
+.school-search-row {
+  flex-wrap: wrap;
+}
+
+.school-search-field {
+  flex: 1 1 48%;
+  min-width: 180px;
+}
+
+.school-search-field .input-label {
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
 }
 
 .school-add {

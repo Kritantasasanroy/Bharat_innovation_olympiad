@@ -13,6 +13,46 @@ function createFakeDb() {
             return acc;
         }, {});
 
+    const matchesWhere = (school: any, where: any): boolean => {
+        if (!where) return true;
+
+        // onboardedAt: { not: null }
+        if (where.onboardedAt?.not === null) {
+            if (school.onboardedAt === null || school.onboardedAt === undefined) return false;
+        }
+
+        // pincode exact / startsWith
+        if (where.pincode) {
+            if (typeof where.pincode === 'string') {
+                if (school.pincode !== where.pincode) return false;
+            } else if (where.pincode.startsWith) {
+                if (!school.pincode.startsWith(where.pincode.startsWith)) return false;
+            }
+        }
+
+        // OR
+        if (where.OR) {
+            return where.OR.some((clause: any) => matchesWhere(school, clause));
+        }
+
+        // AND
+        if (where.AND) {
+            return where.AND.every((clause: any) => matchesWhere(school, clause));
+        }
+
+        // name / city contains
+        if (where.name?.contains) {
+            const needle = where.name.contains.toLowerCase();
+            if (!school.name.toLowerCase().includes(needle)) return false;
+        }
+        if (where.city?.contains) {
+            const needle = where.city.contains.toLowerCase();
+            if (!school.city.toLowerCase().includes(needle)) return false;
+        }
+
+        return true;
+    };
+
     const prisma: any = {
         school: {
             findUnique: async ({ where }: any) => {
@@ -20,15 +60,7 @@ function createFakeDb() {
                 return schools.find((s) => Object.entries(flat).every(([k, v]) => s[k] === v)) ?? null;
             },
             findMany: async ({ where }: any) => {
-                const q: string | undefined = where?.OR?.[0]?.name?.contains;
-                if (!q) return [...schools];
-                const needle = q.toLowerCase();
-                return schools.filter(
-                    (s) =>
-                        s.name.toLowerCase().includes(needle) ||
-                        s.pincode.startsWith(q) ||
-                        s.city.toLowerCase().includes(needle),
-                );
+                return schools.filter((s) => matchesWhere(s, where));
             },
             create: async ({ data }: any) => {
                 const clash = schools.find(
@@ -172,20 +204,81 @@ describe('findByCode', () => {
 });
 
 describe('search', () => {
-    it('matches on name, city and pincode, case-insensitively', async () => {
+    it('returns onboarded schools only, not student-added schools', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        // Mark the school as onboarded, like a staff approval would.
+        schools[0].onboardedAt = new Date();
+
+        const results = await service.search({ name: 'Bright' });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].onboarded).toBe(true);
+    });
+
+    it('excludes student-added schools from the directory', async () => {
         const { service } = setup();
         await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
 
-        for (const q of ['bright', 'BRIGHT FUTURE', 'nagpur', '441108', '4411']) {
-            await expect(service.search(q)).resolves.toHaveLength(1);
+        const results = await service.search({ name: 'Bright' });
+
+        expect(results).toHaveLength(0);
+    });
+
+    it('matches on name and city, case-insensitively', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
+
+        for (const q of ['bright', 'BRIGHT FUTURE', 'nagpur']) {
+            await expect(service.search({ name: q })).resolves.toHaveLength(1);
         }
     });
 
-    it('never exposes a coordinator', async () => {
-        const { service } = setup();
+    it('matches on pincode', async () => {
+        const { service, schools } = setup();
         await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
 
-        const [entry] = await service.search();
+        await expect(service.search({ pincode: '441108' })).resolves.toHaveLength(1);
+        await expect(service.search({ pincode: '4411' })).resolves.toHaveLength(0); // not valid
+    });
+
+    it('combines name and pincode with AND', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
+
+        await expect(
+            service.search({ name: 'Bright', pincode: '441108' }),
+        ).resolves.toHaveLength(1);
+        await expect(
+            service.search({ name: 'Bright', pincode: '110001' }),
+        ).resolves.toHaveLength(0);
+    });
+
+    it('returns an empty list when no search term is provided', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
+
+        await expect(service.search({})).resolves.toHaveLength(0);
+    });
+
+    it('ignores name searches under 3 characters', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
+
+        await expect(service.search({ name: 'Br' })).resolves.toHaveLength(0);
+    });
+
+    it('never exposes a coordinator', async () => {
+        const { service, schools } = setup();
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        schools[0].onboardedAt = new Date();
+
+        const [entry] = await service.search({ name: 'Bright' });
         expect(Object.keys(entry).sort()).toEqual(
             ['city', 'code', 'id', 'name', 'onboarded', 'pincode', 'state'].sort(),
         );

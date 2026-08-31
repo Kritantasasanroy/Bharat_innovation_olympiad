@@ -15,8 +15,7 @@ import GuardianStep from './steps/GuardianStep';
 import PaymentStep from './steps/PaymentStep';
 import PresenceStep from './steps/PresenceStep';
 import type { DirectorySchool } from '@/lib/schools';
-import { searchSchools } from '@/lib/schools';
-import { FormEvent, useState, useEffect, useRef } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 
 /**
  * Student registration, in six steps.
@@ -85,18 +84,8 @@ export default function RegisterPage() {
     const user = useAuthStore((s) => s.user);
     const router = useRouter();
 
-    // Pre-warm the school list as soon as the details step is shown.
-    // The fetch fires in the background while the student fills in their name
-    // and email, so by the time they reach the school field the list is ready.
-    const prewarmRef = useRef<DirectorySchool[] | null>(null);
-    useEffect(() => {
-        if (step !== 'details' || prewarmRef.current) return;
-        const controller = new AbortController();
-        searchSchools('', controller.signal)
-            .then((schools) => { prewarmRef.current = schools; })
-            .catch(() => { /* ignore — SchoolPicker will retry on focus */ });
-        return () => controller.abort();
-    }, [step]);
+    // The school directory is no longer pre-warmed. Searches are now pincode- or
+    // name-driven, so the dropdown only loads once the student starts typing.
 
     // ── Step 0: presence + terms acknowledgements ──
     const [presenceAck, setPresenceAck] = useState(false);
@@ -498,7 +487,6 @@ export default function RegisterPage() {
                             onChange={setSchool}
                             section={section}
                             onSectionChange={setSection}
-                            initialResults={prewarmRef.current ?? undefined}
                         />
                         </div>
 

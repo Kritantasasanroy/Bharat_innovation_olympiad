@@ -279,9 +279,61 @@ export class AdminManagementService {
             partnerId: s.partnerId,
             partnerName: s.partnerId ? (partnerName.get(s.partnerId) ?? null) : null,
             onboardedAt: s.onboardedAt,
-            status: s.onboardedAt ? 'ACTIVE' : 'DIRECTORY_ONLY',
+            status: s.onboardedAt ? 'ACTIVE' : 'STUDENT_ADDED',
             members: s._count.users,
             coordinator: s.accessRequest,
+        }));
+    }
+
+    /**
+     * Schools that students have added themselves, but which have not yet been
+     * onboarded by staff or a partner. Shown in the admin "Student-onboarded schools"
+     * section with the students who selected them.
+     */
+    async listStudentSchools(params: { q?: string } = {}) {
+        const where: Prisma.SchoolWhereInput = { onboardedAt: null };
+        if (params.q?.trim()) {
+            const q = params.q.trim();
+            where.OR = [
+                { name: { contains: q, mode: 'insensitive' } },
+                { code: { contains: q, mode: 'insensitive' } },
+                { city: { contains: q, mode: 'insensitive' } },
+                { pincode: { contains: q } },
+            ];
+        }
+
+        const schools = await this.prisma.school.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: 500,
+            include: {
+                users: {
+                    where: { role: Role.STUDENT },
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        classBand: true,
+                        section: true,
+                        createdAt: true,
+                    },
+                },
+                _count: { select: { users: { where: { role: Role.STUDENT } } } },
+            },
+        });
+
+        return schools.map((s) => ({
+            id: s.id,
+            name: s.name,
+            code: s.code,
+            city: s.city,
+            state: s.state,
+            pincode: s.pincode,
+            members: s._count.users,
+            createdAt: s.createdAt,
+            students: s.users,
         }));
     }
 

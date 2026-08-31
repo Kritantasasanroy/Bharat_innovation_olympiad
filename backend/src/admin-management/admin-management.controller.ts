@@ -73,6 +73,12 @@ export class AdminManagementController {
         return this.service.listSchools({ q, partnerId });
     }
 
+    /** Schools added by students that have not yet been officially onboarded. */
+    @Get('student-schools')
+    listStudentSchools(@Query('q') q?: string) {
+        return this.service.listStudentSchools({ q });
+    }
+
     /** Edit a school, including reassigning it to a different partner (item 20). */
     @Patch('schools/:id')
     updateSchool(

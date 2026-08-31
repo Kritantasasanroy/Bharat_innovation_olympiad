@@ -1,113 +1,86 @@
+# Render Blueprint for the Bharat Innovation Olympiad backend services.
+#
+# This Blueprint deploys the legacy NestJS backend and the new pnpm/Bun/Elysia
+# workspace services into the new Render account. It is intentionally
+# conservative: it wires cross-service URLs and generates app-internal secrets,
+# but it marks all third-party credentials and the database / Redis URLs as
+# `sync: false`. On first deploy, Render will prompt you to fill those values
+# in the dashboard before the services start.
+#
+# Web services use `plan: starter` so they stay awake and can talk to each other
+# over Render's private network. You can downgrade individual services to `free`
+# later from the dashboard; workers do not have a free tier.
+#
+# After the first deploy, run the Drizzle/Prisma migrations against the database
+# you supply. The Blueprint does not run migrations automatically because the
+# DATABASE_URL is external to Render.
+
 services:
-  # ──────────────────────────────────────────────────────────────────────────
-  # NestJS Backend — REST API + WebSocket (Socket.IO / Timer Gateway)
-  # Region: Singapore matches your Neon ap-southeast-1 cluster for low latency
-  # Plan: free — spins down after 15 min idle; warm up the URL before exams.
-  #       Upgrade to 'starter' ($7/mo) for persistent WebSocket connections.
-  # ──────────────────────────────────────────────────────────────────────────
+  # ── Legacy production backend (NestJS + Prisma) ──────────────────────────
   - type: web
-    name: olympiad-backend
-    env: node
+    name: bio-legacy-backend
+    runtime: node
     region: singapore
-    plan: free
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
     rootDir: backend
-    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    # No prisma/migrations/ history exists for this project — schema changes
-    # are kept in sync via `db push`, not `migrate deploy` (which requires a
-    # migrations folder and fails outright without one).
-    startCommand: npx prisma db push --accept-data-loss && node dist/src/main.js
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-
-      # ── Database ───────────────────────────────────────────────────────────
-      # Neon pooler URL (pgbouncer=true) — confirmed working with `prisma db push`.
       - key: DATABASE_URL
         sync: false
-
-      # ── JWT ─────────────────────────────────────────────────────────────────
-      # generateValue: true — Render auto-generates a secure random secret.
-      # Copy the generated value from the Render dashboard if you ever need to
-      # rotate or share it.
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-
-      # ── Admin login credentials (POST /api/auth/admin-login) ────────────
-      - key: ADMIN_EMAIL
+      - key: REDIS_URL
         sync: false
-      - key: ADMIN_PASSWORD
+      - key: PROCTOR_SERVICE_URL
         sync: false
-
-      # ── CORS / Frontend origins ───────────────────────────────────────────
-      # Set these to your exact Vercel production URLs (no trailing slash).
-      # bootstrap.ts and the WebSocket gateway both read these at startup.
+      - key: PROCTOR_API_KEY
+        generateValue: true
       - key: FRONTEND_URL
         sync: false
       - key: ADMIN_FRONTEND_URL
         sync: false
-      # Optional: extra comma-separated origins (custom domains, preview URLs).
+      - key: PARTNER_PORTAL_URL
+        sync: false
+      - key: SCHOOL_PORTAL_URL
+        sync: false
       - key: ALLOWED_ORIGINS
         sync: false
-
-      # ── Razorpay ──────────────────────────────────────────────────────────
-      # PaymentService constructs a Razorpay client at boot unconditionally —
-      # the backend crashes with "key_id or oauthToken is mandatory" without
-      # these set, even in environments where payments aren't in active use.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: onboarding@resend.dev
+      - key: ADMIN_API_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-
-      # ── SMS / OTP ────────────────────────────────────────────────────────
-      # These were previously set by hand in the dashboard and therefore
-      # invisible to the repo, which made an SMS outage impossible to diagnose
-      # from the code. Declared here so the required set is at least discoverable.
-      #
-      # TWOFACTOR_OTP_TEMPLATE=AUTOGEN means "no template appended, use the
-      # 2Factor account default". If sends report Success but never arrive, set
-      # this to the DLT-approved template name. Verify with
-      # GET /api/admin/notifications/sms-health.
       - key: TWOFACTOR_API_KEY
         sync: false
       - key: TWOFACTOR_OTP_TEMPLATE
-        sync: false
-      # Logs the carrier delivery report ~15s after each send, so an
-      # accepted-but-dropped SMS is visible in the Render logs. Default on.
+        value: AUTOGEN
       - key: TWOFACTOR_VERIFY_DELIVERY
-        sync: false
+        value: "true"
       - key: TWOFACTOR_SENDER_ID
         sync: false
       - key: TWOFACTOR_SMS_TEMPLATE
         sync: false
-
-      # ── WhatsApp (WATI) ──────────────────────────────────────────────────
-      # Both are tenant-specific and must match — the endpoint carries the WATI
-      # tenant id in its path. Without them the app logs WhatsApp messages
-      # instead of sending them, and says so at boot.
-      #
-      # Only the four APPROVED templates are ever sent (bio_submission,
-      # bio_schedule, bio_result, bio_reminder). Confirm the account still has
-      # all four with GET /api/admin/whatsapp/health — a template renamed or
-      # deleted on the WATI side is invisible from the code.
-      - key: WATI_API_ENDPOINT
-        sync: false
-      - key: WATI_ACCESS_TOKEN
-        sync: false
-      # Kill switch for a live cohort. `false` stops every WhatsApp send and
-      # leaves email and SMS alone. Default on.
-      - key: WHATSAPP_ENABLED
-        sync: false
-      # The T-1 day exam reminder sweeper, which runs hourly in-process.
-      - key: WHATSAPP_REMINDERS_ENABLED
-        sync: false
-
-      # ── Media storage ────────────────────────────────────────────────────
-      # Cloudinary is what the code defaults to (see object-storage.service.ts).
-      # A stale AWS_S3_BUCKET without these will 503 every media upload.
       - key: STORAGE_PROVIDER
         sync: false
       - key: CLOUDINARY_CLOUD_NAME
@@ -116,95 +89,74 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-
-      # ── Google Drive question-image gallery ──────────────────────────────
-      # The folder must be shared "Anyone with the link — Viewer". Used by
-      # POST /admin/media/sync-drive.
-      #
-      # The API key is optional: without one the folder is listed anonymously
-      # from its own public folder page (google-drive.service.ts). Set it to use
-      # the Drive API instead, which is also the only way to list a folder that
-      # is not link-shared.
       - key: GOOGLE_DRIVE_API_KEY
         sync: false
-      # A folder id, not a secret — committed so a fresh deploy can sync the
-      # question images without anyone remembering to fill in the dashboard.
       - key: GOOGLE_DRIVE_GALLERY_FOLDER_ID
         value: 17uieaNy6KULjNjJ-47AIcIrEn_QROR52
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_S3_BUCKET
+        value: bio-olympiad-prod
+      - key: WATI_API_ENDPOINT
+        sync: false
+      - key: WATI_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_ENABLED
+        value: "true"
+      - key: WHATSAPP_REMINDERS_ENABLED
+        value: "true"
 
-      # ── Redis (optional) ─────────────────────────────────────────────────
-      # Required only if TimerService uses Redis for distributed state.
-      # Add a Render Redis instance and paste its Internal Redis URL here.
+  # ── New workspace services (Bun/Elysia) ──────────────────────────────────
+
+  - type: web
+    name: bio-exam-api
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/exam-api build
+    startCommand: pnpm --filter @bio/exam-api exec bun run dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        sync: false
       - key: REDIS_URL
         sync: false
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # bio-portal-api — Bun/Elysia partner-portal seam (services/portal-api).
-  #
-  # Both bio-portal-api and bio-admin-api below were previously created by
-  # hand in the Render dashboard as plain Node web services with no build/
-  # start commands of their own, which is why they showed "Failed deploy":
-  # neither service's package.json defined a "start" script (Render's own
-  # documented Bun pattern is Build: `bun install`, Start: `bun start`), and
-  # there was nothing to run after a build that otherwise succeeded. Both
-  # gaps are fixed in the services' package.json; these entries give Render
-  # the exact commands, verified locally in a Node+Bun container against
-  # this same repo before being committed.
-  #
-  # Installs via pnpm at the repo root rather than a standalone `bun install`
-  # in services/portal-api, even though this service has no workspace:*
-  # dependencies of its own and could install standalone. Kept consistent
-  # with bio-admin-api (which genuinely needs pnpm — see below) so the whole
-  # workspace has exactly one lockfile, pnpm-lock.yaml: a per-service
-  # `bun install` would have produced its own bun.lock, a second, redundant
-  # source of truth for dependency versions that no other service here has.
-  # ──────────────────────────────────────────────────────────────────────────
-  - type: web
-    name: bio-portal-api
-    env: node   # Render's native Node runtime ships Bun on PATH — see render.com/docs/deploy-elysiajs
-    region: singapore
-    plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.32.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @bio/portal-api build
-    startCommand: pnpm --filter @bio/portal-api start
-    envVars:
       - key: JWT_SECRET
-        sync: false
-      # Base URL of bio-admin-api (below) once it has its own Render URL —
-      # defaults to localhost otherwise, which only works for local dev.
-      - key: ADMIN_API_URL
-        sync: false
+        generateValue: true
       - key: CORS_ORIGIN
         sync: false
-      - key: PARTNER_SUPPORT_EMAIL
-        sync: false
-      - key: STUDENT_APP_URL
-        sync: false
-      - key: SCHOOL_APP_URL
+      - key: LOG_LEVEL
+        value: info
+      - key: DEMO_EXAM_IDS
         sync: false
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # bio-admin-api — Bun/Elysia partner-engine API (services/admin-api).
-  # NOT standalone: it depends on workspace:* packages (@bio/admin-shared-types,
-  # @bio/domain-contracts, etc.), and Bun's own installer does not read this
-  # repo's pnpm-workspace.yaml (only npm/Yarn-style package.json "workspaces" —
-  # see oven-sh/bun#11874), so `bun install` run inside services/admin-api can
-  # never resolve them. rootDir is deliberately left at the repo root, so the
-  # build installs with pnpm (which does resolve the workspace correctly) and
-  # only hands off to bun for this service's own build/run step.
-  #
-  # Fails closed on boot without DATABASE_URL, REDIS_URL, CORS_ORIGIN,
-  # JWT_SECRET and a matching CONTRACT_VERSION — see
-  # services/admin-api/src/config/admin-config.ts. All required, none have
-  # dev-secret defaults on purpose.
-  # ──────────────────────────────────────────────────────────────────────────
   - type: web
     name: bio-admin-api
-    env: node
+    runtime: node
     region: singapore
-    plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.32.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @bio/admin-api build
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/admin-api build
     startCommand: pnpm --filter @bio/admin-api start
+    healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
@@ -212,25 +164,163 @@ services:
       - key: CORS_ORIGIN
         sync: false
       - key: JWT_SECRET
-        sync: false
-      # Must equal @bio/admin-contract-fixtures' EXPECTED_CONTRACT_VERSION
-      # (currently "0.1.0") or the service refuses to boot — see
-      # src/contracts/version-guard.ts.
+        generateValue: true
+      - key: BANK_DETAILS_ENCRYPTION_KEY
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
       - key: CONTRACT_VERSION
         value: "0.1.0"
+
+  - type: web
+    name: bio-portal-api
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/portal-api build
+    startCommand: pnpm --filter @bio/portal-api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
       - key: PORT
         value: "3000"
-      # AES-256-GCM key for partner bank-details encryption at rest
-      # (services/admin-api/src/infra/bank-details-encryption.ts) — a
-      # dedicated key, separate from JWT_SECRET and the legacy backend's
-      # access-token seal key. Fails closed on boot without it.
-      - key: BANK_DETAILS_ENCRYPTION_KEY
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_API_URL
         sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: PARTNER_SUPPORT_EMAIL
+        value: partners@bharatolympiad.in
+      - key: STUDENT_APP_URL
+        sync: false
+      - key: SCHOOL_APP_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info
 
-  # Note: there is no separate proctor service. All AI proctoring (face
-  # detection, gaze estimation, identity matching) runs client-side in the
-  # student's browser via face-api.js — see frontend/src/hooks/useFaceProctor.ts.
-  # The Python FastAPI proctor-service this file used to deploy as
-  # "olympiad-proctor" was removed when the project migrated off Meazure
-  # Learning; do not re-add it without also restoring the proctor-service/
-  # directory.
+  # ── Background workers ───────────────────────────────────────────────────
+
+  - type: worker
+    name: bio-admin-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/admin-worker build
+    startCommand: pnpm --filter @bio/admin-worker exec bun run dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4101"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: bio-analytics-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/analytics-worker build
+    startCommand: pnpm --filter @bio/analytics-worker exec bun run dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4102"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: bio-publish-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/publish-worker build
+    startCommand: pnpm --filter @bio/publish-worker exec bun run dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4103"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: bio-results-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/results-worker build
+    startCommand: pnpm --filter @bio/results-worker exec bun run dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4104"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: bio-scoring-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    repo: https://github.com/Kritantasasanroy/Bharat_innovation_olympiad.git
+    branch: main
+    rootDir: .
+    buildCommand: pnpm install && pnpm --filter @bio/scoring-worker build
+    startCommand: pnpm --filter @bio/scoring-worker exec bun run dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4105"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info

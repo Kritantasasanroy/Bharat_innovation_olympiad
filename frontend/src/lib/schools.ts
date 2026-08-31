@@ -33,8 +33,27 @@ async function readError(response: Response, fallback: string): Promise<string> 
     return typeof message === 'string' ? message : fallback;
 }
 
-export async function searchSchools(query: string, signal?: AbortSignal): Promise<DirectorySchool[]> {
-    const url = `${API_URL}/api/schools${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`;
+export interface SearchSchoolsParams {
+    name?: string;
+    pincode?: string;
+    q?: string;
+}
+
+function buildSearchUrl(params: SearchSchoolsParams): string {
+    const search = new URLSearchParams();
+    if (params.q?.trim()) search.set('q', params.q.trim());
+    if (params.name?.trim()) search.set('name', params.name.trim());
+    if (params.pincode?.trim()) search.set('pincode', params.pincode.trim());
+    const qs = search.toString();
+    return `${API_URL}/api/schools${qs ? `?${qs}` : ''}`;
+}
+
+export async function searchSchools(
+    params: string | SearchSchoolsParams = {},
+    signal?: AbortSignal,
+): Promise<DirectorySchool[]> {
+    const p = typeof params === 'string' ? { q: params } : params;
+    const url = buildSearchUrl(p);
     const response = await fetch(url, signal ? { signal } : {});
     if (!response.ok) throw new Error('Could not load schools.');
     return response.json();

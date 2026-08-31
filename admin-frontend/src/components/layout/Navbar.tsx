@@ -45,6 +45,8 @@ const NAV: (NavLeaf | NavGroup)[] = [
             { label: 'Manage people', href: '/students' },
             // Editing a school, and assigning it to a partner.
             { label: 'Schools', href: '/schools' },
+            // Schools students added because they were not yet in the directory.
+            { label: 'Student-onboarded schools', href: '/student-schools' },
             { label: 'Send email', href: '/mail' },
             { label: 'Deletion archive', href: '/archive' },
         ],

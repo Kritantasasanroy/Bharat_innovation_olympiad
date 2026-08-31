@@ -208,7 +208,9 @@ export default function AdminSchoolsPage() {
                                                         {school.code} ·{' '}
                                                         {school.status === 'ACTIVE'
                                                             ? 'Onboarded'
-                                                            : 'Directory only'}
+                                                            : school.status === 'STUDENT_ADDED'
+                                                              ? 'Student added'
+                                                              : 'Directory only'}
                                                     </span>
                                                 </div>
                                             </td>

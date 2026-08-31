@@ -11,11 +11,15 @@ import { SchoolDirectoryService } from './school-directory.service';
 export class SchoolDirectoryController {
     constructor(private directory: SchoolDirectoryService) {}
 
-    /** Search by name, city or pincode. No query lists onboarded schools first. */
+    /** Search by name, city or pincode. Only onboarded schools are returned. */
     @Get()
     @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
-    search(@Query('q') q?: string) {
-        return this.directory.search(q);
+    search(
+        @Query('q') q?: string,
+        @Query('name') name?: string,
+        @Query('pincode') pincode?: string,
+    ) {
+        return this.directory.search({ q, name, pincode });
     }
 
     /** Resolve the code from a school's handover card; forgiving about how it was typed. */
