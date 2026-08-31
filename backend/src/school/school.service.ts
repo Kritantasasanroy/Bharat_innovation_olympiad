@@ -844,6 +844,7 @@ export class SchoolService {
                 where: { id: existing.id },
                 data: {
                     name: request.schoolName,
+                    code: existing.code ?? (await this.allocateSchoolCode(tx)),
                     city: request.city || existing.city,
                     state: request.state || existing.state,
                     board: request.board,
