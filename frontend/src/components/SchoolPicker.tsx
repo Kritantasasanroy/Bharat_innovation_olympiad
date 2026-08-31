@@ -447,7 +447,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                     </div>
                     <p className="input-hint" style={{ marginTop: '0.25rem' }}>
                         You can fill in either field or both. Pincode is the fastest way to find
-                        your school.
+                        your school. Type at least 3 letters of the school name to see the list.
                     </p>
 
                     {open && (name.trim().length >= NAME_MIN_LENGTH || pincode.replace(/\D/g, '').length === PINCODE_LENGTH) && (
