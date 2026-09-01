@@ -50,14 +50,29 @@ export default function LoginPage() {
 			<div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 50 }}>
 				<ThemeToggle />
 			</div>
+			<div style={{ position: "fixed", top: "1rem", left: "1rem", zIndex: 50 }}>
+				<Link
+					href="/"
+					style={{
+						fontSize: "0.85rem",
+						fontWeight: 500,
+						color: "var(--text-secondary)",
+						textDecoration: "none",
+					}}
+				>
+					← Back to home
+				</Link>
+			</div>
 			<div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-				<Image
-					src="/bio-logo.png"
-					alt="Bharat Innovation Olympiad"
-					width={160}
-					height={48}
-					style={{ height: "48px", width: "auto", objectFit: "contain" }}
-				/>
+				<Link href="/">
+					<Image
+						src="/bio-logo.png"
+						alt="Bharat Innovation Olympiad"
+						width={160}
+						height={48}
+						style={{ height: "48px", width: "auto", objectFit: "contain" }}
+					/>
+				</Link>
 			</div>
 			<div className="page-header">
 				<h1>Partner sign in</h1>
