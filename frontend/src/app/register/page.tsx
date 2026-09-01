@@ -22,23 +22,24 @@ import { FormEvent, useState, useEffect } from 'react';
  *
  * ## The order, and why it is this order
  *
- * `presence` → `details` → `verify` → `face` → `guardian` → `payment`
+ * `presence` → `details` → `verify` → `payment` → `face` → `guardian`
  *
  *  - **presence first**, before a single field: the student has to be at the
- *    keyboard for the face scan, and discovering that at step 4 is too late.
+ *    keyboard for the face scan, and discovering that at step 5 is too late.
  *    It also carries the T&C acceptance, so nobody types their details before
  *    seeing what they are agreeing to.
  *  - **verify before the account exists**: the account is created at the end of
  *    `verify`, once the email is proven. Everything after that point can rely on
- *    a real, authenticated user, which is why `guardian` and `payment` can simply
- *    call authenticated endpoints.
+ *    a real, authenticated user, which is why `payment`, `face` and `guardian`
+ *    can simply call authenticated endpoints.
+ *  - **payment before face**: paying confirms the season and unlocks the
+ *    dashboard. If a student abandons during the face scan they can still sign
+ *    in and complete it later.
  *  - **face before guardian**: it is the step that needs the student personally,
  *    so it happens while they are certainly still there. The parent section can
  *    be finished by a parent leaning over afterwards.
- *  - **payment last**, and mandatory: paying unlocks the dashboard and every
- *    exam. It is last because a student who abandons here still has a usable
- *    account — they land on the dashboard's locked state and can pay from there,
- *    rather than having no account at all.
+ *  - **guardian last**: it is the only step that does not have to be done by the
+ *    participant, so it is placed last when the student may need a parent.
  *
  * Each step lives in its own component under `./steps/`. Only `details` and
  * `verify` remain inline, because they share the form state and the OTP handshake.
@@ -51,8 +52,8 @@ const STEPS: { id: Step; label: string }[] = [
     { id: 'presence', label: 'Before you start' },
     { id: 'details', label: 'Your details' },
     { id: 'verify', label: 'Verify email' },
-    { id: 'face', label: 'Face scan' },
     { id: 'payment', label: 'Payment' },
+    { id: 'face', label: 'Face scan' },
     { id: 'guardian', label: 'Parent consent' },
 ];
 
@@ -60,9 +61,9 @@ const SUBTITLES: Record<Step, string> = {
     presence: 'Please read this before you begin',
     details: 'Create your participant account',
     verify: 'Verify your email',
+    payment: 'Complete your payment',
     face: 'Enrol your face',
     guardian: 'Parent or guardian consent',
-    payment: 'Complete your registration',
 };
 
 export default function RegisterPage() {
@@ -148,8 +149,8 @@ export default function RegisterPage() {
             const ok = await enrollFace(descriptor, photo);
             if (ok) {
                 stopProctoring();
-                // Face enrolled — proceed to payment, then parent consent follows.
-                setStep('payment');
+                // Face enrolled — proceed to parent consent.
+                setStep('guardian');
             } else {
                 setFaceMsg(
                     "We couldn't save your face scan. Make sure your whole face is lit and in frame, then capture again.",
@@ -265,8 +266,8 @@ export default function RegisterPage() {
             clearReferralCode();
             setSuccess('');
 
-            // Account created — face enrollment is mandatory for new students.
-            setStep('face');
+            // Account created — payment is next, then face enrollment and parent consent.
+            setStep('payment');
         } catch (err: any) {
             console.error('Verify OTP error:', err);
             setError(describeError(err, 'create your account'));
@@ -294,15 +295,15 @@ export default function RegisterPage() {
     };
 
     const stepIndex = STEPS.findIndex((s) => s.id === step);
-    // The account exists from `face` onwards, so leaving is no longer destructive.
-    const accountExists = stepIndex >= STEPS.findIndex((s) => s.id === 'face');
+    // The account exists from `payment` onwards, so leaving is no longer destructive.
+    const accountExists = stepIndex >= STEPS.findIndex((s) => s.id === 'payment');
 
     return (
         <div className="auth-page">
             {/* Limon walks through registration, once, and only on the details
-                step — the later steps are OTP entry, a face scan and a payment
-                page, each of which is a single focused action that a tour would
-                only get in the way of. */}
+                step — the later steps are OTP entry, payment, a face scan and a
+                parent section, each of which is a single focused action that a tour
+                would only get in the way of. */}
             <LimonTour tourId="register" ready={step === 'details'} />
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
                 <ThemeToggle />
@@ -357,7 +358,7 @@ export default function RegisterPage() {
                     <PaymentStep
                         studentEmail={user?.email ?? formData.email}
                         rollNumber={user?.rollNumber}
-                        onDone={() => { setError(''); setStep('guardian'); }}
+                        onDone={() => { setError(''); setStep('face'); }}
                     />
                 ) : step === 'guardian' ? (
                     <GuardianStep
@@ -411,7 +412,7 @@ export default function RegisterPage() {
                             <button
                                 type="button"
                                 className="btn"
-                                onClick={() => { stopProctoring(); setStep('payment'); }}
+                                onClick={() => { stopProctoring(); setStep('guardian'); }}
                                 style={{
                                     background: 'transparent',
                                     color: 'var(--text-secondary)',

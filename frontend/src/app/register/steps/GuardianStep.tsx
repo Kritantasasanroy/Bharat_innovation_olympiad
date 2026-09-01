@@ -6,7 +6,7 @@ import { describeError } from '@/lib/errors';
 import { useState } from 'react';
 
 /**
- * Registration step 5 — the parent/guardian section.
+ * Registration step 6 — the parent/guardian section.
  *
  * A thin wrapper over the shared `GuardianForm` so this and the standalone
  * `/guardian` page collect identical fields and show identical consent wording.

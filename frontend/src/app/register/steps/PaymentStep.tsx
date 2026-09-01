@@ -7,7 +7,7 @@ import { THANK_YOU, NEXT_STEPS } from '@/lib/copy/onboarding';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * The final registration step: pay, and unlock the account.
+ * The payment registration step: pay, and unlock the account.
  *
  * ## How unlocking actually happens
  *
@@ -222,7 +222,7 @@ export default function PaymentStep({
                 </ol>
 
                 <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={onDone}>
-                    Payment Confirmed! Proceed to Parent Details →
+                    Payment Confirmed! Proceed to Face Scan →
                 </button>
             </div>
         );

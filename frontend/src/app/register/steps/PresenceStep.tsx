@@ -11,7 +11,7 @@ import { useState } from 'react';
  * before registration."
  *
  * The failure this exists to prevent is expensive and silent: a parent registers
- * on the child's behalf, enrols *their own* face at step 4, and the child is then
+ * on the child's behalf, enrols *their own* face at step 5, and the child is then
  * flagged for identity mismatch in the middle of a real paper — by which point
  * nothing can be done without support unpicking it. So the warning comes first,
  * has to be acknowledged deliberately, and says what actually goes wrong.

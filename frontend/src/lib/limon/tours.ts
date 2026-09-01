@@ -69,7 +69,7 @@ const REGISTER_TOUR: Tour = {
         {
             target: 'register-steps',
             title: 'Six steps, in this order',
-            body: "Your details, your email code, a face scan, payment, then your parent's section. You may stop after the face scan and finish the rest later from your dashboard. It is best to finish the entire process in one go.",
+            body: "Your details, your email code, payment, a face scan, then your parent's section. You may stop after the payment step and finish the face scan and parent section later from your dashboard. It is best to finish the entire process in one go.",
             mood: 'talking',
             placement: 'bottom',
         },
@@ -93,7 +93,7 @@ const REGISTER_TOUR: Tour = {
         },
         {
             title: 'One thing I have to be firm about',
-            body: "The face scan at step 4 has to be done by you, not a parent. It's what Limon/I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam and may be disqualified.",
+            body: "The face scan at step 5 has to be done by you, not a parent. It's what Limon/I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam and may be disqualified.",
             mood: 'concerned',
         },
     ],

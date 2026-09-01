@@ -35,7 +35,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '🧑‍💻',
         title: 'The exam participant must be present',
-        body: 'Registration ends with a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their Innovation Olympiad exam and may be disqualified.',
+        body: 'Registration includes a face scan that identifies the participant in every exam. If someone else\'s face is enrolled, the participant will be flagged during their Innovation Olympiad exam and may be disqualified.',
     },
     {
         icon: '📷',
@@ -59,7 +59,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '⏱️',
         title: 'Set aside about ten minutes - Registration runs in one sitting',
-        body: 'details, email verification, face scan, the parent consent, and payment.',
+        body: 'details, email verification, payment, face scan, and parent consent.',
     },
 ] as const;
 
@@ -83,10 +83,10 @@ export const NEXT_STEPS = [
     },
 ] as const;
 
-/** The thank-you shown once registration is fully complete. */
+/** The confirmation shown once payment is received. */
 export const THANK_YOU = {
-    heading: 'You\'re registered. Welcome to the Bharat Innovation Olympiad by Lemon Ideas.',
-    body: 'Your registration is confirmed, and your roll number has been issued. We have emailed it to you, so keep that email safe for further reference.',
+    heading: 'Payment received — you\'re almost registered.',
+    body: 'Your roll number has already been issued. Continue with the face scan and parent consent to finish. We have emailed your roll number, so keep that email safe for further reference.',
 } as const;
 
 /**
