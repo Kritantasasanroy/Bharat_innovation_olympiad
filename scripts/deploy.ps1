@@ -24,11 +24,11 @@ $VERCEL_TOKEN = $env_vars['VERCEL_TOKEN']
 if (-not $RENDER_KEY)   { Write-Error 'RENDER_API_KEY not found in .env'; exit 1 }
 if (-not $VERCEL_TOKEN) { Write-Error 'VERCEL_TOKEN not found in .env';   exit 1 }
 
-# Render service IDs (verified 2026-07-18 from .env comments)
+# Render service IDs (verified 2026-09-01 from /v1/services)
 $renderServices = @(
-    [pscustomobject]@{ key = 'backend';    id = 'srv-d9dsra3tqb8s739cs8l0'; name = 'olympiad-backend' }
-    [pscustomobject]@{ key = 'admin-api';  id = 'srv-d9dsko3rjlhs73b9o2eg'; name = 'bio-admin-api'   }
-    [pscustomobject]@{ key = 'portal-api'; id = 'srv-d9dsl2rbc2fs73epsge0'; name = 'bio-portal-api'  }
+    [pscustomobject]@{ key = 'backend';    id = 'srv-daah0j0n74is73au7qrg'; name = 'olympiad-backend' }
+    [pscustomobject]@{ key = 'admin-api';  id = 'srv-daah0hpsrm7s73eug6m0'; name = 'bio-admin-api'   }
+    [pscustomobject]@{ key = 'portal-api'; id = 'srv-daah0idg1s2s73d5ld4g'; name = 'bio-portal-api'  }
 )
 
 # Vercel project IDs (fetched 2026-08-12 via /v9/projects)
