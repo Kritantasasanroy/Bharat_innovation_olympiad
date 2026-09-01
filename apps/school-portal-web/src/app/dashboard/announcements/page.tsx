@@ -10,7 +10,7 @@ export default function AnnouncementsPage() {
 		<main>
 			<div className="page-header">
 				<h1>Announcements</h1>
-				<p className="muted">Updates from the BIO team for your school.</p>
+				<p className="muted">Updates from the Innovation Olympiad team for your school.</p>
 			</div>
 
 			{error && <div className="notice notice--error">{error}</div>}

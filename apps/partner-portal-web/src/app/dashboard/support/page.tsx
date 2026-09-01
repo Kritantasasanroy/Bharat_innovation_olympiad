@@ -54,7 +54,9 @@ export default function SupportPage() {
 		<main>
 			<div className="page-header">
 				<h1>Support</h1>
-				<p>Raise a request with the BIO team. It reaches an admin, who replies here.</p>
+				<p>
+					Raise a request with the Innovation Olympiad team. It reaches an admin, who replies here.
+				</p>
 			</div>
 
 			{error ? <div className="notice notice--error">{error}</div> : null}

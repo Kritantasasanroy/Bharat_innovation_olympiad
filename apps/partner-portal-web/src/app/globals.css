@@ -4,7 +4,7 @@
    distinct design system from admin/student/school, not the same
    tokens remapped onto old class names. Cool neutral surfaces, Plus
    Jakarta Sans for headings, a navy structural accent alongside the
-   BIO brand gradient. Same class names as before so no page JSX had
+   Innovation Olympiad brand gradient. Same class names as before so no page JSX had
    to change; every value underneath is new. Dark stays available as
    an opt-in toggle (ThemeToggle), not the base.
    ══════════════════════════════════════════════════════════════ */
@@ -16,7 +16,7 @@
 :root {
 	color-scheme: light;
 
-	/* Brand gradient — BIO logo: vivid lemon yellow + lime green. Used for
+	/* Brand gradient — Innovation Olympiad logo: vivid lemon yellow + lime green. Used for
 	   primary CTAs and highlights only, never a dominant background. */
 	--primary-50: #fffdeb;
 	--primary-100: #fff6c2;

@@ -77,7 +77,8 @@ async function request<T>(path: string, token: string | null, init: RequestInit 
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: "Could not reach the BIO server. Please check your internet and try again.",
+			message:
+				"Could not reach the Innovation Olympiad server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}
@@ -222,7 +223,8 @@ async function backendRequest<T>(
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: "Could not reach the BIO server. Please check your internet and try again.",
+			message:
+				"Could not reach the Innovation Olympiad server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}
@@ -490,7 +492,8 @@ async function downloadXlsx(path: string, token: string, filename: string): Prom
 		if (cause instanceof ApiError) throw cause;
 		throw new ApiError({
 			code: "NETWORK_ERROR",
-			message: "Could not reach the BIO server. Please check your internet and try again.",
+			message:
+				"Could not reach the Innovation Olympiad server. Please check your internet and try again.",
 			statusCode: 0,
 		});
 	}

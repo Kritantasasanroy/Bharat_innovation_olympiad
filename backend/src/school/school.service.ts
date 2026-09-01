@@ -53,7 +53,7 @@ const ABSENT_SCHOOL_HASH = bcrypt.hashSync('bio-timing-equalizer', 10);
  * partner-submitted coordinator is invited to set a password when they confirm
  * their email, and can also create or reset one at any time through the
  * forgot-password flow. Either way, every approved school can sign in with the
- * coordinator email + password or with the access token BIO staff issue on
+ * coordinator email + password or with the access token Innovation Olympiad staff issue on
  * approval. The token's digest is uniquely indexed, so a token resolves to at
  * most one school and can never sign a different one in.
  */
@@ -186,7 +186,7 @@ export class SchoolService {
         } catch (e) {
             if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
                 throw new ConflictException(
-                    'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+                    'A school application is already in the Innovation Olympiad review queue for this coordinator email. Check your email for an update, or contact Innovation Olympiad support.',
                 );
             }
             throw e;
@@ -218,7 +218,7 @@ export class SchoolService {
         });
         if (existing) {
             throw new ConflictException(
-                'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+                'A school application is already in the Innovation Olympiad review queue for this coordinator email. Check your email for an update, or contact Innovation Olympiad support.',
             );
         }
 
@@ -232,7 +232,7 @@ export class SchoolService {
         });
         if (claimed) {
             throw new ConflictException(
-                'This email already has a BIO account. Use a different coordinator email, or sign in if this is your account.',
+                'This email already has an Innovation Olympiad account. Use a different coordinator email, or sign in if this is your account.',
             );
         }
 
@@ -334,7 +334,7 @@ export class SchoolService {
         });
         if (existingRequest) {
             throw new ConflictException(
-                'A school application is already in the BIO review queue for this coordinator email. Check your email for an update, or contact BIO support.',
+                'A school application is already in the Innovation Olympiad review queue for this coordinator email. Check your email for an update, or contact Innovation Olympiad support.',
             );
         }
         const claimed = await this.prisma.user.findFirst({
@@ -344,7 +344,7 @@ export class SchoolService {
         });
         if (claimed) {
             throw new ConflictException(
-                'This email already has a BIO account. Use a different coordinator email, or sign in if this is your account.',
+                'This email already has an Innovation Olympiad account. Use a different coordinator email, or sign in if this is your account.',
             );
         }
 
@@ -581,7 +581,7 @@ export class SchoolService {
             select: { isActive: true },
         });
         if (!coordinator?.isActive) {
-            throw new ForbiddenException('This school coordinator account is not active. Contact BIO support.');
+            throw new ForbiddenException('This school coordinator account is not active. Contact Innovation Olympiad support.');
         }
 
         await this.prisma.schoolRequest.update({

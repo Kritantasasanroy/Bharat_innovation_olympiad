@@ -128,7 +128,7 @@ export default function VerifySchoolEmailPage() {
 			? "Your school application is in the review queue. Once approved, you can sign in with your email + password or the access token."
 			: state === "set-password"
 				? "Choose a password so you can sign in with your coordinator email as well as the access token once your school is approved."
-				: "Use the link in your BIO email to confirm the coordinator address on your application.";
+				: "Use the link in your Innovation Olympiad email to confirm the coordinator address on your application.";
 
 	return (
 		<main className="page">
@@ -153,14 +153,14 @@ export default function VerifySchoolEmailPage() {
 							</strong>
 							<span>
 								{alreadyVerified
-									? "Your school application remains in the BIO staff review queue."
-									: "Your school application has now entered the BIO staff review queue."}
+									? "Your school application remains in the Innovation Olympiad staff review queue."
+									: "Your school application has now entered the Innovation Olympiad staff review queue."}
 							</span>
 						</div>
 						<div className="verification-steps">
 							<div>
 								<span>1</span>
-								<p>BIO staff review the school and coordinator details.</p>
+								<p>Innovation Olympiad staff review the school and coordinator details.</p>
 							</div>
 							<div>
 								<span>2</span>
@@ -189,8 +189,8 @@ export default function VerifySchoolEmailPage() {
 								<div className="verification-status verification-status--success" role="status">
 									<strong>Password created.</strong>
 									<span>
-										Use this email and password, or the access token BIO emails you once the school
-										is approved.
+										Use this email and password, or the access token Innovation Olympiad emails you
+										once the school is approved.
 									</span>
 								</div>
 								<Link href="/login" className="button">

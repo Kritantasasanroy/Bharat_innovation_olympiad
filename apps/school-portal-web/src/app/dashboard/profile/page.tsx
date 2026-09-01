@@ -69,7 +69,7 @@ export default function ProfilePage() {
 				<h1>Profile</h1>
 				<p className="muted">
 					Your institution and contact details. You can update your contact information here; the
-					school name, pincode and code are set by the BIO team.
+					school name, pincode and code are set by the Innovation Olympiad team.
 				</p>
 			</div>
 

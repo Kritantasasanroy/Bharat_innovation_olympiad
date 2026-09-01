@@ -62,7 +62,7 @@ const PARTNER_STEPS: Step[] = [
 		title: "Receive Payouts & Rewards",
 		tagline: "Direct admin-triggered payouts",
 		description:
-			"BIO staff trigger payouts based on your campaign performance. The moment a payout is triggered, the Payouts tab unlocks for you to enter bank details and receive funds.",
+			"Innovation Olympiad staff trigger payouts based on your campaign performance. The moment a payout is triggered, the Payouts tab unlocks for you to enter bank details and receive funds.",
 		actionHref: "/dashboard/payouts",
 		actionLabel: "View payouts",
 	},

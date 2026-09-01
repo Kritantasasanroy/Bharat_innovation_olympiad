@@ -53,7 +53,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 		});
 	} catch (cause) {
 		if (cause instanceof ApiError) throw cause;
-		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
+		throw new ApiError(`Could not reach the Innovation Olympiad backend at ${BACKEND_API_URL}.`, 0);
 	}
 
 	const raw: unknown = await response.json().catch(() => null);
@@ -144,7 +144,7 @@ async function authed<T>(path: string, token: string): Promise<T> {
 		});
 	} catch (cause) {
 		if (cause instanceof ApiError) throw cause;
-		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
+		throw new ApiError(`Could not reach the Innovation Olympiad backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
 	if (!response.ok) {
@@ -168,7 +168,7 @@ async function authedPost<T>(path: string, token: string, body: unknown): Promis
 		});
 	} catch (cause) {
 		if (cause instanceof ApiError) throw cause;
-		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
+		throw new ApiError(`Could not reach the Innovation Olympiad backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
 	if (!response.ok) {
@@ -292,7 +292,7 @@ async function authedPatch<T>(path: string, token: string, body: unknown): Promi
 		});
 	} catch (cause) {
 		if (cause instanceof ApiError) throw cause;
-		throw new ApiError(`Could not reach the BIO backend at ${BACKEND_API_URL}.`, 0);
+		throw new ApiError(`Could not reach the Innovation Olympiad backend at ${BACKEND_API_URL}.`, 0);
 	}
 	const raw: unknown = await response.json().catch(() => null);
 	if (!response.ok) {
@@ -365,7 +365,7 @@ export const portalApi = {
 	/** Admin announcements visible to this audience. */
 	announcements: (token: string) => authed<Announcement[]>("/school/portal/announcements", token),
 
-	/** School payouts (triggered by BIO admin). */
+	/** School payouts (triggered by Innovation Olympiad admin). */
 	payouts: (token: string) => authed<Payout[]>("/school/portal/payouts", token),
 	/** Masked bank details for payouts. */
 	bankDetails: (token: string) => authed<BankDetails | null>("/school/portal/bank-details", token),

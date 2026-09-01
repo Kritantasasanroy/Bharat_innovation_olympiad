@@ -49,7 +49,7 @@ export default function BillingPage() {
 				<p className="muted">
 					Request a sponsored batch, CSR-funded places, EWS support, merit sponsorship, or an
 					approved deferred-payment arrangement. Your enquiry is saved as a support ticket for the
-					BIO team.
+					Innovation Olympiad team.
 				</p>
 			</div>
 
@@ -60,7 +60,8 @@ export default function BillingPage() {
 			) : null}
 			{submitted ? (
 				<div className="notice notice--success" role="status">
-					Your sponsorship enquiry was sent to the BIO team. We will reply in the Support section.
+					Your sponsorship enquiry was sent to the Innovation Olympiad team. We will reply in the
+					Support section.
 				</div>
 			) : null}
 

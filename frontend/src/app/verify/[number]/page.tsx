@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
  * PUBLIC certificate verification (spec Student §28).
  *
  * Deliberately does NOT use the authenticated `api` client — anyone holding a
- * certificate number must be able to check it without a BIO account. An unknown
+ * certificate number must be able to check it without an Innovation Olympiad account. An unknown
  * or malformed number and a real-but-revoked one are reported differently, but
  * neither leaks anything the certificate itself does not already print.
  */

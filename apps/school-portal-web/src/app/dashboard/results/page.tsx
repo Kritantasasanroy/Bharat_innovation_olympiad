@@ -135,7 +135,8 @@ export default function ResultsPage() {
 				<div className="card">
 					<div className="empty-state">
 						<span className="empty-state__icon">📊</span>
-						No results released yet. They appear here once the BIO team publishes them.
+						No results released yet. They appear here once the Innovation Olympiad team publishes
+						them.
 					</div>
 				</div>
 			</main>

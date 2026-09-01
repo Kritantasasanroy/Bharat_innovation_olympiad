@@ -502,7 +502,7 @@ export class SchoolPortalService {
         return { added: added.length, skipped, addedStudents: added };
     }
 
-    /** The school's own payouts (triggered by BIO admin). */
+    /** The school's own payouts (triggered by Innovation Olympiad admin). */
     async myPayouts(schoolId: string) {
         return this.adminApi.listPayouts(schoolId, schoolId);
     }

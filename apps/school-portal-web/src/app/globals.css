@@ -3,7 +3,7 @@
    Warm, relationship-driven identity for school coordinators — a
    distinct design system from admin/student, not the same tokens
    remapped onto old class names. Cream/parchment surfaces, Lexend
-   for headings, a terracotta secondary accent alongside the BIO
+   for headings, a terracotta secondary accent alongside the Innovation Olympiad
    brand gradient. Same class names as before so no page JSX had to
    change; every value underneath is new. Dark stays available as an
    opt-in toggle (ThemeToggle), not the base.
@@ -16,7 +16,7 @@
 :root {
 	color-scheme: light;
 
-	/* Brand gradient — BIO logo: vivid lemon yellow + lime green. Used for
+	/* Brand gradient — Innovation Olympiad logo: vivid lemon yellow + lime green. Used for
 	   primary CTAs and highlights only, never a dominant background. */
 	--primary-50: #fffdeb;
 	--primary-100: #fff6c2;

@@ -73,8 +73,8 @@ export default function PayoutsPage() {
 			<div className="page-header">
 				<h1>Payouts</h1>
 				<p>
-					No fixed commission — BIO staff decide each payout amount and trigger it directly. It
-					shows up here the moment it's triggered.
+					No fixed commission — Innovation Olympiad staff decide each payout amount and trigger it
+					directly. It shows up here the moment it's triggered.
 				</p>
 			</div>
 
@@ -86,7 +86,8 @@ export default function PayoutsPage() {
 				{payouts ? (
 					payouts.length === 0 ? (
 						<div className="empty-state">
-							No payouts yet. BIO staff trigger one when it's time to pay you — it'll appear here.
+							No payouts yet. Innovation Olympiad staff trigger one when it's time to pay you —
+							it'll appear here.
 						</div>
 					) : (
 						<div className="table-wrap">
@@ -125,8 +126,8 @@ export default function PayoutsPage() {
 					{!bankDetails ? (
 						<div className="notice notice--warn" role="alert" style={{ marginBottom: "1rem" }}>
 							A payout has been triggered for you — add where it should be sent. Double-check every
-							field before saving: BIO cannot verify account ownership automatically, and a mistake
-							here could send money to the wrong account.
+							field before saving: Innovation Olympiad cannot verify account ownership
+							automatically, and a mistake here could send money to the wrong account.
 						</div>
 					) : null}
 					<form
@@ -201,8 +202,8 @@ export default function PayoutsPage() {
 							/>
 						</div>
 						<p className="muted" style={{ fontSize: "0.85rem" }}>
-							Your account number and PAN are encrypted before they're stored, and only BIO staff
-							processing your payout can view them.
+							Your account number and PAN are encrypted before they're stored, and only Innovation
+							Olympiad staff processing your payout can view them.
 						</p>
 						<div className="inline">
 							<button type="submit" className="button" disabled={submitting}>

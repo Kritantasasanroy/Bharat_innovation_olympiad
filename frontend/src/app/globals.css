@@ -10,7 +10,7 @@
 
 /* ── CSS Custom Properties ── */
 :root {
-  /* Brand palette — BIO logo: vivid lemon yellow + lime green */
+  /* Brand palette — Innovation Olympiad logo: vivid lemon yellow + lime green */
   --primary-50: #fffdeb;
   --primary-100: #fff6c2;
   --primary-200: #ffec8a;
@@ -54,7 +54,7 @@
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
 
-  /* Gradients — BIO lemon yellow → lime green */
+  /* Gradients — Innovation Olympiad lemon yellow → lime green */
   --gradient-brand: linear-gradient(135deg, #ffd60a, #7dc832);
   --gradient-card: linear-gradient(145deg, rgba(255, 203, 5, 0.05), rgba(99, 184, 27, 0.05));
   --gradient-glow: linear-gradient(135deg, rgba(255, 203, 5, 0.15), rgba(99, 184, 27, 0.15));

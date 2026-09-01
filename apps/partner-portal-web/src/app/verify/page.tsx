@@ -100,8 +100,8 @@ export default function VerifyPartnerEmailPage() {
 				<h1>{state === "verified" ? "Email confirmed" : "Confirm your email"}</h1>
 				<p>
 					{state === "verified"
-						? "Your partner application is ready for BIO staff review."
-						: "Use the link in your BIO email to confirm the contact address on your application."}
+						? "Your partner application is ready for Innovation Olympiad staff review."
+						: "Use the link in your Innovation Olympiad email to confirm the contact address on your application."}
 				</p>
 			</div>
 
@@ -114,8 +114,8 @@ export default function VerifyPartnerEmailPage() {
 							</strong>
 							<span>
 								{alreadyVerified
-									? "Your application remains in the BIO staff review queue."
-									: "Your application has now entered the BIO staff review queue."}
+									? "Your application remains in the Innovation Olympiad staff review queue."
+									: "Your application has now entered the Innovation Olympiad staff review queue."}
 							</span>
 						</div>
 						<div className="verification-steps">

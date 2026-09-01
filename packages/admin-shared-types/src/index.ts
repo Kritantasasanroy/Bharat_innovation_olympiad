@@ -21,7 +21,7 @@ export type {
 } from "./api.ts";
 
 /**
- * The semantic version of the BIO cross-repo contract that the *shapes* in
+ * The semantic version of the Innovation Olympiad cross-repo contract that the *shapes* in
  * this package implement. This is the producer-side source of truth: bump it
  * (per semver) whenever the exported types change. Consumers pin the version
  * they were built against in `@bio/admin-contract-fixtures`

@@ -1,7 +1,7 @@
 // Application constants
 
 export const APP_NAME = 'Bharat Innovation Olympiad';
-export const APP_SHORT = 'BIO';
+export const APP_SHORT = 'Innovation Olympiad';
 export const COMPANY_NAME = 'Lemon Ideas';
 export const TAGLINE = 'Become Future Ready';
 
@@ -9,7 +9,7 @@ export const TAGLINE = 'Become Future Ready';
  * Beta feedback forms, shown as full-page interstitials right after the two
  * moments worth asking about: finishing registration, and finishing an exam.
  *
- * Embedded rather than linked so the student stays inside BIO branding and a
+ * Embedded rather than linked so the student stays inside Innovation Olympiad branding and a
  * popup blocker cannot swallow the form. `embedded=true` is Google's own flag
  * for rendering a form inside an iframe.
  */

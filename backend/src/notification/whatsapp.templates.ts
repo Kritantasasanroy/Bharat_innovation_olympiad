@@ -1,7 +1,7 @@
 import { WatiParam } from './whatsapp.provider';
 
 /**
- * The four Meta-approved BIO templates, and the only place their variables are
+ * The four Meta-approved Innovation Olympiad templates, and the only place their variables are
  * built.
  *
  * ## Why the bodies are copied in here as comments

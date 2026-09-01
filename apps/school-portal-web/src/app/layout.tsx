@@ -16,7 +16,7 @@ const lexend = Lexend({
 });
 
 export const metadata = {
-	title: "BIO School Portal | Bharat Innovation Olympiad",
+	title: "Innovation Olympiad School Portal | Bharat Innovation Olympiad",
 	description:
 		"Bharat Innovation Olympiad school portal — activate your school, manage students, and results.",
 };

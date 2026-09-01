@@ -90,7 +90,7 @@ function ConsentInner() {
                                 onChange={(e) => setDataProcessing(e.target.checked)}
                             />
                             <span>
-                                <strong>Data processing.</strong> I allow BIO to process my registration and
+                                <strong>Data processing.</strong> I allow Innovation Olympiad to process my registration and
                                 exam data to deliver the olympiad and publish my results.
                             </span>
                         </label>

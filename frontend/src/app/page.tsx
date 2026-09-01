@@ -332,7 +332,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── WHAT IT IS ──
-          The "Description" section from the BIO brief: why the Olympiad exists
+          The "Description" section from the Innovation Olympiad brief: why the Olympiad exists
           and where it sits, in the organisation's own words. */}
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>

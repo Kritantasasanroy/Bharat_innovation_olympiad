@@ -124,7 +124,7 @@ export default function PartnerProfilePage() {
 					<div className="card">
 						<h2>Partner ID</h2>
 						<p className="muted" style={{ marginTop: 0 }}>
-							Quote this when contacting the BIO team about your schools or payouts.
+							Quote this when contacting the Innovation Olympiad team about your schools or payouts.
 						</p>
 						<code className="copy-field">{profile.partnerId ?? "Not yet provisioned"}</code>
 					</div>

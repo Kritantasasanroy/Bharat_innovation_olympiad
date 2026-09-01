@@ -77,8 +77,8 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Partner sign in</h1>
 				<p>
-					Use the password from your access request, or the access token BIO issued you. Email must
-					be confirmed before access can be approved.
+					Use the password from your access request, or the access token Innovation Olympiad issued
+					you. Email must be confirmed before access can be approved.
 				</p>
 			</div>
 

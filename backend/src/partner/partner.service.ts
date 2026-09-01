@@ -370,7 +370,7 @@ export class PartnerService {
         }
         if (!request.passwordHash) {
             throw new BadRequestException(
-                'This account signs in with an access token, not a password. Contact BIO support if you need it resent.',
+                'This account signs in with an access token, not a password. Contact Innovation Olympiad support if you need it resent.',
             );
         }
         return this.emailOtp.sendOtp('PARTNER_RESET', email);

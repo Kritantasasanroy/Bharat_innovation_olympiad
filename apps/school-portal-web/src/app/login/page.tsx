@@ -76,9 +76,10 @@ export default function LoginPage() {
 			<div className="page-header">
 				<h1>Coordinator sign in</h1>
 				<p>
-					Use your coordinator email and the password you set, or the access token BIO issued you.
-					The coordinator email must be confirmed before BIO staff can approve an application. New
-					to the platform? <Link href="/activate">Activate your school</Link>.
+					Use your coordinator email and the password you set, or the access token Innovation
+					Olympiad issued you. The coordinator email must be confirmed before Innovation Olympiad
+					staff can approve an application. New to the platform?{" "}
+					<Link href="/activate">Activate your school</Link>.
 				</p>
 			</div>
 

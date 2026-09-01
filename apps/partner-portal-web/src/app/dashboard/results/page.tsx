@@ -160,8 +160,8 @@ export default function PartnerResultsPage() {
 					<div>
 						<h1>Results</h1>
 						<p className="muted mb-0">
-							Scores for students at the schools assigned to you, for exams the BIO team has
-							released to partners.
+							Scores for students at the schools assigned to you, for exams the Innovation Olympiad
+							team has released to partners.
 						</p>
 					</div>
 					{current && (
@@ -188,8 +188,8 @@ export default function PartnerResultsPage() {
 				<div className="card">
 					<div className="empty-state">
 						<span className="empty-state__icon">📊</span>
-						No results have been released to you yet. Results are released per exam by the BIO team,
-						after the exam closes and scores are normalized.
+						No results have been released to you yet. Results are released per exam by the
+						Innovation Olympiad team, after the exam closes and scores are normalized.
 					</div>
 				</div>
 			)}

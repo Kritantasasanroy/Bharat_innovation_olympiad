@@ -132,8 +132,8 @@ export default function HomePage() {
 
 			{token && claims && claims.role !== "PARTNER" ? (
 				<div className="notice notice--error" style={{ margin: "1.5rem 2.5rem 0" }}>
-					Signed in as role &ldquo;{claims.role ?? "unknown"}&rdquo;. This portal is for BIO channel
-					partners only (role <code>PARTNER</code>).
+					Signed in as role &ldquo;{claims.role ?? "unknown"}&rdquo;. This portal is for Innovation
+					Olympiad channel partners only (role <code>PARTNER</code>).
 				</div>
 			) : null}
 

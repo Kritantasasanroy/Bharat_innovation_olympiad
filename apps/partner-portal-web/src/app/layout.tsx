@@ -15,7 +15,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata = {
-	title: "BIO Partner Portal | Bharat Innovation Olympiad",
+	title: "Innovation Olympiad Partner Portal | Bharat Innovation Olympiad",
 	description:
 		"Bharat Innovation Olympiad partner portal — manage schools, students, campaigns, and payouts.",
 };

@@ -17,7 +17,7 @@ const SCHOOL_STEPS: Step[] = [
 		title: "School Profile & Setup",
 		tagline: "Verify institutional details",
 		description:
-			"Ensure your school board, UDISE code, and coordinator contact info are up to date under Profile & roles so students and BIO coordinators can reach you seamlessly.",
+			"Ensure your school board, UDISE code, and coordinator contact info are up to date under Profile & roles so students and Innovation Olympiad coordinators can reach you seamlessly.",
 		actionHref: "/dashboard/profile",
 		actionLabel: "View profile",
 	},
@@ -53,7 +53,7 @@ const SCHOOL_STEPS: Step[] = [
 		title: "Payouts & Institutional Rewards",
 		tagline: "Claim institutional incentives",
 		description:
-			"When institutional rewards or payouts are triggered by the BIO admin team, the Payouts tab appears automatically. Add your bank details to receive payouts directly.",
+			"When institutional rewards or payouts are triggered by the Innovation Olympiad admin team, the Payouts tab appears automatically. Add your bank details to receive payouts directly.",
 		actionHref: "/dashboard/payouts",
 		actionLabel: "View payouts",
 	},

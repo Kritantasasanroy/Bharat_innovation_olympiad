@@ -14,7 +14,7 @@ export const opsRoutes: RouteDefinition[] = [
 		element: (
 			<PagePlaceholder
 				title="Ops Command Center"
-				description="Operational overview placeholder for the bio-admin command center."
+				description="Operational overview placeholder for the Innovation Olympiad admin command center."
 			/>
 		),
 	},

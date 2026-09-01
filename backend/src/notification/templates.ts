@@ -265,10 +265,10 @@ export function partnerEmailVerificationEmail(vars: {
     verificationUrl: string;
 }): RenderedEmail {
     return build(
-        'Confirm your BIO partner application email',
+        'Confirm your Innovation Olympiad partner application email',
         `Confirm your email, ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;">Someone requested partner access for <strong>${escapeHtml(vars.orgName)}</strong> on the Bharat Innovation Olympiad.</p>
-     <p style="margin:0 0 12px;">Confirm that you own this email address. After confirmation, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0 0 12px;">Confirm that you own this email address. After confirmation, the application will enter the Innovation Olympiad staff review queue.</p>
      <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
         { label: 'Confirm email address', url: vars.verificationUrl },
     );
@@ -283,7 +283,7 @@ export function partnerEmailVerificationEmail(vars: {
  */
 export function partnerStartVerificationEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Your BIO partner application code',
+        'Your Innovation Olympiad partner application code',
         'Confirm your email',
         `<p style="margin:0 0 12px;">Someone started a Bharat Innovation Olympiad partner application with this email address.</p>
      <p style="margin:0 0 12px;">Enter this code on the application page to continue — you'll fill in your organisation's details right after.</p>
@@ -295,7 +295,7 @@ export function partnerStartVerificationEmail(vars: { code: string }): RenderedE
 /** Forgot-password step 1: the 6-digit code to prove control of the address before a new password is accepted. */
 export function partnerPasswordResetCodeEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Reset your BIO partner password',
+        'Reset your Innovation Olympiad partner password',
         'Reset your password',
         `<p style="margin:0 0 12px;">Someone asked to reset the password on this Bharat Innovation Olympiad partner account.</p>
      <p style="margin:0 0 12px;">Enter this code on the reset page to choose a new password.</p>
@@ -307,10 +307,10 @@ export function partnerPasswordResetCodeEmail(vars: { code: string }): RenderedE
 /** Confirms a password change actually happened, so an account holder who didn't request it finds out. */
 export function partnerPasswordChangedEmail(vars: { contactPerson: string; orgName: string }): RenderedEmail {
     return build(
-        'Your BIO partner password was changed',
+        'Your Innovation Olympiad partner password was changed',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;">The password on <strong>${escapeHtml(vars.orgName)}</strong>'s Bharat Innovation Olympiad partner account was just changed.</p>
-     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away.</p>`,
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact Innovation Olympiad support right away.</p>`,
     );
 }
 
@@ -333,7 +333,7 @@ export function partnerApprovedEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO partner access is approved',
+        'Your Innovation Olympiad partner access is approved',
         `Welcome aboard, ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.orgName)}</strong> is now an approved Bharat Innovation Olympiad partner.</p>
      <p style="margin:0 0 12px;">Sign in with the email and password you chose when applying, or with the access token below.</p>
@@ -349,7 +349,7 @@ export function partnerRejectedEmail(vars: {
     reason: string;
 }): RenderedEmail {
     return build(
-        'Update on your BIO partner application',
+        'Update on your Innovation Olympiad partner application',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;">We've reviewed <strong>${escapeHtml(vars.orgName)}</strong>'s application for partner access, and are not able to approve it at this time.</p>
      ${factTable([factRow('Reason', vars.reason)])}
@@ -363,7 +363,7 @@ export function partnerRevokedEmail(vars: {
     reason: string;
 }): RenderedEmail {
     return build(
-        'Your BIO partner access has been revoked',
+        'Your Innovation Olympiad partner access has been revoked',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.orgName)}</strong>'s Bharat Innovation Olympiad partner portal access has been revoked, effective immediately.</p>
      ${factTable([factRow('Reason', vars.reason)])}
@@ -378,7 +378,7 @@ export function partnerAccessTokenRotatedEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO partner access token has been renewed',
+        'Your Innovation Olympiad partner access token has been renewed',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${escapeHtml(vars.orgName)}</strong>. Your previous token no longer works.</p>
      ${factTable([factRow('New access token', vars.accessToken)])}
@@ -395,7 +395,7 @@ export function partnerAccessResentEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO partner access details',
+        'Your Innovation Olympiad partner access details',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0;">As requested, here are ${escapeHtml(vars.orgName)}'s current Bharat Innovation Olympiad partner portal access details.</p>
      ${factTable([factRow('Access token', vars.accessToken)])}`,
@@ -432,10 +432,10 @@ export function partnerBankDetailsSubmittedEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO payout bank details were updated',
+        'Your Innovation Olympiad payout bank details were updated',
         `Hi ${escapeHtml(vars.contactPerson)}`,
         `<p style="margin:0 0 12px;">Bank details for your payouts were just saved: account number <strong>${escapeHtml(vars.accountNumberLast4)}</strong>.</p>
-     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away — someone else may have access to your account.</p>`,
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact Innovation Olympiad support right away — someone else may have access to your account.</p>`,
         { label: 'View payouts', url: `${vars.portalUrl}/dashboard/payouts` },
     );
 }
@@ -453,10 +453,10 @@ export function schoolEmailVerificationEmail(vars: {
     verificationUrl: string;
 }): RenderedEmail {
     return build(
-        "Confirm your school's BIO application email and create your password",
+        "Confirm your school's Innovation Olympiad application email and create your password",
         `Confirm your email, ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">Someone requested school portal access for <strong>${escapeHtml(vars.schoolName)}</strong> on the Bharat Innovation Olympiad.</p>
-     <p style="margin:0 0 12px;">Confirm that you own this coordinator email and choose a password. After that, the application will enter the BIO staff review queue.</p>
+     <p style="margin:0 0 12px;">Confirm that you own this coordinator email and choose a password. After that, the application will enter the Innovation Olympiad staff review queue.</p>
      <p style="margin:0;color:#6b7280;font-size:14px;">This link expires in 24 hours. If you did not make this request, you can ignore this email.</p>`,
         { label: 'Confirm email and create password', url: vars.verificationUrl },
     );
@@ -471,7 +471,7 @@ export function schoolEmailVerificationEmail(vars: {
  */
 export function schoolStartVerificationEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Your BIO school activation code',
+        'Your Innovation Olympiad school activation code',
         'Confirm your email',
         `<p style="margin:0 0 12px;">Someone started a school activation on the Bharat Innovation Olympiad with this coordinator email address.</p>
      <p style="margin:0 0 12px;">Enter this code on the activation page to continue — you'll fill in your school's details right after.</p>
@@ -483,7 +483,7 @@ export function schoolStartVerificationEmail(vars: { code: string }): RenderedEm
 /** Forgot-password step 1: the 6-digit code to prove control of the address before a new password is accepted. */
 export function schoolPasswordResetCodeEmail(vars: { code: string }): RenderedEmail {
     return build(
-        'Reset your BIO school password',
+        'Reset your Innovation Olympiad school password',
         'Reset your password',
         `<p style="margin:0 0 12px;">Someone asked to reset the password on this Bharat Innovation Olympiad school coordinator account.</p>
      <p style="margin:0 0 12px;">Enter this code on the reset page to choose a new password.</p>
@@ -495,10 +495,10 @@ export function schoolPasswordResetCodeEmail(vars: { code: string }): RenderedEm
 /** Confirms a password change actually happened, so an account holder who didn't request it finds out. */
 export function schoolPasswordChangedEmail(vars: { coordinatorName: string; schoolName: string }): RenderedEmail {
     return build(
-        'Your BIO school password was changed',
+        'Your Innovation Olympiad school password was changed',
         `Hi ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">The password on <strong>${escapeHtml(vars.schoolName)}</strong>'s Bharat Innovation Olympiad coordinator account was just changed.</p>
-     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact BIO support right away.</p>`,
+     <p style="margin:0;color:#6b7280;font-size:14px;">If this wasn't you, contact Innovation Olympiad support right away.</p>`,
     );
 }
 
@@ -522,7 +522,7 @@ export function schoolApprovedEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO school portal access is ready',
+        'Your Innovation Olympiad school portal access is ready',
         `Welcome, ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong> is now approved on the Bharat Innovation Olympiad. You can sign in with either your coordinator email + password or the access token below.</p>
      ${factTable([
@@ -546,7 +546,7 @@ export function schoolRejectedEmail(vars: {
     reason: string;
 }): RenderedEmail {
     return build(
-        "Update on your school's BIO application",
+        "Update on your school's Innovation Olympiad application",
         `Hi ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">We've reviewed <strong>${escapeHtml(vars.schoolName)}</strong>'s application for school portal access, and are not able to approve it at this time.</p>
      ${factTable([factRow('Reason', vars.reason)])}
@@ -560,7 +560,7 @@ export function schoolRevokedEmail(vars: {
     reason: string;
 }): RenderedEmail {
     return build(
-        'Your BIO school portal access has been revoked',
+        'Your Innovation Olympiad school portal access has been revoked',
         `Hi ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;"><strong>${escapeHtml(vars.schoolName)}</strong>'s Bharat Innovation Olympiad school portal access has been revoked, effective immediately.</p>
      ${factTable([factRow('Reason', vars.reason)])}
@@ -575,7 +575,7 @@ export function schoolAccessTokenRotatedEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO school access token has been renewed',
+        'Your Innovation Olympiad school access token has been renewed',
         `Hi ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0 0 12px;">A new access token has been issued for <strong>${escapeHtml(vars.schoolName)}</strong>. Your previous token no longer works.</p>
      ${factTable([factRow('New access token', vars.accessToken)])}
@@ -592,7 +592,7 @@ export function schoolAccessResentEmail(vars: {
     portalUrl: string;
 }): RenderedEmail {
     return build(
-        'Your BIO school access details',
+        'Your Innovation Olympiad school access details',
         `Hi ${escapeHtml(vars.coordinatorName)}`,
         `<p style="margin:0;">As requested, here are ${escapeHtml(vars.schoolName)}'s current Bharat Innovation Olympiad school portal access details.</p>
      ${factTable([factRow('Access token', vars.accessToken)])}`,

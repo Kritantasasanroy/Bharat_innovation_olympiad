@@ -173,15 +173,17 @@ export default function PartnerSchoolsPage() {
 			// 409 can mean one of two things:
 			// 1) This coordinator's school is already in the review queue (cold-start retry)
 			//    — not an error, just show it in the list.
-			// 2) The email already belongs to another BIO account.
+			// 2) The email already belongs to another Innovation Olympiad account.
 			//    — a real error the partner can act on, so show it in red.
 			if (cause instanceof ApiError && cause.statusCode === 409) {
 				if (cause.message.toLowerCase().includes("bio account")) {
 					setError(
-						"This email already has a BIO account. Use a different coordinator email, or ask the coordinator to sign in with their existing account.",
+						"This email already has an Innovation Olympiad account. Use a different coordinator email, or ask the coordinator to sign in with their existing account.",
 					);
 				} else {
-					setSuccess("This school is already in the BIO review queue — see it in the list below.");
+					setSuccess(
+						"This school is already in the Innovation Olympiad review queue — see it in the list below.",
+					);
 				}
 				formEl.reset();
 				setPincode("");
@@ -202,8 +204,8 @@ export default function PartnerSchoolsPage() {
 			<div className="page-header">
 				<h1>Schools</h1>
 				<p>
-					Onboard a school on its behalf. It enters the BIO review queue tagged as yours; once
-					approved, the school&apos;s coordinator receives their own access token.
+					Onboard a school on its behalf. It enters the Innovation Olympiad review queue tagged as
+					yours; once approved, the school&apos;s coordinator receives their own access token.
 				</p>
 			</div>
 

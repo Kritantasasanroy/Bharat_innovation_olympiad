@@ -62,8 +62,8 @@ export default function SupportPage() {
 			<div className="page-header">
 				<h1>Support</h1>
 				<p>
-					Raise a request with the BIO team — it reaches an admin, who replies below. Prefer email?{" "}
-					<a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+					Raise a request with the Innovation Olympiad team — it reaches an admin, who replies
+					below. Prefer email? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
 				</p>
 			</div>
 

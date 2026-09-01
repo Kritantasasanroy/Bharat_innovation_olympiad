@@ -71,7 +71,8 @@ export default function SchoolPayoutsPage() {
 			<div className="page-header">
 				<h1>Payouts &amp; Rewards</h1>
 				<p className="muted">
-					Institutional rewards and payouts triggered for your school by the BIO admin team.
+					Institutional rewards and payouts triggered for your school by the Innovation Olympiad
+					admin team.
 				</p>
 			</div>
 
@@ -84,8 +85,8 @@ export default function SchoolPayoutsPage() {
 					payouts.length === 0 ? (
 						<div className="empty-state">
 							<span className="empty-state__icon">💳</span>
-							No payouts triggered yet. BIO staff trigger institutional payouts based on cohort size
-							and participation.
+							No payouts triggered yet. Innovation Olympiad staff trigger institutional payouts
+							based on cohort size and participation.
 						</div>
 					) : (
 						<div className="table-wrap">

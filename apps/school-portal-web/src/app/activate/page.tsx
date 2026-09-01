@@ -229,7 +229,8 @@ function StartStep({
 				<h1>Activate your school</h1>
 				<p>
 					Two steps: confirm the coordinator email with a code, then fill in your school&apos;s
-					details. The school access token is issued only after BIO staff review is complete.
+					details. The school access token is issued only after Innovation Olympiad staff review is
+					complete.
 				</p>
 			</div>
 			{expired ? (
@@ -369,8 +370,9 @@ function DetailsStep({
 					<p className="eyebrow">Application submitted</p>
 					<h1>You&apos;re in the review queue</h1>
 					<p className="muted">
-						We saved the application for <strong>{done.schoolName}</strong>. BIO staff review every
-						application by hand — we&apos;ll email the access token once it&apos;s approved.
+						We saved the application for <strong>{done.schoolName}</strong>. Innovation Olympiad
+						staff review every application by hand — we&apos;ll email the access token once
+						it&apos;s approved.
 					</p>
 					<Link href="/login" className="button">
 						Go to coordinator sign in
@@ -385,7 +387,10 @@ function DetailsStep({
 			<div className="page-header">
 				<p className="eyebrow">Step 2 of 2 — email confirmed</p>
 				<h1>Tell us about your school</h1>
-				<p>Confirmed as {ticket.email}. Fill in the rest and submit for BIO staff review.</p>
+				<p>
+					Confirmed as {ticket.email}. Fill in the rest and submit for Innovation Olympiad staff
+					review.
+				</p>
 			</div>
 
 			<div className="card" style={{ maxWidth: 620 }}>
