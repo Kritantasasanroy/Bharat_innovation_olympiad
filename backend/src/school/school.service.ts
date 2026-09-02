@@ -770,7 +770,7 @@ export class SchoolService {
         assertAccessTransition(request.status, dto.decision, 'school');
         if (dto.decision === 'APPROVED' && !hasVerifiedEmail(request.status, request.emailVerifiedAt)) {
             throw new BadRequestException(
-                'Confirm the coordinator email before granting school access. The coordinator must use the verification link first.',
+                `The coordinator has not confirmed their email (${request.coordinatorEmail}). Ask them to click the verification link in their inbox before granting access.`,
             );
         }
 
@@ -812,20 +812,7 @@ export class SchoolService {
               })
             : await this.findOrCreateSchool(tx, request, now);
 
-        const coordinatorUserId =
-            request.coordinatorUserId ??
-            (
-                await tx.user.create({
-                    data: {
-                        email: request.coordinatorEmail,
-                        firstName: request.coordinatorName.trim().split(/\s+/)[0] ?? request.coordinatorName,
-                        lastName: request.coordinatorName.trim().split(/\s+/).slice(1).join(' '),
-                        role: Role.SCHOOL,
-                        schoolId: school.id,
-                        isActive: true,
-                    },
-                })
-            ).id;
+        const coordinatorUserId = await this.provisionCoordinator(tx, request, school.id);
 
         return { schoolId: school.id, coordinatorUserId };
     }
@@ -871,6 +858,42 @@ export class SchoolService {
                 onboardedAt: now,
             },
         });
+    }
+
+    private async provisionCoordinator(
+        tx: SchoolTransactionStore,
+        request: SchoolRequestRecord,
+        schoolId: string,
+    ): Promise<string> {
+        if (request.coordinatorUserId) {
+            return request.coordinatorUserId;
+        }
+
+        const existing = await tx.user.findUnique({ where: { email: request.coordinatorEmail } });
+        if (existing) {
+            if (existing.role === Role.SCHOOL && (!existing.schoolId || existing.schoolId === schoolId)) {
+                await tx.user.update({
+                    where: { id: existing.id },
+                    data: { schoolId, isActive: true },
+                });
+                return existing.id;
+            }
+            throw new ConflictException(
+                `A user with email ${request.coordinatorEmail} already exists as a ${existing.role.toLowerCase()}. Use a different coordinator email or contact support.`,
+            );
+        }
+
+        const created = await tx.user.create({
+            data: {
+                email: request.coordinatorEmail,
+                firstName: request.coordinatorName.trim().split(/\s+/)[0] ?? request.coordinatorName,
+                lastName: request.coordinatorName.trim().split(/\s+/).slice(1).join(' '),
+                role: Role.SCHOOL,
+                schoolId,
+                isActive: true,
+            },
+        });
+        return created.id;
     }
 
     private persistDecision(

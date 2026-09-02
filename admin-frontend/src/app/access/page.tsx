@@ -139,6 +139,17 @@ function responseStatus(error: unknown): number | undefined {
     return typeof response.status === 'number' ? response.status : undefined;
 }
 
+function responseMessage(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
+    const response = error.response;
+    if (!response || typeof response !== 'object' || !('data' in response)) return undefined;
+    const data = (response as { data?: unknown }).data;
+    if (!data || typeof data !== 'object' || !('message' in data)) return undefined;
+    return typeof (data as { message?: unknown }).message === 'string'
+        ? ((data as { message?: unknown }).message as string)
+        : undefined;
+}
+
 const toRow = {
     PARTNER: (r: PartnerRow): Row => ({
         kind: 'PARTNER',
@@ -350,11 +361,14 @@ export default function AccessPage() {
 
             // A fresh approval is exactly when staff need the token to hand over.
             if (decision === 'APPROVED') await openCard(row.kind, row.id);
-        } catch {
+        } catch (cause: unknown) {
+            const backendMessage = responseMessage(cause);
             setError(
-                row.kind === 'PARTNER' && decision !== 'REJECTED'
-                    ? 'Could not reach the partner engine (admin-api). It may still be waking up — try again.'
-                    : `Could not ${ACTION_LABEL[decision].toLowerCase()}.`,
+                backendMessage
+                    ? `${ACTION_LABEL[decision]} failed: ${backendMessage}`
+                    : row.kind === 'PARTNER' && decision !== 'REJECTED'
+                      ? 'Could not reach the partner engine (admin-api). It may still be waking up — try again.'
+                      : `Could not ${ACTION_LABEL[decision].toLowerCase()}.`,
             );
         } finally {
             setSubmitting(false);

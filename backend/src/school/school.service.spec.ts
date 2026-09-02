@@ -536,7 +536,7 @@ describe('email verification (partner-submitted)', () => {
         expect(request.emailVerificationTokenHash).not.toBe(token);
         await expect(
             service.decide(request.id, { decision: 'APPROVED', reason: 'Ready' }, 'admin-1'),
-        ).rejects.toThrow('Confirm the coordinator email');
+        ).rejects.toThrow('has not confirmed their email');
     });
 
     it('verifies once, sends the review notification, and asks to set a password on every visit', async () => {
