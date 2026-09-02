@@ -100,22 +100,37 @@ foreach ($proj in $vercelProjects) {
         continue
     }
     try {
-        # 1. Fetch the UID of the latest production deployment for this project.
+        # 1. Resolve the current Git ref and SHA we actually want to deploy.
+        #    Vercel's withLatestCommit redeploy option has been observed to use
+        #    a stale commit, so we pass an explicit gitSource instead.
+        $ref = (git rev-parse --abbrev-ref HEAD 2>$null)
+        if (-not $ref) { $ref = 'main' }
+        $sha = (git rev-parse HEAD 2>$null)
+        if (-not $sha) { throw "Could not resolve current Git HEAD for $($proj.name)" }
+
+        # 2. Fetch the latest production deployment to get its Git repo id.
         $deploys = Invoke-RestMethod `
             -Uri     "https://api.vercel.com/v6/deployments?projectId=$($proj.id)&target=production&limit=1" `
             -Headers $vercelGet
-        $uid = $deploys.deployments[0].uid
-        if (-not $uid) { throw "No production deployment found for $($proj.name)" }
+        $latest = $deploys.deployments[0]
+        if (-not $latest) { throw "No production deployment found for $($proj.name)" }
+        $repoId = $latest.gitSource.repoId
+        if (-not $repoId) { throw "Could not determine GitHub repo id for $($proj.name)" }
 
-        # 2. Redeploy that deployment (re-uses the same Git commit + env vars).
+        # 3. Create a new deployment from the current commit.
         $body = ConvertTo-Json @{
-            deploymentId = $uid
-            name         = $proj.name
-            target       = 'production'
-        }
+            name      = $proj.name
+            target    = 'production'
+            gitSource = @{
+                type   = 'github'
+                ref    = $ref
+                sha    = $sha
+                repoId = $repoId
+            }
+        } -Depth 3
         $resp = Invoke-RestMethod `
             -Method  Post `
-            -Uri     "https://api.vercel.com/v13/deployments?forceNew=1&withLatestCommit=1&target=production" `
+            -Uri     "https://api.vercel.com/v13/deployments?forceNew=1&target=production" `
             -Headers $vercelPost `
             -Body    $body
         Write-Tag Green 'OK' "$($proj.name)  ->  $($resp.url)  ($($resp.id))"
