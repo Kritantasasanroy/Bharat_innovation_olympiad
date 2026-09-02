@@ -9,7 +9,7 @@ import LimonTour from '@/components/limon/LimonTour';
 import MascotToast from '@/components/MascotToast';
 import { useExamLockdown, type BlockedAction, type LockdownBreach } from '@/hooks/useExamLockdown';
 import { useExamSession } from '@/hooks/useExamSession';
-import { useFaceProctor, NO_FACE_SUSTAIN_MS, LOOKING_AWAY_SUSTAIN_MS, FACE_MISMATCH_SUSTAIN_MS } from '@/hooks/useFaceProctor';
+import { useFaceProctor } from '@/hooks/useFaceProctor';
 import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useIdleMonitor } from '@/hooks/useIdleMonitor';
 import { useTimer } from '@/hooks/useTimer';
@@ -17,7 +17,6 @@ import api from '@/lib/api';
 import {
     EXAM_IDLE_NUDGE_SEC,
     EXAM_PAUSE_TIMEOUT_SEC,
-    FACE_TOAST_COOLDOWN_MIN,
     TIMER_DANGER_THRESHOLD,
     TIMER_WARNING_THRESHOLD,
     VIOLATION_REVIEW_THRESHOLD,
@@ -61,6 +60,21 @@ const BREACH_COPY: Record<LockdownBreach, string> = {
     reload: 'The exam page was reloaded. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your Innovation Olympiad exam, so use the ↻ Reload button above if you need to refresh again.',
     back: 'You navigated back into the exam. Your answers and your remaining time were kept, and you can carry on. It has been recorded on your Innovation Olympiad exam.',
 };
+
+/**
+ * Limon's rotating pep talks during the paper.
+ *
+ * Camera proctoring runs silently — face issues are tracked and recorded but
+ * never announced — so the only recurring Limon message a student sees is
+ * this one, cycling through all four at a fixed interval.
+ */
+const LIMON_PEP_TALKS: ReadonlyArray<{ icon: string; title: string; message: string }> = [
+    { icon: '👀', title: 'Keep going!', message: 'Limon is watching you.' },
+    { icon: '🦾', title: 'Limon is invigilating', message: 'Keep up the good pace!' },
+    { icon: '💪', title: 'You have got this!', message: 'Limon is rooting for you.' },
+    { icon: '🌟', title: 'Stay focused', message: 'Limon is right here with you.' },
+];
+const LIMON_PEP_INTERVAL_MS = 90_000;
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -439,11 +453,6 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         isLoaded: faceModelsLoaded,
         isWarm: faceModelsWarm,
         loadingProgress,
-        currentFaceCount,
-        isIdentityVerified,
-        noFaceSince,
-        awaySince,
-        mismatchSince,
         startProctoring,
         prepareProctoring,
         stopProctoring,
@@ -541,77 +550,43 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     }, [breachNotice]);
 
 
-    // Live "now" tick so the face/gaze popup countdowns re-render every 0.5s.
+    // Live "now" tick so the pause countdown re-renders every 0.5s.
     const [nowTick, setNowTick] = useState(() => Date.now());
     useEffect(() => {
         const t = setInterval(() => setNowTick(Date.now()), 500);
         return () => clearInterval(t);
     }, []);
-    // Shares the same 0.5s tick as the face popups.
+    // Shares the same 0.5s tick as the pause countdown.
     const pauseSecondsLeft = pauseDeadline !== null
         ? Math.max(0, Math.ceil((pauseDeadline - nowTick) / 1000))
         : null;
-    const noFaceSecondsLeft = noFaceSince ? Math.max(0, Math.ceil((NO_FACE_SUSTAIN_MS - (nowTick - noFaceSince)) / 1000)) : null;
-    const awaySecondsLeft = awaySince ? Math.max(0, Math.ceil((LOOKING_AWAY_SUSTAIN_MS - (nowTick - awaySince)) / 1000)) : null;
-    const mismatchSecondsLeft = mismatchSince ? Math.max(0, Math.ceil((FACE_MISMATCH_SUSTAIN_MS - (nowTick - mismatchSince)) / 1000)) : null;
-    const isMultiFace = currentFaceCount > 1;
 
     /**
-     * Face-check notices, rate-limited to one per
-     * {@link FACE_TOAST_COOLDOWN_MIN} minutes.
+     * Limon's rotating pep talks.
      *
-     * These used to be dismissed per *episode*, which sounds equivalent and is
-     * not: in poor light the camera loses a face several times a minute, and
-     * each loss is a new episode with a new `since` timestamp, so the student
-     * got the same toast over and over for a problem they had already been told
-     * about and could not always fix. Now the first one through starts a
-     * cooldown and the rest are silent.
-     *
-     * Silent means *the toast* — every episode is still counted as a violation
-     * and still posted to the server. This throttles the interruption, not the
-     * record.
-     *
-     * The counter starts at the first violation rather than at exam start, so a
-     * student whose camera is fine for twenty minutes still gets told promptly
-     * the first time it is not.
+     * Camera proctoring is deliberately silent: face issues (no face, multiple
+     * faces, looking away, identity mismatch) are still detected, counted and
+     * posted to the server, but the student is never shown a camera/video
+     * notice. The only recurring Limon message is this one, cycling through
+     * {@link LIMON_PEP_TALKS} at a fixed interval. Off during the trial, while
+     * the paper is gated, and once the exam is ending.
      */
-    const FACE_TOAST_COOLDOWN_MS = FACE_TOAST_COOLDOWN_MIN * 60_000;
-    const [faceToast, setFaceToast] = useState<ProctorToastData | null>(null);
-    const lastFaceToastAtRef = useRef(0);
+    const [pepToast, setPepToast] = useState<ProctorToastData | null>(null);
+    const pepIndexRef = useRef(0);
 
     useEffect(() => {
-        if (isTrialRun || isGated || autoSubmit) return;
+        if (isTrialRun || isGated || autoSubmit || !attemptId) return;
 
-        const issue =
-            isMultiFace ? {
-                key: 'multiface', icon: '👥', title: 'Limon sees more than one person',
-                message: 'Only you should be in front of the camera. Ask anyone else in the room to move out of shot.',
-            }
-            : noFaceSince !== null ? {
-                key: 'no-face', icon: '👤', title: 'Limon can’t see you',
-                message: 'Move back in front of the camera and make sure there is light on your face.',
-            }
-            : mismatchSince !== null ? {
-                key: 'mismatch', icon: '⚠️', title: 'Limon isn’t sure it’s you',
-                message: 'The face on camera doesn’t match the one you scanned when you registered. Sit square to the camera, in good light.',
-            }
-            : awaySince !== null ? {
-                key: 'looking-away', icon: '👀', title: 'Limon says eyes on the screen',
-                message: 'You have been looking away for a while. Glance up only briefly if you must.',
-            }
-            : null;
+        const showNext = () => {
+            const talk = LIMON_PEP_TALKS[pepIndexRef.current % LIMON_PEP_TALKS.length];
+            pepIndexRef.current += 1;
+            setPepToast({ ...talk, key: `limon-pep-${Date.now()}`, durationMs: 4500 });
+        };
 
-        if (!issue) return;
-        const now = Date.now();
-        if (now - lastFaceToastAtRef.current < FACE_TOAST_COOLDOWN_MS) return;
-        lastFaceToastAtRef.current = now;
-        // The timestamp is part of the key so a toast shown after a cooldown is
-        // a genuinely new one to ProctorToast and restarts its own dismiss timer.
-        setFaceToast({ ...issue, key: `${issue.key}-${now}`, durationMs: 4500 });
-    }, [
-        isMultiFace, noFaceSince, mismatchSince, awaySince,
-        isTrialRun, isGated, autoSubmit, FACE_TOAST_COOLDOWN_MS,
-    ]);
+        showNext();
+        const t = setInterval(showNext, LIMON_PEP_INTERVAL_MS);
+        return () => clearInterval(t);
+    }, [attemptId, isTrialRun, isGated, autoSubmit]);
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
@@ -1146,16 +1121,15 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Face-check notice ──
-                    Bottom-left, and at most one per cooldown. Used to be a
-                    full-screen black backdrop with an OK button the student had
-                    to click before they could touch the paper again; now it just
-                    tells them, out of the way of the question. */}
-                {faceToast && (
+                {/* ── Limon's pep talk ──
+                    Bottom-left, one every LIMON_PEP_INTERVAL_MS, cycling through
+                    the four messages. Face/camera issues are never announced —
+                    they are tracked and recorded silently. */}
+                {pepToast && (
                     <ProctorToast
-                        data={faceToast}
+                        data={pepToast}
                         position="bottom-left"
-                        onDismiss={() => setFaceToast(null)}
+                        onDismiss={() => setPepToast(null)}
                     />
                 )}
 
@@ -1400,34 +1374,14 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className={`timer-display ${timerClass}`} data-limon="exam-timer">
                             ⏱ {formatTime(remaining)}
                         </div>
-                        {/* Face detection status indicators */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {/* Face count dot */}
-                            <div
-                                title={
-                                    !faceModelsLoaded ? 'Loading AI models…'
-                                    : currentFaceCount === 0 ? 'No face detected'
-                                    : currentFaceCount === 1 ? 'Face detected'
-                                    : `${currentFaceCount} faces detected!`
-                                }
-                                style={{
-                                    width: '10px', height: '10px', borderRadius: '50%',
-                                    background: !faceModelsLoaded ? 'var(--text-muted)'
-                                        : currentFaceCount === 1 ? '#22c55e'
-                                        : currentFaceCount === 0 ? '#ef4444'
-                                        : '#f97316',
-                                    flexShrink: 0,
-                                }}
-                            />
-                            {/* Identity badge */}
-                            {isIdentityVerified === false && (
-                                <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>ID?</span>
-                            )}
-                        </div>
-                        {/* Webcam preview (hidden, face-api.js uses it internally) */}
-                        <div className="webcam-mini" title="Camera preview">
+                        {/* Webcam feed — kept off-screen. face-api.js reads it
+                            internally; no camera/video status is shown to the
+                            student, violations are tracked silently. */}
+                        <div
+                            aria-hidden="true"
+                            style={{ position: 'fixed', top: -9999, left: -9999, width: 640, height: 480, opacity: 0, pointerEvents: 'none' }}
+                        >
                             <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            <div className="webcam-indicator" style={{ background: faceModelsLoaded && currentFaceCount === 1 ? '#22c55e' : faceModelsLoaded && currentFaceCount === 0 ? '#ef4444' : undefined }} />
                         </div>
                     </div>
                 </header>
