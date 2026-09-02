@@ -65,40 +65,23 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ── PRICING BAND ──
-          Price, value and next event at the very top of the page, directly
-          under the navigation register / login buttons. */}
-      <section style={{ background: 'var(--bg-secondary)', padding: '14px 32px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-          <div style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-            borderRadius: 20, padding: '26px 32px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            flexWrap: 'wrap', gap: 18,
-          }}>
-            <div>
-              <div style={{ fontSize: 14.5, color: 'var(--text-secondary)' }}>
-                Program value{' '}
-                <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>₹1,449/-</span>{' '}
-                for Training, Exam and Report · Offered price{' '}
-                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#7dc832' }}>₹379/-</span>{' '}
-                <span style={{ fontSize: 12 }}>(including taxes &amp; platform fee)</span>
-              </div>
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 8 }}>
-                Next Olympiad: <b style={{ color: 'var(--text-primary)' }}>{nextOlympiadDate}</b> · Only 500 exam slots available per week
-              </div>
-            </div>
-            <Link href="/register" className="lp-btn-primary" style={{
-              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
-              fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
-            }}>
-              Register Now <ArrowRight size={15} />
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* ── NEXT OLYMPIAD BAND ── */}
+      <div style={{
+        background: 'linear-gradient(135deg,#1a3a0a,#0e2206)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        padding: '10px 32px', textAlign: 'center',
+      }}>
+        <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, fontWeight: 600 }}>
+          Next Olympiad · <b style={{ color: '#ffcb05' }}>{nextOlympiadDate}</b> — Only 500 exam slots per week
+        </span>{' '}
+        <Link href="/register" style={{
+          marginLeft: 14, color: '#fff', background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
+          fontWeight: 700, fontSize: 12.5, padding: '7px 16px', borderRadius: 999,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <Rocket size={13} /> Register Now
+        </Link>
+      </div>
 
       {/* ── HERO ── */}
       <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
@@ -230,6 +213,41 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRICING BAND ──
+          Program price and value, placed directly under the hero where
+          families see the cost right after the promise. */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '14px 32px 48px' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+            borderRadius: 20, padding: '26px 32px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexWrap: 'wrap', gap: 18,
+          }}>
+            <div>
+              <div style={{ fontSize: 14.5, color: 'var(--text-secondary)' }}>
+                Program value{' '}
+                <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>₹1,449/-</span>{' '}
+                for Training, Exam and Report · Offered price{' '}
+                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#7dc832' }}>₹379/-</span>{' '}
+                <span style={{ fontSize: 12 }}>(including taxes &amp; platform fee)</span>
+              </div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 8 }}>
+                Next Olympiad: <b style={{ color: 'var(--text-primary)' }}>{nextOlympiadDate}</b> · Only 500 exam slots available per week
+              </div>
+            </div>
+            <Link href="/register" className="lp-btn-primary" style={{
+              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+              fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+            }}>
+              Register Now <ArrowRight size={15} />
+            </Link>
           </div>
         </div>
       </section>

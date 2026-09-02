@@ -5495,6 +5495,15 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
 }
 
 .mob-lp-hero { padding: 1.6rem 1rem 1.8rem; text-align: center; background: var(--bg-secondary); }
+.mob-lp-nextdate {
+  background: linear-gradient(135deg, #1a3a0a, #0e2206);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.55rem 1rem;
+}
+.mob-lp-nextdate b { color: #ffcb05; }
 .mob-lp-founder { text-align: left; }
 .mob-lp-founder__avatar {
   width: 72px; height: 72px; border-radius: 50%;

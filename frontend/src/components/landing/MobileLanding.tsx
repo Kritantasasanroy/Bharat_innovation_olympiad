@@ -107,19 +107,9 @@ export default function MobileLanding() {
                 </div>
             )}
 
-            <section style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div className="mob-card mob-lp-price">
-                    <div>
-                        Program value <s>₹1,449/-</s> · Offered price{' '}
-                        <b className="mob-lp-price__offer">₹379/-</b>{' '}
-                        <span className="mob-lp-price__note">(including taxes &amp; platform fee)</span>
-                    </div>
-                    <div className="mob-lp-price__meta">Next Olympiad: <b>{nextOlympiadDate}</b> · Only 500 exam slots available per week</div>
-                    <Link href="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                        <Rocket size={16} /> Register Now <ArrowRight size={15} />
-                    </Link>
-                </div>
-            </section>
+            <div className="mob-lp-nextdate">
+                Next Olympiad · <b>{nextOlympiadDate}</b> — Only 500 exam slots per week
+            </div>
 
             <section className="mob-lp-hero">
                 <div className="mob-lp-badge">
@@ -156,6 +146,20 @@ export default function MobileLanding() {
                     <div><strong>2,400+</strong><span>Partner Schools</span></div>
                     <div><strong>1.8L+</strong><span>Young Innovators</span></div>
                     <div><strong>28</strong><span>States &amp; UTs</span></div>
+                </div>
+            </section>
+
+            <section style={{ padding: '1.2rem 1rem 0.2rem', background: 'var(--bg-secondary)' }}>
+                <div className="mob-card mob-lp-price">
+                    <div>
+                        Program value <s>₹1,449/-</s> · Offered price{' '}
+                        <b className="mob-lp-price__offer">₹379/-</b>{' '}
+                        <span className="mob-lp-price__note">(including taxes &amp; platform fee)</span>
+                    </div>
+                    <div className="mob-lp-price__meta">Next Olympiad: <b>{nextOlympiadDate}</b> · Only 500 exam slots available per week</div>
+                    <Link href="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                        <Rocket size={16} /> Register Now <ArrowRight size={15} />
+                    </Link>
                 </div>
             </section>
 
