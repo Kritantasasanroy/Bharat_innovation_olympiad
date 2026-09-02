@@ -5495,6 +5495,39 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
 }
 
 .mob-lp-hero { padding: 1.6rem 1rem 1.8rem; text-align: center; background: var(--bg-secondary); }
+.mob-lp-nextdate {
+  background: linear-gradient(135deg, #1a3a0a, #0e2206);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.55rem 1rem;
+}
+.mob-lp-nextdate b { color: #ffcb05; }
+.mob-lp-founder { text-align: left; }
+.mob-lp-founder__avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, #7dc832, #ffcb05);
+  color: #fff; font-weight: 800; font-size: 1.4rem;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1rem;
+  font-family: 'Montserrat', sans-serif;
+}
+.mob-lp-founder blockquote {
+  margin: 0 0 0.8rem; padding: 0; border: none;
+  font-family: var(--font-display); font-size: 0.98rem; line-height: 1.65; color: var(--text-primary);
+}
+.mob-lp-founder__byline { margin: 0; font-weight: 700; color: var(--text-secondary); font-size: 0.85rem; }
+.mob-lp-what { text-align: left; }
+.mob-lp-what__head { font-family: var(--font-display); font-size: 1rem; margin-bottom: 0.7rem; display: block; }
+.mob-lp-what__row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary); padding: 4px 0; }
+.mob-lp-what__row svg { flex-shrink: 0; margin-top: 3px; }
+.mob-lp-what__link { color: #7dc832; font-weight: 700; font-size: 0.85rem; }
+.mob-lp-price { text-align: left; font-size: 0.88rem; color: var(--text-secondary); }
+.mob-lp-price__offer { color: #7dc832; font-size: 1.15rem; font-family: 'Montserrat', sans-serif; }
+.mob-lp-price__note { font-size: 0.72rem; }
+.mob-lp-price__meta { margin: 0.5rem 0 0.85rem; font-size: 0.8rem; }
+.mob-lp-price__meta b { color: var(--text-primary); }
 .mob-lp-badge {
   display: inline-flex; align-items: center;
   background: rgba(125,200,50,0.1); border: 1px solid rgba(125,200,50,0.25);

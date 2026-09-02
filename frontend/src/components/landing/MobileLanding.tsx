@@ -14,11 +14,11 @@ import {
 import { useState } from 'react';
 
 const DIMENSIONS = [
-    { n: '01', title: 'Entrepreneurship Mindset', body: 'Identify opportunities, take initiative, solve problems creatively and make responsible decisions.' },
-    { n: '02', title: 'Problem Solving & Innovation', body: 'Observe the world, think creatively, explore multiple solutions and validate ideas through experimentation.' },
-    { n: '03', title: 'Emerging Technologies & STEM', body: 'Computational thinking, coding, robotics, AI, ML and cybersecurity, through to space and quantum tech.' },
-    { n: '04', title: 'Future Readiness & Global Awareness', body: 'Adaptability, lifelong learning, sustainability, climate action and contributing to Viksit Bharat 2047.' },
-    { n: '05', title: 'Financial Readiness', body: 'Money management, saving, investing, budgeting, digital banking, UPI and cyber safety.' },
+    { n: '01', title: 'Entrepreneurship Mindset', body: 'Identify opportunities, take initiative, solve problems creatively and make responsible decisions — becoming creators of opportunities, not seekers of them.' },
+    { n: '02', title: 'Problem Solving & Innovation', body: 'Observe the world, think creatively, explore multiple solutions and validate ideas through experimentation, transforming ideas into innovations that create positive impact.' },
+    { n: '03', title: 'Emerging Technologies & Digital Readiness, STEM', body: 'STEM foundations, computational thinking, coding, robotics, AI, ML and cybersecurity — through to space tech, biotechnology, quantum computing and advanced digital systems.' },
+    { n: '04', title: 'Future Readiness & Global Awareness', body: 'Adaptability, lifelong learning, future careers, sustainability and climate action — contributing to a developed, innovative and globally respected India by 2047.' },
+    { n: '05', title: 'Financial Readiness', body: 'Money management, saving, investing, budgeting, digital banking, UPI, financial safety and the global economy.' },
 ];
 
 const BENEFITS = [
@@ -55,6 +55,10 @@ const TRUST = [
  */
 export default function MobileLanding() {
     const [menuOpen, setMenuOpen] = useState(false);
+
+    // Next Olympiad date, per the website brief: today + 15 days.
+    const nextOlympiadDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+        .toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
     return (
         <div className="mob-lp">
@@ -103,6 +107,10 @@ export default function MobileLanding() {
                 </div>
             )}
 
+            <div className="mob-lp-nextdate">
+                Next Olympiad · <b>{nextOlympiadDate}</b> — Only 500 exam slots per week
+            </div>
+
             <section className="mob-lp-hero">
                 <div className="mob-lp-badge">
                     India&apos;s Innovation &amp; Future Skills Movement · Grades 6&ndash;12
@@ -138,6 +146,40 @@ export default function MobileLanding() {
                     <div><strong>2,400+</strong><span>Partner Schools</span></div>
                     <div><strong>1.8L+</strong><span>Young Innovators</span></div>
                     <div><strong>28</strong><span>States &amp; UTs</span></div>
+                </div>
+            </section>
+
+            <section className="mob-lp-section">
+                <h2 className="mob-lp-section__title">Message from the Founder</h2>
+                <div className="mob-card mob-lp-founder">
+                    {/* Placeholder for Deepak's photo — swap for the real portrait when available. */}
+                    <span className="mob-lp-founder__avatar">DM</span>
+                    <blockquote>
+                        &ldquo;Since 2013, Lemon Ideas has worked to nurture entrepreneurial thinking and
+                        innovation across India &amp; beyond. Our journey with young minds through Junior
+                        Innopreneurs reinforced a simple belief — every child has the potential to become a
+                        creator of change when equipped with the right mindset and opportunities. The Bharat
+                        Innovation Olympiad is our invitation to every child to discover their potential,
+                        become future-ready, and help build a confident, innovative and developed India by 2047.&rdquo;
+                    </blockquote>
+                    <p className="mob-lp-founder__byline">— Deepak Menaria, Founder, Lemon Ideas</p>
+                </div>
+            </section>
+
+            <section className="mob-lp-section">
+                <h2 className="mob-lp-section__title">Bharat Innovation Olympiad — Building Future-Ready India</h2>
+                <div className="mob-card">
+                    <p>
+                        Innovation has no syllabus because the future has no question paper. The Olympiad moves
+                        beyond conventional examinations that reward memorisation, assessing curiosity, creativity,
+                        adaptability and real-world thinking instead.
+                    </p>
+                    <p>
+                        Conceived by Lemon Ideas — an entrepreneurship ecosystem with over 12+ years of experience —
+                        and built on the strong foundation of Innopreneurs, it gives students from Grades 6 to 12 a
+                        unique opportunity to assess themselves across five future-focused dimensions, creating
+                        future-ready citizens, not just high scorers, in line with the vision of Viksit Bharat 2047.
+                    </p>
                 </div>
             </section>
 
@@ -178,13 +220,13 @@ export default function MobileLanding() {
                 <div className="mob-lp-compare">
                     <div className="mob-lp-compare__col">
                         <span className="mob-lp-compare__label">Traditional</span>
-                        {['Memory', 'Marks', 'Knowledge'].map((t) => (
+                        {['Memory', 'Marks', 'Knowledge', 'Exam & Ranking only', 'Academic & syllabus based'].map((t) => (
                             <div key={t} className="mob-lp-compare__row mob-lp-compare__row--no"><XCircle size={14} /> {t}</div>
                         ))}
                     </div>
                     <div className="mob-lp-compare__col mob-lp-compare__col--yes">
                         <span className="mob-lp-compare__label">Innovation Olympiad</span>
-                        {['Creativity', 'Innovation', 'Problem Solving'].map((t) => (
+                        {['Creativity', 'Innovation', 'Problem Solving', 'Training, pitch contests & mentoring', 'No syllabus, real life based'].map((t) => (
                             <div key={t} className="mob-lp-compare__row mob-lp-compare__row--yes"><CheckCircle2 size={14} /> {t}</div>
                         ))}
                     </div>
@@ -233,6 +275,65 @@ export default function MobileLanding() {
                 </div>
             </section>
 
+            <section className="mob-lp-section">
+                <h2 className="mob-lp-section__title">What is Bharat Innovation Olympiad</h2>
+                <div className="mob-card mob-lp-what">
+                    <strong className="mob-lp-what__head">The program</strong>
+                    {[
+                        'A future-ready training program for K-12 students and learners',
+                        'Online assessment &amp; ranking opportunity',
+                        'A safe, authentic, proctored exam for 60 mins with 50 questions covering all 5 dimensions',
+                        'Multiple orientation and acclimatization sessions',
+                        'Five training sessions on Innovation, Future skills, Entrepreneurship mindset, Technology and Financial awareness',
+                        'From the comfort of home (real-time, online)',
+                    ].map((item) => (
+                        <div key={item} className="mob-lp-what__row"><CheckCircle2 size={14} color="#7dc832" /> {item}</div>
+                    ))}
+                </div>
+                <div className="mob-card mob-lp-what">
+                    <strong className="mob-lp-what__head">Take aways for participants</strong>
+                    {[
+                        'Learning beyond academics &amp; syllabus',
+                        '6 hours of training, orientation &amp; interaction + 1 hour exam',
+                        'An exam guide with sample paper for preparations',
+                        'A detailed report with answer key, explanations',
+                        'Ranking &amp; benchmarking at school, city, national level',
+                        'Top 5% make it to the Idea contest directly — prizes, awards and benefits worth ₹50 lakh',
+                        'Access to Junior community at Innopreneurs',
+                        'Benefit from the Lemon Ecosystem of startup founders',
+                        'Roadmap towards a passion project, innovation &amp; startup building',
+                        'Advantage of Lemon Ideas experience since 2013',
+                    ].map((item) => (
+                        <div key={item} className="mob-lp-what__row"><CheckCircle2 size={14} color="#ffcb05" /> {item}</div>
+                    ))}
+                </div>
+                <div className="mob-card mob-lp-price">
+                    <div>
+                        Program value <s>₹1,449/-</s> · Offered price{' '}
+                        <b className="mob-lp-price__offer">₹379/-</b>{' '}
+                        <span className="mob-lp-price__note">(including taxes &amp; platform fee)</span>
+                    </div>
+                    <div className="mob-lp-price__meta">Next Olympiad: <b>{nextOlympiadDate}</b> · Only 500 exam slots available per week</div>
+                    <Link href="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                        <Rocket size={16} /> Register Now <ArrowRight size={15} />
+                    </Link>
+                </div>
+            </section>
+
+            <section className="mob-lp-section">
+                <h2 className="mob-lp-section__title">The Ecosystem Behind the Olympiad</h2>
+                <div className="mob-card mob-lp-what">
+                    <strong className="mob-lp-what__head">About Lemon Ideas</strong>
+                    <p>An entrepreneurship ecosystem with over 12+ years of experience nurturing innovators, entrepreneurs and changemakers across India and beyond.</p>
+                    <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" className="mob-lp-what__link">www.lemonideas.in ↗</a>
+                </div>
+                <div className="mob-card mob-lp-what">
+                    <strong className="mob-lp-what__head">About Innopreneurs Junior</strong>
+                    <p>The flagship junior innovation movement behind the Olympiad — where school participants across India identify problems, build solutions and present their ideas on a national stage.</p>
+                    <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer" className="mob-lp-what__link">www.innopreneurs.in/junior-contest ↗</a>
+                </div>
+            </section>
+
             <section className="mob-lp-cta">
                 <h2>Every idea starts small. Every innovator starts somewhere.</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', width: '100%' }}>
@@ -264,7 +365,7 @@ export default function MobileLanding() {
                     <Link href="/register">Register</Link>
                     <Link href="/login">Participant login</Link>
                     <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">Lemon Ideas ↗</a>
-                    <a href="https://innopreneurs.in" target="_blank" rel="noopener noreferrer">Innopreneurs ↗</a>
+                    <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer">Innopreneurs Junior ↗</a>
                 </nav>
                 <div className="mob-lp-footer__legal">© 2026 Bharat Innovation Olympiad</div>
             </footer>

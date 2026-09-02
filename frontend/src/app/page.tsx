@@ -22,6 +22,10 @@ export default function LandingPage() {
   const isMobile = useIsMobile();
   if (isMobile) return <MobileLanding />;
 
+  // Next Olympiad date, per the website brief: today + 15 days.
+  const nextOlympiadDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+    .toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', minHeight: '100vh' }}>
       {/* Captures a partner's `?ref=CODE` on first touch (PRD-046 attribution). */}
@@ -60,6 +64,24 @@ export default function LandingPage() {
           </div>
         </div>
       </nav>
+
+      {/* ── NEXT OLYMPIAD BAND ── */}
+      <div style={{
+        background: 'linear-gradient(135deg,#1a3a0a,#0e2206)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        padding: '10px 32px', textAlign: 'center',
+      }}>
+        <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, fontWeight: 600 }}>
+          Next Olympiad · <b style={{ color: '#ffcb05' }}>{nextOlympiadDate}</b> — Only 500 exam slots per week
+        </span>{' '}
+        <Link href="/register" style={{
+          marginLeft: 14, color: '#fff', background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
+          fontWeight: 700, fontSize: 12.5, padding: '7px 16px', borderRadius: 999,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <Rocket size={13} /> Register Now
+        </Link>
+      </div>
 
       {/* ── HERO ── */}
       <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
@@ -307,7 +329,13 @@ export default function LandingPage() {
             <div style={{ padding: '34px 30px', textAlign: 'left' }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 22 }}>Traditional Olympiad</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {[['Memory', 'Rewards'], ['Marks', 'Measures'], ['Knowledge', 'Tests']].map(([thing, verb]) => (
+                {[
+                  ['Memory', 'Rewards'],
+                  ['Marks', 'Measures'],
+                  ['Knowledge', 'Tests'],
+                  ['Exam & Ranking', 'Only'],
+                  ['Academic & syllabus based', ''],
+                ].map(([thing, verb]) => (
                   <div key={thing} className="lp-compare-row" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 8px', color: 'var(--text-secondary)', fontSize: 15 }}>
                     <XCircle size={16} color="var(--danger-400)" style={{ flexShrink: 0 }} />
                     <span>{verb} <b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{thing}</b></span>
@@ -319,7 +347,13 @@ export default function LandingPage() {
             <div style={{ padding: '34px 30px', textAlign: 'left', background: 'rgba(125,200,50,0.04)' }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#7dc832', marginBottom: 22 }}>Innovation Olympiad</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {[['Creativity', 'Rewards'], ['Innovation', 'Measures'], ['Problem Solving', 'Builds']].map(([thing, verb]) => (
+                {[
+                  ['Creativity', 'Rewards'],
+                  ['Innovation', 'Measures'],
+                  ['Problem Solving', 'Builds'],
+                  ['Training, Pitch contests & Mentoring', 'Includes'],
+                  ['No syllabus, real life based', ''],
+                ].map(([thing, verb]) => (
                   <div key={thing} className="lp-compare-row" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 8px', color: 'var(--text-primary)', fontSize: 15 }}>
                     <CheckCircle2 size={16} color="#7dc832" style={{ flexShrink: 0 }} />
                     <span>{verb} <b style={{ fontWeight: 700 }}>{thing}</b></span>
@@ -332,42 +366,88 @@ export default function LandingPage() {
       </section>
 
       {/* ── WHAT IT IS ──
-          The "Description" section from the Innovation Olympiad brief: why the Olympiad exists
+          The "Description" section from the BIO website brief: why the Olympiad exists
           and where it sits, in the organisation's own words. */}
       <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 20px', letterSpacing: -0.6, textAlign: 'center' }}>
-            Building a Future-Ready India
+            Bharat Innovation Olympiad — Building Future-Ready India
           </h2>
           <div className="lp-fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20, fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
             <p style={{ margin: 0 }}>
-              <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus, because the future has no fixed Innovation Olympiad exam.</b>{' '}
+              <b style={{ color: 'var(--text-primary)' }}>Become Future Ready.</b>{' '}
+              Discover your potential beyond academics by developing the mindset, skills and awareness
+              to innovate, solve real-world problems and confidently shape the future of India and the world.
+            </p>
+            <p style={{ margin: 0 }}>
+              <b style={{ color: 'var(--text-primary)' }}>Innovation has no syllabus because the future has no question paper.</b>{' '}
               The Bharat Innovation Olympiad reflects this belief by moving beyond conventional
               examinations that reward memorisation. Instead, it assesses curiosity, creativity,
-              adaptability and real-world thinking, preparing participants not just for the next exam,
+              adaptability and real-world thinking — preparing participants not just for the next exam,
               but for the next decade.
             </p>
             <p style={{ margin: 0 }}>
               Conceived by <b style={{ color: 'var(--text-primary)' }}>Lemon Ideas</b>, an entrepreneurship
-              ecosystem with over 12 years of experience nurturing innovators, entrepreneurs and
+              ecosystem with over 12+ years of experience nurturing innovators, entrepreneurs and
               changemakers across India, the Olympiad bridges the gap between classroom learning and
               the capabilities needed to thrive in an uncertain, technology-driven and rapidly
               evolving world.
             </p>
             <p style={{ margin: 0 }}>
-              Built on the foundation of <b style={{ color: 'var(--text-primary)' }}>Innopreneurs</b>,
-              Lemon Ideas&apos; flagship innovation and entrepreneurship movement, it is far more than
-              another Olympiad, it is the beginning of a lifelong innovation ecosystem. Participants from
-              Grades 6 to 12 assess themselves across five future-focused dimensions through a balanced
-              mix of knowledge-based, situational and future-oriented questions.
+              Built on the strong foundation of <b style={{ color: 'var(--text-primary)' }}>Innopreneurs</b>,
+              Lemon Ideas&apos; flagship innovation and entrepreneurship movement, the Bharat Innovation
+              Olympiad is far more than another Olympiad — it is the beginning of a lifelong innovation
+              ecosystem. It provides students from Grades 6 to 12 with a unique opportunity to assess
+              themselves across five future-focused dimensions: Entrepreneurship Mindset, Problem Solving
+              &amp; Innovation, Emerging Technologies &amp; Digital Readiness, Future Readiness &amp;
+              Global Awareness, and Financial Readiness. Through a balanced mix of knowledge-based,
+              situational and future-oriented questions, students are encouraged to think critically,
+              solve authentic problems, make responsible decisions and develop the confidence to embrace change.
             </p>
             <p style={{ margin: 0 }}>
-              What truly distinguishes it is its purpose: creating{' '}
+              What truly distinguishes the Bharat Innovation Olympiad is its purpose of creating{' '}
               <b style={{ color: 'var(--text-primary)' }}>future-ready citizens, not just high scorers</b>.
-              Closely aligned with the vision of Viksit Bharat 2047, it inspires young minds to become
-              innovators, creators and responsible leaders who can shape India&apos;s future with
-              courage, compassion and creativity.
+              It serves as a gateway to innovation challenges, entrepreneurial journeys, mentorship
+              opportunities, school innovation initiatives and the larger Innopreneurs community. Closely
+              aligned with the vision of Viksit Bharat 2047, the Olympiad inspires young minds to become
+              innovators, creators and responsible leaders who can shape India&apos;s future with courage,
+              compassion and creativity.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── MESSAGE BY THE FOUNDER ── */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', gap: 36, alignItems: 'flex-start' }}>
+          {/* Placeholder for Deepak's photo — swap this avatar for the real
+              portrait when the asset is available. */}
+          <div style={{
+            width: 112, height: 112, borderRadius: '50%', flexShrink: 0,
+            background: 'linear-gradient(135deg,#7dc832,#ffcb05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 34, fontWeight: 800, fontFamily: "'Montserrat', sans-serif",
+            boxShadow: '0 14px 34px rgba(125,200,50,0.35)',
+          }}>DM</div>
+          <div>
+            <h2 className="lp-fade-up" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 30, margin: '0 0 18px', letterSpacing: -0.5 }}>
+              Message from the Founder
+            </h2>
+            <blockquote style={{
+              margin: 0, padding: 0, border: 'none',
+              fontFamily: 'var(--font-display)', fontSize: 19, lineHeight: 1.7,
+              color: 'var(--text-primary)', fontStyle: 'normal',
+            }}>
+              &ldquo;Since 2013, Lemon Ideas has worked to nurture entrepreneurial thinking and innovation
+              across India &amp; beyond. Our journey with young minds through Junior Innopreneurs reinforced
+              a simple belief — every child has the potential to become a creator of change when equipped
+              with the right mindset and opportunities. The Bharat Innovation Olympiad is our invitation
+              to every child to discover their potential, become future-ready, and help build a confident,
+              innovative and developed India by 2047.&rdquo;
+            </blockquote>
+            <div className="lp-fade-up-1" style={{ marginTop: 18, fontWeight: 700, color: 'var(--text-secondary)', fontSize: 15 }}>
+              — Deepak Menaria, Founder, Lemon Ideas
+            </div>
           </div>
         </div>
       </section>
@@ -391,27 +471,27 @@ export default function LandingPage() {
               {
                 n: '01',
                 title: 'Entrepreneurship Mindset',
-                body: 'Entrepreneurship is not just about starting a business, it is a way of thinking. This dimension develops the ability to identify opportunities, take initiative, solve problems creatively and make responsible decisions, through customer empathy, teamwork, planning, resource management and ethics.',
+                body: 'Entrepreneurship is not just about starting a business — it is a way of thinking. This dimension develops the ability to identify opportunities, take initiative, solve problems creatively and make responsible decisions. Students build an entrepreneurial mindset through concepts such as customer empathy, teamwork, planning, resource management, ethics and business awareness, empowering them to become creators of opportunities rather than seekers of opportunities.',
               },
               {
                 n: '02',
                 title: 'Problem Solving & Innovation',
-                body: 'Innovation begins with understanding problems that matter. Participants observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation, drawing on design thinking, adaptability and evidence-based reasoning.',
+                body: 'Innovation begins with understanding problems that matter. This dimension encourages students to observe the world around them, think creatively, explore multiple solutions and validate ideas through experimentation. Drawing upon design thinking, adaptability, ethical decision-making and evidence-based reasoning, it nurtures the confidence to transform ideas into meaningful innovations that create positive impact.',
               },
               {
                 n: '03',
                 title: 'Emerging Technologies & Digital Readiness, STEM',
-                body: 'Beginning with strong STEM foundations, this dimension introduces computational thinking, coding logic, robotics, artificial intelligence, machine learning and cybersecurity, then expands to frontier technologies such as space technology, biotechnology and quantum computing.',
+                body: 'The future belongs to those who understand and responsibly use technology. Beginning with strong STEM (Science, Technology, Engineering and Mathematics) foundations, this dimension introduces students to computational thinking, coding logic, robotics, artificial intelligence, machine learning and cybersecurity. It further expands their horizons to frontier technologies such as space technology, biotechnology, quantum computing and advanced digital systems, preparing them to become informed creators and responsible users of tomorrow&apos;s technologies.',
               },
               {
                 n: '04',
                 title: 'Future Readiness & Global Awareness',
-                body: 'Preparing for the future demands adaptability, lifelong learning and global awareness. This dimension develops an understanding of future careers, sustainability, climate action and well-being, and inspires participants to contribute towards Viksit Bharat 2047.',
+                body: 'Preparing for the future requires more than academic knowledge — it demands adaptability, lifelong learning and global awareness. This dimension develops students&apos; understanding of future careers, sustainability, climate action, health and well-being, and the interconnected world through the lens of global challenges and opportunities. It also inspires them to contribute towards the vision of Viksit Bharat 2047, encouraging every learner to see themselves as an active participant in building a developed, innovative and globally respected India.',
               },
               {
                 n: '05',
                 title: 'Financial Readiness',
-                body: 'Financial literacy is an essential life skill. Participants learn money management, saving, investing, budgeting and responsible financial decision-making, alongside digital banking, UPI, financial safety, cyber awareness and the global economy.',
+                body: 'Financial literacy is an essential life skill in an increasingly connected world. This dimension helps students understand money management, saving, investing, budgeting and responsible financial decision-making while introducing them to digital banking, UPI, financial safety and cyber awareness. It also broadens their perspective by building awareness of the global economy, international trade, world currencies and the role of financial systems in shaping prosperous individuals, businesses and nations.',
               },
             ].map((d) => (
               <div key={d.n} className="lp-dimension-card lp-fade-up">
@@ -508,6 +588,93 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── WHAT IT IS / TAKEAWAYS ──
+          The two-column "What is Bharat Innovation Olympiad | Take aways for
+          participants" panel plus the program pricing band from the website brief. */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 48 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>A Complete Innovation Ecosystem</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>
+              Six hours of training, orientation &amp; interaction, then a one-hour proctored exam.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+            <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#7dc832' }}>What is Bharat Innovation Olympiad</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[
+                  'A future-ready training program for K-12 students and learners',
+                  'Online assessment &amp; ranking opportunity',
+                  'Exam — a safe, authentic, proctored exam for 60 mins with 50 questions covering all 5 dimensions',
+                  'Multiple orientation and acclimatization sessions for participants',
+                  'Five training sessions on Innovation, Future skills, Entrepreneurship mindset, Technology and Financial awareness',
+                  'From the comfort of home (real-time, online)',
+                ].map((item) => (
+                  <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+                    <CheckCircle2 size={16} color="#7dc832" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#ffcb05' }}>Take aways for participants</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[
+                  'Learning beyond academics &amp; syllabus',
+                  '6 hours of training, orientation &amp; interaction + 1 hour exam',
+                  'An exam guide with sample paper for preparations',
+                  'A detailed report with answer key, explanations',
+                  'Ranking &amp; benchmarking at school, city, national level',
+                  'Top 5% make it to the Idea contest directly, unlocking prizes, awards and benefits worth ₹50 lakh',
+                  'Access to Junior community at Innopreneurs',
+                  'Benefit from the Lemon Ecosystem of startup founders',
+                  'Roadmap towards a passion project, innovation &amp; startup building',
+                  'Advantage of Lemon Ideas experience since 2013',
+                ].map((item) => (
+                  <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+                    <CheckCircle2 size={16} color="#ffcb05" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Program pricing band */}
+          <div style={{
+            marginTop: 28, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+            borderRadius: 20, padding: '26px 32px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexWrap: 'wrap', gap: 18,
+          }}>
+            <div>
+              <div style={{ fontSize: 14.5, color: 'var(--text-secondary)' }}>
+                Program value{' '}
+                <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>₹1,449/-</span>{' '}
+                for Training, Exam and Report · Offered price{' '}
+                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#7dc832' }}>₹379/-</span>{' '}
+                <span style={{ fontSize: 12 }}>(including taxes &amp; platform fee)</span>
+              </div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 8 }}>
+                Next Olympiad: <b style={{ color: 'var(--text-primary)' }}>{nextOlympiadDate}</b> · Only 500 exam slots available per week
+              </div>
+            </div>
+            <Link href="/register" className="lp-btn-primary" style={{
+              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+              fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+            }}>
+              Register Now <ArrowRight size={15} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── NATIONAL STAGE GALLERY ── */}
       <section style={{ background: 'var(--bg-secondary)', padding: '80px 32px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
@@ -548,6 +715,47 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── ABOUT THE ECOSYSTEM ──
+          About Lemon Ideas and About Innopreneurs Junior, per the website brief. */}
+      <section style={{ background: 'var(--bg-primary)', padding: '76px 32px' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 48 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 34, margin: '0 0 10px', letterSpacing: -0.6 }}>The Ecosystem Behind the Olympiad</h2>
+            <p style={{ fontSize: 15.5, color: 'var(--text-secondary)', margin: 0 }}>
+              Built on a decade-plus of nurturing innovators and entrepreneurs across India.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+            <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
+              <span className="lp-icon-wrap" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(125,200,50,0.1)', marginBottom: 18 }}>
+                <Lightbulb size={24} color="#7dc832" />
+              </span>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, marginBottom: 8 }}>About Lemon Ideas</div>
+              <p style={{ fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.65, margin: '0 0 14px' }}>
+                An entrepreneurship ecosystem with over 12+ years of experience nurturing innovators,
+                entrepreneurs and changemakers across India and beyond.
+              </p>
+              <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" style={{ color: '#7dc832', fontWeight: 700, fontSize: 14 }}>
+                www.lemonideas.in ↗
+              </a>
+            </div>
+            <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
+              <span className="lp-icon-wrap" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,203,5,0.1)', marginBottom: 18 }}>
+                <Users size={24} color="#ffcb05" />
+              </span>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, marginBottom: 8 }}>About Innopreneurs Junior</div>
+              <p style={{ fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.65, margin: '0 0 14px' }}>
+                The flagship junior innovation movement behind the Olympiad — where school participants
+                across India identify problems, build solutions and present their ideas on a national stage.
+              </p>
+              <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer" style={{ color: '#ffcb05', fontWeight: 700, fontSize: 14 }}>
+                www.innopreneurs.in/junior-contest ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA BAND ── */}
       <section style={{ background: 'linear-gradient(135deg,#1a3a0a,#0e2206)', padding: '70px 32px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(125,200,50,0.12), transparent)' }} />
@@ -581,8 +789,8 @@ export default function LandingPage() {
             <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">
               Lemon Ideas ↗
             </a>
-            <a href="https://innopreneurs.in" target="_blank" rel="noopener noreferrer">
-              Innopreneurs ↗
+            <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer">
+              Innopreneurs Junior ↗
             </a>
             <a href="https://worldskillchallenge.com" target="_blank" rel="noopener noreferrer">
               World Skill Challenge ↗
