@@ -62,11 +62,11 @@ const BREACH_COPY: Record<LockdownBreach, string> = {
 };
 
 /**
- * Limon's rotating pep talks during the paper.
+ * Limon's four pep talks, shown one at a time at each 20% milestone of the
+ * exam time.
  *
  * Camera proctoring runs silently — face issues are tracked and recorded but
- * never announced — so the only recurring Limon message a student sees is
- * this one, cycling through all four at a fixed interval.
+ * never announced — so the only Limon messages a student sees are these.
  */
 const LIMON_PEP_TALKS: ReadonlyArray<{ icon: string; title: string; message: string }> = [
     { icon: '👀', title: 'Keep going!', message: 'Limon is watching you.' },
@@ -74,7 +74,8 @@ const LIMON_PEP_TALKS: ReadonlyArray<{ icon: string; title: string; message: str
     { icon: '💪', title: 'You have got this!', message: 'Limon is rooting for you.' },
     { icon: '🌟', title: 'Stay focused', message: 'Limon is right here with you.' },
 ];
-const LIMON_PEP_INTERVAL_MS = 90_000;
+/** The exam-time milestones (percent) at which each pep talk appears. */
+const LIMON_PEP_MILESTONES: ReadonlyArray<number> = [20, 40, 60, 80];
 
 function formatTime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -562,31 +563,17 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         : null;
 
     /**
-     * Limon's rotating pep talks.
+     * Limon's pep talks — one at each 20% of the paper.
      *
      * Camera proctoring is deliberately silent: face issues (no face, multiple
      * faces, looking away, identity mismatch) are still detected, counted and
      * posted to the server, but the student is never shown a camera/video
-     * notice. The only recurring Limon message is this one, cycling through
-     * {@link LIMON_PEP_TALKS} at a fixed interval. Off during the trial, while
-     * the paper is gated, and once the exam is ending.
+     * notice. The only Limon messages a student sees are these four, one at
+     * each 20% milestone of the exam time. Off during the trial, while the
+     * paper is gated, and once the exam is ending.
      */
     const [pepToast, setPepToast] = useState<ProctorToastData | null>(null);
-    const pepIndexRef = useRef(0);
-
-    useEffect(() => {
-        if (isTrialRun || isGated || autoSubmit || !attemptId) return;
-
-        const showNext = () => {
-            const talk = LIMON_PEP_TALKS[pepIndexRef.current % LIMON_PEP_TALKS.length];
-            pepIndexRef.current += 1;
-            setPepToast({ ...talk, key: `limon-pep-${Date.now()}`, durationMs: 4500 });
-        };
-
-        showNext();
-        const t = setInterval(showNext, LIMON_PEP_INTERVAL_MS);
-        return () => clearInterval(t);
-    }, [attemptId, isTrialRun, isGated, autoSubmit]);
+    const firedPepMilestonesRef = useRef<ReadonlySet<number>>(new Set());
 
     const [showViolationInfo, setShowViolationInfo] = useState(false);
 
@@ -614,6 +601,27 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (remaining > 0) setTimerReady(true);
     }, [remaining]);
+
+    /**
+     * Limon's pep talks — one at each 20% of the paper.
+     *
+     * Elapsed time comes from the server timer (`duration − remaining`), like
+     * the timer checks below, so a student who reloads at 65% still gets the
+     * 60% pep talk they missed. `timerReady` guards the first render, when
+     * `remaining` is 0 only because no tick has arrived yet.
+     */
+    useEffect(() => {
+        if (!timerReady || isTrialRun || isGated || autoSubmit || durationSeconds <= 0) return;
+
+        const elapsedPercent = ((durationSeconds - remaining) / durationSeconds) * 100;
+        const fired = firedPepMilestonesRef.current;
+        const milestone = LIMON_PEP_MILESTONES.find((m) => elapsedPercent >= m && !fired.has(m));
+        if (milestone === undefined) return;
+
+        const talk = LIMON_PEP_TALKS[LIMON_PEP_MILESTONES.indexOf(milestone)];
+        firedPepMilestonesRef.current = new Set(fired).add(milestone);
+        setPepToast({ ...talk, key: `limon-pep-${milestone}-${Date.now()}`, durationMs: 4500 });
+    }, [timerReady, remaining, durationSeconds, isTrialRun, isGated, autoSubmit]);
 
     /**
      * Time's up.
@@ -1122,9 +1130,9 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 )}
 
                 {/* ── Limon's pep talk ──
-                    Bottom-left, one every LIMON_PEP_INTERVAL_MS, cycling through
-                    the four messages. Face/camera issues are never announced —
-                    they are tracked and recorded silently. */}
+                    Bottom-left, one at each 20% milestone of the exam time.
+                    Face/camera issues are never announced — they are tracked
+                    and recorded silently. */}
                 {pepToast && (
                     <ProctorToast
                         data={pepToast}
