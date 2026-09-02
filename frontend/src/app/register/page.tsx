@@ -45,7 +45,7 @@ import { FormEvent, useState, useEffect } from 'react';
  * `verify` remain inline, because they share the form state and the OTP handshake.
  */
 
-type Step = 'presence' | 'details' | 'verify' | 'face' | 'guardian' | 'payment';
+type Step = 'presence' | 'details' | 'verify' | 'payment' | 'face' | 'guardian';
 
 /** Ordered, so the progress indicator and the labels derive from one list. */
 const STEPS: { id: Step; label: string }[] = [
