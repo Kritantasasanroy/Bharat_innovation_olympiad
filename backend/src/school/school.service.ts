@@ -120,6 +120,7 @@ type StoreArgs = {
 
 type SchoolTransactionStore = {
     schoolRequest: {
+        findFirst(args: StoreArgs): Promise<SchoolRequestRecord | null>;
         update(args: StoreArgs): Promise<SchoolRequestRecord>;
     };
     school: {
@@ -777,13 +778,24 @@ export class SchoolService {
         const now = new Date();
         const issuing = dto.decision === 'APPROVED' && !request.accessTokenHash;
         const plaintext = issuing ? generateAccessToken('SCHOOL') : null;
-        const result = await this.prisma.$transaction(async (tx) => {
-            const provisioned =
-                dto.decision === 'APPROVED'
-                    ? await this.provisionSchool(tx, request, now)
-                    : { schoolId: request.schoolId, coordinatorUserId: request.coordinatorUserId };
-            return this.persistDecision(tx, request, dto, adminId, provisioned, plaintext, issuing, now);
-        });
+        let result: SchoolRequestRecord;
+        try {
+            result = await this.prisma.$transaction(async (tx) => {
+                const provisioned =
+                    dto.decision === 'APPROVED'
+                        ? await this.provisionSchool(tx, request, now)
+                        : { schoolId: request.schoolId, coordinatorUserId: request.coordinatorUserId };
+                return this.persistDecision(tx, request, dto, adminId, provisioned, plaintext, issuing, now);
+            });
+        } catch (e) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+                const target = Array.isArray(e.meta?.target) ? (e.meta?.target as string[]).join(', ') : 'a unique field';
+                throw new ConflictException(
+                    `This school request conflicts with an existing record (${target}). Check for a duplicate school, email, or access token, then try again.`,
+                );
+            }
+            throw e;
+        }
 
         const emailSent = await this.notifyDecision(result, dto, plaintext);
         await this.notifyOnboardingPartner(result, dto);
@@ -827,6 +839,14 @@ export class SchoolService {
             where: { nameKey_pincode: { nameKey, pincode: request.pincode } },
         });
         if (existing) {
+            const otherRequest = await tx.schoolRequest.findFirst({
+                where: { schoolId: existing.id, id: { not: request.id } },
+            });
+            if (otherRequest) {
+                throw new ConflictException(
+                    `A school request for "${request.schoolName}" (${request.pincode}) is already linked to this school. Use or delete the existing request before granting a new one.`,
+                );
+            }
             return tx.school.update({
                 where: { id: existing.id },
                 data: {
