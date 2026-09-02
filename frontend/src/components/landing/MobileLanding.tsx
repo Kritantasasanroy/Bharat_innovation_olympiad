@@ -107,9 +107,19 @@ export default function MobileLanding() {
                 </div>
             )}
 
-            <div className="mob-lp-nextdate">
-                Next Olympiad · <b>{nextOlympiadDate}</b> — Only 500 exam slots per week
-            </div>
+            <section style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div className="mob-card mob-lp-price">
+                    <div>
+                        Program value <s>₹1,449/-</s> · Offered price{' '}
+                        <b className="mob-lp-price__offer">₹379/-</b>{' '}
+                        <span className="mob-lp-price__note">(including taxes &amp; platform fee)</span>
+                    </div>
+                    <div className="mob-lp-price__meta">Next Olympiad: <b>{nextOlympiadDate}</b> · Only 500 exam slots available per week</div>
+                    <Link href="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                        <Rocket size={16} /> Register Now <ArrowRight size={15} />
+                    </Link>
+                </div>
+            </section>
 
             <section className="mob-lp-hero">
                 <div className="mob-lp-badge">
@@ -306,17 +316,6 @@ export default function MobileLanding() {
                     ].map((item) => (
                         <div key={item} className="mob-lp-what__row"><CheckCircle2 size={14} color="#ffcb05" /> {item}</div>
                     ))}
-                </div>
-                <div className="mob-card mob-lp-price">
-                    <div>
-                        Program value <s>₹1,449/-</s> · Offered price{' '}
-                        <b className="mob-lp-price__offer">₹379/-</b>{' '}
-                        <span className="mob-lp-price__note">(including taxes &amp; platform fee)</span>
-                    </div>
-                    <div className="mob-lp-price__meta">Next Olympiad: <b>{nextOlympiadDate}</b> · Only 500 exam slots available per week</div>
-                    <Link href="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                        <Rocket size={16} /> Register Now <ArrowRight size={15} />
-                    </Link>
                 </div>
             </section>
 
