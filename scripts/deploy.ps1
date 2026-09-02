@@ -114,7 +114,8 @@ foreach ($proj in $vercelProjects) {
             -Headers $vercelGet
         $latest = $deploys.deployments[0]
         if (-not $latest) { throw "No production deployment found for $($proj.name)" }
-        $repoId = $latest.gitSource.repoId
+        $repoId = $latest.meta.githubRepoId
+        if (-not $repoId) { $repoId = $latest.meta.githubCommitRepoId }
         if (-not $repoId) { throw "Could not determine GitHub repo id for $($proj.name)" }
 
         # 3. Create a new deployment from the current commit.
