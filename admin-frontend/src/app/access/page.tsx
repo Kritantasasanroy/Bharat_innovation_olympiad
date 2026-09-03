@@ -20,6 +20,7 @@ interface PartnerRow {
     emailVerifiedAt: string | null;
     decisionReason: string | null;
     createdAt: string;
+    decidedAt: string | null;
     tokenIssuedAt: string | null;
     tokenLastUsedAt: string | null;
 }
@@ -39,8 +40,13 @@ interface SchoolRow {
     status: Status;
     emailVerifiedAt: string | null;
     submittedByPartnerId: string | null;
+    /** Org name of the partner that onboarded this school, resolved server-side. */
+    submittedByPartnerName: string | null;
+    /** Campaign referral code the school arrived on, if any. */
+    submittedViaReferralCode: string | null;
     decisionReason: string | null;
     createdAt: string;
+    decidedAt: string | null;
     tokenIssuedAt: string | null;
     tokenLastUsedAt: string | null;
 }
@@ -58,9 +64,21 @@ interface Row {
     emailVerifiedAt: string | null;
     decisionReason: string | null;
     createdAt: string;
+    decidedAt: string | null;
     tokenIssuedAt: string | null;
+    tokenLastUsedAt: string | null;
     /** Set on a school a partner brought in; drives the "via partner" tag. */
     viaPartner: boolean;
+    /** Org name of the onboarding partner (schools only), or null. */
+    onboardedByPartner: string | null;
+    /** Campaign referral code the request arrived on (schools only), or null. */
+    referralCode: string | null;
+    /** School-only address fields, surfaced in the detail view. */
+    board: string | null;
+    udiseCode: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
 }
 
 interface Card {
@@ -163,8 +181,17 @@ const toRow = {
         emailVerifiedAt: r.emailVerifiedAt,
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
+        decidedAt: r.decidedAt,
         tokenIssuedAt: r.tokenIssuedAt,
+        tokenLastUsedAt: r.tokenLastUsedAt,
         viaPartner: false,
+        onboardedByPartner: null,
+        referralCode: null,
+        board: null,
+        udiseCode: null,
+        city: null,
+        state: null,
+        pincode: null,
     }),
     SCHOOL: (r: SchoolRow): Row => ({
         kind: 'SCHOOL',
@@ -178,8 +205,17 @@ const toRow = {
         emailVerifiedAt: r.emailVerifiedAt,
         decisionReason: r.decisionReason,
         createdAt: r.createdAt,
+        decidedAt: r.decidedAt,
         tokenIssuedAt: r.tokenIssuedAt,
+        tokenLastUsedAt: r.tokenLastUsedAt,
         viaPartner: r.submittedByPartnerId !== null,
+        onboardedByPartner: r.submittedByPartnerName,
+        referralCode: r.submittedViaReferralCode,
+        board: r.board,
+        udiseCode: r.udiseCode,
+        city: r.city,
+        state: r.state,
+        pincode: r.pincode,
     }),
 };
 
@@ -240,6 +276,9 @@ export default function AccessPage() {
     const [kindFilter, setKindFilter] = useState<'ALL' | Kind>('ALL');
     const [statusFilter, setStatusFilter] = useState<'ALL' | Status>('ALL');
 
+    // The request whose full-detail card is open.
+    const [detail, setDetail] = useState<Row | null>(null);
+
     const [pending, setPending] = useState<{ row: Row; decision: Decision } | null>(null);
     const [reason, setReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -293,6 +332,11 @@ export default function AccessPage() {
     );
     const pendingCount = rows.filter((r) => r.status === 'PENDING' && r.emailVerifiedAt).length;
     const verificationCount = rows.filter((r) => r.status === 'PENDING' && !r.emailVerifiedAt).length;
+
+    // Keep the open detail card in step with background refreshes.
+    const detailRow = detail
+        ? (rows.find((r) => r.kind === detail.kind && r.id === detail.id) ?? detail)
+        : null;
 
     const openCard = useCallback(async (kind: Kind, id: string) => {
         setCardBusy(true);
@@ -511,131 +555,254 @@ export default function AccessPage() {
                     </div>
                 )}
 
-                <div className="glass-card table-responsive">
-                    {loading ? (
-                        <div className="loading-container">
-                            <div className="spinner" />
-                        </div>
-                    ) : visible.length === 0 ? (
-                        <div className="empty-state">
-                            <h3>No access requests</h3>
-                            <p className="text-muted">
-                                Partners apply from the partner portal&apos;s “Request access” page;
-                                schools from the school portal&apos;s “Activate your school” page.
-                            </p>
-                        </div>
-                    ) : (
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Type</th>
-                                    <th>Organisation</th>
-                                    <th>Contact</th>
-                                    <th>Requested</th>
-                                    <th>Status</th>
-                                    <th style={{ textAlign: 'right' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {visible.map((row) => (
-                                    <tr key={`${row.kind}-${row.id}`}>
-                                        <td>
-                                            <span className={`kind-tag kind-tag--${row.kind.toLowerCase()}`}>
-                                                {row.kind === 'PARTNER' ? 'Partner' : 'School'}
-                                            </span>
-                                            {row.viaPartner && (
-                                                <span className="kind-tag kind-tag--partner" style={{ marginTop: '0.3rem', display: 'inline-block' }}>
-                                                    via partner
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="student-name">
-                                                <strong>{row.title}</strong>
-                                                <span className="join-date">{row.detail}</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="student-name">
-                                                <span>{row.contactName}</span>
-                                                <span className="join-date">{row.email}</span>
-                                            </div>
-                                        </td>
-                                        <td className="text-muted">
-                                            {new Date(row.createdAt).toLocaleDateString('en-IN', {
-                                                dateStyle: 'medium',
-                                            })}
-                                        </td>
-                                        <td>
-                                            {row.status === 'PENDING' && !row.emailVerifiedAt ? (
-                                                <span className="badge badge-warning">EMAIL UNVERIFIED</span>
-                                            ) : (
-                                                <span className={STATUS_CLASS[row.status]}>{row.status}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ textAlign: 'right' }}>
-                                            <div className="row-actions">
-                                                {row.status === 'PENDING' && !row.emailVerifiedAt && (
-                                                    <button
-                                                        className="btn btn-sm btn-secondary"
-                                                        onClick={() => void resendVerification(row)}
-                                                        disabled={cardBusy}
-                                                    >
-                                                        Resend verification
-                                                    </button>
-                                                )}
-                                                {row.tokenIssuedAt && (
-                                                    <>
-                                                        <button
-                                                            className="btn btn-sm btn-secondary"
-                                                            onClick={() => void openCard(row.kind, row.id)}
-                                                        >
-                                                            View card
-                                                        </button>
-                                                        {row.status === 'APPROVED' && (
-                                                            <button
-                                                                className="btn btn-sm btn-secondary"
-                                                                title="Resend access details by email"
-                                                                onClick={() => void resend(row)}
-                                                                disabled={cardBusy}
-                                                            >
-                                                                Resend email
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                )}
-                                                {actionsFor(row).map((decision) => (
-                                                    <button
-                                                        key={decision}
-                                                        className={`btn btn-sm ${decision === 'APPROVED' ? 'btn-primary' : 'btn-danger'}`}
-                                                        onClick={() => {
-                                                            setPending({ row, decision });
-                                                            setReason('');
-                                                        }}
-                                                    >
-                                                        {ACTION_LABEL[decision]}
-                                                    </button>
-                                                ))}
-                                                <button
-                                                    className="btn btn-sm btn-danger"
-                                                    title="Permanently delete this record"
-                                                    onClick={() => {
-                                                        setDeleteTarget(row);
-                                                        setDeleteConfirm('');
-                                                        setDeleteReason('');
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
+                {loading ? (
+                    <div className="glass-card loading-container">
+                        <div className="spinner" />
+                    </div>
+                ) : visible.length === 0 ? (
+                    <div className="glass-card empty-state">
+                        <h3>No access requests</h3>
+                        <p className="text-muted">
+                            Partners apply from the partner portal&apos;s “Request access” page;
+                            schools from the school portal&apos;s “Activate your school” page.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="request-grid">
+                        {visible.map((row) => (
+                            <button
+                                type="button"
+                                key={`${row.kind}-${row.id}`}
+                                className="request-card"
+                                onClick={() => setDetail(row)}
+                            >
+                                <div className="request-card__top">
+                                    <span className="request-card__tags">
+                                        <span className={`kind-tag kind-tag--${row.kind.toLowerCase()}`}>
+                                            {row.kind === 'PARTNER' ? 'Partner' : 'School'}
+                                        </span>
+                                        {row.viaPartner && (
+                                            <span className="kind-tag kind-tag--partner">via partner</span>
+                                        )}
+                                    </span>
+                                    {row.status === 'PENDING' && !row.emailVerifiedAt ? (
+                                        <span className="badge badge-warning">EMAIL UNVERIFIED</span>
+                                    ) : (
+                                        <span className={STATUS_CLASS[row.status]}>{row.status}</span>
+                                    )}
+                                </div>
+
+                                <div className="request-card__title">{row.title}</div>
+                                <div className="request-card__detail">{row.detail}</div>
+
+                                <dl className="request-card__facts">
+                                    <div>
+                                        <dt>Contact</dt>
+                                        <dd>{row.contactName}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Email</dt>
+                                        <dd>{row.email}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Phone</dt>
+                                        <dd>{row.phone || '—'}</dd>
+                                    </div>
+                                    {row.kind === 'SCHOOL' && (
+                                        <div>
+                                            <dt>Onboarded by</dt>
+                                            <dd>
+                                                {row.onboardedByPartner ??
+                                                    (row.viaPartner ? 'A partner' : 'Self-applied')}
+                                            </dd>
+                                        </div>
+                                    )}
+                                </dl>
+
+                                <div className="request-card__foot">
+                                    <span className="text-muted">
+                                        Requested{' '}
+                                        {new Date(row.createdAt).toLocaleDateString('en-IN', {
+                                            dateStyle: 'medium',
+                                        })}
+                                    </span>
+                                    <span className="request-card__cue">View details →</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
+
+            {detailRow && (
+                <div className="modal-overlay" onClick={() => setDetail(null)}>
+                    <div
+                        className="modal-content glass-card access-card"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="access-card__head">
+                            <span className="request-card__tags">
+                                <span className={`kind-tag kind-tag--${detailRow.kind.toLowerCase()}`}>
+                                    {detailRow.kind === 'PARTNER' ? 'Partner' : 'School'}
+                                </span>
+                                {detailRow.viaPartner && (
+                                    <span className="kind-tag kind-tag--partner">via partner</span>
+                                )}
+                                {detailRow.status === 'PENDING' && !detailRow.emailVerifiedAt ? (
+                                    <span className="badge badge-warning">EMAIL UNVERIFIED</span>
+                                ) : (
+                                    <span className={STATUS_CLASS[detailRow.status]}>{detailRow.status}</span>
+                                )}
+                            </span>
+                            <h2>{detailRow.title}</h2>
+                            <p className="text-muted">{detailRow.detail}</p>
+                        </div>
+
+                        <dl className="access-card__grid">
+                            <Field label="Contact" value={detailRow.contactName} />
+                            <Field label="Email" value={detailRow.email} />
+                            <Field label="Phone" value={detailRow.phone} />
+                            {detailRow.kind === 'SCHOOL' && (
+                                <>
+                                    <Field label="Board" value={detailRow.board} />
+                                    <Field label="UDISE" value={detailRow.udiseCode || '—'} />
+                                    <Field label="City" value={detailRow.city} />
+                                    <Field label="State" value={detailRow.state} />
+                                    <Field label="Pincode" value={detailRow.pincode} />
+                                    <Field
+                                        label="Onboarded by"
+                                        value={
+                                            detailRow.onboardedByPartner ??
+                                            (detailRow.viaPartner
+                                                ? 'A partner'
+                                                : 'Self-applied (no partner)')
+                                        }
+                                    />
+                                    {detailRow.referralCode && (
+                                        <Field
+                                            label="Referral code"
+                                            value={detailRow.referralCode}
+                                            mono
+                                        />
+                                    )}
+                                </>
+                            )}
+                            <Field
+                                label="Requested"
+                                value={new Date(detailRow.createdAt).toLocaleString('en-IN')}
+                            />
+                            <Field
+                                label="Email verified"
+                                value={
+                                    detailRow.emailVerifiedAt
+                                        ? new Date(detailRow.emailVerifiedAt).toLocaleString('en-IN')
+                                        : 'Not verified'
+                                }
+                            />
+                            {detailRow.tokenIssuedAt && (
+                                <Field
+                                    label="Token issued"
+                                    value={new Date(detailRow.tokenIssuedAt).toLocaleString('en-IN')}
+                                />
+                            )}
+                            {detailRow.tokenIssuedAt && (
+                                <Field
+                                    label="Token last used"
+                                    value={
+                                        detailRow.tokenLastUsedAt
+                                            ? new Date(detailRow.tokenLastUsedAt).toLocaleString('en-IN')
+                                            : 'Never'
+                                    }
+                                />
+                            )}
+                            {detailRow.decidedAt && (
+                                <Field
+                                    label="Decided"
+                                    value={new Date(detailRow.decidedAt).toLocaleString('en-IN')}
+                                />
+                            )}
+                            {detailRow.decisionReason && (
+                                <Field label="Decision reason" value={detailRow.decisionReason} />
+                            )}
+                        </dl>
+
+                        <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+                            {detailRow.status === 'PENDING' && !detailRow.emailVerifiedAt && (
+                                <button
+                                    className="btn btn-secondary"
+                                    disabled={cardBusy}
+                                    onClick={() => {
+                                        if (!detailRow) return;
+                                        const row = detailRow;
+                                        setDetail(null);
+                                        void resendVerification(row);
+                                    }}
+                                >
+                                    Resend verification
+                                </button>
+                            )}
+                            {detailRow.tokenIssuedAt && (
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => {
+                                        if (!detailRow) return;
+                                        const row = detailRow;
+                                        setDetail(null);
+                                        void openCard(row.kind, row.id);
+                                    }}
+                                >
+                                    View handover card
+                                </button>
+                            )}
+                            {detailRow.tokenIssuedAt && detailRow.status === 'APPROVED' && (
+                                <button
+                                    className="btn btn-secondary"
+                                    disabled={cardBusy}
+                                    onClick={() => {
+                                        if (!detailRow) return;
+                                        const row = detailRow;
+                                        setDetail(null);
+                                        void resend(row);
+                                    }}
+                                >
+                                    Resend email
+                                </button>
+                            )}
+                            {actionsFor(detailRow).map((decision) => (
+                                <button
+                                    key={decision}
+                                    className={`btn ${decision === 'APPROVED' ? 'btn-primary' : 'btn-danger'}`}
+                                    onClick={() => {
+                                        if (!detailRow) return;
+                                        const row = detailRow;
+                                        setDetail(null);
+                                        setPending({ row, decision });
+                                        setReason('');
+                                    }}
+                                >
+                                    {ACTION_LABEL[decision]}
+                                </button>
+                            ))}
+                            <button
+                                className="btn btn-danger"
+                                onClick={() => {
+                                    if (!detailRow) return;
+                                    const row = detailRow;
+                                    setDetail(null);
+                                    setDeleteTarget(row);
+                                    setDeleteConfirm('');
+                                    setDeleteReason('');
+                                }}
+                            >
+                                Delete
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => setDetail(null)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {pending && (
                 <div className="modal-overlay" onClick={() => !submitting && setPending(null)}>

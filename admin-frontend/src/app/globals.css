@@ -1519,6 +1519,118 @@ h4 {
   }
 }
 
+/* The review queue as a grid of clickable request cards. */
+.request-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.request-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.request-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-400);
+  transform: translateY(-2px);
+}
+
+.request-card:focus-visible {
+  outline: 2px solid var(--primary-400);
+  outline-offset: 2px;
+}
+
+.request-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.request-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.request-card__title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.request-card__detail {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.request-card__facts {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+}
+
+.request-card__facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.request-card__facts dt {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.request-card__facts dd {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.request-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+}
+
+.request-card__cue {
+  color: var(--primary-400);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .request-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Results page: info chip + help grid ─────────────────────────────────── */
 .info-chip {
   display: inline-flex;

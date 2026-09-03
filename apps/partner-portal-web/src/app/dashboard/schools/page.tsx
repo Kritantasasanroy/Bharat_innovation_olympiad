@@ -272,7 +272,16 @@ export default function PartnerSchoolsPage() {
 						</div>
 						<div>
 							<label htmlFor="coordinatorPhone">Coordinator phone</label>
-							<input id="coordinatorPhone" name="coordinatorPhone" required />
+							<input
+								id="coordinatorPhone"
+								name="coordinatorPhone"
+								type="tel"
+								maxLength={20}
+								pattern="^[+0-9][0-9()\\s-]{6,19}$"
+								title="Enter a phone number with 7–20 digits"
+								autoComplete="tel"
+								required
+							/>
 						</div>
 					</div>
 					<button type="submit" className="button" disabled={submitting || !location}>

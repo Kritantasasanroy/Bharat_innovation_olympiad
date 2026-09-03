@@ -330,6 +330,7 @@ type FakePartnerDirectory = {
         partnerId: string,
         isDefault: boolean,
     ): Promise<{ email: string; contactPerson: string }>;
+    labelsFor(partnerIds: readonly string[]): Promise<Record<string, string>>;
 };
 
 function createFakePartnerDirectory(): FakePartnerDirectory {
@@ -338,6 +339,9 @@ function createFakePartnerDirectory(): FakePartnerDirectory {
             email: 'partner@example.com',
             contactPerson: 'Partner Contact',
         })),
+        labelsFor: jest.fn(async (partnerIds: readonly string[]) =>
+            Object.fromEntries([...new Set(partnerIds)].map((id) => [id, `Partner ${id}`])),
+        ),
     };
 }
 

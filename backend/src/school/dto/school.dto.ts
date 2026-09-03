@@ -16,6 +16,7 @@ import {
     ValidateIf,
     ValidateNested,
 } from 'class-validator';
+import { PHONE_MESSAGE, PHONE_PATTERN } from '../../common/phone';
 import { PINCODE_PATTERN } from '../school-directory.helpers';
 
 const PINCODE_MESSAGE = 'A pincode is six digits, e.g. 441108.';
@@ -55,6 +56,7 @@ export class ApplySchoolDto {
 
     @IsString()
     @IsNotEmpty()
+    @Matches(PHONE_PATTERN, { message: PHONE_MESSAGE })
     coordinatorPhone: string;
 
     /// The campaign referral code the school arrived on (`/activate?ref=CODE`),

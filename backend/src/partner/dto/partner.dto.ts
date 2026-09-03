@@ -11,6 +11,7 @@ import {
     MinLength,
     ValidateIf,
 } from 'class-validator';
+import { PHONE_MESSAGE, PHONE_PATTERN } from '../../common/phone';
 
 export class ApplyPartnerDto {
     @IsString()
@@ -26,6 +27,7 @@ export class ApplyPartnerDto {
 
     @IsString()
     @IsNotEmpty()
+    @Matches(PHONE_PATTERN, { message: PHONE_MESSAGE })
     phone: string;
 
     @IsString()

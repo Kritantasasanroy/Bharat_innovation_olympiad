@@ -163,6 +163,8 @@ type SchoolPartnerDirectory = {
         email: string;
         contactPerson: string;
     }>;
+    /** id → org name, for showing which partner onboarded a school. */
+    labelsFor(partnerIds: readonly string[]): Promise<Record<string, string>>;
 };
 
 @Injectable()
@@ -724,7 +726,7 @@ export class SchoolService {
 
     /** ADMIN — the school half of the Access Management queue. */
     async list() {
-        return this.prisma.schoolRequest.findMany({
+        const rows = await this.prisma.schoolRequest.findMany({
             orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
@@ -751,6 +753,18 @@ export class SchoolService {
                 tokenLastUsedAt: true,
             },
         });
+
+        // Which partner onboarded each school, resolved to a name for the admin
+        // review card. A self-applied school carries no `submittedByPartnerId`
+        // and shows nothing here.
+        const partnerNames = await this.partnerDirectory.labelsFor(
+            rows.map((r) => r.submittedByPartnerId ?? '').filter(Boolean),
+        );
+        for (const row of rows) {
+            (row as { submittedByPartnerName?: string | null }).submittedByPartnerName =
+                row.submittedByPartnerId ? partnerNames[row.submittedByPartnerId] ?? null : null;
+        }
+        return rows;
     }
 
     /** `SCH-XXXXXX` over the unambiguous alphabet; retried on the rare collision. */

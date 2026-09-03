@@ -111,6 +111,47 @@ export class PartnerDirectoryService {
         };
     }
 
+    /**
+     * Display names for a batch of partner ids, for admin surfaces that need to
+     * show *which* partner onboarded a school. Each id resolves the same way
+     * {@link detailsFor} does — `PartnerRequest` first (the backend owns partner
+     * identity), then the mirrored engine `Partner` row, then the house partner
+     * for the default id — but in one pass, returned as a plain id → name map.
+     * An id that resolves to nothing is simply absent from the map.
+     */
+    async labelsFor(partnerIds: readonly string[]): Promise<Record<string, string>> {
+        const ids = [...new Set(partnerIds.filter((id): id is string => Boolean(id)))];
+        if (ids.length === 0) return {};
+
+        const [requests, engines] = await Promise.all([
+            this.prisma.partnerRequest.findMany({
+                where: { partnerId: { in: ids } },
+                select: { partnerId: true, orgName: true },
+            }),
+            this.prisma.partner.findMany({
+                where: { id: { in: ids } },
+                select: { id: true, orgName: true },
+            }),
+        ]);
+
+        const byRequest = new Map(
+            requests
+                .filter((r): r is { partnerId: string; orgName: string } => Boolean(r.partnerId))
+                .map((r) => [r.partnerId, r.orgName]),
+        );
+        const byEngine = new Map(engines.map((e) => [e.id, e.orgName]));
+
+        const labels: Record<string, string> = {};
+        for (const id of ids) {
+            const name =
+                byRequest.get(id) ??
+                byEngine.get(id) ??
+                (id === this.defaultPartnerId ? HOUSE_PARTNER.orgName : null);
+            if (name) labels[id] = name;
+        }
+        return labels;
+    }
+
     /** The partner a school reports to — its own, or the house partner. */
     async forSchool(schoolId: string): Promise<PartnerDetails> {
         const school = await this.prisma.school.findUnique({
