@@ -79,8 +79,8 @@ export default function AdminDashboard() {
                         </a>
                         <a href="/slots" className="glass-card action-card">
                             <span className="action-icon">🗓️</span>
-                            <h3>Slot Management</h3>
-                            <p>Create time slots and monitor seat availability for exams.</p>
+                            <h3>Exam Scheduling</h3>
+                            <p>Set sitting times and seat counts, and see who is scheduled when.</p>
                         </a>
                         <a href="/payments" className="glass-card action-card">
                             <span className="action-icon">💳</span>

@@ -337,11 +337,13 @@ export const portalApi = {
 	partner: (token: string) => authed<SchoolPartner>("/school/portal/partner", token),
 	overview: (token: string) => authed<SchoolOverview>("/school/portal/overview", token),
 	students: (token: string) => authed<PortalStudent[]>("/school/portal/students", token),
-	/** Every exam's slots, how full each is, and which one this school holds (item 15). */
+	/**
+	 * Where this school's participants have been scheduled (item 15).
+	 *
+	 * Read-only: sittings are auto-assigned from each participant's own
+	 * registration date, so there is no school-level slot left to pick.
+	 */
 	slots: (token: string) => authed<SlotBoard[]>("/school/portal/slots", token),
-	/** The school picks (or changes) its slot for one exam (item 15). */
-	pickSlot: (token: string, examInstanceId: string, slotId: string) =>
-		authedPost<PickSlotResult>("/school/portal/slots", token, { examInstanceId, slotId }),
 	monitoring: (token: string) => authed<PortalMonitoring>("/school/portal/monitoring", token),
 	results: (token: string) => authed<PortalResult[]>("/school/portal/results", token),
 	/** Exams whose results have been released to schools (item 18). */
@@ -427,19 +429,21 @@ export interface SchoolPartner {
 	readonly label: string;
 }
 
+/**
+ * One sitting this school's participants were placed in.
+ *
+ * Sittings are assigned per participant from their own registration date, so a
+ * school is spread across whichever dates its students' signups landed on — it
+ * no longer holds a single slot. `students` is therefore *this school's* count
+ * in that sitting, not the sitting's total.
+ */
 export interface BoardSlot {
 	readonly slotId: string;
 	readonly label: string | null;
 	readonly startsAt: string;
 	readonly endsAt: string;
-	readonly capacity: number;
-	readonly booked: number;
-	readonly remaining: number;
-	readonly fillPct: number;
-	readonly isAssignedToUs: boolean;
+	readonly students: number;
 	readonly hasEnded: boolean;
-	readonly selectable: boolean;
-	readonly fitsAllStudents: boolean;
 }
 
 export interface SlotBoard {
@@ -451,22 +455,11 @@ export interface SlotBoard {
 	readonly startsAt: string;
 	readonly endsAt: string;
 	readonly eligibleStudents: number;
-	readonly assignedSlotId: string | null;
-	readonly slots: BoardSlot[];
-}
-
-export interface PickSlotResult {
-	readonly changed: boolean;
-	readonly booked?: number;
-	readonly summary?: {
-		readonly totalStudents: number;
-		readonly eligibleStudents: number;
-		readonly allocated: number;
-		readonly alreadyBooked: number;
-		readonly noCapacity: number;
-		readonly ineligible: number;
-		readonly notes: string[];
-	};
+	/** How many of this school's eligible participants have a sitting. */
+	readonly scheduledStudents: number;
+	/** …and how many are still waiting for one. */
+	readonly awaitingSchedule: number;
+	readonly sittings: BoardSlot[];
 }
 
 export interface ReleasedInstance {

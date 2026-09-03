@@ -227,7 +227,7 @@ export default function AdminPaymentsPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                            {['Student', 'Exam / Slot', 'Amount', 'Status', 'Coupon', 'Order ID', 'Date', 'Action'].map(h => (
+                                            {['Student', 'Exam / Sitting', 'Amount', 'Status', 'Coupon', 'Order ID', 'Date', 'Action'].map(h => (
                                                 <th key={h} style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>

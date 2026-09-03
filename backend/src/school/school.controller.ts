@@ -92,6 +92,20 @@ export class SchoolController {
         return this.schoolService.resendVerificationForAdmin(id, adminId);
     }
 
+    /**
+     * ADMIN — a flat directory of every school, for filter dropdowns.
+     *
+     * Distinct from `admin/manage/student-schools`, which lists only the
+     * unonboarded schools students added themselves. This is "every school there
+     * is", id and name, and nothing more.
+     */
+    @Get('admin/schools')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    listAllSchools() {
+        return this.schoolService.listAllForAdmin();
+    }
+
     /** ADMIN — school review queue for the Access Management page. */
     @Get('admin/school-requests')
     @UseGuards(JwtAuthGuard, RolesGuard)

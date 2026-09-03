@@ -42,7 +42,7 @@ export default function SlotsPage() {
 	const datesWithSlots = useMemo(() => {
 		const map = new Map<string, { dateStr: string; slotsCount: number; exams: string[] }>();
 		for (const board of boards ?? []) {
-			for (const slot of board.slots) {
+			for (const slot of board.sittings) {
 				const key = dateKey(slot.startsAt);
 				const existing = map.get(key) ?? {
 					dateStr: dateOnly(slot.startsAt),
@@ -68,7 +68,7 @@ export default function SlotsPage() {
 		if (!activeDate || !boards) return [];
 		const list: { board: SlotBoard; slot: BoardSlot }[] = [];
 		for (const board of boards) {
-			for (const slot of board.slots) {
+			for (const slot of board.sittings) {
 				if (dateKey(slot.startsAt) === activeDate) {
 					list.push({ board, slot });
 				}
@@ -114,9 +114,11 @@ export default function SlotsPage() {
 	return (
 		<main>
 			<div className="page-header">
-				<h1>Exam Slots &amp; Calendar</h1>
+				<h1>Exam Calendar</h1>
 				<p className="muted">
-					View scheduled exam windows and the student cohort sitting on each date.
+					Where your participants have been scheduled. Each one is assigned a sitting automatically
+					about two weeks after they register, so your school is spread across several dates rather
+					than sitting together.
 				</p>
 			</div>
 
@@ -130,8 +132,8 @@ export default function SlotsPage() {
 				<div className="card">
 					<div className="empty-state">
 						<span className="empty-state__icon">🗓️</span>
-						No active exam instances scheduled right now. Upcoming exam slots will appear here when
-						published.
+						None of your participants have been scheduled yet. Dates appear here as they are
+						assigned.
 					</div>
 				</div>
 			)}
@@ -142,7 +144,7 @@ export default function SlotsPage() {
 					<div className="section-title">
 						<h2>Exam Date Calendar</h2>
 						<span className="muted" style={{ fontSize: "0.85rem" }}>
-							Select a date to inspect scheduled slots &amp; students
+							Select a date to see who is sitting that day
 						</span>
 					</div>
 
@@ -191,7 +193,7 @@ export default function SlotsPage() {
 										className="badge badge--neutral"
 										style={{ fontSize: "0.7rem", marginTop: 4 }}
 									>
-										{meta.slotsCount} slot{meta.slotsCount === 1 ? "" : "s"}
+										{meta.slotsCount} sitting{meta.slotsCount === 1 ? "" : "s"}
 									</span>
 								</button>
 							);
@@ -210,27 +212,26 @@ export default function SlotsPage() {
 								{datesWithSlots.find(([k]) => k === activeDate)?.[1].dateStr || activeDate}
 							</h2>
 							<p className="muted mb-0" style={{ fontSize: "0.85rem" }}>
-								Slots assigned for your school's classes
+								The sittings your participants were placed in on this date
 							</p>
 						</div>
 					</div>
 
 					<div className="grid-3" style={{ gap: "1rem" }}>
 						{slotsOnDate.map(({ board, slot }) => {
-							const mine = slot.isAssignedToUs;
 							return (
 								<div
 									key={slot.slotId}
 									className="stat-tile"
 									style={{
 										background: "var(--bg-card)",
-										borderColor: mine ? "var(--accent-500)" : "var(--border-default)",
-										borderWidth: mine ? 2 : 1,
+										borderColor: "var(--border-default)",
+										borderWidth: 1,
 									}}
 								>
 									<div className="row-between">
 										<strong style={{ fontSize: "0.95rem" }}>{board.examTitle}</strong>
-										{mine && <span className="badge badge--positive">Your School Slot</span>}
+										{slot.hasEnded && <span className="badge badge--neutral">Sat</span>}
 									</div>
 
 									<div className="muted" style={{ fontSize: "0.82rem", margin: "0.3rem 0" }}>
@@ -249,15 +250,16 @@ export default function SlotsPage() {
 									</p>
 
 									<div className="row-between" style={{ fontSize: "0.82rem", marginTop: "0.4rem" }}>
-										<span className="muted">Booked / Capacity</span>
-										<strong>
-											{slot.booked} / {slot.capacity}
-										</strong>
+										<span className="muted">Your participants</span>
+										<strong>{slot.students}</strong>
 									</div>
 
-									<div className="perf-bar" style={{ marginTop: "0.4rem" }}>
-										<div className="perf-bar__fill" style={{ width: `${slot.fillPct}%` }} />
-									</div>
+									{board.awaitingSchedule > 0 && (
+										<p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.4rem" }}>
+											{board.awaitingSchedule} of your participants still have no date for this
+											exam.
+										</p>
+									)}
 								</div>
 							);
 						})}

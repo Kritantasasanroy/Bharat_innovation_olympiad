@@ -183,13 +183,3 @@ export class UpdateSchoolProfileDto {
     coordinatorPhone?: string;
 }
 
-/** A school picking one of the slots offered for an exam (item 15). */
-export class PickSlotDto {
-    @IsString()
-    @IsNotEmpty()
-    examInstanceId: string;
-
-    @IsString()
-    @IsNotEmpty()
-    slotId: string;
-}

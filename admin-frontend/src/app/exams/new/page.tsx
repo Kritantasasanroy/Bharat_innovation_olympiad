@@ -7,27 +7,34 @@ import { CLASS_BANDS } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-interface SlotRow {
+/** One recurring sitting time — the shape `SlotTiming` stores. */
+interface TimingRow {
     label: string;
-    startsAt: string;
-    endsAt: string;
+    startTime: string;
+    endTime: string;
     capacity: number;
+    weekdays: number[];
 }
 
 interface CreateFullResult {
     exam: { id: string; title: string };
     instance: { id: string };
-    slots: { id: string }[];
+    slotTimings: { id: string }[];
 }
 
-interface DistributeSummary {
-    allocated: number;
-    overflowed: number;
-    noCapacity: number;
-    skippedAlreadyBooked: number;
-}
+const STEPS = ['Exam details', 'Schedule', 'Sittings', 'Review'] as const;
 
-const STEPS = ['Exam details', 'Schedule', 'Slots', 'Review'] as const;
+const WEEKDAYS = [
+    { value: 0, label: 'Sun' },
+    { value: 1, label: 'Mon' },
+    { value: 2, label: 'Tue' },
+    { value: 3, label: 'Wed' },
+    { value: 4, label: 'Thu' },
+    { value: 5, label: 'Fri' },
+    { value: 6, label: 'Sat' },
+];
+
+const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function apiError(err: unknown, fallback: string): string {
     const data =
@@ -40,9 +47,13 @@ function apiError(err: unknown, fallback: string): string {
 }
 
 /**
- * The exam-creation wizard: define the exam, its schedule, and its slots, then
- * auto-assign every eligible student across those slots — same school together,
- * balanced, overflowing when a slot fills.
+ * The exam-creation wizard: the exam, the window it runs in, and the recurring
+ * sittings inside it.
+ *
+ * Step 3 collects *timings*, not dates. Which Sundays actually need to exist
+ * depends on when each participant registers, so the dated sittings are created
+ * by the assigner as it needs them — there is nothing to enumerate here, and
+ * nothing to auto-distribute afterwards.
  */
 export default function NewExamWizard() {
     const router = useRouter();
@@ -64,30 +75,51 @@ export default function NewExamWizard() {
     const [instanceEnd, setInstanceEnd] = useState('');
     const [requireSeb, setRequireSeb] = useState(false);
 
-    // Step 3 — slots
-    const [slots, setSlots] = useState<SlotRow[]>([
-        { label: 'Slot 1', startsAt: '', endsAt: '', capacity: 100 },
+    // Step 3 — recurring sittings and the assignment rules
+    const [timings, setTimings] = useState<TimingRow[]>([
+        { label: 'Morning sitting', startTime: '10:00', endTime: '12:00', capacity: 50, weekdays: [0, 6] },
     ]);
+    const [leadDays, setLeadDays] = useState(14);
+    const [horizonDays, setHorizonDays] = useState(56);
+    const [dayPreference, setDayPreference] = useState<number[]>([0, 6]);
 
     // Result
     const [created, setCreated] = useState<CreateFullResult | null>(null);
-    const [summary, setSummary] = useState<DistributeSummary | null>(null);
 
     const toggleBand = (band: number) =>
         setClassBands((prev) =>
             prev.includes(band) ? prev.filter((b) => b !== band) : [...prev, band].sort((a, b) => a - b),
         );
 
-    const addSlot = () =>
-        setSlots((prev) => [
+    const addTiming = () =>
+        setTimings((prev) => [
             ...prev,
-            { label: `Slot ${prev.length + 1}`, startsAt: instanceStart, endsAt: instanceEnd, capacity: 100 },
+            { label: '', startTime: '14:00', endTime: '16:00', capacity: 50, weekdays: [0, 6] },
         ]);
 
-    const updateSlot = (i: number, patch: Partial<SlotRow>) =>
-        setSlots((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+    const updateTiming = (i: number, patch: Partial<TimingRow>) =>
+        setTimings((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
 
-    const removeSlot = (i: number) => setSlots((prev) => prev.filter((_, idx) => idx !== i));
+    const removeTiming = (i: number) => setTimings((prev) => prev.filter((_, idx) => idx !== i));
+
+    const toggleTimingDay = (i: number, day: number) =>
+        setTimings((prev) =>
+            prev.map((t, idx) =>
+                idx === i
+                    ? {
+                          ...t,
+                          weekdays: t.weekdays.includes(day)
+                              ? t.weekdays.filter((d) => d !== day)
+                              : [...t.weekdays, day].sort((a, b) => a - b),
+                      }
+                    : t,
+            ),
+        );
+
+    const togglePreferredDay = (day: number) =>
+        setDayPreference((prev) =>
+            prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+        );
 
     function validateStep(): string | null {
         if (step === 0) {
@@ -99,10 +131,22 @@ export default function NewExamWizard() {
             if (new Date(instanceEnd) <= new Date(instanceStart)) return 'End must be after start.';
         }
         if (step === 2) {
-            if (slots.length === 0) return 'Add at least one slot.';
-            for (const s of slots) {
-                if (!s.startsAt || !s.endsAt) return 'Every slot needs a start and end time.';
-                if (s.capacity < 1) return 'Slot capacity must be at least 1.';
+            if (timings.length === 0) return 'Add at least one sitting time.';
+            for (const t of timings) {
+                if (!t.startTime || !t.endTime) return 'Every sitting needs a start and end time.';
+                if (t.startTime === t.endTime) return 'A sitting must be longer than zero minutes.';
+                if (t.capacity < 1) return 'Each sitting needs at least one seat.';
+                if (t.weekdays.length === 0) return 'Pick at least one day for every sitting.';
+            }
+            if (dayPreference.length === 0) return 'Pick at least one preferred day.';
+            if (horizonDays < leadDays) return 'The latest sitting must be further out than the earliest.';
+            // A preferred day no timing covers is the single most common way to
+            // end up with an exam nobody can be scheduled for, so it is caught
+            // here rather than discovered later on the unassigned list.
+            const covered = new Set(timings.flatMap((t) => t.weekdays));
+            const orphan = dayPreference.find((d) => !covered.has(d));
+            if (orphan !== undefined) {
+                return `No sitting runs on ${WEEKDAY_FULL[orphan]}, but it is a preferred day. Add a sitting for it, or remove it from the preferred days.`;
             }
         }
         return null;
@@ -130,33 +174,25 @@ export default function NewExamWizard() {
                 durationMinutes,
                 feeAmount,
                 isPublished,
-                instance: { startsAt: instanceStart, endsAt: instanceEnd, requireSeb },
-                slots: slots.map((s) => ({
-                    label: s.label || undefined,
-                    startsAt: s.startsAt,
-                    endsAt: s.endsAt,
-                    capacity: Number(s.capacity),
+                instance: {
+                    startsAt: instanceStart,
+                    endsAt: instanceEnd,
+                    requireSeb,
+                    slotLeadDays: leadDays,
+                    slotHorizonDays: horizonDays,
+                    slotDayPreference: dayPreference,
+                },
+                slotTimings: timings.map((t) => ({
+                    label: t.label || undefined,
+                    startTime: t.startTime,
+                    endTime: t.endTime,
+                    capacity: Number(t.capacity),
+                    weekdays: t.weekdays,
                 })),
             });
             setCreated(data);
         } catch (err) {
             setError(apiError(err, 'Could not create the exam.'));
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    async function autoDistribute() {
-        if (!created) return;
-        setBusy(true);
-        setError('');
-        try {
-            const { data } = await api.post<DistributeSummary>(
-                `/admin/exams/instances/${created.instance.id}/auto-distribute`,
-            );
-            setSummary(data);
-        } catch (err) {
-            setError(apiError(err, 'Could not auto-assign students.'));
         } finally {
             setBusy(false);
         }
@@ -174,39 +210,19 @@ export default function NewExamWizard() {
                     <div className="glass-card" style={{ padding: 'var(--space-6)', maxWidth: 640 }}>
                         <h3>{created.exam.title}</h3>
                         <p className="text-muted">
-                            {created.slots.length} slot{created.slots.length === 1 ? '' : 's'} created. You can
-                            now auto-assign every eligible student across them — same school together,
-                            balanced, overflowing when a slot fills.
+                            {created.slotTimings.length} sitting time
+                            {created.slotTimings.length === 1 ? '' : 's'} configured. Participants
+                            are now scheduled automatically as they register — the first{' '}
+                            {WEEKDAY_FULL[dayPreference[0]]} at least {leadDays} days after they
+                            sign up, rolling forward as dates fill. Dated sittings appear on the
+                            scheduling page as they are needed.
                         </p>
 
                         {error && <div className="form-error">{error}</div>}
 
-                        {summary ? (
-                            <div className="glass-card" style={{ padding: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
-                                <h4>Assignment complete</h4>
-                                <div className="stat-row" style={{ marginTop: 'var(--space-3)' }}>
-                                    <Stat label="Allocated" value={summary.allocated} />
-                                    <Stat label="Overflowed" value={summary.overflowed} />
-                                    <Stat label="No capacity" value={summary.noCapacity} />
-                                    <Stat label="Already booked" value={summary.skippedAlreadyBooked} />
-                                </div>
-                                {summary.noCapacity > 0 && (
-                                    <p className="text-muted" style={{ marginTop: 'var(--space-3)' }}>
-                                        {summary.noCapacity} eligible student{summary.noCapacity === 1 ? '' : 's'}{' '}
-                                        could not be placed — add slots or capacity, then re-run from Slots &amp;
-                                        windows.
-                                    </p>
-                                )}
-                            </div>
-                        ) : (
-                            <button className="btn btn-primary" onClick={autoDistribute} disabled={busy} style={{ marginTop: 'var(--space-4)' }}>
-                                {busy ? 'Assigning…' : 'Auto-assign eligible students now'}
-                            </button>
-                        )}
-
-                        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
+                        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)', flexWrap: 'wrap' }}>
                             <button className="btn btn-secondary" onClick={() => router.push('/slots')}>
-                                Go to Slots &amp; windows
+                                Go to Exam scheduling
                             </button>
                             <button className="btn btn-secondary" onClick={() => router.push(`/questions?examId=${created.exam.id}`)}>
                                 Add questions
@@ -288,7 +304,7 @@ export default function NewExamWizard() {
 
                     {step === 1 && (
                         <div className="exam-form">
-                            <p className="text-muted">The overall window this exam runs in. Slots sit inside it.</p>
+                            <p className="text-muted">The overall window this exam runs in. Sittings sit inside it.</p>
                             <div className="grid-2" style={{ gap: 'var(--space-4)' }}>
                                 <div className="form-group">
                                     <label>Window starts *</label>
@@ -311,41 +327,129 @@ export default function NewExamWizard() {
                     {step === 2 && (
                         <div className="exam-form">
                             <p className="text-muted">
-                                Add the exam-day batches. Students are auto-assigned across these, keeping each
-                                school together and balancing the load.
+                                Sittings recur — set the times and days once, and dated sittings are
+                                created automatically as participants are scheduled onto them.
                             </p>
-                            {slots.map((slot, i) => (
+
+                            {timings.map((timing, i) => (
                                 <div key={i} className="glass-card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-3)' }}>
                                     <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
                                         <div className="form-group">
-                                            <label>Label</label>
-                                            <input className="form-control" value={slot.label} onChange={(e) => updateSlot(i, { label: e.target.value })} />
+                                            <label>Starts (IST)</label>
+                                            <input type="time" className="form-control" value={timing.startTime} onChange={(e) => updateTiming(i, { startTime: e.target.value })} />
                                         </div>
                                         <div className="form-group">
-                                            <label>Capacity</label>
-                                            <input type="number" min={1} className="form-control" value={slot.capacity} onChange={(e) => updateSlot(i, { capacity: Number(e.target.value) })} />
+                                            <label>Ends (IST)</label>
+                                            <input type="time" className="form-control" value={timing.endTime} onChange={(e) => updateTiming(i, { endTime: e.target.value })} />
                                         </div>
                                     </div>
                                     <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
                                         <div className="form-group">
-                                            <label>Starts</label>
-                                            <input type="datetime-local" className="form-control" value={slot.startsAt} onChange={(e) => updateSlot(i, { startsAt: e.target.value })} />
+                                            <label>Seats per sitting</label>
+                                            <input type="number" min={1} className="form-control" value={timing.capacity} onChange={(e) => updateTiming(i, { capacity: Number(e.target.value) })} />
                                         </div>
                                         <div className="form-group">
-                                            <label>Ends</label>
-                                            <input type="datetime-local" className="form-control" value={slot.endsAt} onChange={(e) => updateSlot(i, { endsAt: e.target.value })} />
+                                            <label>Label (optional)</label>
+                                            <input className="form-control" value={timing.label} placeholder="Morning sitting" onChange={(e) => updateTiming(i, { label: e.target.value })} />
                                         </div>
                                     </div>
-                                    {slots.length > 1 && (
-                                        <button type="button" className="btn btn-danger btn-sm" onClick={() => removeSlot(i)}>
-                                            Remove slot
+                                    <div className="form-group">
+                                        <label>Runs on</label>
+                                        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                                            {WEEKDAYS.map((d) => {
+                                                const on = timing.weekdays.includes(d.value);
+                                                return (
+                                                    <button
+                                                        key={d.value}
+                                                        type="button"
+                                                        aria-pressed={on}
+                                                        onClick={() => toggleTimingDay(i, d.value)}
+                                                        style={{
+                                                            padding: 'var(--space-2) var(--space-4)',
+                                                            borderRadius: 'var(--radius-full)',
+                                                            border: on ? '1px solid var(--primary-400)' : '1px solid var(--border-default)',
+                                                            background: on ? 'rgba(255,203,5,0.14)' : 'var(--bg-input)',
+                                                            color: on ? 'var(--primary-400)' : 'var(--text-secondary)',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.875rem',
+                                                        }}
+                                                    >
+                                                        {d.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    {timings.length > 1 && (
+                                        <button type="button" className="btn btn-danger btn-sm" onClick={() => removeTiming(i)}>
+                                            Remove sitting
                                         </button>
                                     )}
                                 </div>
                             ))}
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={addSlot}>
-                                + Add slot
+
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={addTiming}>
+                                + Add sitting time
                             </button>
+
+                            <hr style={{ margin: 'var(--space-6) 0', border: 0, borderTop: '1px solid var(--border-subtle)' }} />
+
+                            <h4>How participants are scheduled</h4>
+                            <p className="text-muted">
+                                Each participant gets the first available date in this window,
+                                counted from the day they registered.
+                            </p>
+
+                            <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
+                                <div className="form-group">
+                                    <label>Earliest sitting (days after registering)</label>
+                                    <input type="number" min={0} max={365} className="form-control" value={leadDays} onChange={(e) => setLeadDays(Number(e.target.value))} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Latest sitting (days after registering)</label>
+                                    <input type="number" min={1} max={730} className="form-control" value={horizonDays} onChange={(e) => setHorizonDays(Number(e.target.value))} />
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Preferred days, in order</label>
+                                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                                    {WEEKDAYS.map((d) => {
+                                        const rank = dayPreference.indexOf(d.value);
+                                        const on = rank >= 0;
+                                        return (
+                                            <button
+                                                key={d.value}
+                                                type="button"
+                                                aria-pressed={on}
+                                                onClick={() => togglePreferredDay(d.value)}
+                                                style={{
+                                                    padding: 'var(--space-2) var(--space-4)',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    border: on ? '1px solid var(--primary-400)' : '1px solid var(--border-default)',
+                                                    background: on ? 'rgba(255,203,5,0.14)' : 'var(--bg-input)',
+                                                    color: on ? 'var(--primary-400)' : 'var(--text-secondary)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: on ? 600 : 400,
+                                                }}
+                                            >
+                                                {on && <span style={{ opacity: 0.7, marginRight: 4 }}>{rank + 1}.</span>}
+                                                {d.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {dayPreference.length > 0 && (
+                                    <p className="text-muted" style={{ marginTop: 'var(--space-3)', lineHeight: 1.6 }}>
+                                        Every {WEEKDAY_FULL[dayPreference[0]]} between {leadDays} and{' '}
+                                        {horizonDays} days out is tried in turn
+                                        {dayPreference.length > 1
+                                            ? `, and only when all of them are full are ${dayPreference.slice(1).map((d) => `${WEEKDAY_FULL[d]}s`).join(', then ')} tried.`
+                                            : '.'}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -362,23 +466,28 @@ export default function NewExamWizard() {
                             </p>
                             <table className="data-table" style={{ marginTop: 'var(--space-3)' }}>
                                 <thead>
-                                    <tr><th>Slot</th><th>Window</th><th>Capacity</th></tr>
+                                    <tr><th>Sitting</th><th>Days</th><th>Seats each</th></tr>
                                 </thead>
                                 <tbody>
-                                    {slots.map((s, i) => (
+                                    {timings.map((t, i) => (
                                         <tr key={i}>
-                                            <td>{s.label}</td>
-                                            <td className="text-muted">
-                                                {s.startsAt ? new Date(s.startsAt).toLocaleString('en-IN') : '—'} →{' '}
-                                                {s.endsAt ? new Date(s.endsAt).toLocaleTimeString('en-IN') : '—'}
+                                            <td>
+                                                {t.startTime} – {t.endTime}
+                                                {t.label && <div className="text-muted">{t.label}</div>}
                                             </td>
-                                            <td>{s.capacity}</td>
+                                            <td className="text-muted">
+                                                {t.weekdays.map((d) => WEEKDAYS[d].label).join(', ')}
+                                            </td>
+                                            <td>{t.capacity}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                            <p className="text-muted" style={{ marginTop: 'var(--space-3)' }}>
-                                Total capacity: {slots.reduce((sum, s) => sum + Number(s.capacity), 0)} seats.
+                            <p className="text-muted" style={{ marginTop: 'var(--space-3)', lineHeight: 1.6 }}>
+                                {timings.reduce((sum, t) => sum + Number(t.capacity) * t.weekdays.length, 0)}{' '}
+                                seats a week across all sittings. Participants are scheduled{' '}
+                                {leadDays}–{horizonDays} days after they register, preferring{' '}
+                                {dayPreference.map((d) => `${WEEKDAY_FULL[d]}s`).join(', then ')}.
                             </p>
                         </div>
                     )}
@@ -398,14 +507,5 @@ export default function NewExamWizard() {
                 </div>
             </main>
         </AuthGuard>
-    );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-    return (
-        <div className="stat-tile">
-            <span className="stat-tile__label">{label}</span>
-            <span className="stat-tile__value">{value}</span>
-        </div>
     );
 }

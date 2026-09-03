@@ -28,11 +28,11 @@ describe('tourForPath', () => {
         expect(tourForPath('/exams/abc-123/play?next=xyz')).toBeNull();
     });
 
-    // The instructions and slot pages are not the player, and are exactly where
-    // a confused student wants a guide.
+    // The instructions and schedule pages are not the player, and are exactly
+    // where a confused student wants a guide.
     it('still offers help on the pages around the player', () => {
         expect(tourForPath('/exams/abc-123/instructions')).toBe('exams');
-        expect(tourForPath('/exams/abc-123/slots')).toBe('exams');
+        expect(tourForPath('/exams/abc-123/schedule')).toBe('exams');
     });
 
     it('returns null where there is nothing to explain', () => {

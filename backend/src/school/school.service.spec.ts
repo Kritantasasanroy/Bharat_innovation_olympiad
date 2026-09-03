@@ -94,6 +94,7 @@ type FakePrisma = {
     };
     school: {
         findUnique(args: StoreArgs): Promise<SchoolRow | null>;
+        findMany(args: StoreArgs): Promise<SchoolRow[]>;
         create(args: StoreArgs): Promise<SchoolRow>;
         update(args: StoreArgs): Promise<SchoolRow>;
     };
@@ -226,6 +227,8 @@ function createFakeDb() {
         school: {
             findUnique: async ({ where = {} }: StoreArgs) =>
                 schools.find((school) => match(school, where)) ?? null,
+            findMany: async ({ where = {} }: StoreArgs) =>
+                schools.filter((school) => match(school, where)),
             create: async ({ data = {} }: StoreArgs) => {
                 const row: SchoolRow = {
                     id: nextId('school'),

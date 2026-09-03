@@ -15,7 +15,6 @@ function createFakeDb() {
     const partnerRequests: any[] = [];
     const bookings: any[] = [];
     const slots: any[] = [];
-    const assignments: any[] = [];
     const archive: any[] = [];
     const audit: any[] = [];
 
@@ -81,18 +80,6 @@ function createFakeDb() {
                 return r;
             },
         },
-        schoolSlotAssignment: {
-            deleteMany: async ({ where }: any) => {
-                let count = 0;
-                for (let i = assignments.length - 1; i >= 0; i -= 1) {
-                    if (assignments[i].schoolId === where.schoolId) {
-                        assignments.splice(i, 1);
-                        count += 1;
-                    }
-                }
-                return { count };
-            },
-        },
         partnerRequest: {
             findUnique: async ({ where }: any) => byId(partnerRequests, where.id),
             delete: async ({ where }: any) => {
@@ -129,9 +116,6 @@ function createFakeDb() {
         if (include?.accessRequest) {
             result.accessRequest = schoolRequests.find((r) => r.schoolId === s.id) ?? null;
         }
-        if (include?.slotAssignments) {
-            result.slotAssignments = assignments.filter((a) => a.schoolId === s.id);
-        }
         if (include?._count) {
             result._count = { users: users.filter((u) => u.schoolId === s.id).length };
         }
@@ -139,7 +123,7 @@ function createFakeDb() {
     };
     prisma.user.findUnique = tx.user.findUnique;
 
-    return { prisma, users, schools, schoolRequests, partnerRequests, bookings, slots, assignments, archive, audit };
+    return { prisma, users, schools, schoolRequests, partnerRequests, bookings, slots, archive, audit };
 }
 
 const ADMIN = { id: 'admin-1', email: 'admin@bio.test' };
@@ -191,7 +175,7 @@ describe('deleteUser', () => {
 
 describe('deleteSchool', () => {
     it('detaches students rather than deleting them, and removes the coordinator', async () => {
-        const { service, users, schools, schoolRequests, assignments, archive } = setup();
+        const { service, users, schools, schoolRequests, archive } = setup();
         schools.push({ id: 's1', name: 'DPS', code: 'SCH-AAA' });
         schoolRequests.push({
             id: 'req1',
@@ -203,7 +187,6 @@ describe('deleteSchool', () => {
         users.push({ id: 'coord1', firstName: 'Co', lastName: 'Ord', email: 'coord@x.test', role: 'SCHOOL', schoolId: 's1' });
         users.push({ id: 'stu1', firstName: 'S', lastName: 'One', email: 's1@x.test', role: 'STUDENT', schoolId: 's1' });
         users.push({ id: 'stu2', firstName: 'S', lastName: 'Two', email: 's2@x.test', role: 'STUDENT', schoolId: 's1' });
-        assignments.push({ id: 'a1', schoolId: 's1' });
 
         const result = await service.deleteSchool('s1', ADMIN, 'closed');
 
@@ -213,8 +196,7 @@ describe('deleteSchool', () => {
         expect(users.find((u) => u.id === 'stu2')?.schoolId).toBeNull();
         // Coordinator is gone.
         expect(users.find((u) => u.id === 'coord1')).toBeUndefined();
-        // Assignments gone; request detached.
-        expect(assignments).toHaveLength(0);
+        // Request detached.
         expect(schoolRequests[0].schoolId).toBeNull();
         expect(result.studentsDetached).toBe(2);
         expect(archive[0]).toMatchObject({ entityType: 'SCHOOL', email: 'coord@x.test' });

@@ -125,6 +125,7 @@ type SchoolTransactionStore = {
     };
     school: {
         findUnique(args: StoreArgs): Promise<SchoolRecord | null>;
+        findMany(args: StoreArgs): Promise<SchoolRecord[]>;
         create(args: StoreArgs): Promise<SchoolRecord>;
         update(args: StoreArgs): Promise<SchoolRecord>;
     };
@@ -177,6 +178,22 @@ export class SchoolService {
         @Inject(PartnerDirectoryService) private partnerDirectory: SchoolPartnerDirectory,
         private emailOtp: EmailOtpService,
     ) {}
+
+    /**
+     * Every school, as id/name/code — the directory behind the admin filter
+     * dropdowns.
+     *
+     * Deliberately unpaginated and capped: these feed `<select>` elements, so a
+     * consumer wants the whole list at once, and a school estate large enough to
+     * exceed this cap needs a searchable control rather than a longer dropdown.
+     */
+    async listAllForAdmin() {
+        return this.prisma.school.findMany({
+            select: { id: true, name: true, code: true },
+            orderBy: { name: 'asc' },
+            take: 2000,
+        } as StoreArgs);
+    }
 
     /**
      * Create a SchoolRequest and, if a concurrent request wins the race on the

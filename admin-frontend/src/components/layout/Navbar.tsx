@@ -29,7 +29,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
             { label: 'Exams', href: '/exams' },
             { label: 'Question bank', href: '/questions' },
             { label: 'Media gallery', href: '/media' },
-            { label: 'Slots & windows', href: '/slots' },
+            { label: 'Exam scheduling', href: '/slots' },
         ],
     },
     {

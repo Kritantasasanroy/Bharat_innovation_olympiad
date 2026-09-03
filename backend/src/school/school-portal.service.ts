@@ -4,7 +4,6 @@ import { PartnerDirectoryService } from '../partner/partner-directory.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultsExportService } from '../results/results-export.service';
-import { SchoolSlotService } from '../slot/school-slot.service';
 import { RegisterStudentsDto, UpdateSchoolProfileDto } from './dto/school.dto';
 
 export type StudentStatus = 'INVITED' | 'REGISTERED' | 'PAID' | 'COMPLETED';
@@ -33,7 +32,6 @@ export class SchoolPortalService {
     constructor(
         private prisma: PrismaService,
         private partners: PartnerDirectoryService,
-        private schoolSlots: SchoolSlotService,
         private exportService: ResultsExportService,
         private adminApi: PartnerAdminApiClient,
     ) {}
@@ -191,48 +189,80 @@ export class SchoolPortalService {
     }
 
     /**
-     * Every published exam this school's students are eligible for, with **all**
-     * its slots — how full each one is, and which one (if any) this school holds
-     * (item 15).
+     * Where this school's students have been scheduled, exam by exam (item 15).
      *
-     * The school portal previously showed only the slot staff had already assigned,
-     * so a coordinator with no assignment saw an empty page and had no way to ask
-     * for one. Now they see the whole board and can pick from it.
+     * Read-only, and deliberately so. Sittings are assigned per student at
+     * registration — each student's date follows from *their own* signup date,
+     * not their school's — so a whole school no longer shares one slot and there
+     * is nothing here for a coordinator to pick. What they need instead is the
+     * roll-call this returns: which sittings their students landed in, how many
+     * are in each, and who has no date yet so the school can chase it with staff.
      */
     async slots(schoolId: string) {
         const now = new Date();
 
         const instances = await this.prisma.examInstance.findMany({
-            where: {
-                exam: { isPublished: true },
-                endsAt: { gte: now },
-            },
+            where: { exam: { isPublished: true }, endsAt: { gte: now } },
             orderBy: { startsAt: 'asc' },
             include: {
                 exam: { select: { id: true, title: true, classBands: true, durationMinutes: true } },
-                slots: { orderBy: { startsAt: 'asc' } },
             },
         });
 
-        const assignments = await this.prisma.schoolSlotAssignment.findMany({
-            where: { schoolId },
-        });
-        const assignedSlotByInstance = new Map(
-            assignments.map((a) => [a.examInstanceId, a.slotId]),
-        );
-
-        // How many of this school's students each exam actually applies to — the
-        // number the coordinator needs in order to pick a slot big enough.
         const students = await this.prisma.user.findMany({
             where: { schoolId, role: Role.STUDENT },
             select: { classBand: true },
+        });
+
+        // Every active booking held by this school's students, across the exams
+        // above — one query rather than one per instance.
+        const bookings = await this.prisma.booking.findMany({
+            where: {
+                status: { in: ['PENDING', 'CONFIRMED'] },
+                user: { schoolId },
+                slot: { examInstanceId: { in: instances.map((i) => i.id) } },
+            },
+            include: {
+                slot: {
+                    select: {
+                        id: true,
+                        label: true,
+                        startsAt: true,
+                        endsAt: true,
+                        examInstanceId: true,
+                    },
+                },
+            },
         });
 
         return instances.map((instance) => {
             const eligible = students.filter(
                 (s) => s.classBand !== null && instance.exam.classBands.includes(s.classBand),
             ).length;
-            const assignedSlotId = assignedSlotByInstance.get(instance.id) ?? null;
+
+            // Group this school's students by the sitting they were placed in, so
+            // a coordinator sees "18 on Sun 21 Sep, 6 on Sun 28 Sep" rather than a
+            // flat list of names.
+            const mine = bookings.filter((b) => b.slot.examInstanceId === instance.id);
+            const bySitting = new Map<
+                string,
+                { slotId: string; label: string | null; startsAt: Date; endsAt: Date; students: number }
+            >();
+            for (const booking of mine) {
+                const row = bySitting.get(booking.slot.id) ?? {
+                    slotId: booking.slot.id,
+                    label: booking.slot.label,
+                    startsAt: booking.slot.startsAt,
+                    endsAt: booking.slot.endsAt,
+                    students: 0,
+                };
+                row.students += 1;
+                bySitting.set(booking.slot.id, row);
+            }
+
+            const sittings = [...bySitting.values()].sort(
+                (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+            );
 
             return {
                 examInstanceId: instance.id,
@@ -243,92 +273,15 @@ export class SchoolPortalService {
                 startsAt: instance.startsAt,
                 endsAt: instance.endsAt,
                 eligibleStudents: eligible,
-                assignedSlotId,
-                slots: instance.slots.map((slot) => {
-                    const remaining = slot.capacity - slot.booked;
-                    return {
-                        slotId: slot.id,
-                        label: slot.label,
-                        startsAt: slot.startsAt,
-                        endsAt: slot.endsAt,
-                        capacity: slot.capacity,
-                        booked: slot.booked,
-                        remaining,
-                        /** Percentage full, so the UI can draw a fill bar. */
-                        fillPct:
-                            slot.capacity > 0
-                                ? Math.round((slot.booked / slot.capacity) * 100)
-                                : 100,
-                        isAssignedToUs: slot.id === assignedSlotId,
-                        hasEnded: slot.endsAt < now,
-                        /** A school can only pick a slot that is open and fits its cohort. */
-                        selectable:
-                            slot.endsAt >= now && remaining > 0 && slot.id !== assignedSlotId,
-                        /** Whether the whole eligible cohort fits — a warning, not a block. */
-                        fitsAllStudents: remaining >= eligible,
-                    };
-                }),
+                scheduledStudents: mine.length,
+                /** Eligible students with no sitting yet — the number to chase. */
+                awaitingSchedule: Math.max(0, eligible - mine.length),
+                sittings: sittings.map((sitting) => ({
+                    ...sitting,
+                    hasEnded: sitting.endsAt < now,
+                })),
             };
         });
-    }
-
-    /**
-     * The coordinator picks a slot for one exam (item 15).
-     *
-     * This is a real write, so it is bounded: the slot must belong to the exam
-     * instance named, and the school may only set **its own** assignment. Once set,
-     * `SchoolSlotService` books the school's eligible students into it and pins
-     * future registrations there — the same path staff use, so a school-picked slot
-     * and a staff-assigned one behave identically.
-     *
-     * Capacity is enforced by the same atomic guard as everywhere else, so two
-     * schools racing for the last places in a slot cannot oversell it.
-     */
-    async pickSlot(schoolId: string, examInstanceId: string, slotId: string) {
-        const slot = await this.prisma.examSlot.findUnique({
-            where: { id: slotId },
-            select: { id: true, examInstanceId: true, capacity: true, booked: true, endsAt: true },
-        });
-        if (!slot) throw new NotFoundException('Slot not found.');
-        if (slot.examInstanceId !== examInstanceId) {
-            throw new BadRequestException('That slot does not belong to this exam.');
-        }
-        if (slot.endsAt < new Date()) {
-            throw new BadRequestException('That slot has already ended.');
-        }
-        if (slot.booked >= slot.capacity) {
-            throw new BadRequestException('That slot is full. Pick another.');
-        }
-
-        const existing = await this.prisma.schoolSlotAssignment.findUnique({
-            where: { schoolId_examInstanceId: { schoolId, examInstanceId } },
-        });
-
-        // Changing an existing pick must move the students who are already booked,
-        // or the school ends up split across two slots.
-        if (existing && existing.slotId !== slotId) {
-            await this.schoolSlots.reassignSchool(schoolId, examInstanceId, slotId, schoolId);
-            return { changed: true, ...(await this.slotSummary(schoolId, examInstanceId)) };
-        }
-
-        const result = await this.schoolSlots.setSchoolSlotAssignment(
-            schoolId,
-            examInstanceId,
-            slotId,
-            schoolId,
-        );
-        return { changed: false, summary: result.summary };
-    }
-
-    private async slotSummary(schoolId: string, examInstanceId: string) {
-        const booked = await this.prisma.booking.count({
-            where: {
-                status: { in: ['PENDING', 'CONFIRMED'] },
-                slot: { examInstanceId },
-                user: { schoolId },
-            },
-        });
-        return { booked };
     }
 
     /**

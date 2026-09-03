@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
  *
  * "Google form submission button on right" (Beta Testing Requirements). The
  * interstitials only catch two moments — just after registering and just after an
- * exam. A beta tester who hits something odd on the slot picker at 9pm has
+ * exam. A beta tester who hits something odd on the schedule page at 9pm has
  * nowhere to say so, and by the next interstitial they will have forgotten.
  *
  * ## Where it deliberately does not appear
@@ -25,7 +25,7 @@ const HIDDEN_ON = ['/exams/', '/login', '/register'];
 
 function isHidden(pathname: string | null): boolean {
     if (!pathname) return true;
-    // Only the player itself is hidden, not the instructions or slot pages —
+    // Only the player itself is hidden, not the instructions or schedule pages —
     // those are exactly where a confused tester wants to tell us something.
     if (/^\/exams\/[^/]+\/play/.test(pathname)) return true;
     return HIDDEN_ON.some((p) => p !== '/exams/' && pathname.startsWith(p));

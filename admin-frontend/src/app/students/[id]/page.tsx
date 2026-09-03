@@ -5,7 +5,7 @@ import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface Attempt {
     id: string;
@@ -42,11 +42,33 @@ interface Payment {
     } | null;
 }
 
-interface Booking {
-    id: string;
+/** One sitting this participant holds, from `GET /admin/students/:id/schedule`. */
+interface StudentSitting {
+    bookingId: string;
     status: string;
-    createdAt: string;
-    slot: { label: string | null; startsAt: string; endsAt: string; examInstance: { exam: { title: string } } };
+    /** Null when the auto-assigner placed them; an admin id when a human did. */
+    assignedBy: string | null;
+    slotId: string;
+    label: string | null;
+    startsAt: string;
+    endsAt: string;
+    weekday: string;
+    capacity: number;
+    booked: number;
+    examInstanceId: string;
+    exam: { id: string; title: string };
+}
+
+/** A sitting they could be moved into. */
+interface SittingOption {
+    id: string;
+    label: string | null;
+    startsAt: string;
+    endsAt: string;
+    capacity: number;
+    booked: number;
+    seatsLeft: number;
+    isFull: boolean;
 }
 
 /**
@@ -91,7 +113,6 @@ interface StudentDetail {
     guardianProfile: GuardianProfile | null;
     attempts: Attempt[];
     payments: Payment[];
-    bookings: Booking[];
     summary: {
         totalAttempts: number;
         totalViolations: number;
@@ -245,8 +266,19 @@ export default function StudentDetailPage() {
     const id = params?.id as string;
 
     const [student, setStudent] = useState<StudentDetail | null>(null);
+    const [sittings, setSittings] = useState<StudentSitting[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const loadSchedule = useCallback(async () => {
+        if (!id) return;
+        try {
+            const { data } = await api.get<StudentSitting[]>(`/admin/students/${id}/schedule`);
+            setSittings(data);
+        } catch {
+            setSittings([]);
+        }
+    }, [id]);
 
     useEffect(() => {
         if (!id) return;
@@ -254,7 +286,8 @@ export default function StudentDetailPage() {
             .then((r) => setStudent(r.data))
             .catch((e) => setError(e.response?.data?.message ?? e.message))
             .finally(() => setLoading(false));
-    }, [id]);
+        loadSchedule();
+    }, [id, loadSchedule]);
 
     if (loading) {
         return (
@@ -401,7 +434,7 @@ export default function StudentDetailPage() {
                                 <table className="data-table">
                                     <thead>
                                         <tr>
-                                            <th>Exam / Slot</th>
+                                            <th>Exam / Sitting</th>
                                             <th>Amount</th>
                                             <th>Status</th>
                                             <th>Coupon</th>
@@ -427,39 +460,225 @@ export default function StudentDetailPage() {
                     </div>
                 </div>
 
-                {/* Bookings */}
-                <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: 'var(--space-4)' }}>Slot Bookings</h2>
-                    <div className="glass-card" style={{ overflow: 'hidden', padding: 0 }}>
-                        {student.bookings.length === 0 ? (
-                            <div style={{ padding: 'var(--space-10)', textAlign: 'center', color: 'var(--text-secondary)' }}>No slot bookings yet.</div>
-                        ) : (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table className="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Exam</th>
-                                            <th>Slot</th>
-                                            <th>Status</th>
-                                            <th>Booked On</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {student.bookings.map((b) => (
-                                            <tr key={b.id}>
-                                                <td>{b.slot.examInstance.exam.title}</td>
-                                                <td style={{ fontSize: '0.85rem' }}>{b.slot.label ?? fmt(b.slot.startsAt)}</td>
-                                                <td><StatusBadge status={b.status} /></td>
-                                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{fmt(b.createdAt)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                {/* Exam sittings — visible *and* editable, which is the point:
+                    participants cannot change their own date, so this is the only
+                    place a wrong one gets fixed. */}
+                <SchedulePanel
+                    userId={id}
+                    sittings={sittings}
+                    onChanged={loadSchedule}
+                />
             </main>
         </AuthGuard>
+    );
+}
+
+/**
+ * This participant's exam sittings, with the controls to move them.
+ *
+ * Dates are assigned automatically from the day each participant registers, and
+ * participants have no way to change their own. That makes this panel the single
+ * place a genuine clash gets resolved — so it shows not just the date but how
+ * full the sitting is, whether a human chose it, and every alternative with its
+ * remaining seats.
+ */
+function SchedulePanel({
+    userId,
+    sittings,
+    onChanged,
+}: {
+    userId: string;
+    sittings: StudentSitting[];
+    onChanged: () => void;
+}) {
+    const [moving, setMoving] = useState<StudentSitting | null>(null);
+    const [options, setOptions] = useState<SittingOption[]>([]);
+    const [optionsLoading, setOptionsLoading] = useState(false);
+    const [target, setTarget] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [note, setNote] = useState<string | null>(null);
+
+    const openMove = async (sitting: StudentSitting) => {
+        setMoving(sitting);
+        setTarget('');
+        setOptionsLoading(true);
+        try {
+            const { data } = await api.get<SittingOption[]>(
+                `/admin/slots?examInstanceId=${sitting.examInstanceId}`,
+            );
+            setOptions(data.filter((o) => o.id !== sitting.slotId));
+        } catch {
+            setOptions([]);
+        } finally {
+            setOptionsLoading(false);
+        }
+    };
+
+    const move = async () => {
+        if (!moving || !target) return;
+        setSaving(true);
+        setNote(null);
+        try {
+            await api.put(`/admin/students/${userId}/schedule`, { slotId: target });
+            setNote('Moved. The participant has been sent their new date by email and WhatsApp.');
+            setMoving(null);
+            onChanged();
+        } catch (e: unknown) {
+            const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            setNote(msg ?? 'Could not move this participant.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const release = async (sitting: StudentSitting) => {
+        if (
+            !confirm(
+                `Remove this participant from ${fmt(sitting.startsAt)}?\n\nThey will have no sitting for ${sitting.exam.title} until one is assigned again.`,
+            )
+        )
+            return;
+        try {
+            await api.delete(`/admin/students/${userId}/schedule/${sitting.examInstanceId}`);
+            setNote('Sitting released. The seat is free again.');
+            onChanged();
+        } catch (e: unknown) {
+            const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            setNote(msg ?? 'Could not release that sitting.');
+        }
+    };
+
+    return (
+        <div>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: 'var(--space-4)' }}>
+                Exam Sittings
+            </h2>
+
+            {note && (
+                <div
+                    className="glass-card"
+                    style={{ padding: 'var(--space-3) var(--space-4)', marginBottom: 'var(--space-3)', fontSize: '0.85rem' }}
+                >
+                    {note}
+                </div>
+            )}
+
+            <div className="glass-card" style={{ overflow: 'hidden', padding: 0 }}>
+                {sittings.length === 0 ? (
+                    <div style={{ padding: 'var(--space-10)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        No sitting assigned yet. Participants are scheduled automatically about two
+                        weeks after they register — place them by hand from Exam scheduling if this
+                        looks wrong.
+                    </div>
+                ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Exam</th>
+                                    <th>Sitting</th>
+                                    <th>Seats</th>
+                                    <th>Set by</th>
+                                    <th style={{ textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sittings.map((b) => (
+                                    <tr key={b.bookingId}>
+                                        <td>{b.exam.title}</td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            <strong>{fmt(b.startsAt)}</strong>
+                                            <div style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>
+                                                {b.weekday}
+                                                {b.label ? ` · ${b.label}` : ''}
+                                            </div>
+                                        </td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {b.booked}/{b.capacity}
+                                        </td>
+                                        <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                            {b.assignedBy ? 'Staff' : 'Automatic'}
+                                        </td>
+                                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                            <button className="btn btn-secondary btn-sm" onClick={() => openMove(b)}>
+                                                Change date
+                                            </button>{' '}
+                                            <button className="btn btn-danger btn-sm" onClick={() => release(b)}>
+                                                Release
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {moving && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Change sitting"
+                    style={{
+                        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 'var(--space-4)', zIndex: 1000,
+                    }}
+                    onClick={() => setMoving(null)}
+                >
+                    <div
+                        className="glass-card"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ padding: 'var(--space-6)', width: '100%', maxWidth: 520 }}
+                    >
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
+                            Change sitting — {moving.exam.title}
+                        </h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-5)' }}>
+                            Currently {fmt(moving.startsAt)}. Moving them re-sends their date by
+                            email and WhatsApp.
+                        </p>
+
+                        {optionsLoading ? (
+                            <p style={{ color: 'var(--text-secondary)' }}>Loading sittings…</p>
+                        ) : options.length === 0 ? (
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                No other sitting exists for this exam yet. Add a timing or a one-off
+                                sitting from Exam scheduling first.
+                            </p>
+                        ) : (
+                            <>
+                                <label className="input-label" htmlFor="target-slot">
+                                    Move to
+                                </label>
+                                <select
+                                    id="target-slot"
+                                    className="input-field"
+                                    value={target}
+                                    onChange={(e) => setTarget(e.target.value)}
+                                >
+                                    <option value="">Choose a sitting…</option>
+                                    {options.map((o) => (
+                                        <option key={o.id} value={o.id} disabled={o.isFull}>
+                                            {fmt(o.startsAt)} — {o.isFull ? 'full' : `${o.seatsLeft} seat(s) left`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginTop: 'var(--space-6)' }}>
+                            <button className="btn btn-secondary" onClick={() => setMoving(null)}>
+                                Cancel
+                            </button>
+                            <button className="btn btn-primary" onClick={move} disabled={!target || saving}>
+                                {saving ? 'Moving…' : 'Move participant'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

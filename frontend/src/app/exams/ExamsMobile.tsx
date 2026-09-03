@@ -60,8 +60,8 @@ const timeOnly = (iso: string) =>
 const PHASE_UI: Record<Phase, { pill: string; tone: string; cta: string }> = {
     DRAFT: { pill: 'Unavailable', tone: 'muted', cta: 'Unavailable' },
     SCHEDULED: { pill: 'Scheduled', tone: 'info', cta: 'Not open yet' },
-    NEEDS_SLOT: { pill: 'Choose your schedule', tone: 'warn', cta: 'Choose your exam schedule' },
-    SLOT_UPCOMING: { pill: 'Your schedule is coming up', tone: 'info', cta: 'Waiting for your schedule' },
+    NEEDS_SLOT: { pill: 'Being scheduled', tone: 'warn', cta: 'Awaiting your exam date' },
+    SLOT_UPCOMING: { pill: 'Your sitting is coming up', tone: 'info', cta: 'View your sitting' },
     OPEN: { pill: 'Open now', tone: 'success', cta: 'Start Exam' },
     SLOT_MISSED: { pill: 'Schedule missed', tone: 'danger', cta: 'Schedule has passed' },
     ENDED: { pill: 'Closed', tone: 'muted', cta: 'Exam closed' },
@@ -80,7 +80,7 @@ interface Props {
  * 768px via `.grid-3`, but it is styled for a `glass-card` sitting inside a
  * three-wide grid: dense meta rows and a `phase-pill` tuned to a card that
  * has room either side. This mirrors the same phase logic (mustPayFirst,
- * needsSlot, startable) against the `mob-card` visual language the rest of
+ * awaitingSlot, startable) against the `mob-card` visual language the rest of
  * the mobile screens use, so an exam card looks like it belongs on the same
  * phone as the dashboard.
  */
@@ -116,16 +116,18 @@ function MobileExamCard({ exam, router, hasPass }: { exam: Exam; router: ReturnT
     const ui = PHASE_UI[phase] ?? PHASE_UI.ENDED;
     const slot = instance?.mySlot ?? null;
     const startable = !isCompleted && (instance?.canStart ?? false);
-    const needsSlot = !isCompleted && phase === 'NEEDS_SLOT';
-    const mustPayFirst = needsSlot && hasPass === false;
+    // Sittings are assigned at registration, so NEEDS_SLOT is something the
+    // student waits on, not something they do. Kept in step with the desktop card.
+    const awaitingSlot = !isCompleted && phase === 'NEEDS_SLOT';
+    const mustPayFirst = !isCompleted && hasPass === false && !startable;
 
     const sections = [...(exam.sections ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const questionCount = sections.reduce((sum, s) => sum + (s._count?.sectionQuestions ?? 0), 0);
 
     const handleCardAction = () => {
         if (mustPayFirst) router.push('/unlock');
-        else if (needsSlot) router.push(`/exams/${exam.id}/slots`);
         else if (startable) router.push(`/exams/${exam.id}/instructions`);
+        else if (slot) router.push(`/exams/${exam.id}/schedule`);
     };
 
     return (
@@ -147,17 +149,13 @@ function MobileExamCard({ exam, router, hasPass }: { exam: Exam; router: ReturnT
 
             {slot ? (
                 <div className="mob-exam2__slot">
-                    <span>Your schedule{slot.label ? ` · ${slot.label}` : ''}</span>
+                    <span>Your sitting{slot.label ? ` · ${slot.label}` : ''}</span>
                     <strong>{dt(slot.startsAt)} - {timeOnly(slot.endsAt)}</strong>
-                    {slot.bookingStatus === 'PENDING' && (
-                        <p className="mob-exam2__warn">Not confirmed yet. Complete payment to secure this schedule.</p>
-                    )}
                 </div>
-            ) : needsSlot ? (
+            ) : awaitingSlot ? (
                 <p className="mob-exam2__warn">
-                    {mustPayFirst
-                        ? 'Unlock your exams first, then choose a date and time.'
-                        : 'You have not picked a sitting yet. Places are limited.'}
+                    Your exam date has not been set yet. We schedule everyone about two weeks
+                    after they register and will message you as soon as yours is confirmed.
                 </p>
             ) : instance && (
                 <div className="mob-exam2__slot">
@@ -166,17 +164,17 @@ function MobileExamCard({ exam, router, hasPass }: { exam: Exam; router: ReturnT
                 </div>
             )}
 
-            {!isCompleted && !startable && !needsSlot && instance?.startBlockedReason && (
+            {!isCompleted && !startable && !awaitingSlot && instance?.startBlockedReason && (
                 <p className="mob-exam2__warn">{instance.startBlockedReason}</p>
             )}
 
             <button
-                className={`btn ${startable || needsSlot ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn ${startable || mustPayFirst ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ width: '100%', justifyContent: 'center', marginTop: '0.7rem' }}
-                disabled={!startable && !needsSlot}
+                disabled={!startable && !mustPayFirst && !slot}
                 onClick={handleCardAction}
             >
-                {isCompleted ? '✓ Completed' : mustPayFirst ? '🔒 Unlock to pick your schedule' : ui.cta}
+                {isCompleted ? '✓ Completed' : mustPayFirst ? '🔒 Unlock your exams' : ui.cta}
             </button>
         </div>
     );

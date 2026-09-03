@@ -14,6 +14,7 @@ import {
     startRefusalReason,
     validateSlotWindow,
 } from './exam-lifecycle';
+import { parseMinuteOfDay } from '../slot/slot-assignment.rules';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
 // Uses a simple mulberry32 PRNG seeded from the userId hash so each
@@ -150,12 +151,18 @@ export class ExamService {
         const completedExamIds = new Set(completedAttempts.map((a) => a.examInstance.examId));
 
         return exams.map((exam) => {
-            const demo = isDemoExam(exam.id);
+            // Practice papers and the trial rehearsal never run to a timetable.
+            // The query above already filters trials out of the catalogue, so
+            // `isTrial` is belt-and-braces — but it keeps this in step with
+            // `AttemptService.startAttempt` and `SlotAssignmentService.needsSlot`,
+            // which use the same predicate and must not be allowed to drift from
+            // it. All three have to agree on "does this exam use sittings".
+            const demo = isDemoExam(exam.id) || exam.isTrial;
 
             const instances = exam.instances.map((instance) => {
                 const booking = slotByInstance.get(instance.id);
-                // A demo/practice exam is always open inside its window — it runs no
-                // slots and exists precisely to be taken at will.
+                // A demo/practice/trial exam is always open inside its window — it
+                // runs no slots and exists precisely to be taken at will.
                 const phase = demo
                     ? examPhase({
                           isPublished: exam.isPublished,
@@ -453,14 +460,15 @@ export class ExamService {
     }
 
     /**
-     * Create an exam, one scheduled instance, and its slots in a single step —
-     * the shape the admin "new exam" wizard collects. Unlike {@link createExam}
-     * this does **not** force-publish: the wizard passes explicit flags, so an
-     * exam can be drafted with its schedule and slots before it goes live.
+     * Create an exam and one scheduled instance in a single step — the shape the
+     * admin "new exam" wizard collects. Unlike {@link createExam} this does
+     * **not** force-publish: the wizard passes explicit flags, so an exam can be
+     * drafted with its schedule before it goes live.
      *
-     * Slot auto-distribution (same-school-together, balance + overflow) is a
-     * separate call the wizard makes afterwards, so the admin can review the
-     * slots first — see `SchoolSlotService.autoDistributeInstance`.
+     * Sittings are *not* created here. They are materialised from the instance's
+     * slot timings on the dates the auto-assigner actually needs (see
+     * `SlotTimingService.ensureSlot`), so the wizard's job is to set the timings
+     * and the assignment rules, not to enumerate dates.
      */
     async createFull(input: {
         title: string;
@@ -481,24 +489,25 @@ export class ExamService {
             browserExamKey?: string;
             configKey?: string;
             quitUrl?: string;
+            /** Auto-assignment rules; each falls back to the schema default. */
+            slotLeadDays?: number;
+            slotHorizonDays?: number;
+            slotDayPreference?: number[];
         };
-        slots: {
+        /**
+         * The recurring sitting times. `startTime`/`endTime` are `HH:mm` IST and
+         * `weekdays` is 0=Sunday…6=Saturday — the same shape `SlotTiming` stores.
+         */
+        slotTimings?: {
             label?: string;
-            startsAt: string | Date;
-            endsAt: string | Date;
-            capacity: number;
+            startTime: string;
+            endTime: string;
+            capacity?: number;
+            weekdays?: number[];
         }[];
     }) {
-        if (!input.slots?.length) {
-            throw new BadRequestException('Add at least one slot.');
-        }
+        const { instance, slotTimings, isPublished, isResultReleased, ...examData } = input;
 
-        const { instance, slots, isPublished, isResultReleased, ...examData } = input;
-
-        // Slots must sit inside the exam window. A slot scheduled before the exam
-        // opens can never be sat: the attempt gate refuses every start before
-        // `instance.startsAt`, so its students would watch the slot expire against
-        // a Start button that never enables.
         const instanceWindow = {
             startsAt: new Date(instance.startsAt),
             endsAt: new Date(instance.endsAt),
@@ -506,14 +515,30 @@ export class ExamService {
         if (instanceWindow.endsAt <= instanceWindow.startsAt) {
             throw new BadRequestException('The exam window must end after it starts.');
         }
-        slots.forEach((s, i) => {
-            const check = validateSlotWindow(
-                { startsAt: new Date(s.startsAt), endsAt: new Date(s.endsAt) },
-                instanceWindow,
-            );
-            if (!check.ok) {
-                throw new BadRequestException(`Slot ${i + 1} (${s.label ?? 'unnamed'}): ${check.reason}`);
+
+        // Parsed up front, outside the transaction: a typo in a time should fail
+        // before an exam row exists, not leave a half-built exam behind.
+        const timings = (slotTimings ?? []).map((t, i) => {
+            const startMinute = parseMinuteOfDay(t.startTime);
+            const endMinute = parseMinuteOfDay(t.endTime);
+            if (startMinute === null || endMinute === null) {
+                throw new BadRequestException(
+                    `Slot timing ${i + 1}: times must be HH:mm on a 24-hour clock (IST).`,
+                );
             }
+            if (startMinute === endMinute) {
+                throw new BadRequestException(
+                    `Slot timing ${i + 1}: a sitting must be longer than zero minutes.`,
+                );
+            }
+            return {
+                label: t.label ?? null,
+                startMinute,
+                endMinute,
+                capacity: t.capacity ?? 50,
+                weekdays: t.weekdays ?? [0, 6],
+                sortOrder: i,
+            };
         });
 
         return this.prisma.$transaction(async (tx) => {
@@ -528,31 +553,39 @@ export class ExamService {
             const examInstance = await tx.examInstance.create({
                 data: {
                     examId: exam.id,
-                    startsAt: new Date(instance.startsAt),
-                    endsAt: new Date(instance.endsAt),
+                    startsAt: instanceWindow.startsAt,
+                    endsAt: instanceWindow.endsAt,
                     requireSeb: instance.requireSeb ?? false,
                     browserExamKey: instance.browserExamKey,
                     configKey: instance.configKey,
                     quitUrl: instance.quitUrl,
+                    ...(instance.slotLeadDays !== undefined && {
+                        slotLeadDays: instance.slotLeadDays,
+                    }),
+                    ...(instance.slotHorizonDays !== undefined && {
+                        slotHorizonDays: instance.slotHorizonDays,
+                    }),
+                    ...(instance.slotDayPreference !== undefined && {
+                        slotDayPreference: instance.slotDayPreference,
+                    }),
                 },
             });
 
-            await tx.examSlot.createMany({
-                data: slots.map((s) => ({
-                    examInstanceId: examInstance.id,
-                    label: s.label,
-                    startsAt: new Date(s.startsAt),
-                    endsAt: new Date(s.endsAt),
-                    capacity: s.capacity,
-                })),
-            });
+            if (timings.length) {
+                await tx.slotTiming.createMany({
+                    data: timings.map((t) => ({ ...t, examInstanceId: examInstance.id })),
+                });
+            }
 
-            const createdSlots = await tx.examSlot.findMany({
+            const createdTimings = await tx.slotTiming.findMany({
                 where: { examInstanceId: examInstance.id },
-                orderBy: { startsAt: 'asc' },
+                orderBy: [{ sortOrder: 'asc' }, { startMinute: 'asc' }],
             });
 
-            return { exam, instance: examInstance, slots: createdSlots };
+            // No dated sittings are created here on purpose. Which Sundays exist
+            // depends on when students register, so they are materialised by the
+            // assigner when a student actually needs one.
+            return { exam, instance: examInstance, slotTimings: createdTimings };
         });
     }
 
@@ -1204,6 +1237,9 @@ export class ExamService {
         browserExamKey?: string;
         configKey?: string;
         quitUrl?: string;
+        slotLeadDays?: number;
+        slotHorizonDays?: number;
+        slotDayPreference?: number[];
     }) {
         if (data.startsAt || data.endsAt) {
             const current = await this.prisma.examInstance.findUnique({
@@ -1225,9 +1261,11 @@ export class ExamService {
                 .filter((r) => !r.check.ok);
 
             if (stranded.length > 0) {
-                const names = stranded.map((r) => r.slot.label ?? 'unnamed').join(', ');
+                const names = stranded
+                    .map((r) => r.slot.startsAt.toISOString().slice(0, 10))
+                    .join(', ');
                 throw new BadRequestException(
-                    `This window would leave ${stranded.length} slot(s) outside the exam: ${names}. Move those slots first, or widen the window.`,
+                    `This window would leave ${stranded.length} sitting(s) outside the exam: ${names}. Move or delete those sittings first, or widen the window.`,
                 );
             }
         }

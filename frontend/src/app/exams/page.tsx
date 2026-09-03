@@ -90,8 +90,8 @@ const timeOnly = (iso: string) =>
 const PHASE_UI: Record<Phase, { pill: string; tone: string; cta: string }> = {
     DRAFT: { pill: 'Unavailable', tone: 'muted', cta: 'Unavailable' },
     SCHEDULED: { pill: 'Scheduled', tone: 'info', cta: 'Not open yet' },
-    NEEDS_SLOT: { pill: 'Choose your schedule', tone: 'warn', cta: 'Choose your exam schedule' },
-    SLOT_UPCOMING: { pill: 'Your schedule is coming up', tone: 'info', cta: 'Waiting for your schedule' },
+    NEEDS_SLOT: { pill: 'Being scheduled', tone: 'warn', cta: 'Awaiting your exam date' },
+    SLOT_UPCOMING: { pill: 'Your sitting is coming up', tone: 'info', cta: 'View your sitting' },
     OPEN: { pill: 'Open now', tone: 'success', cta: 'Start Exam' },
     SLOT_MISSED: { pill: 'Schedule missed', tone: 'danger', cta: 'Schedule has passed' },
     ENDED: { pill: 'Closed', tone: 'muted', cta: 'Exam closed' },
@@ -206,22 +206,22 @@ function ExamCard({
     const startable = !isCompleted && (instance?.canStart ?? false);
 
     /**
-     * An exam waiting on a slot is not a dead end — the student picks one.
-     *
-     * The slot picker has existed all along but nothing ever linked to it, so
-     * `NEEDS_SLOT` rendered a "contact your coordinator" note and a disabled
-     * button. Now that students choose their own sitting after paying, this is
-     * the route they take.
+     * `NEEDS_SLOT` no longer means "go and pick one". Sittings are assigned
+     * automatically from the student's registration date, so this phase means
+     * the assignment has not landed yet — usually because the organisers have
+     * not opened any sittings, or because every date in the student's window was
+     * full and staff have to place them by hand. Either way it is something the
+     * student waits on rather than something they do, so the card explains and
+     * offers no action.
      */
-    const needsSlot = !isCompleted && phase === 'NEEDS_SLOT';
+    const awaitingSlot = !isCompleted && phase === 'NEEDS_SLOT';
 
     /**
-     * Slot picking comes after paying, in both directions: the server refuses
-     * to book without an active pass, and a confirmed booking can no longer be
-     * changed by the student. So an unpaid student is sent to `/unlock` rather
-     * than to a picker that would reject them.
+     * Paying is a separate gate from the sitting. A student is scheduled from the
+     * moment they register, but cannot start until the one-time payment is done,
+     * so an unpaid student is pointed at `/unlock` regardless of their date.
      */
-    const mustPayFirst = needsSlot && hasPass === false;
+    const mustPayFirst = !isCompleted && hasPass === false && !startable;
 
     const sections = [...(exam.sections ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const questionCount = sections.reduce(
@@ -232,10 +232,10 @@ function ExamCard({
     const handleCardAction = () => {
         if (mustPayFirst) {
             router.push('/unlock');
-        } else if (needsSlot) {
-            router.push(`/exams/${exam.id}/slots`);
         } else if (startable) {
             router.push(`/exams/${exam.id}/instructions`);
+        } else if (slot) {
+            router.push(`/exams/${exam.id}/schedule`);
         }
     };
 
@@ -301,61 +301,56 @@ function ExamCard({
                 </div>
             )}
 
-            {/* The student's own slot. This, not the exam window, is what enables Start. */}
+            {/* The student's own sitting. This, not the exam window, is what enables
+                Start — and it is assigned, not chosen, so nothing here is a control. */}
             {slot ? (
                 <div className={`slot-card ${startable ? 'slot-card-live' : ''}`}>
                     <div className="slot-card-head">
-                        <span className="meta-label">Your schedule</span>
+                        <span className="meta-label">Your exam sitting</span>
                         {slot.label && <strong>{slot.label}</strong>}
                     </div>
                     <div className="slot-card-time">
                         {dt(slot.startsAt)} to {timeOnly(slot.endsAt)}
                     </div>
-                    {slot.bookingStatus === 'PENDING' ? (
-                        <p className="slot-note slot-note-warn">
-                            Your booking is not confirmed yet. Complete payment to secure this schedule.
-                        </p>
-                    ) : (
-                        <p className="slot-note slot-note-muted">
-                            This sitting is confirmed and cannot be changed. Contact support if you
-                            need it moved.
-                        </p>
-                    )}
+                    <p className="slot-note slot-note-muted">
+                        This date was assigned to you when you registered. Contact support if you
+                        need it changed.
+                    </p>
                 </div>
             ) : (
-                needsSlot && (
+                awaitingSlot && (
                     <div className="slot-card">
                         <p className="slot-note slot-note-warn">
-                            {mustPayFirst
-                                ? 'Unlock your exams first, then choose the date and time that suits you.'
-                                : 'You have not picked a sitting yet. Choose the date and time that suits you, places on each schedule are limited. Once confirmed, your schedule cannot be changed.'}
+                            Your exam date has not been set yet. We schedule every participant
+                            about two weeks after they register, and you will be told your date
+                            by email and WhatsApp as soon as it is confirmed.
                         </p>
                     </div>
                 )
             )}
 
-            {/* Why the button is off, in the student's words. Suppressed while a
-                slot is still to be picked: there the button is an action, not a
-                refusal, and "you need a confirmed slot booking" alongside a
-                "Choose your exam slot" button just reads as a contradiction. */}
-            {!isCompleted && !startable && !needsSlot && instance?.startBlockedReason && (
+            {/* Why the button is off, in the student's words. Suppressed while the
+                sitting is still being assigned: the card above already says so in
+                terms the student can act on, and "you need a confirmed schedule
+                booking" underneath it only reads as a second, blunter refusal. */}
+            {!isCompleted && !startable && !awaitingSlot && instance?.startBlockedReason && (
                 <p className="slot-note slot-note-muted">{instance.startBlockedReason}</p>
             )}
 
             <div className="exam-footer">
                 <button
-                    className={`btn ${startable || needsSlot ? 'btn-primary' : 'btn-secondary'}`}
+                    className={`btn ${startable || mustPayFirst ? 'btn-primary' : 'btn-secondary'}`}
                     style={{
                         width: '100%',
-                        cursor: startable || needsSlot ? 'pointer' : 'not-allowed',
+                        cursor: startable || mustPayFirst || slot ? 'pointer' : 'not-allowed',
                     }}
-                    disabled={!startable && !needsSlot}
+                    disabled={!startable && !mustPayFirst && !slot}
                     onClick={handleCardAction}
                 >
                     {isCompleted
                         ? '✓ Completed'
                         : mustPayFirst
-                          ? '🔒 Unlock to pick your schedule'
+                          ? '🔒 Unlock your exams'
                           : ui.cta}
                 </button>
             </div>

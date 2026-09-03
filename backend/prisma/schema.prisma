@@ -185,25 +185,24 @@ model RefreshToken {
 /// `pincode` it is the duplicate key, so the same school cannot be added twice
 /// under punctuation or casing variants.
 model School {
-  id              String                 @id @default(uuid())
-  name            String
-  nameKey         String
-  code            String?                @unique
-  city            String
-  state           String
-  pincode         String
-  board           String?
-  udiseCode       String?
+  id            String         @id @default(uuid())
+  name          String
+  nameKey       String
+  code          String?        @unique
+  city          String
+  state         String
+  pincode       String
+  board         String?
+  udiseCode     String?
   /// The admin-api `Partner.id` this school belongs to. Set when a partner
   /// onboards the school (or when staff reassign it). A school with no partner
   /// falls back to the house partner (`DEFAULT_PARTNER_ID`) at read time, so the
   /// school portal always has a partner to show — see `PartnerDirectoryService`.
-  partnerId       String?
-  onboardedAt     DateTime?
-  createdAt       DateTime               @default(now())
-  users           User[]
-  slotAssignments SchoolSlotAssignment[]
-  accessRequest   SchoolRequest?
+  partnerId     String?
+  onboardedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  users         User[]
+  accessRequest SchoolRequest?
 
   @@unique([nameKey, pincode])
   @@index([code])
@@ -375,15 +374,15 @@ model SectionQuestion {
 }
 
 model ExamInstance {
-  id                          String                 @id @default(uuid())
+  id                          String            @id @default(uuid())
   examId                      String
   startsAt                    DateTime
   endsAt                      DateTime
-  requireSeb                  Boolean                @default(false)
+  requireSeb                  Boolean           @default(false)
   browserExamKey              String?
   configKey                   String?
   quitUrl                     String?
-  maxAttempts                 Int                    @default(1)
+  maxAttempts                 Int               @default(1)
   /// Result-release gating (ADMIN-20). Results cannot be released until a
   /// normalization run has completed; releasing is an audited human decision.
   resultsNormalizedAt         DateTime?
@@ -411,11 +410,26 @@ model ExamInstance {
   finalResultsReleasedAt      DateTime?
   answerKeyReleasedAt         DateTime?
   finalReleasedBy             String?
-  createdAt                   DateTime               @default(now())
+  createdAt                   DateTime          @default(now())
+  /// ── Auto-assignment rules ────────────────────────────────────────────────
+  /// The search the assigner runs for a newly registered student, expressed as
+  /// data so the business rule can be tuned without a deploy. Defaults encode
+  /// the policy as specified: no sitting sooner than a fortnight away, none
+  /// more than eight weeks out, Sundays exhausted before Saturdays are tried.
+  ///
+  /// Nothing sooner than this many days after the student registered.
+  slotLeadDays                Int               @default(14)
+  /// …and nothing later than this many days after it. The search gives up
+  /// rather than booking a student past the horizon.
+  slotHorizonDays             Int               @default(56)
+  /// Weekdays to try, **in order of preference**. 0 = Sunday … 6 = Saturday.
+  /// Every occurrence of the first day inside the window is tried before the
+  /// second day is considered at all.
+  slotDayPreference           Int[]             @default([0, 6])
   attempts                    Attempt[]
   slots                       ExamSlot[]
-  exam                        Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
-  slotAssignments             SchoolSlotAssignment[]
+  slotTimings                 SlotTiming[]
+  exam                        Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
   certificates                Certificate[]
   trialCompletions            TrialCompletion[]
 
@@ -1032,54 +1046,98 @@ enum ProctorEventType {
 
 // ── Slot booking & payment models ────────────────────────────────────────────
 
-model ExamSlot {
-  id                String                 @id @default(uuid())
-  examInstanceId    String
-  examInstance      ExamInstance           @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
-  label             String?
-  startsAt          DateTime
-  endsAt            DateTime
-  capacity          Int
-  booked            Int                    @default(0)
-  createdAt         DateTime               @default(now())
-  bookings          Booking[]
-  schoolAssignments SchoolSlotAssignment[]
+/// An admin-configured *recurring* sitting time for an exam instance — "Sunday
+/// and Saturday, 10:00–12:00 IST, 50 seats". It is a rule, not a date: the
+/// concrete `ExamSlot` rows are materialised from it on the dates the
+/// auto-assigner actually needs (see `slot-assignment.ts`).
+///
+/// This indirection is what makes "the first Sunday two weeks after you
+/// registered" expressible at all. Every student registers on a different day,
+/// so the set of dates that must exist is unknowable in advance — an admin
+/// hand-creating one row per calendar date could never keep up, and any Sunday
+/// they forgot would silently push students onto a Saturday.
+model SlotTiming {
+  id             String       @id @default(uuid())
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  label          String?
+  /// Minutes from midnight **IST**, e.g. 600 = 10:00. Stored as a time-of-day
+  /// rather than a DateTime because the same timing recurs on many dates; the
+  /// date is supplied when a slot is materialised.
+  startMinute    Int
+  endMinute      Int
+  /// Seats per materialised sitting. New sittings copy this; changing it here
+  /// does not retroactively resize sittings that already exist, so a slot a
+  /// student is already booked into can never shrink underneath them.
+  capacity       Int          @default(50)
+  /// Which days this timing runs on. 0 = Sunday … 6 = Saturday, IST.
+  weekdays       Int[]        @default([0, 6])
+  isActive       Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  slots          ExamSlot[]
 
   @@index([examInstanceId])
+}
+
+/// One concrete sitting: a specific date + timing, with its own seat count.
+///
+/// Materialised on demand by the auto-assigner and editable by an admin
+/// afterwards. `booked` is maintained by an atomic
+/// `UPDATE … WHERE booked < capacity` so two concurrent assignments can never
+/// oversell the same seat.
+model ExamSlot {
+  id             String       @id @default(uuid())
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  /// The timing this sitting was materialised from. Null only for a sitting an
+  /// admin created by hand outside the recurring schedule.
+  timingId       String?
+  timing         SlotTiming?  @relation(fields: [timingId], references: [id], onDelete: SetNull)
+  /// Midnight IST of the sitting's calendar day, held as a UTC instant. The
+  /// weekday rules ("first Sunday after…") are all IST-relative, so the date is
+  /// stored separately rather than re-derived from `startsAt` in whatever zone
+  /// the reading server happens to run in.
+  slotDate       DateTime
+  label          String?
+  startsAt       DateTime
+  endsAt         DateTime
+  capacity       Int          @default(50)
+  booked         Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  bookings       Booking[]
+
+  /// One sitting per (timing, date) — the uniqueness that makes lazy
+  /// materialisation safe to race.
+  @@unique([timingId, slotDate])
+  @@index([examInstanceId])
+  @@index([slotDate])
   @@index([startsAt])
 }
 
-// A school's students all land in the same slot for a given exam instance —
-// admin-editable per school (see SchoolSlotService); students with no
-// assignment for their school keep using the existing manual slot-picker.
-model SchoolSlotAssignment {
-  id             String       @id @default(uuid())
-  schoolId       String
-  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  examInstanceId String
-  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
-  slotId         String
-  slot           ExamSlot     @relation(fields: [slotId], references: [id])
-  assignedBy     String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  @@unique([schoolId, examInstanceId])
-  @@index([examInstanceId])
-  @@index([slotId])
-}
-
+/// A student's seat in one sitting.
+///
+/// Since slots became auto-assigned at registration this is an *appointment*,
+/// not a purchase: it is created before any money changes hands and is always
+/// CONFIRMED. Paying is a separate, account-level gate (`AccessPass`) checked
+/// independently when the student tries to start. PENDING survives only for
+/// rows written by the old pay-then-pick flow.
 model Booking {
-  id        String        @id @default(uuid())
-  userId    String
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  slotId    String
-  slot      ExamSlot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  paymentId String?       @unique
-  payment   Payment?      @relation(fields: [paymentId], references: [id])
-  status    BookingStatus @default(PENDING)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id         String        @id @default(uuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slotId     String
+  slot       ExamSlot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  paymentId  String?       @unique
+  payment    Payment?      @relation(fields: [paymentId], references: [id])
+  status     BookingStatus @default(CONFIRMED)
+  /// Admin user id when a human placed or moved this student, null when the
+  /// auto-assigner did. Distinguishes a deliberate override from a default.
+  assignedBy String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@unique([userId, slotId])
   @@index([userId])

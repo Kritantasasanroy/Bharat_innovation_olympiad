@@ -16,7 +16,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { SubmitBankDetailsDto } from '../partner/dto/partner.dto';
-import { PickSlotDto, RegisterStudentsDto, UpdateSchoolProfileDto } from './dto/school.dto';
+import { RegisterStudentsDto, UpdateSchoolProfileDto } from './dto/school.dto';
 import { SchoolPortalService } from './school-portal.service';
 
 /**
@@ -26,8 +26,9 @@ import { SchoolPortalService } from './school-portal.service';
  * never from the request body — a coordinator cannot address another school.
  *
  * A school is trusted with three writes and no others: its own contact details,
- * its student roster, and picking one of the slots offered for an exam. Exam
- * windows, slot capacities and scores are set by staff and by the exam itself.
+ * its student roster, and seeing where its students have been scheduled. Exam
+ * windows, sitting capacities, who sits when, and scores are all set by staff
+ * and by the exam itself.
  */
 @Controller('school/portal')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,16 +74,15 @@ export class SchoolPortalController {
         return this.portal.students(this.schoolOf(schoolId));
     }
 
-    /** Every exam's slots, how full each is, and which one this school holds (item 15). */
+    /**
+     * Where this school's students have been scheduled (item 15).
+     *
+     * Read-only: sittings are auto-assigned per student from their own
+     * registration date, so there is no school-level slot left to pick.
+     */
     @Get('slots')
     slots(@CurrentUser('schoolId') schoolId: string) {
         return this.portal.slots(this.schoolOf(schoolId));
-    }
-
-    /** The school picks (or changes) its slot for one exam (item 15). */
-    @Post('slots')
-    pickSlot(@CurrentUser('schoolId') schoolId: string, @Body() dto: PickSlotDto) {
-        return this.portal.pickSlot(this.schoolOf(schoolId), dto.examInstanceId, dto.slotId);
     }
 
     @Get('monitoring')

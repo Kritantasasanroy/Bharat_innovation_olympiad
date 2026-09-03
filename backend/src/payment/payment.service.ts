@@ -118,7 +118,7 @@ export class PaymentService {
                 where: { id: bookingId },
                 data: { status: BookingStatus.CONFIRMED },
             });
-            await this.slots.notifyScheduleConfirmed(bookingId);
+            await this.slots.notifySchedule(bookingId);
             return { alreadyPaid: true, amount: 0, booking };
         }
 
@@ -233,7 +233,7 @@ export class PaymentService {
             });
             // Deduped on (booking, slot), so the browser-callback path below can
             // confirm the same payment without the student hearing about it twice.
-            await this.slots.notifyScheduleConfirmed(payment.booking.id);
+            await this.slots.notifySchedule(payment.booking.id);
         }
 
         // An access-pass order confirms the same way a booking does. This is
@@ -303,7 +303,7 @@ export class PaymentService {
                 where: { id: payment.booking.id },
                 data: { status: BookingStatus.CONFIRMED },
             });
-            await this.slots.notifyScheduleConfirmed(payment.booking.id);
+            await this.slots.notifySchedule(payment.booking.id);
         }
 
         if (payment) await this.creditReferral(payment.id);

@@ -27,7 +27,7 @@ interface Exam {
     isTrial: boolean;
     /** Whether students must complete the trial before this exam will start. */
     requiresTrial: boolean;
-    /** False lets students sit it any time in its window, with no slot booking. */
+    /** False lets students sit it any time in its window, with no assigned sitting. */
     requiresSlot: boolean;
     createdAt: string;
     instances: ExamInstance[];
@@ -225,21 +225,22 @@ export default function AdminExamsPage() {
     };
 
     /**
-     * Turns the slot requirement on or off for one exam.
+     * Turns the sitting requirement on or off for one exam.
      *
-     * Off means students may sit it at any point inside its window without
-     * booking a sitting. Slots and existing bookings are left untouched, so
-     * turning it back on restores the timetable exactly as it was.
+     * Off means students may sit it at any point inside its window regardless of
+     * the sitting they were assigned, and nobody new is auto-scheduled. Sittings
+     * and existing assignments are left untouched, so turning it back on restores
+     * the timetable exactly as it was.
      */
     const toggleSlotRequirement = async (exam: Exam) => {
         const turningOff = exam.requiresSlot !== false;
         if (
             turningOff &&
             !confirm(
-                'Let students sit this exam without booking a slot?\n\n' +
+                'Let students sit this exam without an assigned sitting?\n\n' +
                     'It becomes startable at any time inside its exam window, for every eligible ' +
-                    'student. Existing slots and bookings are kept and are restored if you turn ' +
-                    'this back on.',
+                    'student, and nobody new is auto-scheduled. Existing sittings and ' +
+                    'assignments are kept and are restored if you turn this back on.',
             )
         ) {
             return;
@@ -250,7 +251,7 @@ export default function AdminExamsPage() {
             await api.put(`/admin/exams/${exam.id}`, { requiresSlot: turningOff ? false : true });
             await fetchExams();
         } catch (err: unknown) {
-            setActionError(getApiErrorMessage(err, 'Failed to change the slot requirement.'));
+            setActionError(getApiErrorMessage(err, 'Failed to change the sitting requirement.'));
         } finally {
             setActiveExamAction('');
         }
@@ -286,7 +287,7 @@ export default function AdminExamsPage() {
                             + Quick exam
                         </button>
                         <a href="/exams/new" className="btn btn-primary">
-                            + New exam with slots
+                            + New exam
                         </a>
                     </div>
                 </div>
@@ -379,9 +380,9 @@ export default function AdminExamsPage() {
                                     {exam.requiresSlot === false && (
                                         <span
                                             className="badge badge-warning"
-                                            title="Students can sit this exam at any time inside its window — no slot booking needed. Slots and bookings are kept."
+                                            title="Students can sit this exam at any time inside its window — no assigned sitting needed. Sittings and assignments are kept."
                                         >
-                                            No slot needed
+                                            No sitting needed
                                         </span>
                                     )}
                                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -466,8 +467,8 @@ export default function AdminExamsPage() {
                                     <p className="hint hint-muted">🔒 {exam.releaseBlockedReason}</p>
                                 )}
 
-                                {/* Action row 3: slot requirement. Hidden for the
-                                    trial paper, which never runs slots anyway. */}
+                                {/* Action row 3: sitting requirement. Hidden for the
+                                    trial paper, which never runs sittings anyway. */}
                                 {!exam.isTrial && (
                                     <>
                                         <button
@@ -477,32 +478,32 @@ export default function AdminExamsPage() {
                                             disabled={activeExamAction === `slot-${exam.id}`}
                                             title={
                                                 exam.requiresSlot === false
-                                                    ? 'Go back to requiring a booked slot'
+                                                    ? 'Go back to requiring an assigned sitting'
                                                     : 'Let students sit this exam any time inside its window'
                                             }
                                         >
                                             {activeExamAction === `slot-${exam.id}`
                                                 ? '...'
                                                 : exam.requiresSlot === false
-                                                  ? '🗓 Require a slot again'
-                                                  : '🔓 Allow any time (no slot)'}
+                                                  ? '🗓 Require a sitting again'
+                                                  : '🔓 Allow any time (no sitting)'}
                                         </button>
                                         {exam.requiresSlot === false && (
                                             <p className="hint hint-warn">
                                                 ⚠ Open to every eligible student for the whole exam
-                                                window. Slots and bookings are kept.
+                                                window. Sittings and assignments are kept.
                                             </p>
                                         )}
                                     </>
                                 )}
 
-                                {/* Timings + slots (item 6) */}
+                                {/* Exam window (item 6) */}
                                 <a
                                     href={`/exams/${exam.id}/schedule`}
                                     className="btn btn-secondary btn-sm"
                                     style={{ textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}
                                 >
-                                    🗓 Edit Schedule &amp; Slots
+                                    🗓 Edit exam window
                                 </a>
 
                                 {/* Manage Questions — primary CTA */}

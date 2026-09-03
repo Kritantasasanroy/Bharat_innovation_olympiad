@@ -537,16 +537,15 @@ export class AdminManagementService {
 
     /**
      * Deleting a school **detaches** its students (they remain as independent
-     * accounts, keeping their attempts/results/bookings). The coordinator user
-     * and the school's slot assignments are removed with it, and the linked
-     * access request is detached. Everything removed is captured in the archive.
+     * accounts, keeping their attempts/results/bookings). The coordinator user is
+     * removed with it and the linked access request is detached. Students keep the
+     * sittings they were assigned — those hang off the student, not the school. Everything removed is captured in the archive.
      */
     async deleteSchool(id: string, actor: Actor, reason?: string) {
         const school = await this.prisma.school.findUnique({
             where: { id },
             include: {
                 accessRequest: true,
-                slotAssignments: { select: { id: true } },
                 _count: { select: { users: true } },
             },
         });
@@ -576,10 +575,6 @@ export class AdminManagementService {
                 where: { schoolId: id, role: Role.STUDENT },
                 data: { schoolId: null },
             });
-
-            // Assignments reference the slot with Restrict, so remove them before
-            // anything touches slots; they have no incoming FKs themselves.
-            await tx.schoolSlotAssignment.deleteMany({ where: { schoolId: id } });
 
             // Detach the access request (schoolId is SetNull, but be explicit so
             // the request row doesn't dangle a pointer to a deleted school).
@@ -619,7 +614,7 @@ export class AdminManagementService {
     /**
      * Deletes a school by its access-request row (what the admin Access queue
      * lists), removing the provisioned `School` too when one exists — detaching
-     * its students, removing its coordinator and slot assignments, exactly like
+     * its students and removing its coordinator, exactly like
      * {@link deleteSchool}. A request that was never approved has no school, so
      * only the request row goes.
      */
@@ -653,7 +648,6 @@ export class AdminManagementService {
                     data: { schoolId: null },
                 });
                 studentsDetached = detached.count;
-                await tx.schoolSlotAssignment.deleteMany({ where: { schoolId: school.id } });
             }
             if (coordinator) {
                 await tx.user.delete({ where: { id: coordinator.id } });

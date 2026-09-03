@@ -1,8 +1,8 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
-import { SchoolSlotService } from '../slot/school-slot.service';
+import { SlotAssignmentService } from '../slot/slot-assignment.service';
 import { RollNumberService } from '../user/roll-number.service';
 import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 import { PhoneOtpService } from './phone-otp.service';
@@ -27,9 +27,11 @@ function tryNormalizePhone(raw: string | undefined): string | undefined {
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
+
     constructor(
         private prisma: PrismaService,
-        private schoolSlotService: SchoolSlotService,
+        private slotAssignment: SlotAssignmentService,
         private notifications: NotificationService,
         private phoneOtpService: PhoneOtpService,
         private rollNumbers: RollNumberService,
@@ -114,6 +116,26 @@ export class AuthService {
         if (isStudent && !schoolId) {
             throw new BadRequestException(
                 'Choose your school to continue. Search for it by name, city or pincode, enter your school code, or select it if it is not listed.',
+            );
+        }
+    }
+
+    /**
+     * Books this student their sitting for every exam that runs to a timetable.
+     *
+     * Deliberately swallows its own failures. A student whose Sundays are all
+     * full still has a valid account, and refusing to complete their registration
+     * over it would be the worst possible response — they would be left with no
+     * account *and* no date. The assigner logs what it could not place, the admin
+     * sees them on the instance's unassigned list, and the same search runs again
+     * the next time the student opens their schedule.
+     */
+    private async assignSlots(userId: string): Promise<void> {
+        try {
+            await this.slotAssignment.assignForNewStudent(userId);
+        } catch (err) {
+            this.logger.error(
+                `Slot auto-assignment failed for new user ${userId}: ${(err as Error).message}`,
             );
         }
     }
@@ -215,14 +237,11 @@ export class AuthService {
             // they somehow already have one.
             const rollNumber = await this.rollNumbers.ensureFor(claimed.id, claimed.classBand);
 
-            // This was missing: only brand-new users were ever auto-allocated, so
-            // a student who came in through a school's roster — the common case for
-            // a school-run exam — was never booked into their school's slot, and the
-            // admin slot page reported "0 student(s) auto-allocated" for a school
-            // that plainly had students.
-            if (schoolId) {
-                await this.schoolSlotService.autoAllocateForNewStudent(claimed.id, schoolId);
-            }
+            // Claiming a roster row is this student's registration, so it is also
+            // the moment their sitting is chosen — the first eligible Sunday a
+            // fortnight out. `activatedAt` was just stamped above, and that is the
+            // date the search counts from.
+            await this.assignSlots(claimed.id);
 
             // `claimed` was read before the roll number was written, so merge it
             // in rather than returning a row that says `rollNumber: null` to a
@@ -262,14 +281,11 @@ export class AuthService {
 
         const rollNumber = await this.rollNumbers.ensureFor(user.id, user.classBand);
 
-        // Same school -> same slot: if this student's school already has a
-        // slot assignment for any exam instance, book them into it
-        // immediately. No-ops when the school has no assignment yet, so
-        // registration is unaffected for every exam that still uses manual
-        // slot picking.
-        if (schoolId) {
-            await this.schoolSlotService.autoAllocateForNewStudent(user.id, schoolId);
-        }
+        // The sitting is chosen here, at registration, not later at payment: the
+        // whole rule is relative to *this* moment ("the first Sunday at least two
+        // weeks from now"), and a student who has not paid yet still needs to know
+        // when their exam is. Paying is a separate gate on actually starting it.
+        await this.assignSlots(user.id);
 
         // Only for genuinely new accounts — claiming an invited roster row
         // returns earlier, so a student is never welcomed twice.

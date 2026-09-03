@@ -30,7 +30,6 @@ function createFakeDb() {
                 return row;
             },
         },
-        schoolSlotAssignment: { findMany: async () => [] },
         attempt: { findMany: async () => [] },
     };
     return { prisma, users, schools };
@@ -38,15 +37,14 @@ function createFakeDb() {
 
 function setup() {
     const db = createFakeDb();
-    // The collaborators added for the partner card, slot self-pick and result
-    // export are not exercised by these roster/read tests, so they are stubbed to
-    // nothing rather than faked — a fake would only assert against itself here.
+    // The collaborators added for the partner card and result export are not
+    // exercised by these roster/read tests, so they are stubbed to nothing rather
+    // than faked — a fake would only assert against itself here.
     return {
         ...db,
         service: new SchoolPortalService(
             db.prisma as never,
             {} as never, // PartnerDirectoryService
-            {} as never, // SchoolSlotService
             {} as never, // ResultsExportService
             {} as never, // PartnerAdminApiClient
         ),

@@ -86,8 +86,8 @@ export interface ResultSummary {
 export const PHASE_LABEL: Record<Phase, string> = {
     DRAFT: 'Unavailable',
     SCHEDULED: 'Not open yet',
-    NEEDS_SLOT: 'Schedule needed',
-    SLOT_UPCOMING: 'Your schedule is coming up',
+    NEEDS_SLOT: 'Being scheduled',
+    SLOT_UPCOMING: 'Your sitting is coming up',
     OPEN: 'Open now',
     SLOT_MISSED: 'Schedule missed',
     ENDED: 'Closed',
