@@ -103,6 +103,7 @@ type FakePrisma = {
         findUnique(args: StoreArgs): Promise<UserRow | null>;
         create(args: StoreArgs): Promise<UserRow>;
         update(args: StoreArgs): Promise<UserRow>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
     auditLog: { create(args: StoreArgs): Promise<unknown> };
     $transaction<T>(callback: (tx: FakePrisma) => Promise<T>): Promise<T>;
@@ -274,6 +275,11 @@ function createFakeDb() {
                 if (!row) throw new Error('test fixture user not found');
                 Object.assign(row, data);
                 return row;
+            },
+            updateMany: async ({ where = {}, data = {} }: StoreArgs) => {
+                const matched = users.filter((user) => match(user, where));
+                for (const row of matched) Object.assign(row, data);
+                return { count: matched.length };
             },
         },
         auditLog: {

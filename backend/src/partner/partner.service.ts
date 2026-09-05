@@ -270,8 +270,10 @@ export class PartnerService {
     async resendVerificationForAdmin(id: string, adminId: string) {
         const request = await this.prisma.partnerRequest.findUnique({ where: { id } });
         if (!request) throw new NotFoundException('Partner request not found.');
-        if (request.emailVerifiedAt || request.status !== 'PENDING') {
-            throw new ConflictException('This partner does not need email verification.');
+        if (request.status !== 'PENDING') {
+            throw new ConflictException(
+                'This partner request has already been decided. Use "Resend email" on the handover card to re-send its access details.',
+            );
         }
 
         const now = new Date();

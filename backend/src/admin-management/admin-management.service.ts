@@ -519,6 +519,14 @@ export class AdminManagementService {
                 actor,
             });
 
+            // `SchoolRequest.coordinatorUserId` has no FK back to User, so a
+            // plain delete would leave it dangling and 500 a later grant/reject
+            // on that request. Clear it explicitly.
+            await tx.schoolRequest.updateMany({
+                where: { coordinatorUserId: id },
+                data: { coordinatorUserId: null },
+            });
+
             await tx.user.delete({ where: { id } });
             await this.recomputeSlotCounters(tx, affectedSlotIds);
 
@@ -576,12 +584,25 @@ export class AdminManagementService {
                 data: { schoolId: null },
             });
 
-            // Detach the access request (schoolId is SetNull, but be explicit so
-            // the request row doesn't dangle a pointer to a deleted school).
+            // Detach the access request: null out both the school and the
+            // coordinator pointer (the coordinator user is deleted just below,
+            // and `coordinatorUserId` has no FK, so it would otherwise dangle
+            // and 500 a later grant/reject on this request), and mark it revoked
+            // so it doesn't sit in the queue as a broken APPROVED row.
             if (school.accessRequest) {
                 await tx.schoolRequest.update({
                     where: { id: school.accessRequest.id },
-                    data: { schoolId: null },
+                    data: {
+                        schoolId: null,
+                        coordinatorUserId: null,
+                        ...(school.accessRequest.status === 'APPROVED'
+                            ? {
+                                  status: 'REVOKED',
+                                  accessTokenHash: null,
+                                  accessTokenSealed: null,
+                              }
+                            : {}),
+                    },
                 });
             }
 

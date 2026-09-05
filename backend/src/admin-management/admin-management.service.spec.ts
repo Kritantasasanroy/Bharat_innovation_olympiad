@@ -79,6 +79,20 @@ function createFakeDb() {
                 Object.assign(r, data);
                 return r;
             },
+            updateMany: async ({ where, data }: any) => {
+                let count = 0;
+                for (const r of schoolRequests) {
+                    if (
+                        where.coordinatorUserId !== undefined
+                            ? r.coordinatorUserId === where.coordinatorUserId
+                            : true
+                    ) {
+                        Object.assign(r, data);
+                        count += 1;
+                    }
+                }
+                return { count };
+            },
         },
         partnerRequest: {
             findUnique: async ({ where }: any) => byId(partnerRequests, where.id),

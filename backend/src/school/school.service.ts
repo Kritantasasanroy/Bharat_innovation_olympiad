@@ -134,6 +134,7 @@ type SchoolTransactionStore = {
         findUnique(args: StoreArgs): Promise<UserRecord | null>;
         create(args: StoreArgs): Promise<UserRecord>;
         update(args: StoreArgs): Promise<UserRecord>;
+        updateMany(args: StoreArgs): Promise<{ count: number }>;
     };
     auditLog: {
         create(args: StoreArgs): Promise<unknown>;
@@ -532,8 +533,10 @@ export class SchoolService {
     async resendVerificationForAdmin(id: string, adminId: string) {
         const request = await this.prisma.schoolRequest.findUnique({ where: { id } });
         if (!request) throw new NotFoundException('School request not found.');
-        if (request.emailVerifiedAt || request.status !== 'PENDING') {
-            throw new ConflictException('This school does not need email verification.');
+        if (request.status !== 'PENDING') {
+            throw new ConflictException(
+                'This school request has already been decided. Use "Resend email" on the handover card to re-send its access details.',
+            );
         }
 
         const now = new Date();
@@ -812,10 +815,21 @@ export class SchoolService {
         let result: SchoolRequestRecord;
         try {
             result = await this.prisma.$transaction(async (tx) => {
+                // A prior `deleteSchool` removes the coordinator account but can
+                // leave `coordinatorUserId` on this row — don't carry a pointer
+                // to a deleted user into the decision (it would 500 the update).
+                const liveCoordinatorId = request.coordinatorUserId
+                    ? (
+                          await tx.user.findUnique({
+                              where: { id: request.coordinatorUserId },
+                              select: { id: true },
+                          })
+                      )?.id ?? null
+                    : null;
                 const provisioned =
                     dto.decision === 'APPROVED'
                         ? await this.provisionSchool(tx, request, now)
-                        : { schoolId: request.schoolId, coordinatorUserId: request.coordinatorUserId };
+                        : { schoolId: request.schoolId, coordinatorUserId: liveCoordinatorId };
                 return this.persistDecision(tx, request, dto, adminId, provisioned, plaintext, issuing, now);
             });
         } catch (e) {
@@ -917,7 +931,14 @@ export class SchoolService {
         schoolId: string,
     ): Promise<string> {
         if (request.coordinatorUserId) {
-            return request.coordinatorUserId;
+            const stillThere = await tx.user.findUnique({
+                where: { id: request.coordinatorUserId },
+                select: { id: true },
+            });
+            if (stillThere) return request.coordinatorUserId;
+            // The coordinator account was deleted (e.g. the school was removed
+            // and this request is now being re-approved) — fall through and
+            // re-provision from the email instead of trusting a stale id.
         }
 
         const existing = await tx.user.findUnique({ where: { email: request.coordinatorEmail } });
@@ -957,8 +978,10 @@ export class SchoolService {
         issuing: boolean,
         now: Date,
     ) {
+        // `updateMany`, not `update`: a coordinator id that no longer resolves to
+        // a row (a since-deleted account) must be a no-op, never a 500.
         const coordinatorUpdate = provisioned.coordinatorUserId
-            ? tx.user.update({
+            ? tx.user.updateMany({
                   where: { id: provisioned.coordinatorUserId },
                   data: { isActive: dto.decision === 'APPROVED' },
               })

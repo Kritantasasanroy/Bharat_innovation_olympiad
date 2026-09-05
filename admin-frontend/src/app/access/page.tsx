@@ -3,7 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Kind = 'PARTNER' | 'SCHOOL';
 type Status = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
@@ -294,6 +294,23 @@ export default function AccessPage() {
     const [deleteReason, setDeleteReason] = useState('');
     const [deleting, setDeleting] = useState(false);
 
+    // Pull the page (or the open modal) to whatever we just reported, so an
+    // error or confirmation is never left sitting off-screen.
+    const noticeRef = useRef<HTMLDivElement>(null);
+    const modalNoticeRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!error && !emailNotice) return;
+        const target = modalNoticeRef.current ?? noticeRef.current;
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [error, emailNotice]);
+
+    // Open a request's detail card, clearing any notice left over from another row.
+    const openDetail = useCallback((row: Row) => {
+        setError(null);
+        setEmailNotice(null);
+        setDetail(row);
+    }, []);
+
     const load = useCallback(async (background = false) => {
         if (!background) setLoading(true);
         try {
@@ -497,10 +514,13 @@ export default function AccessPage() {
             });
         } catch (cause: unknown) {
             const status = responseStatus(cause);
+            const backendMessage = responseMessage(cause);
             setError(
                 status === 429
                     ? 'A verification email was sent recently. Wait a minute before requesting another.'
-                    : 'Could not resend the verification email.',
+                    : backendMessage
+                      ? `Could not resend the activation link: ${backendMessage}`
+                      : 'Could not resend the activation link.',
             );
         } finally {
             setCardBusy(false);
@@ -547,13 +567,14 @@ export default function AccessPage() {
                     </span>
                 </div>
 
-                {error && <div className="form-error">{error}</div>}
-
-                {emailNotice && (
-                    <div className={emailNotice.type === 'success' ? 'form-success' : 'form-warn'}>
-                        {emailNotice.message}
-                    </div>
-                )}
+                <div ref={noticeRef}>
+                    {error && <div className="form-error">{error}</div>}
+                    {emailNotice && (
+                        <div className={emailNotice.type === 'success' ? 'form-success' : 'form-warn'}>
+                            {emailNotice.message}
+                        </div>
+                    )}
+                </div>
 
                 {loading ? (
                     <div className="glass-card loading-container">
@@ -575,11 +596,11 @@ export default function AccessPage() {
                                 className="request-card"
                                 role="button"
                                 tabIndex={0}
-                                onClick={() => setDetail(row)}
+                                onClick={() => openDetail(row)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                         e.preventDefault();
-                                        setDetail(row);
+                                        openDetail(row);
                                     }
                                 }}
                             >
@@ -633,7 +654,7 @@ export default function AccessPage() {
                                             dateStyle: 'medium',
                                         })}
                                     </span>
-                                    {row.status === 'PENDING' && !row.emailVerifiedAt ? (
+                                    {row.status === 'PENDING' ? (
                                         <button
                                             type="button"
                                             className="btn btn-sm btn-secondary"
@@ -678,6 +699,21 @@ export default function AccessPage() {
                             <h2>{detailRow.title}</h2>
                             <p className="text-muted">{detailRow.detail}</p>
                         </div>
+
+                        {(error || emailNotice) && (
+                            <div ref={modalNoticeRef}>
+                                {error && <div className="form-error">{error}</div>}
+                                {emailNotice && (
+                                    <div
+                                        className={
+                                            emailNotice.type === 'success' ? 'form-success' : 'form-warn'
+                                        }
+                                    >
+                                        {emailNotice.message}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <dl className="access-card__grid">
                             <Field label="Contact" value={detailRow.contactName} />
@@ -748,18 +784,16 @@ export default function AccessPage() {
                         </dl>
 
                         <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-                            {detailRow.status === 'PENDING' && !detailRow.emailVerifiedAt && (
+                            {detailRow.status === 'PENDING' && (
                                 <button
                                     className="btn btn-secondary"
                                     disabled={cardBusy}
                                     onClick={() => {
                                         if (!detailRow) return;
-                                        const row = detailRow;
-                                        setDetail(null);
-                                        void resendVerification(row);
+                                        void resendVerification(detailRow);
                                     }}
                                 >
-                                    Resend activation link
+                                    {cardBusy ? 'Sending…' : 'Resend activation link'}
                                 </button>
                             )}
                             {detailRow.tokenIssuedAt && (
@@ -796,6 +830,8 @@ export default function AccessPage() {
                                     onClick={() => {
                                         if (!detailRow) return;
                                         const row = detailRow;
+                                        setError(null);
+                                        setEmailNotice(null);
                                         setDetail(null);
                                         setPending({ row, decision });
                                         setReason('');
@@ -837,6 +873,11 @@ export default function AccessPage() {
                                 Approving issues this {pending.row.kind.toLowerCase()} a single access
                                 token. You will see the handover card next.
                             </p>
+                        )}
+                        {error && (
+                            <div ref={modalNoticeRef} className="form-error">
+                                {error}
+                            </div>
                         )}
                         <form className="exam-form" onSubmit={submitDecision}>
                             <div className="form-group">
