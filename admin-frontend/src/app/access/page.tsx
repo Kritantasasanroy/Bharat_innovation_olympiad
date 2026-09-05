@@ -492,8 +492,8 @@ export default function AccessPage() {
             setEmailNotice({
                 type: data.emailSent ? 'success' : 'warn',
                 message: data.emailSent
-                    ? `A new verification link was sent to ${row.email}.`
-                    : `The verification link could not be sent to ${row.email}. Check the email provider configuration.`,
+                    ? `A new activation link was sent to ${row.email}.`
+                    : `The activation link could not be sent to ${row.email}. Check the email provider configuration.`,
             });
         } catch (cause: unknown) {
             const status = responseStatus(cause);
@@ -570,11 +570,18 @@ export default function AccessPage() {
                 ) : (
                     <div className="request-grid">
                         {visible.map((row) => (
-                            <button
-                                type="button"
+                            <div
                                 key={`${row.kind}-${row.id}`}
                                 className="request-card"
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => setDetail(row)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setDetail(row);
+                                    }
+                                }}
                             >
                                 <div className="request-card__top">
                                     <span className="request-card__tags">
@@ -626,9 +633,23 @@ export default function AccessPage() {
                                             dateStyle: 'medium',
                                         })}
                                     </span>
-                                    <span className="request-card__cue">View details →</span>
+                                    {row.status === 'PENDING' && !row.emailVerifiedAt ? (
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-secondary"
+                                            disabled={cardBusy}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void resendVerification(row);
+                                            }}
+                                        >
+                                            Resend activation link
+                                        </button>
+                                    ) : (
+                                        <span className="request-card__cue">View details →</span>
+                                    )}
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
                 )}
@@ -738,7 +759,7 @@ export default function AccessPage() {
                                         void resendVerification(row);
                                     }}
                                 >
-                                    Resend verification
+                                    Resend activation link
                                 </button>
                             )}
                             {detailRow.tokenIssuedAt && (
