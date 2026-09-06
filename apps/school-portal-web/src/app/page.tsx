@@ -86,15 +86,7 @@ export default function HomePage() {
 			</div>
 
 			{/* NAV */}
-			<div
-				style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "space-between",
-					padding: "1.5rem 2.5rem",
-					borderBottom: "1px solid var(--border-subtle)",
-				}}
-			>
+			<div className="landing-topbar">
 				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
 					<Image
 						src="/bio-logo.png"
@@ -115,7 +107,7 @@ export default function HomePage() {
 						School Portal
 					</span>
 				</div>
-				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+				<div className="landing-topbar__actions">
 					<Link href="/login" className="button button--secondary">
 						Log in
 					</Link>
@@ -126,23 +118,12 @@ export default function HomePage() {
 			</div>
 
 			{/* HERO */}
-			<div
-				className="hero-grid"
-				style={{
-					display: "grid",
-					gridTemplateColumns: "1fr 1fr",
-					gap: "2.5rem",
-					alignItems: "center",
-					maxWidth: 1180,
-					margin: "0 auto",
-					padding: "4.5rem 2.5rem",
-				}}
-			>
+			<div className="landing-hero">
 				<div>
 					<div className="pill pill--active" style={{ marginBottom: "1.25rem" }}>
 						Built for schools across India
 					</div>
-					<h1 style={{ fontSize: "2.6rem", lineHeight: 1.14, marginBottom: "1.1rem" }}>
+					<h1 className="landing-hero__title">
 						Your school&apos;s Olympiad journey,{" "}
 						<span className="brand-gradient">all in one place</span>
 					</h1>
@@ -262,10 +243,7 @@ export default function HomePage() {
 			</div>
 
 			{/* FEATURES */}
-			<div
-				className="grid-3"
-				style={{ maxWidth: 1180, margin: "0 auto", padding: "0 2.5rem 4.5rem" }}
-			>
+			<div className="grid-3 landing-features">
 				{FEATURES.map((feature) => (
 					<div key={feature.title} className="card" style={{ marginBottom: 0 }}>
 						<div

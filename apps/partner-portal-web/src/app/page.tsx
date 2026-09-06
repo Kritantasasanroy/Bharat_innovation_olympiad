@@ -91,15 +91,7 @@ export default function HomePage() {
 			</div>
 
 			{/* NAV */}
-			<div
-				style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "space-between",
-					padding: "1.5rem 2.5rem",
-					borderBottom: "1px solid var(--border-subtle)",
-				}}
-			>
+			<div className="landing-topbar">
 				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
 					<Image
 						src="/bio-logo.png"
@@ -120,7 +112,7 @@ export default function HomePage() {
 						Partner Program
 					</span>
 				</div>
-				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+				<div className="landing-topbar__actions">
 					<Link href="/login" className="button button--secondary">
 						Partner login
 					</Link>
@@ -138,22 +130,12 @@ export default function HomePage() {
 			) : null}
 
 			{/* HERO */}
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "1.05fr 0.95fr",
-					gap: "2.5rem",
-					alignItems: "center",
-					maxWidth: 1180,
-					margin: "0 auto",
-					padding: "4.5rem 2.5rem 3.5rem",
-				}}
-			>
+			<div className="landing-hero">
 				<div>
 					<div className="pill pill--active" style={{ marginBottom: "1.25rem" }}>
 						Built for growth partners across India
 					</div>
-					<h1 style={{ fontSize: "2.6rem", lineHeight: 1.12, marginBottom: "1.1rem" }}>
+					<h1 className="landing-hero__title">
 						Grow your network.
 						<br />
 						Track everything that <span className="brand-gradient">matters</span>.
@@ -339,10 +321,7 @@ export default function HomePage() {
 			</div>
 
 			{/* TRUST ROW */}
-			<div
-				className="grid-3"
-				style={{ maxWidth: 1180, margin: "0 auto", padding: "0 2.5rem 4.5rem" }}
-			>
+			<div className="grid-3 landing-features">
 				{TRUST_CARDS.map((c) => (
 					<div key={c.title} className="card" style={{ marginBottom: 0 }}>
 						<div

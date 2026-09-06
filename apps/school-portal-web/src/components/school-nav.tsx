@@ -96,6 +96,9 @@ export function SchoolNav() {
 	const pathname = usePathname();
 	const { token } = useAuth();
 	const [payouts, setPayouts] = useState<Payout[] | null>(null);
+	// Mobile: the grouped links collapse behind a "Menu" toggle. Following a link
+	// closes it again (see `onClick` on each link below).
+	const [menuOpen, setMenuOpen] = useState(false);
 
 	useEffect(() => {
 		if (!token) return;
@@ -133,7 +136,7 @@ export function SchoolNav() {
 
 	return (
 		<nav className="dashboard-nav">
-			<Link href="/dashboard" className="dashboard-nav__brand">
+			<Link href="/dashboard" className="dashboard-nav__brand" onClick={() => setMenuOpen(false)}>
 				<Image
 					src="/bio-logo.png"
 					alt="Bharat Innovation Olympiad"
@@ -150,41 +153,59 @@ export function SchoolNav() {
 				<span className="dashboard-nav__brand-text">Bharat Innovation Olympiad</span>
 				<span className="dashboard-nav__brand-sub">School Portal</span>
 			</Link>
-			{groups.map((group) => (
-				<div key={group.label} style={{ marginBottom: "0.25rem" }}>
-					<div
-						style={{
-							fontSize: "0.68rem",
-							fontWeight: 700,
-							color: "var(--text-muted)",
-							textTransform: "uppercase",
-							letterSpacing: "0.06em",
-							padding: "0.75rem 1rem 0.35rem",
-						}}
-					>
-						{group.label}
+			<button
+				type="button"
+				className="dashboard-nav__toggle"
+				aria-expanded={menuOpen}
+				onClick={() => setMenuOpen((open) => !open)}
+			>
+				<span className="dashboard-nav__toggle-bars" aria-hidden="true">
+					<span />
+					<span />
+					<span />
+				</span>
+				{menuOpen ? "Close menu" : "Menu"}
+			</button>
+			<div className={menuOpen ? "dashboard-nav__groups is-open" : "dashboard-nav__groups"}>
+				{groups.map((group) => (
+					<div key={group.label} style={{ marginBottom: "0.25rem" }}>
+						<div
+							style={{
+								fontSize: "0.68rem",
+								fontWeight: 700,
+								color: "var(--text-muted)",
+								textTransform: "uppercase",
+								letterSpacing: "0.06em",
+								padding: "0.75rem 1rem 0.35rem",
+							}}
+						>
+							{group.label}
+						</div>
+						{group.links.map((link) => {
+							const isActive =
+								link.href === "/dashboard"
+									? pathname === link.href
+									: pathname?.startsWith(link.href);
+							return (
+								<Link
+									key={link.href}
+									href={link.href}
+									className={
+										isActive
+											? "dashboard-nav__link dashboard-nav__link--active"
+											: "dashboard-nav__link"
+									}
+									style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}
+									onClick={() => setMenuOpen(false)}
+								>
+									{ICONS[link.href]}
+									{link.label}
+								</Link>
+							);
+						})}
 					</div>
-					{group.links.map((link) => {
-						const isActive =
-							link.href === "/dashboard" ? pathname === link.href : pathname?.startsWith(link.href);
-						return (
-							<Link
-								key={link.href}
-								href={link.href}
-								className={
-									isActive
-										? "dashboard-nav__link dashboard-nav__link--active"
-										: "dashboard-nav__link"
-								}
-								style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}
-							>
-								{ICONS[link.href]}
-								{link.label}
-							</Link>
-						);
-					})}
-				</div>
-			))}
+				))}
+			</div>
 		</nav>
 	);
 }

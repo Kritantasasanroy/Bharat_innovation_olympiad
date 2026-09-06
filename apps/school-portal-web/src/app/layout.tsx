@@ -21,6 +21,11 @@ export const metadata = {
 		"Bharat Innovation Olympiad school portal — activate your school, manage students, and results.",
 };
 
+export const viewport = {
+	width: "device-width",
+	initialScale: 1,
+};
+
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
 	// Light by default; the toggle persists a choice to localStorage `bio-theme`.
 	return (
