@@ -150,6 +150,15 @@ const ACTION_LABEL: Record<Decision, string> = {
 /** `/admin/partner-requests` vs `/admin/school-requests`. */
 const basePath = (kind: Kind) => `/admin/${kind === 'PARTNER' ? 'partner' : 'school'}-requests`;
 
+/**
+ * When "Resend activation link" applies: any request that isn't approved and
+ * still needs its email confirmed (or is pending, where a nudge is fine).
+ * A revoked/rejected request with an unverified email can't be re-granted until
+ * the applicant clicks the link, so this is the only way forward for it.
+ */
+const canResendActivation = (row: { status: Status; emailVerifiedAt: string | null }) =>
+    row.status !== 'APPROVED' && (row.status === 'PENDING' || !row.emailVerifiedAt);
+
 function responseStatus(error: unknown): number | undefined {
     if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
     const response = error.response;
@@ -654,7 +663,7 @@ export default function AccessPage() {
                                             dateStyle: 'medium',
                                         })}
                                     </span>
-                                    {row.status === 'PENDING' ? (
+                                    {canResendActivation(row) ? (
                                         <button
                                             type="button"
                                             className="btn btn-sm btn-secondary"
@@ -784,7 +793,7 @@ export default function AccessPage() {
                         </dl>
 
                         <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-                            {detailRow.status === 'PENDING' && (
+                            {canResendActivation(detailRow) && (
                                 <button
                                     className="btn btn-secondary"
                                     disabled={cardBusy}

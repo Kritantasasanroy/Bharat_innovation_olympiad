@@ -533,10 +533,13 @@ export class SchoolService {
     async resendVerificationForAdmin(id: string, adminId: string) {
         const request = await this.prisma.schoolRequest.findUnique({ where: { id } });
         if (!request) throw new NotFoundException('School request not found.');
-        if (request.status !== 'PENDING') {
+        if (request.status === 'APPROVED') {
             throw new ConflictException(
-                'This school request has already been decided. Use "Resend email" on the handover card to re-send its access details.',
+                'This school is already approved. Use "Resend email" on the handover card to re-send its access details.',
             );
+        }
+        if (request.emailVerifiedAt && request.status !== 'PENDING') {
+            throw new ConflictException('This school coordinator has already confirmed their email address.');
         }
 
         const now = new Date();
