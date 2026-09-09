@@ -308,13 +308,20 @@ export class AccessPassService {
         }
 
         if (!user) {
-            // A real ₹1 payment landed but we can't tie it to an account — the
-            // payer used a different email/phone than they registered with.
-            // Surface it for a manual grant rather than silently dropping money.
+            // A real ₹1 payment landed but we can't tie it to an account here —
+            // the payer used a different email/phone than they registered with,
+            // OR they registered against a different backend.
+            //
+            // There is one shared Razorpay account and one payment link, but more
+            // than one backend serving students (production, plus the dev stack
+            // used for testing). Razorpay only calls one of them, so the one it
+            // calls forwards a shared-link payment it can't place to the peer in
+            // `SHARED_LINK_RELAY_URL`, if set — see `relayUnmatchedPayment`.
             this.logger.warn(
                 `Shared-link ₹1 payment ${razorpayPaymentId} matched no account ` +
                     `(email="${email}", contact="${contact ?? ''}") — needs a manual grant.`,
             );
+            await this.relayUnmatchedPayment(entity);
             return { status: 'unmatched' };
         }
 
@@ -364,6 +371,58 @@ export class AccessPassService {
 
         this.logger.log(`Shared-link ₹1 unlock granted to ${user.email} (payment ${razorpayPaymentId}).`);
         return { status: 'granted' };
+    }
+
+    /**
+     * Forward a shared-link payment this backend couldn't place to a peer backend.
+     *
+     * Razorpay can be told exactly one webhook URL per account, but the ₹1 link is
+     * shared by every student-facing backend (prod + the dev stack). The backend
+     * Razorpay calls re-signs the event with the same `RAZORPAY_WEBHOOK_SECRET`
+     * and POSTs it to `SHARED_LINK_RELAY_URL`, so the peer verifies it byte for
+     * byte as though Razorpay had called it directly, then runs its own account
+     * match.
+     *
+     * - Unset by default → production is unchanged until the variable is added.
+     * - Set it ONLY on the backend Razorpay actually calls, and never point it at
+     *   that same backend, or a payment nobody can place bounces forever.
+     * - Best-effort: a slow or down peer must never turn a webhook this backend
+     *   already accepted (HTTP 200 to Razorpay) into a Razorpay retry storm.
+     */
+    private async relayUnmatchedPayment(entity: unknown): Promise<void> {
+        const url = process.env.SHARED_LINK_RELAY_URL;
+        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        if (!url || !secret) return;
+
+        const paymentId = (entity as { id?: string } | null)?.id;
+        const body = JSON.stringify({
+            event: 'payment.captured',
+            payload: { payment: { entity } },
+        });
+        const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
+
+        const abort = new AbortController();
+        const timer = setTimeout(() => abort.abort(), 5000);
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-razorpay-signature': signature,
+                },
+                body,
+                signal: abort.signal,
+            });
+            this.logger.log(
+                `Relayed unmatched ₹1 payment ${paymentId} to ${url} — HTTP ${res.status}`,
+            );
+        } catch (err) {
+            this.logger.warn(
+                `Relay of unmatched ₹1 payment ${paymentId} to ${url} failed: ${(err as Error).message}`,
+            );
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     // ── Admin ────────────────────────────────────────────────────────────────
