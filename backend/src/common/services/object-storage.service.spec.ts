@@ -115,7 +115,7 @@ describe('validation — nothing is signed until the file is acceptable', () => 
     it('rejects a MIME type that does not match the kind', async () => {
         // A video file smuggled into the image slot would be transcoded as a still.
         await expect(ticket(['image', 'clip.mp4', 'video/mp4', 1024])).rejects.toThrow(
-            /Images must be one of/i,
+            /Image files must be one of/i,
         );
     });
 
@@ -125,10 +125,10 @@ describe('validation — nothing is signed until the file is acceptable', () => 
         ).rejects.toThrow(/limit is 10 MB/i);
     });
 
-    it('rejects a video over the 100 MB limit (Cloudinary’s free-plan ceiling)', async () => {
+    it('rejects a video over the 5 GB single-upload ceiling', async () => {
         await expect(
             ticket(['video', 'big.mp4', 'video/mp4', MEDIA_RULES.video.maxBytes + 1]),
-        ).rejects.toThrow(/limit is 100 MB/i);
+        ).rejects.toThrow(/above the 5 GB single-upload ceiling/i);
     });
 
     it('accepts a file exactly on the limit', async () => {

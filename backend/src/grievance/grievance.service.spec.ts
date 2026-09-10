@@ -1,5 +1,6 @@
 import { AttemptStatus, GrievanceStatus, GrievanceType } from '@prisma/client';
 import { GrievanceService } from './grievance.service';
+import { BadRequestException } from '@nestjs/common';
 
 /**
  * Hand-rolled in-memory fake of the slice of PrismaService this service uses.
@@ -113,7 +114,7 @@ describe('GrievanceService.create', () => {
         const db = createFakeDb();
         const service = new GrievanceService(db.prisma);
         await expect(
-            service.create('u1', { type: GrievanceType.GRIEVANCE, subject: '  ', description: 'x' }),
+            service.create('u1', { attachmentUrls: ['students/u1/id/proof.pdf'], type: GrievanceType.GRIEVANCE, subject: '  ', description: 'x' }),
         ).rejects.toThrow(/subject and description/i);
     });
 
@@ -123,6 +124,7 @@ describe('GrievanceService.create', () => {
         await expect(
             service.create('u1', {
                 type: GrievanceType.REATTEMPT,
+                attachmentUrls: ['students/u1/id/proof.pdf'],
                 subject: 'Please let me retake',
                 description: 'Power cut',
             }),
@@ -136,6 +138,7 @@ describe('GrievanceService.create', () => {
         await expect(
             service.create('u1', {
                 type: GrievanceType.REATTEMPT,
+                attachmentUrls: ['students/u1/id/proof.pdf'],
                 subject: 's',
                 description: 'd',
                 attemptId: attempt.id,
@@ -148,6 +151,7 @@ describe('GrievanceService.create', () => {
         const service = new GrievanceService(db.prisma);
         const grievance = await service.create('u1', {
             type: GrievanceType.GRIEVANCE,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: '  Wrong score  ',
             description: '  Q3 was marked wrong  ',
         });
@@ -163,6 +167,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.GRIEVANCE,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 's',
             description: 'd',
         });
@@ -185,6 +190,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.GRIEVANCE,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 's',
             description: 'd',
             attemptId: attempt.id,
@@ -208,6 +214,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.GRIEVANCE,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 's',
             description: 'd',
         });
@@ -223,6 +230,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.REATTEMPT,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 'Power cut',
             description: 'Lost 20 minutes',
             attemptId: attempt.id,
@@ -246,6 +254,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.REATTEMPT,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 's',
             description: 'd',
             attemptId: attempt.id,
@@ -272,6 +281,7 @@ describe('GrievanceService.decide', () => {
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
             type: GrievanceType.REATTEMPT,
+            attachmentUrls: ['students/u1/id/proof.pdf'],
             subject: 's',
             description: 'd',
             attemptId: attempt.id,
@@ -291,7 +301,8 @@ describe('GrievanceService.decide', () => {
         const attempt = seedAttempt(db, 'u1');
         const service = new GrievanceService(db.prisma);
         const g = await service.create('u1', {
-            type: GrievanceType.GRIEVANCE, // not REATTEMPT
+            type: GrievanceType.GRIEVANCE,
+            attachmentUrls: ['students/u1/id/proof.pdf'], // not REATTEMPT
             subject: 's',
             description: 'd',
             attemptId: attempt.id,
@@ -301,5 +312,71 @@ describe('GrievanceService.decide', () => {
 
         expect(attempt.status).toBe(AttemptStatus.SUBMITTED);
         expect(db.attemptItems).toHaveLength(2);
+    });
+});
+
+/**
+ * Supporting proof is compulsory on every new request.
+ *
+ * A date-change or re-attempt cannot be decided on the student's word alone,
+ * and chasing the document afterwards is most of what made these take days.
+ */
+describe('GrievanceService.create — supporting documents', () => {
+    const base = {
+        type: GrievanceType.GRIEVANCE,
+        subject: 'Exam date clash',
+        description: 'I have a medical appointment that day.',
+    };
+
+    it('refuses a request with no attachment at all', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        await expect(service.create('u1', base as never)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses an empty attachment array', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        await expect(
+            service.create('u1', { ...base, attachmentUrls: [] } as never),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses attachments that are only whitespace', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        await expect(
+            service.create('u1', { ...base, attachmentUrls: ['   ', ''] } as never),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts a single document and stores it', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        const g = await service.create('u1', {
+            ...base,
+            attachmentUrls: ['students/u1/id/prescription.pdf'],
+        } as never);
+
+        expect(g.attachmentUrls).toEqual(['students/u1/id/prescription.pdf']);
+    });
+
+    it('keeps several documents, dropping the blank ones', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        const g = await service.create('u1', {
+            ...base,
+            attachmentUrls: ['a/ticket.pdf', '  ', 'b/card.jpg'],
+        } as never);
+
+        expect(g.attachmentUrls).toEqual(['a/ticket.pdf', 'b/card.jpg']);
+    });
+
+    it('still enforces subject and description alongside the proof', async () => {
+        const service = new GrievanceService(createFakeDb().prisma);
+
+        await expect(
+            service.create('u1', { ...base, subject: '  ', attachmentUrls: ['a/x.pdf'] } as never),
+        ).rejects.toBeInstanceOf(BadRequestException);
     });
 });

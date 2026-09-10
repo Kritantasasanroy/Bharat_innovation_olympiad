@@ -18,7 +18,9 @@
 		"test:contract": "bun test packages/contract-fixtures/src/contract-version.test.ts",
 		"security:audit": "pnpm audit --audit-level high",
 		"boundaries": "pnpm --filter @bio/exam-api lint:boundaries",
-		"verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:contract && pnpm boundaries"
+		"verify": "node scripts/e2e/verify.mjs both",
+		"verify:dev": "node scripts/e2e/verify.mjs dev",
+		"verify:demo": "node scripts/e2e/verify.mjs demo"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
