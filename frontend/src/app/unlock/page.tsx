@@ -46,6 +46,18 @@ export default function UnlockPage() {
         return res.data;
     }, []);
 
+    /** Active check: reconcile against the ₹1 payment (local record + the peer
+     *  backend Razorpay calls), then re-read. `loadPass` alone only sees what is
+     *  already local — the gap when the webhook relay has not landed. */
+    const reconcileThenLoad = useCallback(async () => {
+        try {
+            await api.post('/access-pass/reconcile');
+        } catch {
+            /* best-effort */
+        }
+        return loadPass();
+    }, [loadPass]);
+
     useEffect(() => {
         loadPass()
             .catch((e: any) =>
@@ -77,7 +89,7 @@ export default function UnlockPage() {
         pollRef.current = setInterval(async () => {
             ticks += 1;
             try {
-                const p = await loadPass();
+                const p = ticks % 3 === 0 ? await reconcileThenLoad() : await loadPass();
                 if (p.isActive) {
                     stopPolling();
                     return;
@@ -87,7 +99,7 @@ export default function UnlockPage() {
             }
             if (ticks >= MAX_POLLS) stopPolling();
         }, POLL_MS);
-    }, [loadPass, stopPolling]);
+    }, [loadPass, reconcileThenLoad, stopPolling]);
 
     const handlePay = () => {
         setError('');
@@ -100,7 +112,7 @@ export default function UnlockPage() {
         setChecking(true);
         setError('');
         try {
-            await loadPass();
+            await reconcileThenLoad();
         } catch (e: any) {
             setError(e.response?.data?.message || 'Could not refresh, please try again.');
         } finally {

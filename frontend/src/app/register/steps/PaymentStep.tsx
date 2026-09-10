@@ -76,6 +76,21 @@ export default function PaymentStep({
         return data;
     }, []);
 
+    /**
+     * The active check: ask the backend to reconcile against the ₹1 payment
+     * (its own record and the peer backend Razorpay calls), then re-read.
+     * `loadPass` alone only reports what is already local, which is exactly the
+     * gap when the webhook relay has not landed.
+     */
+    const reconcileThenLoad = useCallback(async () => {
+        try {
+            await api.post('/access-pass/reconcile');
+        } catch {
+            // Reconcile is best-effort — fall back to a plain read.
+        }
+        return loadPass();
+    }, [loadPass]);
+
     const stopPolling = useCallback(() => {
         if (pollRef.current) {
             clearInterval(pollRef.current);
@@ -103,11 +118,11 @@ export default function PaymentStep({
     useEffect(() => {
         if (!waiting) return;
         const handleFocus = () => {
-            void loadPass();
+            void reconcileThenLoad();
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, [waiting, loadPass]);
+    }, [waiting, reconcileThenLoad]);
 
     const startPolling = useCallback(() => {
         setWaiting(true);
@@ -117,7 +132,9 @@ export default function PaymentStep({
         pollRef.current = setInterval(async () => {
             ticks += 1;
             try {
-                const p = await loadPass();
+                // Reconcile every few ticks (not every tick — it may call a peer
+                // backend); a plain read on the others.
+                const p = ticks % 3 === 0 ? await reconcileThenLoad() : await loadPass();
                 if (p.isActive) {
                     stopPolling();
                     return;
@@ -130,7 +147,7 @@ export default function PaymentStep({
                 setPollsExhausted(true);
             }
         }, POLL_MS);
-    }, [loadPass, stopPolling]);
+    }, [loadPass, reconcileThenLoad, stopPolling]);
 
     const handlePay = () => {
         setError('');
@@ -142,7 +159,7 @@ export default function PaymentStep({
         setChecking(true);
         setError('');
         try {
-            const p = await loadPass();
+            const p = await reconcileThenLoad();
             if (!p.isActive) {
                 setError(
                     "We can't see your payment yet. Bank confirmations can take a minute or two, wait a moment and check again. If you have already been charged, use \"Already paid but still locked?\" below and the system will verify & unlock.",

@@ -84,6 +84,32 @@ export class PaymentController {
         return this.accessPassService.createOrder(userId);
     }
 
+    /**
+     * The active "I've paid, check now". Unlike `GET /access-pass/me` (which only
+     * reports the local record) this reaches out: it checks this backend's own
+     * `SharedLinkPayment` table and, if configured, asks the backend Razorpay
+     * actually calls. Safe to hit on every poll.
+     */
+    @Post('access-pass/reconcile')
+    @UseGuards(JwtAuthGuard)
+    async reconcileAccessPass(@CurrentUser('id') userId: string) {
+        return this.accessPassService.reconcileForUser(userId);
+    }
+
+    /**
+     * "Was a ₹1 shared-link payment seen for this email / phone?" — PUBLIC, and
+     * deliberately low-value: the caller already knows the address they are
+     * asking about, and the answer is a bare boolean plus the Razorpay id. A
+     * peer backend calls this during a student's reconcile.
+     */
+    @Get('payments/shared-link/check')
+    async checkSharedLinkPayment(
+        @Query('email') email?: string,
+        @Query('contact') contact?: string,
+    ) {
+        return this.accessPassService.lookupSharedLinkPayment(email, contact);
+    }
+
     @Post('access-pass/verify')
     @UseGuards(JwtAuthGuard)
     async verifyAccessPass(

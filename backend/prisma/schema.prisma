@@ -1240,6 +1240,34 @@ model AccessPass {
   @@index([status])
 }
 
+/// Every ₹1 payment seen on the shared Razorpay access link, recorded the moment
+/// the webhook lands — whether or not it could be matched to an account here.
+///
+/// It exists so "I've paid, check now" has something authoritative to read.
+/// Razorpay calls exactly one backend (production), but a student may have
+/// registered against another (the dev stack). Production writes a row here for
+/// every ₹1 capture; any backend's reconcile then asks production "was this
+/// email/phone paid?" and unlocks locally — a pull that does not depend on the
+/// fire-and-forget webhook relay having landed.
+model SharedLinkPayment {
+  id                String   @id @default(uuid())
+  /// Razorpay's `pay_…` id. Unique so a retried webhook writes once.
+  razorpayPaymentId String   @unique
+  razorpayOrderId   String?
+  /// Lower-cased for case-insensitive match, exactly as the payer typed it.
+  email             String?
+  /// E.164 via `normalizePhone`, so it matches `User.phone`.
+  contact           String?
+  amount            Int
+  currency          String   @default("INR")
+  /// The account this was matched to, if any — null means "arrived but unplaced".
+  matchedUserId     String?
+  capturedAt        DateTime @default(now())
+
+  @@index([email])
+  @@index([contact])
+}
+
 /// A pending phone sign-in code.
 ///
 /// Issued and verified by this backend rather than Neon Auth: Neon's `send.otp`

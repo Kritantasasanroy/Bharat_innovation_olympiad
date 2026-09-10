@@ -26,6 +26,18 @@ export const ACCESS_PASS_AMOUNT_PAISE = Number(process.env.ACCESS_PASS_AMOUNT_PA
  */
 export const SHARED_LINK_UNLOCK_PAISE = Number(process.env.SHARED_LINK_UNLOCK_PAISE ?? 100);
 
+/**
+ * The peer backend to ask "was this email/phone's ₹1 paid?" during a reconcile.
+ *
+ * Razorpay's webhook only ever calls one backend (production), so a student who
+ * registered on the dev stack has no local record of their payment even after
+ * they have genuinely paid. Set this on every backend that is NOT the one
+ * Razorpay calls, pointing at the one it does
+ * (`https://…/api/payments/shared-link/check`). Unset on production itself — it
+ * is the source of truth and reconciles from its own `SharedLinkPayment` table.
+ */
+const SHARED_LINK_CHECK_URL = process.env.SHARED_LINK_CHECK_URL;
+
 @Injectable()
 export class AccessPassService {
     private readonly logger = new Logger(AccessPassService.name);
@@ -282,14 +294,6 @@ export class AccessPassService {
         const razorpayPaymentId: string | undefined = entity?.id;
         if (!razorpayPaymentId) return { status: 'ignored' };
 
-        // Webhooks are retried — if this exact payment is already recorded, the
-        // pass was handled on the first delivery. Nothing more to do.
-        const seen = await this.prisma.payment.findUnique({
-            where: { razorpayPaymentId },
-            select: { id: true },
-        });
-        if (seen) return { status: 'already' };
-
         // Match the payer to an account by what they entered on the hosted page.
         const email = String(entity?.email ?? '').trim();
         const contact = entity?.contact ? normalizePhone(String(entity.contact)) : null;
@@ -306,6 +310,38 @@ export class AccessPassService {
                 select: { id: true, email: true, firstName: true },
             });
         }
+
+        // Record the raw ₹1 payment BEFORE doing anything else, so a reconcile
+        // ("I've paid, check now") always has something to read even when this
+        // backend can't place the payer. Upsert keeps a retried webhook to one
+        // row. See the `SharedLinkPayment` model.
+        await this.prisma.sharedLinkPayment
+            .upsert({
+                where: { razorpayPaymentId },
+                create: {
+                    razorpayPaymentId,
+                    razorpayOrderId: entity?.order_id ?? null,
+                    email: email ? email.toLowerCase() : null,
+                    contact,
+                    amount,
+                    currency: String(entity?.currency ?? 'INR'),
+                    matchedUserId: user?.id ?? null,
+                },
+                update: { matchedUserId: user?.id ?? undefined },
+            })
+            .catch((err) =>
+                this.logger.warn(
+                    `Could not record SharedLinkPayment ${razorpayPaymentId}: ${(err as Error).message}`,
+                ),
+            );
+
+        // Webhooks are retried — if this exact payment already produced a pass,
+        // it was handled on the first delivery. Nothing more to do.
+        const seen = await this.prisma.payment.findUnique({
+            where: { razorpayPaymentId },
+            select: { id: true },
+        });
+        if (seen) return { status: 'already' };
 
         if (!user) {
             // A real ₹1 payment landed but we can't tie it to an account here —
@@ -422,6 +458,177 @@ export class AccessPassService {
             );
         } finally {
             clearTimeout(timer);
+        }
+    }
+
+    // ── Shared-link reconcile (the "check now" path) ──────────────────────────
+
+    /**
+     * Has a ₹1 payment for this email or phone landed on THIS backend's
+     * `SharedLinkPayment` table? Backs the public
+     * `GET /payments/shared-link/check` that a peer backend calls.
+     */
+    async lookupSharedLinkPayment(
+        email?: string,
+        contact?: string,
+    ): Promise<{ paid: boolean; paymentId?: string; orderId?: string; amount?: number }> {
+        const or: Array<Record<string, unknown>> = [];
+        const e = String(email ?? '').trim().toLowerCase();
+        if (e) or.push({ email: e });
+        const c = contact ? normalizePhone(String(contact)) : '';
+        if (c) or.push({ contact: c });
+        if (or.length === 0) return { paid: false };
+
+        const row = await this.prisma.sharedLinkPayment.findFirst({
+            where: { amount: SHARED_LINK_UNLOCK_PAISE, OR: or },
+            orderBy: { capturedAt: 'desc' },
+        });
+        if (!row) return { paid: false };
+        return {
+            paid: true,
+            paymentId: row.razorpayPaymentId,
+            orderId: row.razorpayOrderId ?? undefined,
+            amount: row.amount,
+        };
+    }
+
+    /**
+     * The active "I've paid, check now" — as opposed to `getMyPass`, which only
+     * reads what is already local.
+     *
+     * Order of attempts, cheapest first:
+     *  1. already ACTIVE → done;
+     *  2. a ₹1 `SharedLinkPayment` for this student's own email/phone is already
+     *     on this backend (the webhook or its relay landed) → grant;
+     *  3. ask the peer backend Razorpay actually calls (`SHARED_LINK_CHECK_URL`)
+     *     whether it saw the payment → grant on its word.
+     *
+     * Idempotent and safe to call on every poll.
+     */
+    async reconcileForUser(
+        userId: string,
+    ): Promise<{ status: 'active' | 'granted' | 'not_found' }> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, phone: true, firstName: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+
+        if (await this.hasActivePass(userId)) return { status: 'active' };
+
+        // 2 — a payment already recorded locally for this exact person.
+        const local = await this.lookupSharedLinkPayment(user.email, user.phone ?? undefined);
+        if (local.paid && local.paymentId) {
+            await this.grantSharedLinkPassToUser(user, {
+                razorpayPaymentId: local.paymentId,
+                razorpayOrderId: local.orderId,
+                amount: local.amount ?? SHARED_LINK_UNLOCK_PAISE,
+            });
+            return { status: 'granted' };
+        }
+
+        // 3 — ask the backend Razorpay calls.
+        if (SHARED_LINK_CHECK_URL) {
+            try {
+                const url = new URL(SHARED_LINK_CHECK_URL);
+                if (user.email) url.searchParams.set('email', user.email);
+                if (user.phone) url.searchParams.set('contact', user.phone);
+                const abort = new AbortController();
+                const timer = setTimeout(() => abort.abort(), 6000);
+                const res = await fetch(url, { signal: abort.signal }).finally(() =>
+                    clearTimeout(timer),
+                );
+                if (res.ok) {
+                    const peer = (await res.json()) as {
+                        paid?: boolean;
+                        paymentId?: string;
+                        orderId?: string;
+                        amount?: number;
+                    };
+                    if (
+                        peer?.paid &&
+                        peer.paymentId &&
+                        Number(peer.amount ?? SHARED_LINK_UNLOCK_PAISE) === SHARED_LINK_UNLOCK_PAISE
+                    ) {
+                        await this.grantSharedLinkPassToUser(user, {
+                            razorpayPaymentId: peer.paymentId,
+                            razorpayOrderId: peer.orderId,
+                            amount: SHARED_LINK_UNLOCK_PAISE,
+                        });
+                        return { status: 'granted' };
+                    }
+                }
+            } catch (err) {
+                this.logger.warn(
+                    `Shared-link reconcile for ${user.email} could not reach the peer: ${(err as Error).message}`,
+                );
+            }
+        }
+
+        return { status: 'not_found' };
+    }
+
+    /**
+     * Record a ₹1 payment against `user` and flip their pass ACTIVE. Shared by
+     * the webhook match and the reconcile. Idempotent on `razorpayPaymentId`.
+     */
+    private async grantSharedLinkPassToUser(
+        user: { id: string; email: string; firstName: string },
+        p: { razorpayPaymentId: string; razorpayOrderId?: string; amount: number },
+    ): Promise<void> {
+        const existing = await this.prisma.payment.findUnique({
+            where: { razorpayPaymentId: p.razorpayPaymentId },
+            select: { id: true },
+        });
+        const payment =
+            existing ??
+            (await this.prisma.payment.create({
+                data: {
+                    userId: user.id,
+                    razorpayOrderId: p.razorpayOrderId ?? `sharedlink_${p.razorpayPaymentId}`,
+                    razorpayPaymentId: p.razorpayPaymentId,
+                    amount: p.amount,
+                    currency: 'INR',
+                    status: PaymentStatus.PAID,
+                },
+                select: { id: true },
+            }));
+
+        const before = await this.prisma.accessPass.findUnique({
+            where: { userId: user.id },
+            select: { status: true },
+        });
+
+        await this.prisma.accessPass.upsert({
+            where: { userId: user.id },
+            create: {
+                userId: user.id,
+                paymentId: payment.id,
+                amount: p.amount,
+                status: AccessPassStatus.ACTIVE,
+                grantedAt: new Date(),
+            },
+            update: {
+                paymentId: payment.id,
+                amount: p.amount,
+                status: AccessPassStatus.ACTIVE,
+                grantedAt: new Date(),
+                revokedAt: null,
+            },
+        });
+
+        await this.prisma.sharedLinkPayment
+            .updateMany({
+                where: { razorpayPaymentId: p.razorpayPaymentId },
+                data: { matchedUserId: user.id },
+            })
+            .catch(() => undefined);
+
+        if (before?.status !== AccessPassStatus.ACTIVE) {
+            await this.notifications.sendAccessPassActivated(user.email, user.firstName, p.amount);
+            this.logger.log(
+                `Shared-link ₹1 pass granted to ${user.email} via reconcile (payment ${p.razorpayPaymentId}).`,
+            );
         }
     }
 
