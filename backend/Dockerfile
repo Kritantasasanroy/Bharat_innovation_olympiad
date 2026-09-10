@@ -2,6 +2,13 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Prisma's engine is chosen by detecting the libssl version at `prisma generate`
+# time. Without the openssl package the detector gives up, silently picks the
+# openssl-1.1.x engine, and that engine then fails to load against Alpine's
+# openssl 3 at runtime ("Could not parse schema engine response"). Install it in
+# BOTH stages so generate and `migrate deploy` agree.
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
 RUN npm ci
 
@@ -12,6 +19,8 @@ RUN npm run build
 FROM node:20-alpine
 
 WORKDIR /app
+
+RUN apk add --no-cache openssl
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
