@@ -9,6 +9,7 @@ import { S3Module } from './common/services/s3.module';
 import { NotificationModule } from './notification/notification.module';
 import { ConsentModule } from './consent/consent.module';
 import { ExamModule } from './exam/exam.module';
+import { ExamFeedbackModule } from './exam-feedback/exam-feedback.module';
 import { GeoModule } from './geo/geo.module';
 import { GrievanceModule } from './grievance/grievance.module';
 import { GuardianModule } from './guardian/guardian.module';
@@ -32,6 +33,7 @@ import { UserModule } from './user/user.module';
         PrismaModule,
         S3Module,
         NotificationModule,
+        ExamFeedbackModule,
         GeoModule,
         AuthModule,
         UserModule,

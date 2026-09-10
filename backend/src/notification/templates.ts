@@ -139,7 +139,9 @@ export function slotConfirmedEmail(vars: {
          'Find a quiet, well-lit spot with a plain background behind you.',
      ])}
      <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This schedule is confirmed and cannot be changed from your account. If you genuinely cannot make it, contact support as early as possible.</p>`,
-        { label: 'View your admit card', url: `${vars.appUrl}/admit-card/${vars.bookingId}` },
+        // Query-param route: the student portal is a static export and cannot
+        // carry a dynamic /admit-card/<id> segment. See frontend/next.config.ts.
+        { label: 'View your admit card', url: `${vars.appUrl}/admit-card/?bookingId=${encodeURIComponent(vars.bookingId)}` },
     );
 }
 

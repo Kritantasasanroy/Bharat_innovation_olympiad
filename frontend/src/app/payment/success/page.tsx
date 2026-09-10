@@ -138,7 +138,7 @@ function SuccessContent() {
                     <button
                         className="btn btn-primary btn-lg"
                         style={{ width: '100%' }}
-                        onClick={() => router.push(`/exams/${booking.slot.examInstance.exam.id}/instructions`)}
+                        onClick={() => router.push(`/exams/instructions?id=${booking.slot.examInstance.exam.id}`)}
                     >
                         Go to Exam Instructions →
                     </button>

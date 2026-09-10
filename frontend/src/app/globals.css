@@ -893,6 +893,55 @@ h4 {
 .exam-capture-mask h2 { font-size: 1.25rem; }
 .exam-capture-mask p { max-width: 460px; color: rgba(255, 255, 255, 0.75); font-size: 0.9rem; }
 
+/* ── Student self-view during an exam ──────────────────────────────────── */
+.exam-selfview {
+  position: fixed;
+  top: 68px;
+  right: 16px;
+  width: 150px;
+  height: 112px;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 60;
+  background: #0b1220;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.exam-selfview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror, the way a selfie camera behaves */
+  display: block;
+}
+.exam-selfview__dot {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+  animation: selfviewPulse 2s ease-in-out infinite;
+}
+@keyframes selfviewPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (max-width: 768px) {
+  .exam-selfview {
+    top: 60px;
+    right: 10px;
+    width: 96px;
+    height: 72px;
+    border-radius: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exam-selfview__dot { animation: none; }
+}
+
 @media print {
   /* Printing an exam paper is a screenshot with a paper trail. The whole
      document is replaced rather than merely hidden, so "Print to PDF" cannot
@@ -2144,6 +2193,148 @@ h4 {
           font-size: 0.7rem;
           color: var(--text-muted);
           text-transform: capitalize;
+        }
+
+        /* ── XP pill (navbar desktop + mobile, profile page) ── */
+        .xp-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          font-size: 0.8rem;
+          font-weight: 700;
+          line-height: 1;
+          color: var(--accent-500, #b45309);
+          background: rgba(255, 203, 5, 0.14);
+          border: 1px solid rgba(255, 203, 5, 0.3);
+          white-space: nowrap;
+        }
+        .xp-pill__spark { font-size: 0.85em; }
+        .xp-pill__value { font-variant-numeric: tabular-nums; }
+        .xp-pill__unit { font-size: 0.7rem; font-weight: 600; opacity: 0.8; }
+
+        /* ── Account trigger + dropdown (replaces the loose name/Profile/Logout) ── */
+        .navbar-account { position: relative; }
+        .navbar-account__trigger {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: 4px 6px 4px 4px;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          background: transparent;
+          cursor: pointer;
+          transition: background var(--transition-fast), border-color var(--transition-fast);
+        }
+        .navbar-account__trigger:hover { background: var(--bg-elevated); border-color: var(--border-subtle); }
+        .navbar-account__name { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
+        .navbar-account__chev { font-size: 0.7rem; color: var(--text-muted); }
+        .navbar-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          min-width: 168px;
+          padding: 6px;
+          border-radius: var(--radius-md);
+          z-index: 60;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .navbar-menu__item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          padding: 8px 10px;
+          border: 0;
+          border-radius: var(--radius-sm, 8px);
+          background: transparent;
+          color: var(--text-primary);
+          font-size: 0.85rem;
+          font-weight: 500;
+          cursor: pointer;
+          text-align: left;
+        }
+        .navbar-menu__item:hover { background: var(--bg-elevated); }
+        .navbar-menu__item--danger { color: var(--danger-400); }
+
+        /* ── Mobile top bar: XP pill sits beside the avatar ── */
+        .mob-topbar__right { display: flex; align-items: center; gap: 8px; }
+
+        /* ── Profile page XP card ── */
+        .profile-xp {
+          display: flex;
+          align-items: center;
+          gap: var(--space-4);
+          padding: var(--space-4) var(--space-5);
+        }
+        .profile-xp__spark {
+          font-size: 1.6rem;
+          flex-shrink: 0;
+          filter: drop-shadow(0 2px 6px rgba(255, 203, 5, 0.4));
+        }
+        .profile-xp__body { flex: 1; min-width: 0; }
+        .profile-xp__value {
+          font-size: 1.5rem;
+          font-weight: 800;
+          line-height: 1;
+          background: var(--gradient-brand);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .profile-xp__value span { font-size: 0.8rem; font-weight: 700; }
+        .profile-xp__note { font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px; }
+        @media (max-width: 480px) {
+          .profile-xp { flex-wrap: wrap; }
+          .profile-xp .btn { width: 100%; }
+        }
+
+        /* ── Post-exam star rating ── */
+        .rating-prompt {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: var(--space-8) var(--space-6);
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--space-3);
+        }
+        .rating-prompt__title { font-size: 1.35rem; margin: 0; }
+        .rating-prompt__sub { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
+        .rating-prompt__reaction {
+          font-size: 0.95rem;
+          font-weight: 600;
+          margin: 0;
+          min-height: 1.4em;
+          color: var(--text-primary);
+        }
+        .rating-stars { display: flex; gap: 6px; margin-top: var(--space-2); }
+        .rating-star {
+          background: none;
+          border: 0;
+          cursor: pointer;
+          font-size: 2.4rem;
+          line-height: 1;
+          padding: 2px 4px;
+          color: var(--border-color, #cbd5e1);
+          transition: transform 0.12s ease, color 0.12s ease;
+        }
+        .rating-star:hover { transform: scale(1.15); }
+        .rating-star.is-on { color: #f5b301; text-shadow: 0 2px 10px rgba(245, 179, 1, 0.45); }
+        .rating-star:focus-visible { outline: 2px solid var(--primary-400); outline-offset: 2px; border-radius: 6px; }
+        .rating-comment { width: 100%; text-align: left; margin-top: var(--space-2); }
+        .rating-comment__opt { color: var(--text-muted); font-weight: 500; }
+        .rating-comment__count { font-size: 0.78rem; margin-top: 4px; }
+        .rating-comment__count.is-short { color: var(--danger-400); }
+        .rating-comment__count.is-ok { color: var(--success-400, #22c55e); }
+        .rating-prompt__actions { margin-top: var(--space-3); width: 100%; }
+        .rating-prompt__actions .btn { min-width: 220px; }
+        @media (prefers-reduced-motion: reduce) {
+          .rating-star:hover { transform: none; }
         }
 
         .option-item {
@@ -5733,3 +5924,100 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
   .result-stats { gap: 1rem !important; }
   .result-header h2 { font-size: 1.15rem; }
 }
+
+/* ── Support: mandatory proof upload ───────────────────────────────────── */
+.support-proof-note {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  background: rgba(255, 203, 5, 0.08);
+  border: 1px solid rgba(255, 203, 5, 0.25);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.85rem;
+  margin: 0 0 0.6rem;
+}
+.support-proof-note strong { color: var(--text-primary); }
+.support-proof-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.support-proof-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-elevated);
+}
+.support-proof-list button {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.support-proof-list button:hover { color: var(--danger-400); }
+
+/* ── Results: paper not released yet ───────────────────────────────────── */
+.result-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2rem 1.5rem;
+}
+.result-pending__icon { font-size: 2.2rem; }
+.result-pending h3 { margin: 0; font-size: 1.1rem; }
+.result-pending p {
+  margin: 0;
+  max-width: 520px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+/* ── Slot countdown ────────────────────────────────────────────────────── */
+.slot-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.slot-countdown strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.slot-countdown--soon {
+  color: var(--danger-400);
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+.slot-countdown--soon strong { color: var(--danger-400); }
+.slot-countdown--live {
+  color: #16a34a;
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.slot-countdown__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  animation: slotPulse 1.6s ease-in-out infinite;
+}
+@keyframes slotPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .slot-countdown__dot { animation: none; } }

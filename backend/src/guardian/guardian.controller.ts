@@ -48,13 +48,23 @@ export class GuardianController {
             limits: { fileSize: DOCUMENT_RULES.maxBytes, files: 1 },
         }),
     )
-    async uploadIdDocument(@UploadedFile() file?: Express.Multer.File) {
+    async uploadIdDocument(
+        @CurrentUser('id') userId: string,
+        @UploadedFile() file?: Express.Multer.File,
+    ) {
         if (!file) throw new BadRequestException('Choose a file to upload.');
 
+        // `userId` partitions the object key (guardians/<userId>/id/<uuid>), which
+        // is what makes a DPDP erasure request one prefix delete. On the S3
+        // provider `url` is now an object KEY, not a URL — the bucket is private
+        // and reads are signed at render time.
         const { url } = await this.storage.uploadDocumentBuffer(
             file.buffer,
             file.originalname || 'id-document',
             file.mimetype,
+            undefined,
+            userId,
+            'guardians',
         );
         return { url };
     }

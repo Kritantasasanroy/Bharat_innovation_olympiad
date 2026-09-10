@@ -811,6 +811,8 @@ export default function LandingPage() {
 
           <div className="lp-footer__legal">
             © 2026 Bharat Innovation Olympiad · An Innovation &amp; Future Skills Ecosystem
+            <br />
+            © Bharat Innovation Olympiad is owned by Lemon Ideas Innovations Pvt Ltd.
           </div>
         </div>
       </footer>

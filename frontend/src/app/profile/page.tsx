@@ -6,7 +6,10 @@ import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useXp } from '@/hooks/useXp';
+import { XP_PER_EXAM_COMPLETE } from '@/lib/constants';
 
 /** What `GET /guardian/me` returns — see `GuardianService.status`. */
 interface GuardianStatus {
@@ -42,6 +45,8 @@ function GuardianRow({ label, value }: { label: string; value: React.ReactNode }
 }
 
 export default function ProfilePage() {
+    const router = useRouter();
+    const xp = useXp();
     const { user } = useAuthStore();
 
     // Face enrollment state
@@ -133,6 +138,21 @@ export default function ProfilePage() {
                 <div className="page-header">
                     <h1>My Profile</h1>
                     <p className="text-secondary">Your registered details. None of this can be edited here.</p>
+                </div>
+
+                <div className="profile-xp glass-card" style={{ maxWidth: '600px', margin: '0 auto 1.5rem' }}>
+                    <div className="profile-xp__spark" aria-hidden="true">⚡</div>
+                    <div className="profile-xp__body">
+                        <div className="profile-xp__value">{xp.loaded ? xp.xp : '—'} <span>XP</span></div>
+                        <div className="profile-xp__note">
+                            {xp.completed > 0
+                                ? `${xp.completed} exam${xp.completed === 1 ? '' : 's'} completed — ${XP_PER_EXAM_COMPLETE} XP each.`
+                                : 'Complete an exam to start earning XP.'}
+                        </div>
+                    </div>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => router.push('/results')}>
+                        View results
+                    </button>
                 </div>
 
                 {/**

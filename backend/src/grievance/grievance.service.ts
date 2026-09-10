@@ -28,10 +28,27 @@ export class GrievanceService {
     /** STUDENT — raise a grievance or request a re-attempt. */
     async create(
         userId: string,
-        input: { type: GrievanceType; subject: string; description: string; attemptId?: string },
+        input: {
+            type: GrievanceType;
+            subject: string;
+            description: string;
+            attemptId?: string;
+            attachmentUrls?: string[];
+        },
     ) {
         if (!input.subject?.trim() || !input.description?.trim()) {
             throw new BadRequestException('A subject and description are required.');
+        }
+
+        // Proof is compulsory. A request to move an exam date or re-sit a paper
+        // cannot be decided on the student's word alone, and asking for the
+        // document afterwards is most of what made these take days. The UI says
+        // what counts (prescription, ticket, ceremony card); this is the gate.
+        const attachments = (input.attachmentUrls ?? []).filter((u) => typeof u === 'string' && u.trim());
+        if (attachments.length === 0) {
+            throw new BadRequestException(
+                'Attach at least one supporting document — a prescription, ticket, ceremony card or similar.',
+            );
         }
 
         if (input.attemptId) {
@@ -49,6 +66,7 @@ export class GrievanceService {
                 type: input.type,
                 subject: input.subject.trim(),
                 description: input.description.trim(),
+                attachmentUrls: attachments,
                 ...(input.attemptId ? { attemptId: input.attemptId } : {}),
             },
         });

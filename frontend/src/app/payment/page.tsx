@@ -1,10 +1,11 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import api from '@/lib/api';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 declare global {
     interface Window {
@@ -43,8 +44,8 @@ function formatDateTime(iso: string) {
     });
 }
 
-export default function PaymentPage({ params }: { params: Promise<{ bookingId: string }> }) {
-    const { bookingId } = use(params);
+function PaymentPage() {
+    const bookingId = useRouteParam('bookingId');
     const router = useRouter();
 
     const [booking, setBooking] = useState<BookingDetail | null>(null);
@@ -371,3 +372,5 @@ export default function PaymentPage({ params }: { params: Promise<{ bookingId: s
         </AuthGuard>
     );
 }
+
+export default withSearchParams(PaymentPage);

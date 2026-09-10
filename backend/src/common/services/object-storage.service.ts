@@ -44,25 +44,80 @@ import { createHash, randomUUID } from 'crypto';
  * guard can obtain the right to upload.
  */
 
-export type MediaKind = 'image' | 'video';
+export type MediaKind = 'image' | 'video' | 'audio';
+
+/**
+ * The ceiling for video and audio, which are deliberately "unlimited".
+ *
+ * This is S3's hard limit for a **single PUT**, which is the upload shape we
+ * use: the browser sends the file straight to S3 with one presigned request.
+ * Going past 5 GB is not a bigger number here, it is a different mechanism
+ * (multipart: create → presign each part → complete, plus chunking in the admin
+ * uploader). No exam asset is anywhere near this, so that machinery is not built
+ * — if a >5 GB upload ever fails, that is the reason and this is the note.
+ *
+ * A real `Infinity` is avoided on purpose: it serialises to `null` in the JSON
+ * the admin UI reads, and the UI compares against this to reject a file early.
+ */
+export const UNLIMITED_BYTES = 5 * 1024 ** 3; // 5 GiB — S3 single-PUT maximum
 
 /**
  * What each kind of media may be, and how big it may get.
  *
- * The video ceiling is Cloudinary's **free-plan hard limit** (100 MB), not a
- * number we invented — going over it fails at their end regardless of what we
- * allow, so refusing early gives a better error than a 400 from a third party.
+ * **Images are capped at 10 MB and that number is shown in the UI.** A question
+ * image is displayed inline on a phone mid-exam; anything larger is a scan that
+ * should have been compressed, and every megabyte is paid for again on every
+ * student's download.
+ *
+ * **Video and audio are uncapped** (per Deepak, 2026-09-08). They are uploaded
+ * browser-direct via multipart, so a large file never occupies API memory, and
+ * lifecycle rules tier them to Intelligent-Tiering after 30 days.
  */
 export const MEDIA_RULES: Record<MediaKind, { types: string[]; maxBytes: number }> = {
     image: {
         types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'],
-        maxBytes: 10 * 1024 * 1024, // 10 MB — Cloudinary free-plan image limit
+        maxBytes: 10 * 1024 * 1024, // 10 MB — shown to the user in the upload UI
     },
     video: {
-        types: ['video/mp4', 'video/webm', 'video/quicktime'],
-        maxBytes: 100 * 1024 * 1024, // 100 MB — Cloudinary free-plan video limit
+        types: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'],
+        maxBytes: UNLIMITED_BYTES,
+    },
+    audio: {
+        types: ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/webm'],
+        maxBytes: UNLIMITED_BYTES,
     },
 };
+
+/** Object-key prefix per kind. Mirrors the lifecycle rules in `storage.tf`. */
+const MEDIA_PREFIX: Record<MediaKind, string> = {
+    image: 'questions/images',
+    video: 'questions/video',
+    audio: 'questions/audio',
+};
+
+/**
+ * Cache headers written at upload time.
+ *
+ * Every object key contains a UUID, so a key's bytes never change — the content
+ * is immutable by construction. `immutable` tells the browser it need not
+ * revalidate for a year, which is the single biggest lever on S3 cost here: a
+ * question image is fetched once per device instead of once per page view.
+ * 500 students x 50 questions is 25,000 GETs if this is wrong and ~50 if it is
+ * right.
+ */
+const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable';
+
+/**
+ * Presigned GET lifetime for question media.
+ *
+ * Long enough that one signing pass covers a whole exam sitting (so the client
+ * never comes back mid-paper for a fresh URL), short enough that a copied link
+ * is not a permanent handout. SigV4's own ceiling is 7 days.
+ */
+export const MEDIA_URL_TTL_SECONDS = 6 * 60 * 60; // 6 hours
+
+/** Identity documents are signed for minutes, not hours. */
+export const DOCUMENT_URL_TTL_SECONDS = 5 * 60; // 5 minutes
 
 /**
  * Supporting documents (the guardian's ID proof), as opposed to question media.
@@ -121,7 +176,15 @@ export class ObjectStorageService {
 
     // ── S3-compatible ────────────────────────────────────────────────────────
     private readonly s3: S3Client | null = null;
+    /** Question media. Private; every read is a presigned GET. */
     private readonly bucket: string;
+    /**
+     * Student + guardian identity documents. A SEPARATE bucket with its own KMS
+     * key, because it holds PII belonging to minors and must not share a blast
+     * radius with question media. Falls back to `bucket` only so a half-configured
+     * dev box still boots — in AWS both are always set.
+     */
+    private readonly documentsBucket: string;
     private readonly region: string;
     private readonly publicBaseUrl: string;
 
@@ -136,6 +199,7 @@ export class ObjectStorageService {
             config.get<string>('STORAGE_REGION') || config.get<string>('AWS_REGION') || 'auto';
         this.bucket =
             config.get<string>('STORAGE_BUCKET') || config.get<string>('AWS_S3_BUCKET') || '';
+        this.documentsBucket = config.get<string>('STORAGE_DOCUMENTS_BUCKET') || this.bucket;
         const accessKeyId =
             config.get<string>('STORAGE_ACCESS_KEY_ID') ||
             config.get<string>('AWS_ACCESS_KEY_ID') ||
@@ -172,11 +236,24 @@ export class ObjectStorageService {
                     ? 's3'
                     : 'cloudinary';
 
-        if (this.provider === 's3' && this.bucket && accessKeyId && secretAccessKey) {
+        if (this.provider === 's3' && this.bucket) {
+            const hasStaticKeys = Boolean(accessKeyId && secretAccessKey);
             this.s3 = new S3Client({
                 region: this.region,
                 ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-                credentials: { accessKeyId, secretAccessKey },
+                // With static keys, use them. With none, leave `credentials`
+                // unset so the AWS SDK's default provider chain resolves them —
+                // on our EC2 hosts that is the instance profile, and there are
+                // deliberately no access keys on the box (see DEPLOYMENT-REPORT
+                // §"Media moved off Cloudinary onto S3"). This branch previously
+                // required both keys, so on AWS `this.s3` stayed null and every
+                // upload 503'd with "storage is not configured".
+                //
+                // A non-AWS S3-compatible endpoint (R2 / B2 / MinIO) has no
+                // instance profile to fall back on, so it still needs the keys —
+                // and if they are absent there, this client simply won't
+                // authenticate, which surfaces on the first upload, not at boot.
+                ...(hasStaticKeys ? { credentials: { accessKeyId, secretAccessKey } } : {}),
             });
         }
 
@@ -197,12 +274,19 @@ export class ObjectStorageService {
             : this.s3 !== null;
     }
 
-    /** The knobs the admin UI shows next to the upload box. */
+    /**
+     * The knobs the admin UI shows next to the upload box.
+     *
+     * `unlimited` is called out explicitly so the frontend can print "no size
+     * limit" for video/audio rather than "5120 MB", which would read as a cap.
+     */
     get limits() {
         return {
             provider: this.provider,
-            image: MEDIA_RULES.image,
-            video: MEDIA_RULES.video,
+            image: { ...MEDIA_RULES.image, unlimited: false },
+            video: { ...MEDIA_RULES.video, unlimited: true },
+            audio: { ...MEDIA_RULES.audio, unlimited: true },
+            document: { ...DOCUMENT_RULES, unlimited: false },
         };
     }
 
@@ -219,19 +303,23 @@ export class ObjectStorageService {
         contentLength: number,
     ): Promise<UploadTicket> {
         const rules = MEDIA_RULES[kind];
-        if (!rules) throw new BadRequestException('kind must be "image" or "video".');
+        if (!rules) throw new BadRequestException('kind must be "image", "video" or "audio".');
 
         if (!rules.types.includes(contentType)) {
             throw new BadRequestException(
-                `${kind === 'image' ? 'Images' : 'Videos'} must be one of: ${rules.types.join(', ')}. Got "${contentType}".`,
+                `${kind[0].toUpperCase()}${kind.slice(1)} files must be one of: ${rules.types.join(', ')}. Got "${contentType}".`,
             );
         }
         if (!Number.isFinite(contentLength) || contentLength <= 0) {
             throw new BadRequestException('A valid file size is required.');
         }
         if (contentLength > rules.maxBytes) {
+            // Video/audio only reach here past 5 GB, which is the single-PUT
+            // ceiling rather than a policy limit — say which it is.
             throw new BadRequestException(
-                `That ${kind} is ${mb(contentLength)} MB. The limit is ${mb(rules.maxBytes)} MB.`,
+                kind === 'image'
+                    ? `That image is ${mb(contentLength)} MB. The limit is ${mb(rules.maxBytes)} MB.`
+                    : `That ${kind} is ${mb(contentLength)} MB, above the 5 GB single-upload ceiling. Split or re-encode it.`,
             );
         }
 
@@ -306,7 +394,7 @@ export class ObjectStorageService {
         // The uploaded name is never trusted into the key — a filename can carry
         // path separators, unicode tricks, or someone else's question id.
         const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
-        const key = `questions/${kind}s/${randomUUID()}${ext}`;
+        const key = `${MEDIA_PREFIX[kind]}/${randomUUID()}${ext}`;
 
         const uploadUrl = await getSignedUrl(
             client,
@@ -315,8 +403,13 @@ export class ObjectStorageService {
                 Key: key,
                 ContentType: contentType,
                 ContentLength: contentLength,
+                // Signed in at upload so the object carries it forever. This is
+                // what stops a question image being re-fetched on every page view.
+                CacheControl: IMMUTABLE_CACHE,
             }),
-            { expiresIn: 900 }, // 15 min — a 100 MB video on a slow line needs the room
+            // An uncapped video on a slow Indian mobile line needs real room; the
+            // ticket is single-use and bound to one key, so a long window is cheap.
+            { expiresIn: 6 * 60 * 60 },
         );
 
         return {
@@ -325,8 +418,11 @@ export class ObjectStorageService {
             headers: {
                 'Content-Type': contentType,
                 'Content-Length': String(contentLength),
+                'Cache-Control': IMMUTABLE_CACHE,
             },
-            publicUrl: `${this.publicBaseUrl}/${key}`,
+            // NOTE: no `publicUrl`. The bucket is private as of 2026-09-08 — a
+            // naked S3 URL now 403s. Callers store `key` and render it through
+            // `getPresignedGetUrl` / `resolveUrl`.
             key,
             maxBytes,
         };
@@ -339,7 +435,12 @@ export class ObjectStorageService {
      * Cloudinary is configured here purely for question media, and routing anything
      * large through this process is the thing this file exists to prevent.
      */
-    async uploadBuffer(key: string, buffer: Buffer, contentType: string): Promise<string> {
+    async uploadBuffer(
+        key: string,
+        buffer: Buffer,
+        contentType: string,
+        bucket = this.bucket,
+    ): Promise<string> {
         if (!this.s3) {
             throw new ServiceUnavailableException(
                 'Server-side upload requires the S3 provider (STORAGE_PROVIDER=s3).',
@@ -347,13 +448,16 @@ export class ObjectStorageService {
         }
         await this.s3.send(
             new PutObjectCommand({
-                Bucket: this.bucket,
+                Bucket: bucket,
                 Key: key,
                 Body: buffer,
                 ContentType: contentType,
+                CacheControl: IMMUTABLE_CACHE,
             }),
         );
-        return `${this.publicBaseUrl}/${key}`;
+        // Returns the KEY, not a URL. Both buckets are private; callers persist
+        // this and resolve it to a signed URL at render time.
+        return key;
     }
 
     /**
@@ -392,9 +496,12 @@ export class ObjectStorageService {
 
         if (this.provider === 's3') {
             const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
-            const key = `questions/images/${randomUUID()}${ext}`;
-            const url = await this.uploadBuffer(key, buffer, contentType);
-            return { url, publicId: key, provider: 's3' };
+            const key = `${MEDIA_PREFIX.image}/${randomUUID()}${ext}`;
+            await this.uploadBuffer(key, buffer, contentType);
+            // `url` carries the KEY on the S3 provider. `resolveUrl` turns it into
+            // a signed URL at render time and passes a real Cloudinary URL through
+            // untouched, so both generations of stored value keep working.
+            return { url: key, publicId: key, provider: 's3' };
         }
 
         return this.cloudinaryUpload(buffer, filename, contentType, folder, 'image');
@@ -408,18 +515,24 @@ export class ObjectStorageService {
      * to its own folder so ID documents are never mixed in with question media
      * that staff browse casually in the gallery.
      *
-     * ⚠️ The returned URL is **unguessable but publicly readable**. That is
-     * acceptable for question media and is NOT really acceptable for a
-     * government ID belonging to a minor. Before real students use this, switch
-     * the delivery to Cloudinary `authenticated` resource type (or S3 + signed
-     * GETs, which `getPresignedGetUrl` already supports) so the URL alone is not
-     * enough to read the file.
+     * FIXED 2026-09-08. This used to warn that the returned URL was "unguessable
+     * but publicly readable", which for a government ID belonging to a minor was
+     * not acceptable. On the S3 provider it now writes to a **separate private
+     * bucket** (`STORAGE_DOCUMENTS_BUCKET`) with its own KMS key, and returns a
+     * key rather than a URL — reads go through {@link getDocumentUrl}, which
+     * signs for 5 minutes. The Cloudinary path still carries the old caveat and
+     * should not be used for real students.
+     *
+     * `ownerId` partitions the key by user so a DPDP erasure request is a single
+     * prefix delete rather than a search.
      */
     async uploadDocumentBuffer(
         buffer: Buffer,
         filename: string,
         contentType: string,
         folder = 'bio/guardian-ids',
+        ownerId = 'unassigned',
+        subject: 'students' | 'guardians' = 'guardians',
     ): Promise<{ url: string; publicId: string; provider: 'cloudinary' | 's3' }> {
         if (!DOCUMENT_RULES.types.includes(contentType)) {
             throw new BadRequestException(
@@ -439,9 +552,12 @@ export class ObjectStorageService {
 
         if (this.provider === 's3') {
             const ext = (filename.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase();
-            const key = `guardian-ids/${randomUUID()}${ext}`;
-            const url = await this.uploadBuffer(key, buffer, contentType);
-            return { url, publicId: key, provider: 's3' };
+            // Owner id is sanitised into the key — it reaches here from a JWT
+            // subject, but a key is not the place to trust an upstream string.
+            const owner = ownerId.replace(/[^a-zA-Z0-9_-]/g, '') || 'unassigned';
+            const key = `${subject}/${owner}/id/${randomUUID()}${ext}`;
+            await this.uploadBuffer(key, buffer, contentType, this.documentsBucket);
+            return { url: key, publicId: key, provider: 's3' };
         }
 
         // `auto` rather than `image`: Cloudinary rejects a PDF on the image
@@ -495,20 +611,69 @@ export class ObjectStorageService {
         return { url: body.secure_url, publicId: body.public_id, provider: 'cloudinary' };
     }
 
-    async getPresignedGetUrl(key: string, expiresIn = 3600): Promise<string> {
+    async getPresignedGetUrl(
+        key: string,
+        expiresIn = MEDIA_URL_TTL_SECONDS,
+        bucket = this.bucket,
+    ): Promise<string> {
         if (!this.s3) {
             throw new ServiceUnavailableException('Signed reads require the S3 provider.');
         }
-        return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+        return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {
             expiresIn,
         });
     }
 
-    async deleteObject(key: string): Promise<void> {
+    /** A short-lived link to one identity document. Separate bucket, 5-minute TTL. */
+    async getDocumentUrl(key: string, expiresIn = DOCUMENT_URL_TTL_SECONDS): Promise<string> {
+        return this.getPresignedGetUrl(key, expiresIn, this.documentsBucket);
+    }
+
+    /**
+     * Turns a stored value into something a browser can load.
+     *
+     * Two generations of value live in the database side by side and this is the
+     * one place that knows the difference:
+     *
+     * - an `http(s)://…` string is a legacy **Cloudinary** URL — already public,
+     *   returned untouched;
+     * - anything else is an **S3 object key** written after 2026-09-08, when both
+     *   buckets went private — signed here.
+     *
+     * Sniffing the scheme rather than adding a column means no backfill, and no
+     * risk of a missed row rendering a broken image.
+     */
+    async resolveUrl(
+        stored: string | null | undefined,
+        opts: { documents?: boolean; expiresIn?: number } = {},
+    ): Promise<string | null> {
+        if (!stored) return null;
+        if (/^https?:\/\//i.test(stored)) return stored;
+        if (!this.s3) return null;
+        return opts.documents
+            ? this.getDocumentUrl(stored, opts.expiresIn)
+            : this.getPresignedGetUrl(stored, opts.expiresIn ?? MEDIA_URL_TTL_SECONDS);
+    }
+
+    /**
+     * Signs many keys in one pass.
+     *
+     * Presigning is a local HMAC — no network call — so this is cheap, and doing
+     * the whole paper at once is the difference between one request per exam and
+     * one request per question image. Order is preserved.
+     */
+    async resolveUrls(
+        stored: (string | null | undefined)[],
+        opts: { documents?: boolean; expiresIn?: number } = {},
+    ): Promise<(string | null)[]> {
+        return Promise.all(stored.map((s) => this.resolveUrl(s, opts)));
+    }
+
+    async deleteObject(key: string, bucket = this.bucket): Promise<void> {
         if (!this.s3) {
             throw new ServiceUnavailableException('Deletes require the S3 provider.');
         }
-        await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+        await this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     }
 
     // ── Gallery deletes (permanent, provider-side) ─────────────────────────────

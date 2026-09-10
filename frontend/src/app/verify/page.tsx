@@ -3,7 +3,7 @@
 import ThemeToggle from '@/components/ThemeToggle';
 import { APP_NAME } from '@/lib/constants';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import { useEffect, useState } from 'react';
 
 /**
@@ -32,9 +32,9 @@ type VerifyResult =
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
-export default function VerifyCertificatePage() {
-    const params = useParams<{ number: string }>();
-    const certificateNumber = decodeURIComponent(String(params?.number ?? ''));
+function VerifyCertificatePage() {
+    // useRouteParam already URL-decodes.
+    const certificateNumber = useRouteParam('number');
 
     const [result, setResult] = useState<VerifyResult | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -176,3 +176,5 @@ export default function VerifyCertificatePage() {
         </div>
     );
 }
+
+export default withSearchParams(VerifyCertificatePage);

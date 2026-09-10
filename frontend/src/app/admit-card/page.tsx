@@ -3,7 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import { api } from '@/lib/api';
 import { APP_NAME } from '@/lib/constants';
-import { useParams } from 'next/navigation';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import { useEffect, useState } from 'react';
 
 interface AdmitCard {
@@ -16,19 +16,19 @@ interface AdmitCard {
 }
 
 /** Printable admit card for a confirmed booking (spec Student §17). */
-export default function AdmitCardPage() {
-    const params = useParams<{ bookingId: string }>();
+function AdmitCardPage() {
+    const bookingId = useRouteParam('bookingId');
     const [card, setCard] = useState<AdmitCard | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!params?.bookingId) return;
-        api.get<AdmitCard>(`/admit-card/${params.bookingId}`)
+        if (!bookingId) return;
+        api.get<AdmitCard>(`/admit-card/${bookingId}`)
             .then(({ data }) => setCard(data))
             .catch((err) =>
                 setError(err?.response?.data?.message ?? 'Admit card is not available for this booking.'),
             );
-    }, [params?.bookingId]);
+    }, [bookingId]);
 
     return (
         <AuthGuard>
@@ -138,3 +138,5 @@ export default function AdmitCardPage() {
         </AuthGuard>
     );
 }
+
+export default withSearchParams(AdmitCardPage);

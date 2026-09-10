@@ -58,6 +58,10 @@ export default function SupportPage() {
     const [notice, setNotice] = useState<string | null>(null);
 
     const [gType, setGType] = useState<'GRIEVANCE' | 'REATTEMPT'>('GRIEVANCE');
+    /** Uploaded proof: object keys from `POST /grievances/attachment`, with the
+     *  original filename kept only so the student can see what they attached. */
+    const [gFiles, setGFiles] = useState<{ url: string; name: string }[]>([]);
+    const [uploading, setUploading] = useState(false);
     const [gSubject, setGSubject] = useState('');
     const [gDescription, setGDescription] = useState('');
     const [gAttemptId, setGAttemptId] = useState('');
@@ -87,8 +91,27 @@ export default function SupportPage() {
         void load();
     }, [load]);
 
+    async function uploadProof(file: File) {
+        setUploading(true);
+        setError(null);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const { data } = await api.post<{ url: string }>('/grievances/attachment', form);
+            setGFiles((prev) => [...prev, { url: data.url, name: file.name }]);
+        } catch (err: any) {
+            setError(err?.response?.data?.message ?? 'Could not upload that file. Try again.');
+        } finally {
+            setUploading(false);
+        }
+    }
+
     async function submitGrievance(event: FormEvent) {
         event.preventDefault();
+        if (gFiles.length === 0) {
+            setError('Attach at least one supporting document before submitting.');
+            return;
+        }
         setBusy(true);
         setError(null);
         setNotice(null);
@@ -97,11 +120,13 @@ export default function SupportPage() {
                 type: gType,
                 subject: gSubject,
                 description: gDescription,
+                attachmentUrls: gFiles.map((f) => f.url),
                 ...(gAttemptId ? { attemptId: gAttemptId } : {}),
             });
             setGSubject('');
             setGDescription('');
             setGAttemptId('');
+            setGFiles([]);
             setNotice('Your request has been submitted. Our team will get back to you.');
             await load();
         } catch (err: any) {
@@ -199,7 +224,50 @@ export default function SupportPage() {
                             />
                         </div>
 
-                        <button type="submit" className="btn btn-primary" disabled={busy}>
+                        <div className="form-group">
+                            <label htmlFor="gproof">
+                                Supporting documents <span style={{ color: 'var(--danger-400)' }}>*</span>
+                            </label>
+                            <div className="support-proof-note">
+                                <strong>Please attach sufficient proof.</strong> A request we cannot verify
+                                cannot be decided, and chasing the document afterwards is what makes these
+                                slow. If you are asking to <strong>change your exam date</strong>, give a
+                                reasonable cause with an appropriate document — for example a{' '}
+                                <em>medical prescription</em>, a <em>travel ticket</em>, or a{' '}
+                                <em>ceremony/wedding card</em>. JPG, PNG, HEIC or PDF, up to 10&nbsp;MB each.
+                            </div>
+                            <input
+                                id="gproof"
+                                type="file"
+                                className="form-control"
+                                accept="image/jpeg,image/png,image/heic,application/pdf"
+                                disabled={uploading || busy}
+                                onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void uploadProof(f);
+                                    e.target.value = '';
+                                }}
+                            />
+                            {uploading && <div className="text-secondary" style={{ fontSize: '0.8rem', marginTop: 4 }}>Uploading…</div>}
+                            {gFiles.length > 0 && (
+                                <ul className="support-proof-list">
+                                    {gFiles.map((f, i) => (
+                                        <li key={f.url}>
+                                            <span>📎 {f.name}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setGFiles((prev) => prev.filter((_, j) => j !== i))}
+                                                aria-label={`Remove ${f.name}`}
+                                            >
+                                                ✕
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <button type="submit" className="btn btn-primary" disabled={busy || uploading || gFiles.length === 0}>
                             {busy ? 'Submitting…' : 'Submit grievance'}
                         </button>
                     </form>

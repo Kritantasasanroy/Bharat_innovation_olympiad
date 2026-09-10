@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { APP_NAME } from '@/lib/constants';
+import XpPill from '@/components/layout/XpPill';
 import ThemeToggle from '@/components/ThemeToggle';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -81,7 +82,9 @@ export default function MobileNav() {
                     <span className="mob-topbar__name">Bharat Innovation Olympiad</span>
                 </div>
                 {user && (
-                    <button
+                    <div className="mob-topbar__right">
+                        {!isAdmin && <XpPill compact />}
+                        <button
                         type="button"
                         className="mob-topbar__avatar"
                         aria-label="Account menu"
@@ -90,7 +93,8 @@ export default function MobileNav() {
                     >
                         {user.firstName[0]}
                         {user.lastName[0]}
-                    </button>
+                        </button>
+                    </div>
                 )}
             </nav>
 

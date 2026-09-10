@@ -6,13 +6,36 @@ const NEON_AUTH_URL = process.env.NEXT_PUBLIC_NEON_AUTH_URL!;
 
 export const authClient = createAuthClient(NEON_AUTH_URL);
 
-// Helper: call an OTP endpoint directly using fetch (credentials: 'include' for cookie session)
+/**
+ * Call an OTP endpoint directly.
+ *
+ * `credentials: 'omit'` — never send or store the Neon session cookie.
+ *
+ * We use Neon Auth only to prove the student owns the email address: both call
+ * sites read nothing but the error, and the account and our own JWT come from
+ * `/auth/sync` and `/auth/login-sync`, which take the email in the body and are
+ * documented as needing no Neon session token. So the cookie Neon sets is never
+ * read by anything here.
+ *
+ * It is not merely unused, it is harmful. Once a student completes one sign-in,
+ * that cookie is replayed on every later call and Better Auth rejects the whole
+ * request with `403 {"message":"Invalid origin"}` — a message that has nothing
+ * to do with the actual cause and that no amount of retrying clears, because the
+ * same cookie goes out every time. Symptom: the first registration in a browser
+ * works and every one after it fails. Signing out first does not help either;
+ * `signOut` carries the same cookie and is rejected identically.
+ *
+ * It is definitely not an origin allowlist problem: with no cookie attached the
+ * endpoint answers 200 to *any* origin — `http://`, `null`, no Origin header,
+ * even an unrelated domain. The cookie is the trigger. Omitting it removes both
+ * the failure and the thing that causes it.
+ */
 async function neonFetch(path: string, body: object) {
     const res = await fetch(`${NEON_AUTH_URL}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        credentials: 'include',
+        credentials: 'omit',
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -21,14 +44,17 @@ async function neonFetch(path: string, body: object) {
     return { data: json, error: null };
 }
 
+/** Ask Neon to email a 6-digit code. */
+const sendOtp = (email: string) =>
+    neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' });
+
 /** OTP helper functions — call the Better Auth email-otp endpoints directly */
 export const emailOtp = {
     /**
      * Send a 6-digit OTP for sign-in to the given email.
      * Works for both existing and new users (sign-in type is accepted regardless of user existence).
      */
-    sendSignInOtp: (email: string) =>
-        neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' }),
+    sendSignInOtp: (email: string) => sendOtp(email),
 
     /**
      * Send a 6-digit OTP for new user registration.
@@ -36,12 +62,15 @@ export const emailOtp = {
      * requires an existing Neon Auth session — which new users on a fresh device/incognito
      * don't have, causing the OTP to never be sent.
      */
-    sendVerificationOtp: (email: string) =>
-        neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' }),
+    sendVerificationOtp: (email: string) => sendOtp(email),
 
     /**
-     * Verify OTP and sign in — creates a session cookie.
-     * Used for both login and registration verification.
+     * Verify the OTP. Used for both login and registration.
+     *
+     * Despite the endpoint name this is only ever asked "was this code right?" —
+     * both call sites read the error and discard the data, and no session cookie
+     * is kept (see `neonFetch`). The account and the JWT come from our own
+     * `/auth/sync` and `/auth/login-sync`.
      */
     signIn: (email: string, otp: string) =>
         neonFetch('/sign-in/email-otp', { email, otp }),

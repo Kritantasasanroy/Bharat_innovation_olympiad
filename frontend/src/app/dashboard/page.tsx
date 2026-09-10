@@ -304,7 +304,7 @@ export default function StudentDashboard() {
                                                             ✓ Completed
                                                         </button>
                                                     ) : startable ? (
-                                                        <Link href={`/exams/${exam.id}/instructions`} className="btn btn-primary btn-sm">
+                                                        <Link href={`/exams/instructions?id=${exam.id}`} className="btn btn-primary btn-sm">
                                                             Start Exam
                                                         </Link>
                                                     ) : (

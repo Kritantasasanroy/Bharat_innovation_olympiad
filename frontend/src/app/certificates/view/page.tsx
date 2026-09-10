@@ -3,7 +3,7 @@
 import AuthGuard from '@/components/layout/AuthGuard';
 import { api } from '@/lib/api';
 import { APP_NAME, COMPANY_NAME } from '@/lib/constants';
-import { useParams } from 'next/navigation';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import { useEffect, useState } from 'react';
 
 interface Certificate {
@@ -27,21 +27,21 @@ interface Certificate {
  * tier, and a print stylesheet gives the same artefact with no extra infra.
  * The verification URL is printed on the certificate so a reader can check it.
  */
-export default function CertificatePage() {
-    const params = useParams<{ id: string }>();
+function CertificatePage() {
+    const id = useRouteParam('id');
     const [certificate, setCertificate] = useState<Certificate | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!params?.id) return;
-        api.get<Certificate>(`/certificates/${params.id}`)
+        if (!id) return;
+        api.get<Certificate>(`/certificates/${id}`)
             .then(({ data }) => setCertificate(data))
             .catch(() => setError('Certificate not found.'));
-    }, [params?.id]);
+    }, [id]);
 
     const verifyUrl =
         typeof window !== 'undefined' && certificate
-            ? `${window.location.origin}/verify/${certificate.certificateNumber}`
+            ? `${window.location.origin}/verify?number=${encodeURIComponent(certificate.certificateNumber)}`
             : '';
 
     return (
@@ -238,3 +238,5 @@ export default function CertificatePage() {
         </AuthGuard>
     );
 }
+
+export default withSearchParams(CertificatePage);

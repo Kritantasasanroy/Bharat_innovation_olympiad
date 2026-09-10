@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import ThemeProvider from '@/components/ThemeProvider';
+import ScrollToError from '@/components/ScrollToError';
 
 // `variable` (not `className`) — the design system's own `--font-sans` token
 // (globals.css) resolves through this rather than next/font setting
@@ -23,6 +24,10 @@ export default function RootLayout({
             <body className={inter.variable}>
                 <ThemeProvider>
                     {children}
+                    <ScrollToError />
+                    <footer style={{ textAlign: 'center', padding: '24px 16px', fontSize: '0.8rem', opacity: 0.6 }}>
+                        © Bharat Innovation Olympiad is owned by Lemon Ideas Innovations Pvt Ltd.
+                    </footer>
                 </ThemeProvider>
             </body>
         </html>

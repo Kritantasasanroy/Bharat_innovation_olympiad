@@ -1,12 +1,13 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import Navbar from '@/components/layout/Navbar';
 import api from '@/lib/api';
 import { releaseCamera } from '@/lib/camera';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * What a student sees the moment their paper ends.
@@ -23,8 +24,8 @@ import { use, useEffect, useState } from 'react';
  * provisional score → here is what happens next and when → here is how the score
  * is verified → here is where to go.
  */
-export default function ExamSubmittedPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+function ExamSubmittedPage() {
+    const id = useRouteParam('id');
     const user = useAuthStore((s) => s.user);
 
     const [result, setResult] = useState<any>(null);
@@ -102,8 +103,11 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                                 <span className="submitted-score__total">/ {result.total}</span>
                             </div>
                             <p className="submitted-provisional">
-                                <strong>This is a provisional, unverified score.</strong> It may
-                                change while violations and warnings are reviewed by the exam team and grievances are settled.
+                                <strong>This is a provisional, unverified score, and this is the only
+                                time you will see it.</strong> It may change while violations and warnings
+                                are reviewed by the exam team and grievances are settled, so it is not
+                                repeated on your results page — your verified result is published there
+                                once the exam team releases it.
                             </p>
                         </>
                     ) : result?.isDisqualified ? (
@@ -113,8 +117,9 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
                         </p>
                     ) : (
                         <p className="text-muted">
-                            Your score is not published yet. It appears on your results page as soon as
-                            marking for this Innovation Olympiad exam is released, you will receive details by email.
+                            Your exam is submitted and safe. Marking is not finished yet — your result is
+                            published on your results page once the exam team releases it, and you will
+                            receive details by email.
                         </p>
                     )}
                 </section>
@@ -227,3 +232,5 @@ export default function ExamSubmittedPage({ params }: { params: Promise<{ id: st
         </AuthGuard>
     );
 }
+
+export default withSearchParams(ExamSubmittedPage);

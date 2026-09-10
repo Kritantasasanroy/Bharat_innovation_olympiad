@@ -303,6 +303,25 @@ export default function ResultsPage() {
                                             Raise a grievance
                                         </Link>
                                     </div>
+                                ) : !result.isReleased ? (
+                                    /* ── Not released yet ──
+                                       The score exists on the server, but this page does not
+                                       show it until an admin releases the paper's results.
+                                       A student sees their provisional mark exactly once —
+                                       on the submit screen, straight after the exam — and
+                                       then not again until it is verified and published. A
+                                       provisional number that stays on screen for weeks gets
+                                       treated as final, which is the whole thing this
+                                       two-stage design exists to prevent. */
+                                    <div className="result-pending">
+                                        <div className="result-pending__icon" aria-hidden="true">⏳</div>
+                                        <h3>Results not published yet</h3>
+                                        <p>
+                                            Your exam is submitted and safe. Results are released once every
+                                            paper has been marked, exam violations reviewed and grievances
+                                            settled — we will publish them here as soon as that is done.
+                                        </p>
+                                    </div>
                                 ) : typeof result.score === 'number' ? (
                                     <>
                                         {/* The honesty banner. A provisional score that looks

@@ -370,7 +370,11 @@ export default function MobileLanding() {
                     <a href="https://lemonideas.in" target="_blank" rel="noopener noreferrer">Lemon Ideas ↗</a>
                     <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer">Innopreneurs Junior ↗</a>
                 </nav>
-                <div className="mob-lp-footer__legal">© 2026 Bharat Innovation Olympiad</div>
+                <div className="mob-lp-footer__legal">
+                    © 2026 Bharat Innovation Olympiad
+                    <br />
+                    © Bharat Innovation Olympiad is owned by Lemon Ideas Innovations Pvt Ltd.
+                </div>
             </footer>
         </div>
     );

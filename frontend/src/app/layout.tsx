@@ -1,5 +1,6 @@
 import FeedbackTab from '@/components/FeedbackTab';
 import LimonHelp from '@/components/limon/LimonHelp';
+import ScrollToError from '@/components/ScrollToError';
 import ThemeProvider from '@/components/ThemeProvider';
 import type { Metadata } from 'next';
 import './globals.css';
@@ -55,7 +56,8 @@ export default function RootLayout({
                     {/* "Need help?" — Limon, on demand, on every page that has a
                         tour. Hides itself on the exam player for the same reason
                         the feedback tab does. */}
-                    <LimonHelp />
+                    {/* Brings any error banner into view + announces it. */}
+                    <ScrollToError />
                 </ThemeProvider>
             </body>
         </html>

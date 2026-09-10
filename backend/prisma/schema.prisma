@@ -78,6 +78,7 @@ model User {
   guardianProfile  GuardianProfile?
   trainingRecords  TrainingRecord[]
   whatsappMessages WhatsAppMessage[]
+  examFeedback     ExamFeedback[]
 
   @@index([email])
   @@index([schoolId])
@@ -357,6 +358,12 @@ model MediaAsset {
 enum MediaAssetKind {
   IMAGE
   VIDEO
+  // Added 2026-09-08. Applied to the live DB with
+  //   ALTER TYPE "MediaAssetKind" ADD VALUE IF NOT EXISTS 'AUDIO';
+  // rather than `prisma db push` — a push here drops any admin-api Drizzle table
+  // that is not also mirrored in this file. Mirrored here so a later push does
+  // not try to remove the value again.
+  AUDIO
 }
 
 model SectionQuestion {
@@ -433,6 +440,8 @@ model ExamInstance {
   certificates                Certificate[]
   trialCompletions            TrialCompletion[]
 
+  examFeedback ExamFeedback[]
+
   @@index([examId])
   @@index([startsAt, endsAt])
 }
@@ -496,6 +505,8 @@ model Attempt {
   proctorEvents     ProctorEvent[]
   certificate       Certificate?
   grievances        Grievance[]
+
+  examFeedback ExamFeedback?
 
   @@unique([userId, examInstanceId])
   @@index([userId])
@@ -790,6 +801,13 @@ model Grievance {
   subject     String
   description String
   status      GrievanceStatus @default(OPEN)
+  /// Object keys of the proof the student attached (S3) or URLs (Cloudinary).
+  /// At least one is required on new submissions — a date-change or re-attempt
+  /// request without a document behind it cannot be decided, and chasing the
+  /// evidence afterwards is most of what made these slow. Stored as keys, not
+  /// URLs, for the same reason guardian ID documents are: the bucket is private
+  /// and reads are signed when an admin opens them.
+  attachmentUrls String[]      @default([])
   resolution  String?
   decidedBy   String?
   decidedAt   DateTime?
@@ -798,6 +816,36 @@ model Grievance {
 
   @@index([userId])
   @@index([status])
+}
+
+/// "How much did you like the Innovation Olympiad?" — the one-tap star rating
+/// shown the moment an exam is submitted, before any score.
+///
+/// Asked there deliberately: it is the only point at which a student is
+/// reliably still present and the experience is still fresh. Once they are
+/// looking at a result, the rating is about the mark, not the olympiad.
+///
+/// One row per attempt (`attemptId @unique`) so a student cannot stack ratings
+/// on the same paper by reloading, and so "did they rate this attempt?" is a
+/// single lookup. `comment` is optional above 3 stars and required below it —
+/// enforced in `ExamFeedbackService`, not here, because a rule about *why* a
+/// low score needs explaining belongs with the rest of the business rules.
+model ExamFeedback {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptId      String       @unique
+  attempt        Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  /// 1–5. Validated in the DTO and again in the service.
+  rating         Int
+  comment        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([rating])
+  @@index([examInstanceId])
+  @@index([createdAt])
 }
 
 /// A student-requested refund on a PAID payment. Eligibility is evaluated

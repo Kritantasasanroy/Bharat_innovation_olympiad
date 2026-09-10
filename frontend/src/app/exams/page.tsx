@@ -1,6 +1,7 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import SlotCountdown from '@/components/SlotCountdown';
 import Navbar from '@/components/layout/Navbar';
 import PayToUnlockBanner from '@/components/PayToUnlockBanner';
 import api from '@/lib/api';
@@ -233,9 +234,9 @@ function ExamCard({
         if (mustPayFirst) {
             router.push('/unlock');
         } else if (startable) {
-            router.push(`/exams/${exam.id}/instructions`);
+            router.push(`/exams/instructions?id=${exam.id}`);
         } else if (slot) {
-            router.push(`/exams/${exam.id}/schedule`);
+            router.push(`/exams/schedule?id=${exam.id}`);
         }
     };
 
@@ -312,6 +313,7 @@ function ExamCard({
                     <div className="slot-card-time">
                         {dt(slot.startsAt)} to {timeOnly(slot.endsAt)}
                     </div>
+                    <SlotCountdown startsAt={slot.startsAt} endsAt={slot.endsAt} />
                     <p className="slot-note slot-note-muted">
                         This date was assigned to you when you registered. Contact support if you
                         need it changed.

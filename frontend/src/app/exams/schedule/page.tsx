@@ -1,9 +1,10 @@
 'use client';
 
 import AuthGuard from '@/components/layout/AuthGuard';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * The student's exam sitting — a statement, not a choice.
@@ -68,8 +69,8 @@ function countdownLabel(iso: string): string {
     return `In ${days} days`;
 }
 
-export default function SchedulePage({ params }: { params: Promise<{ id: string }> }) {
-    const { id: examId } = use(params);
+function SchedulePage() {
+    const examId = useRouteParam('id');
     const router = useRouter();
 
     const [schedule, setSchedule] = useState<Schedule | null>(null);
@@ -273,14 +274,14 @@ export default function SchedulePage({ params }: { params: Promise<{ id: string 
                         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                             <button
                                 className="btn btn-primary"
-                                onClick={() => router.push(`/exams/${examId}/instructions`)}
+                                onClick={() => router.push(`/exams/instructions?id=${examId}`)}
                                 style={{ flex: '1 1 200px' }}
                             >
                                 Exam instructions →
                             </button>
                             <button
                                 className="btn btn-secondary"
-                                onClick={() => router.push(`/admit-card/${schedule.bookingId}`)}
+                                onClick={() => router.push(`/admit-card?bookingId=${schedule.bookingId}`)}
                                 style={{ flex: '1 1 200px' }}
                             >
                                 View admit card
@@ -327,3 +328,5 @@ export default function SchedulePage({ params }: { params: Promise<{ id: string 
         </AuthGuard>
     );
 }
+
+export default withSearchParams(SchedulePage);

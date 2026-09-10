@@ -135,11 +135,11 @@ export default function CertificatesPage() {
                                 </div>
 
                                 <div className="flex gap-3" style={{ marginTop: 'var(--space-4)' }}>
-                                    <Link href={`/certificates/${certificate.id}`} className="btn btn-primary btn-sm">
+                                    <Link href={`/certificates/view?id=${certificate.id}`} className="btn btn-primary btn-sm">
                                         View &amp; download
                                     </Link>
                                     <Link
-                                        href={`/verify/${certificate.certificateNumber}`}
+                                        href={`/verify?number=${encodeURIComponent(certificate.certificateNumber)}`}
                                         className="btn btn-secondary btn-sm"
                                     >
                                         Public verify link

@@ -1,6 +1,7 @@
 'use client';
 
 import PayToUnlockBanner from '@/components/PayToUnlockBanner';
+import SlotCountdown from '@/components/SlotCountdown';
 import { useRouter } from 'next/navigation';
 
 type Phase =
@@ -126,8 +127,8 @@ function MobileExamCard({ exam, router, hasPass }: { exam: Exam; router: ReturnT
 
     const handleCardAction = () => {
         if (mustPayFirst) router.push('/unlock');
-        else if (startable) router.push(`/exams/${exam.id}/instructions`);
-        else if (slot) router.push(`/exams/${exam.id}/schedule`);
+        else if (startable) router.push(`/exams/instructions?id=${exam.id}`);
+        else if (slot) router.push(`/exams/schedule?id=${exam.id}`);
     };
 
     return (
@@ -151,6 +152,7 @@ function MobileExamCard({ exam, router, hasPass }: { exam: Exam; router: ReturnT
                 <div className="mob-exam2__slot">
                     <span>Your sitting{slot.label ? ` · ${slot.label}` : ''}</span>
                     <strong>{dt(slot.startsAt)} - {timeOnly(slot.endsAt)}</strong>
+                    <SlotCountdown startsAt={slot.startsAt} endsAt={slot.endsAt} />
                 </div>
             ) : awaitingSlot ? (
                 <p className="mob-exam2__warn">

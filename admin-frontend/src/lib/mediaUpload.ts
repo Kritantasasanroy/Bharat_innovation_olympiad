@@ -11,12 +11,39 @@ import api from '@/lib/api';
  *     reused across questions and deleted independent of any one of them.
  */
 
-export type MediaKind = 'image' | 'video';
+export type MediaKind = 'image' | 'video' | 'audio';
 
-export const MEDIA_LIMITS: Record<MediaKind, { label: string; accept: string; maxMb: number }> = {
+/**
+ * Mirrors `MEDIA_RULES` in the backend's ObjectStorageService.
+ *
+ * Pictures are capped at **10 MB** and that number is shown next to the file
+ * picker — an admin should know it before waiting out a 40 MB upload, not after.
+ * Video and audio are **uncapped** (Deepak, 2026-09-08); `maxMb: null` means
+ * "no limit" and the UI prints that instead of a number. The only ceiling left
+ * is S3's 5 GB single-PUT maximum, which the server enforces and explains.
+ */
+export const MEDIA_LIMITS: Record<
+    MediaKind,
+    { label: string; accept: string; maxMb: number | null }
+> = {
     image: { label: 'Picture', accept: 'image/*', maxMb: 10 },
-    video: { label: 'Video', accept: 'video/mp4,video/webm,video/quicktime', maxMb: 100 },
+    video: {
+        label: 'Video',
+        accept: 'video/mp4,video/webm,video/quicktime,video/x-matroska',
+        maxMb: null,
+    },
+    audio: {
+        label: 'Audio',
+        accept: 'audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm',
+        maxMb: null,
+    },
 };
+
+/** What to show under a file picker. */
+export function describeLimit(kind: MediaKind): string {
+    const { maxMb } = MEDIA_LIMITS[kind];
+    return maxMb === null ? 'No size limit' : `Max ${maxMb} MB`;
+}
 
 interface UploadTicket {
     provider: 'cloudinary' | 's3';
@@ -42,7 +69,7 @@ export async function uploadMediaFile(
     onProgress?: (pct: number) => void,
 ): Promise<UploadedAsset> {
     const limit = MEDIA_LIMITS[kind];
-    if (file.size > limit.maxMb * 1024 * 1024) {
+    if (limit.maxMb !== null && file.size > limit.maxMb * 1024 * 1024) {
         throw new Error(
             `That ${kind} is ${(file.size / 1024 / 1024).toFixed(1)} MB. The limit is ${limit.maxMb} MB.`,
         );
@@ -70,7 +97,7 @@ export async function uploadMediaFile(
     // still save the URL even if this call fails, so don't let it throw.
     try {
         await api.post('/admin/media', {
-            kind: kind === 'image' ? 'IMAGE' : 'VIDEO',
+            kind: kind.toUpperCase(),
             provider: asset.provider,
             url: asset.url,
             publicId: asset.publicId,
@@ -158,11 +185,16 @@ function uploadToS3(
                 reject(new Error(`Storage rejected the upload (${xhr.status}).`));
                 return;
             }
-            if (!ticket.publicUrl || !ticket.key) {
-                reject(new Error('Upload succeeded but no public URL was issued.'));
+            // The bucket went private on 2026-09-08, so the ticket no longer
+            // carries a `publicUrl` — a naked S3 URL 403s now. What gets stored
+            // is the object KEY; the backend signs it into a short-lived URL at
+            // render time (ObjectStorageService.resolveUrl). `publicUrl` is still
+            // honoured if present so a Cloudinary-era ticket keeps working.
+            if (!ticket.key) {
+                reject(new Error('Upload succeeded but no object key was issued.'));
                 return;
             }
-            resolve({ url: ticket.publicUrl, provider: 's3', publicId: ticket.key });
+            resolve({ url: ticket.publicUrl ?? ticket.key, provider: 's3', publicId: ticket.key });
         };
 
         xhr.onerror = () => reject(new Error('Could not reach the storage provider.'));

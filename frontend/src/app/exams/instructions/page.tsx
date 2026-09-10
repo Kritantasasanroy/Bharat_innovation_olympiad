@@ -1,6 +1,7 @@
 'use client';
 
 import ExamTutorial from '@/components/exam/ExamTutorial';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import AuthGuard from '@/components/layout/AuthGuard';
 import TooSmallForExam from '@/components/TooSmallForExam';
 import { useDeviceCheck } from '@/hooks/useDeviceCheck';
@@ -19,7 +20,7 @@ import { enterFullscreen } from '@/lib/fullscreen';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Shared between the Rules & Guidelines card and the Start Exam confirmation
@@ -135,8 +136,8 @@ function buildRules(exam: { negativeMarking?: boolean; sectionCount?: number } |
     ];
 }
 
-export default function ExamInstructionsPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+function ExamInstructionsPage() {
+    const id = useRouteParam('id');
     const { deviceChecks, allChecksPassed } = useDeviceCheck();
     const { videoRef, startWebcam } = useWebcam();
     const router = useRouter();
@@ -382,10 +383,10 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
     const handleProceed = () => {
         void enterFullscreen();
         if (trialState === 'required' && trialExamId) {
-            router.push(`/exams/${trialExamId}/play?next=${id}`);
+            router.push(`/exams/play?id=${trialExamId}&next=${id}`);
             return;
         }
-        router.push(`/exams/${id}/play`);
+        router.push(`/exams/play?id=${id}`);
     };
 
     const handleStartClick = () => {
@@ -580,7 +581,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                             </p>
                             <button
                                 className="btn btn-primary"
-                                onClick={() => router.push(`/guardian?next=/exams/${id}/instructions`)}
+                                onClick={() => router.push(`/guardian?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`)}
                             >
                                 Complete the parent section
                             </button>
@@ -731,7 +732,7 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
                                     // exam — the practice run has to be a faithful
                                     // rehearsal or it is not rehearsing anything.
                                     void enterFullscreen();
-                                    router.push(`/exams/${trialExamId}/play?next=${id}`);
+                                    router.push(`/exams/play?id=${trialExamId}&next=${id}`);
                                 }}
                             >
                                 🎯 Take the practice test again
@@ -844,3 +845,5 @@ export default function ExamInstructionsPage({ params }: { params: Promise<{ id:
         </AuthGuard>
     );
 }
+
+export default withSearchParams(ExamInstructionsPage);

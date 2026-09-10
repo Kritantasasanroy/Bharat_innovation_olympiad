@@ -1,6 +1,7 @@
 'use client';
 
 import AutoSubmitNotice, { type AutoSubmitState } from '@/components/exam/AutoSubmitNotice';
+import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import ExamPreparingOverlay from '@/components/exam/ExamPreparingOverlay';
 import ProctorToast, { type ProctorToastData } from '@/components/exam/ProctorToast';
 import ViolationBanner from '@/components/exam/ViolationBanner';
@@ -32,7 +33,7 @@ import {
 import { cueIsWorthShowing, MascotCue, nextMascotCue } from '@/lib/mascot';
 import { useAuthStore } from '@/store/authStore';
 import { useProctorStore } from '@/store/proctorStore';
-import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /** Seconds the exam is paused before it submits itself. Shared with the copy. */
 const PAUSE_TIMEOUT_SEC = EXAM_PAUSE_TIMEOUT_SEC;
@@ -219,8 +220,8 @@ function QuestionVideo({ src }: { src: string }) {
     );
 }
 
-export default function ExamPlayPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+function ExamPlayPage() {
+    const id = useRouteParam('id');
     const {
         exam, attempt, questions, currentIndex, currentQuestion,
         answers, flagged, error,
@@ -694,7 +695,11 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
      * capturing them.
      */
     useEffect(() => {
-        if (!photoCapturedAt) return;
+        // Practice run only. A snapshot is still captured and uploaded on a real
+        // paper when a violation is recorded — the review team needs it — but the
+        // student is not told, in keeping with a real exam showing no violation
+        // notices at all.
+        if (!photoCapturedAt || !isTrialRun) return;
         setStatusToast({
             key: `photo-${photoCapturedAt}`,
             icon: '📸',
@@ -702,7 +707,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             message: 'A photo was taken because a violation was recorded just now. It is kept with your Innovation Olympiad exam for the review team, and it is the only time a picture of you is stored.',
             durationMs: 4500,
         });
-    }, [photoCapturedAt]);
+    }, [photoCapturedAt, isTrialRun]);
 
     /**
      * Nothing has moved for {@link EXAM_IDLE_NUDGE_SEC} seconds.
@@ -812,16 +817,20 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
             // trial again rather than letting anything through unchecked.
             console.error('Could not record trial completion:', err);
         }
-        return `/exams/${nextExamId}/instructions?trial=done`;
+        return `/exams/instructions?id=${nextExamId}&trial=done`;
     };
 
     const destinationAfterSubmit = async (redirectUrl?: string): Promise<string> => {
         if (isTrialRun) return finishTrialRun();
         if (redirectUrl) return redirectUrl;
-        // The beta feedback prompt still comes first — it is asked while the exam
-        // is fresh — and hands off to the submitted page, which answers the
-        // questions a student actually has at that moment.
-        return `/feedback/exam?next=${encodeURIComponent(`/exams/${id}/submitted`)}`;
+        // The feedback step comes first — it is asked while the exam is fresh,
+        // and before any score — then hands off to the submitted page, which
+        // answers the questions a student actually has at that moment.
+        //
+        // `attemptId` rides along so the star rating can be tied to this paper
+        // and asked exactly once; without it the rating step skips itself.
+        const back = encodeURIComponent(`/exams/submitted?id=${id}`);
+        return `/feedback/exam?next=${back}${attemptId ? `&attemptId=${encodeURIComponent(attemptId)}` : ''}`;
     };
     useEffect(() => { destinationRef.current = destinationAfterSubmit; });
 
@@ -929,7 +938,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     <button
                         className="btn btn-primary"
                         style={{ marginTop: '1.5rem' }}
-                        onClick={() => { window.location.href = `/guardian?next=/exams/${id}/instructions`; }}
+                        onClick={() => { window.location.href = `/guardian?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`; }}
                     >
                         Complete the parent section
                     </button>
@@ -1080,10 +1089,13 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 )}
 
                 {/* ── Violation warning ──
-                    The titled explanation the counter alone never gave. Shown for
-                    every non-final violation; the final one is handled by the
-                    terminal notice instead, which supersedes it. */}
-                {visibleViolation && (
+                    The titled explanation the counter alone never gave.
+                    **Practice run only.** On a real olympiad the student is never
+                    interrupted by a violation notice — every kind is still
+                    detected and posted to `/proctor/events` exactly as before,
+                    but silently. The rehearsal is where a student is meant to
+                    find out what trips a strike, so there it shows everything. */}
+                {isTrialRun && visibleViolation && (
                     <ViolationBanner
                         kind={visibleViolation.kind}
                         count={visibleViolation.count}
@@ -1092,11 +1104,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     />
                 )}
 
-                {/* ── Blocked action notice ──
-                    Something the lockdown stopped before it took effect (Back,
-                    F5, right-click). No strike was taken — nothing was gained by
-                    it — so this explains rather than warns. */}
-                {blockedNotice && (
+                {/* ── Blocked action notice ── Practice run only, like the
+                    violation banner above. The action is still blocked on a real
+                    paper; the student just isn't shown a notice about it. */}
+                {isTrialRun && blockedNotice && (
                     <div className="exam-blocked-notice" role="status">
                         <span className="exam-blocked-notice__icon" aria-hidden="true">🔒</span>
                         <span>{BLOCKED_ACTION_COPY[blockedNotice.action]}</span>
@@ -1111,10 +1122,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
                 )}
 
-                {/* ── Reload / back actually happened ──
-                    Not fatal any more, so this reassures rather than warns:
-                    the paper is intact and the student can carry on. */}
-                {breachNotice && (
+                {/* ── Reload / back actually happened ── Practice run only.
+                    The breach is still recorded to `/proctor/events` on a real
+                    paper; the student just carries on without a notice. */}
+                {isTrialRun && breachNotice && (
                     <div className="exam-blocked-notice exam-blocked-notice--breach" role="status">
                         <span className="exam-blocked-notice__icon" aria-hidden="true">↻</span>
                         <span>{BREACH_COPY[breachNotice.breach]}</span>
@@ -1162,15 +1173,21 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                 {/* ── Screen-capture mask ──
                     Above everything. A screenshot already taken cannot be
                     recalled, but every one after it captures this instead of the
-                    paper, and the student is told the attempt was recorded. */}
+                    paper. The masking runs on every exam (it is content
+                    protection, not a notice); the explanatory text is practice
+                    only, so a real paper stays silent about violations. */}
                 {isMasked && (
-                    <div className="exam-capture-mask" role="alert">
-                        <div className="exam-capture-mask__icon" aria-hidden="true">📷</div>
-                        <h2>Screen capture is not allowed</h2>
-                        <p>
-                            Screenshots, screen recordings and printing are not permitted during the
-                            exam. This attempt has been recorded and counted as a violation.
-                        </p>
+                    <div className="exam-capture-mask" role={isTrialRun ? 'alert' : 'presentation'}>
+                        {isTrialRun && (
+                            <>
+                                <div className="exam-capture-mask__icon" aria-hidden="true">📷</div>
+                                <h2>Screen capture is not allowed</h2>
+                                <p>
+                                    Screenshots, screen recordings and printing are not permitted during the
+                                    exam. This attempt has been recorded and counted as a violation.
+                                </p>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -1299,7 +1316,10 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                     </div>
 
                     <div className="flex items-center gap-4">
-                        {/* Always-visible violation counter so the student knows the score */}
+                        {/* Violation counter — practice run only. On a real
+                            olympiad nothing about violations is shown to the
+                            student; they are recorded to the backend silently. */}
+                        {isTrialRun && (
                         <div data-limon="exam-violations" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             <div
                                 className="violation-badge"
@@ -1362,6 +1382,7 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                                 </div>
                             )}
                         </div>
+                        )}
                         {/* The only sanctioned way to refresh the paper.
                             F5, Ctrl+R and the browser's own reload button all end
                             the exam now, so there has to be one route that does
@@ -1382,17 +1403,22 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
                         <div className={`timer-display ${timerClass}`} data-limon="exam-timer">
                             ⏱ {formatTime(remaining)}
                         </div>
-                        {/* Webcam feed — kept off-screen. face-api.js reads it
-                            internally; no camera/video status is shown to the
-                            student, violations are tracked silently. */}
-                        <div
-                            aria-hidden="true"
-                            style={{ position: 'fixed', top: -9999, left: -9999, width: 640, height: 480, opacity: 0, pointerEvents: 'none' }}
-                        >
-                            <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
                     </div>
                 </header>
+
+                {/* ── Student self-view ──
+                    The same `videoRef` face-api.js reads from, now shown to the
+                    student: a small live picture pinned to the top-right so they
+                    can see their camera is working and they are in frame. On
+                    every exam, practice or real — it is a mirror, not a warning,
+                    so it does not conflict with a real paper being silent about
+                    violations. Fixed, so it stays put while the paper scrolls;
+                    below the blocking overlays' z-index so a gate still covers
+                    it. Mirrored horizontally, the way people expect a selfie. */}
+                <div className="exam-selfview" aria-label="Your camera">
+                    <video ref={videoRef} autoPlay muted playsInline />
+                    <span className="exam-selfview__dot" aria-hidden="true" />
+                </div>
 
                 {/* ── Main Question Area ── */}
                 <main className="exam-main">
@@ -1661,3 +1687,5 @@ export default function ExamPlayPage({ params }: { params: Promise<{ id: string 
         </AuthGuard>
     );
 }
+
+export default withSearchParams(ExamPlayPage);
