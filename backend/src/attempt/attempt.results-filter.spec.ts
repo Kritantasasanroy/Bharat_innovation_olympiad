@@ -1,6 +1,7 @@
 import { AttemptStatus } from '@prisma/client';
 import { AttemptService } from './attempt.service';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
+import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
  * A trial rehearsal or a practice paper is never scored and never produces a
@@ -21,6 +22,7 @@ function service() {
         {} as never,
         {} as never,
         {} as never,
+        objectStorageStub(),
     );
     return { svc, findMany };
 }

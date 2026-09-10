@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
  * A paper must close on time even when the browser is gone.
@@ -63,6 +64,7 @@ describe('attempt expiry', () => {
             {} as any,
             whatsAppStub(),
             notificationServiceStub(),
+            objectStorageStub(),
         );
         const autoSubmit = jest
             .spyOn(service, 'autoSubmit')

@@ -3,6 +3,7 @@ import { AttemptStatus } from '@prisma/client';
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
  * The student's own attempt report, and the answer key it does or does not carry.
@@ -69,6 +70,7 @@ describe('AttemptService.getStudentReport', () => {
             null as any,
             whatsAppStub(),
             notificationServiceStub(),
+            objectStorageStub(),
         );
     }
 
@@ -170,6 +172,7 @@ describe('AttemptService.getStudentReport', () => {
                 null as any,
                 whatsAppStub(),
                 notificationServiceStub(),
+                objectStorageStub(),
             );
 
             await expect(service.getStudentReport(USER, ATTEMPT)).rejects.toThrow(NotFoundException);

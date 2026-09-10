@@ -7,6 +7,7 @@ import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
 import { NotificationService } from '../notification/notification.service';
 import { WhatsAppService } from '../notification/whatsapp.service';
+import { ObjectStorageService } from '../common/services/object-storage.service';
 import { ProctorService } from '../proctor/proctor.service';
 
 /**
@@ -162,7 +163,45 @@ export class AttemptService {
         private proctorService: ProctorService,
         private whatsapp: WhatsAppService,
         private notifications: NotificationService,
+        private storage: ObjectStorageService,
     ) { }
+
+    /**
+     * Turns the stored media reference on each question row into something a
+     * browser can load right now, in place.
+     *
+     * A question's `imageUrl` / `videoUrl` / `mediaUrl` is *either* a legacy
+     * `https://…` Cloudinary URL *or*, for anything uploaded since the media
+     * bucket went private, a bare S3 object key.
+     * {@link ObjectStorageService.resolveUrl} returns the first kind untouched
+     * and signs the second for six hours — comfortably longer than a sitting.
+     * Presigning is a local HMAC with no network call, so doing the whole paper
+     * in one pass is effectively free.
+     *
+     * Null-safe on `this.storage`: the unit tests build this service with
+     * stubbed dependencies and never wire storage.
+     */
+    private async signQuestionMedia(
+        rows: Array<
+            | { imageUrl?: string | null; videoUrl?: string | null; mediaUrl?: string | null }
+            | null
+            | undefined
+        >,
+    ): Promise<void> {
+        if (!this.storage?.resolveUrls) return;
+        const present = rows.filter(Boolean) as Array<Record<string, unknown>>;
+        if (present.length === 0) return;
+        const [images, videos, media] = await Promise.all([
+            this.storage.resolveUrls(present.map((r) => r.imageUrl as string | null)),
+            this.storage.resolveUrls(present.map((r) => r.videoUrl as string | null)),
+            this.storage.resolveUrls(present.map((r) => r.mediaUrl as string | null)),
+        ]);
+        present.forEach((r, i) => {
+            r.imageUrl = images[i] ?? r.imageUrl ?? null;
+            r.videoUrl = videos[i] ?? r.videoUrl ?? null;
+            r.mediaUrl = media[i] ?? r.mediaUrl ?? null;
+        });
+    }
 
     // ── Seeded PRNG helpers ─────────────────────────────────────────────────
 
@@ -364,7 +403,22 @@ export class AttemptService {
         return questions;
     }
 
+    /**
+     * Starts (or resumes) an attempt and hands back the paper.
+     *
+     * Thin wrapper over {@link openAttempt}: its one added job is to turn every
+     * question's stored media reference into a URL the browser can load — see
+     * {@link signQuestionMedia}. Kept as a separate seam so the several return
+     * points inside `openAttempt` (fresh start, resume, concurrent-create,
+     * demo) don't each have to remember to do it.
+     */
     async startAttempt(userId: string, instanceId: string, ipAddress?: string) {
+        const result = await this.openAttempt(userId, instanceId, ipAddress);
+        await this.signQuestionMedia(result?.questions ?? []);
+        return result;
+    }
+
+    private async openAttempt(userId: string, instanceId: string, ipAddress?: string) {
         // Face enrollment is required before starting any proctored exam —
         // this is enforced here (not just at registration) so a student can
         // never reach the exam player unenrolled, regardless of how their
@@ -1391,6 +1445,11 @@ export class AttemptService {
                 { subject: 'Time', A: 80, fullMark: 100 }
             );
         }
+
+        // An admin opening this review days later needs working image URLs, not
+        // the raw S3 keys the private media bucket stores — same treatment the
+        // live paper gets in `startAttempt`.
+        await this.signQuestionMedia(attempt.items.map((item) => item.question));
 
         return {
             attempt,

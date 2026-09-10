@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ObjectStorageService } from '../common/services/object-storage.service';
 import { generateCertificateNumber, isValidCertificateNumber } from './certificate-number';
 
 const SUBMITTED_STATUSES = [AttemptStatus.SUBMITTED, AttemptStatus.AUTO_SUBMITTED];
@@ -17,7 +18,10 @@ const MAX_NUMBER_ATTEMPTS = 5;
  */
 @Injectable()
 export class CertificateService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private storage: ObjectStorageService,
+    ) {}
 
     /**
      * Issue a certificate for every submitted attempt on a released instance
@@ -180,6 +184,14 @@ export class CertificateService {
         });
         if (!certificate || certificate.userId !== userId) {
             throw new NotFoundException('Certificate not found');
+        }
+        // `facePhotoUrl` is a bare key in the private media bucket for anything
+        // enrolled since it was locked down (older rows are Cloudinary URLs).
+        // Sign it so the certificate page can actually render the photo.
+        if (this.storage?.resolveUrl && certificate.user?.facePhotoUrl) {
+            certificate.user.facePhotoUrl =
+                (await this.storage.resolveUrl(certificate.user.facePhotoUrl)) ??
+                certificate.user.facePhotoUrl;
         }
         return certificate;
     }

@@ -1,6 +1,7 @@
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
  * The paper is sat one section at a time.
@@ -47,6 +48,7 @@ function build(userId: string, sections = buildSections()) {
         null as any,
         whatsAppStub(),
         notificationServiceStub(),
+        objectStorageStub(),
     );
     return (service as any).buildQuestionSet(sections, 'exam-1', userId, 30, 50, 20) as any[];
 }

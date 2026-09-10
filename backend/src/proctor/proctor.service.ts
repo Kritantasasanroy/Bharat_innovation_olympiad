@@ -29,6 +29,31 @@ export class ProctorService {
     ) {}
 
     /**
+     * Signs the `snapshotUrl` on a list of proctor events, in place, so an admin
+     * gets a URL that loads.
+     *
+     * The snapshot is written to the private media bucket as a bare object key
+     * (older rows are full Cloudinary URLs). `resolveUrl` passes a URL through
+     * and signs a key for six hours. Null-safe on `this.storage` for the specs.
+     */
+    private async signEventSnapshots(
+        events: Array<{ details?: unknown } | null | undefined>,
+    ): Promise<void> {
+        if (!this.storage?.resolveUrl) return;
+        await Promise.all(
+            events.map(async (event) => {
+                const details = event?.details;
+                if (!details || typeof details !== 'object') return;
+                const bag = details as Record<string, unknown>;
+                const stored = bag.snapshotUrl;
+                if (typeof stored !== 'string' || stored.length === 0) return;
+                const signed = await this.storage.resolveUrl(stored);
+                if (signed) bag.snapshotUrl = signed;
+            }),
+        );
+    }
+
+    /**
      * A webcam still, kept only when something actually went wrong.
      *
      * Registration promises — and the parent's DPDP consent says — that no photo
@@ -211,6 +236,8 @@ export class ProctorService {
             return { attemptId, events: [], totalEvents: 0, riskScore: 0, summary: {} };
         }
 
+        await this.signEventSnapshots(attempt.proctorEvents);
+
         return {
             attemptId,
             student: {
@@ -258,6 +285,8 @@ export class ProctorService {
             },
             orderBy: { startedAt: 'asc' },
         });
+
+        await Promise.all(attempts.map((a) => this.signEventSnapshots(a.proctorEvents)));
 
         return attempts.map((a) => ({
             attemptId: a.id,

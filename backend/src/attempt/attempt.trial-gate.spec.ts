@@ -3,6 +3,7 @@ import { AttemptService } from './attempt.service';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
  * The rehearsal gate: a student sits the trial paper before *any* real paper,
@@ -54,6 +55,7 @@ describe('AttemptService — rehearsal gate covers practice exams', () => {
             proctor,
             whatsAppStub(),
             notificationServiceStub(),
+            objectStorageStub(),
         );
     }
 

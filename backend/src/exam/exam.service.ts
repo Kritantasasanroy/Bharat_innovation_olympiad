@@ -73,6 +73,38 @@ export class ExamService {
         private drive: GoogleDriveService,
     ) { }
 
+    /**
+     * Rewrites the stored media reference on each question row in place so the
+     * browser gets a loadable URL.
+     *
+     * `imageUrl` / `videoUrl` / `mediaUrl` is either a legacy Cloudinary URL
+     * (passed straight through) or a bare S3 key written after the media bucket
+     * went private (signed for six hours here). Presigning is a local HMAC, so
+     * the whole paper is one cheap pass. Null-safe on `this.storage` for the
+     * specs that stub it.
+     */
+    private async signQuestionMedia(
+        rows: Array<
+            | { imageUrl?: string | null; videoUrl?: string | null; mediaUrl?: string | null }
+            | null
+            | undefined
+        >,
+    ): Promise<void> {
+        if (!this.storage?.resolveUrls) return;
+        const present = rows.filter(Boolean) as Array<Record<string, unknown>>;
+        if (present.length === 0) return;
+        const [images, videos, media] = await Promise.all([
+            this.storage.resolveUrls(present.map((r) => r.imageUrl as string | null)),
+            this.storage.resolveUrls(present.map((r) => r.videoUrl as string | null)),
+            this.storage.resolveUrls(present.map((r) => r.mediaUrl as string | null)),
+        ]);
+        present.forEach((r, i) => {
+            r.imageUrl = images[i] ?? r.imageUrl ?? null;
+            r.videoUrl = videos[i] ?? r.videoUrl ?? null;
+            r.mediaUrl = media[i] ?? r.mediaUrl ?? null;
+        });
+    }
+
     // ── Student-facing ──
 
     /**
@@ -336,6 +368,12 @@ export class ExamService {
         }
 
         const flattenedSections = exam.sections.map(s => flattenSection(s));
+
+        // Question media is stored as a bare S3 key once the media bucket went
+        // private (older rows are still full Cloudinary URLs). Sign the keys and
+        // pass the URLs through — see `signQuestionMedia`. Done before the
+        // shuffle below, which only reorders these same objects.
+        await this.signQuestionMedia(flattenedSections.flatMap((s) => s.questions ?? []));
 
         // Mirrors the paywall in `AttemptService.startAttempt` so the device-check
         // page can warn about a locked pass up front. Advisory only — the server
