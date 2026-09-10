@@ -22,12 +22,25 @@ const IDENTITY_THRESHOLD = 0.6;       // Euclidean distance threshold for identi
 // tinyFaceDetector's default inputSize (416) is tuned for lower-res input —
 // a larger inputSize gives the detector more pixel detail to work with,
 // which helped with missed detections on a 320x240 feed. scoreThreshold is
-// back at face-api.js's own default (0.5); the lowered 0.3 tried earlier let
-// through too many low-confidence, unreliable detections. This affects
-// face-count, gaze estimation, and multi-face detection alike since they all
-// run against the same detectAllFaces() call.
+// face-api.js's own default (0.5) here: a lowered 0.3 on this every-5s exam
+// path let through too many low-confidence, unreliable detections, and it
+// feeds face-count, gaze estimation and multi-face alike (one detectAllFaces()
+// call). Enrollment uses ENROLLMENT_DETECTOR_SCORE_THRESHOLD instead — see below.
 const DETECTOR_INPUT_SIZE = 512;
 const DETECTOR_SCORE_THRESHOLD = 0.5;
+
+// Enrollment (the face scan during registration) is a slow, cooperative, one-off
+// capture — the person is deliberately holding still and looking at the lens — so
+// it can afford to be far more forgiving than the every-5s exam detector. A
+// lower confidence bar accepts a weaker webcam or a dim room, and retrying
+// across a short window rides out a single bad frame (a blink, the camera
+// hunting focus) instead of failing with "no face detected".
+//
+// These are used ONLY by `captureDescriptor`. `runDetection` — face count, gaze,
+// multi-face, and the identity check that can lead to disqualification — keeps
+// DETECTOR_SCORE_THRESHOLD unchanged, so exam-time strictness is untouched.
+const ENROLLMENT_DETECTOR_SCORE_THRESHOLD = 0.3;
+const ENROLLMENT_CAPTURE_WINDOW_MS = 6000;
 
 // ── Sustained-issue tracking ──
 // Real inference only runs every 5s, but "sustained for N seconds" needs finer
@@ -522,31 +535,38 @@ export function useFaceProctor({
         }
     }, []);
 
-    // Capture descriptor from the live video (used during enrollment)
+    // Capture a descriptor from the live video — used ONLY for enrollment (the
+    // registration face scan and the "enrol now" fallback on the instructions
+    // page). Deliberately lenient: a low confidence bar and several attempts
+    // over a short window, so a weak webcam or a dim room does not dead-end the
+    // registration. Exam-time detection is a different code path and unaffected.
     const captureDescriptor = useCallback(async (): Promise<number[] | null> => {
         const faceapi = faceApiRef.current;
         const video = videoElementRef.current;
-        if (!faceapi || !video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
-            return null;
+        if (!faceapi || !video) return null;
+
+        const deadline = Date.now() + ENROLLMENT_CAPTURE_WINDOW_MS;
+        while (Date.now() < deadline) {
+            if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+                try {
+                    const detection = await Promise.race([
+                        faceapi
+                            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                                inputSize: DETECTOR_INPUT_SIZE,
+                                scoreThreshold: ENROLLMENT_DETECTOR_SCORE_THRESHOLD,
+                            }))
+                            .withFaceLandmarks(true)
+                            .withFaceDescriptor(),
+                        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
+                    ]);
+                    if (detection?.descriptor) return Array.from(detection.descriptor);
+                } catch {
+                    // Transient inference error — keep trying until the window closes.
+                }
+            }
+            await new Promise((resolve) => setTimeout(resolve, 350));
         }
-
-        try {
-            const detectionPromise = faceapi
-                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
-                    inputSize: DETECTOR_INPUT_SIZE,
-                    scoreThreshold: DETECTOR_SCORE_THRESHOLD,
-                }))
-                .withFaceLandmarks(true)
-                .withFaceDescriptor();
-
-            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
-            const detection = await Promise.race([detectionPromise, timeoutPromise]);
-
-            if (!detection) return null;
-            return Array.from(detection.descriptor);
-        } catch {
-            return null;
-        }
+        return null;
     }, []);
 
     useEffect(() => {

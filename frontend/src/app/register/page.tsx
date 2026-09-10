@@ -367,11 +367,19 @@ export default function RegisterPage() {
                     />
                 ) : step === 'face' ? (
                     <div className="auth-form">
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor used to verify
                             you during the exam, and this one photo is kept and printed on your certificate. This step cannot be skipped, and{' '}
                             <strong>the participant must do it themselves ( Not parents or somebody else)</strong>.
                         </p>
+
+                        <div className="scan-warning" role="note">
+                            <strong>This scan is the participant&apos;s exam identity.</strong> On exam day the
+                            same face is checked against the photo ID uploaded during registration, and again
+                            by the camera continuously throughout the paper. If the person sitting the exam does
+                            not match this scan, <strong>the attempt can be disqualified.</strong> So scan the
+                            actual participant now, in good light, with nothing covering the face.
+                        </div>
 
                         {faceMsg && (
                             <div style={{
