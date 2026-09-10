@@ -4,10 +4,14 @@ import { DEMO_EXAM_IDS } from '../common/demo-exams';
 import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
- * A trial rehearsal or a practice paper is never scored and never produces a
- * result — anywhere. The dashboard's "Recent Results", the results page and the
- * XP total all read from `getResults` / `getRecentResults`, so filtering the
- * practice attempts out there is what keeps the three in step.
+ * Only the **trial rehearsal** is kept out of a student's results.
+ *
+ * The dashboard's "Recent Results", the results page and the XP total all read
+ * from `getResults` / `getRecentResults`, so the rule lives in one place and the
+ * three stay in step. The free **practice papers must NOT be filtered** — a
+ * student sits one to gauge themselves, so its score and result are the point.
+ * They were briefly excluded here alongside the trial; that was wrong, and these
+ * tests pin the distinction so it does not come back.
  */
 
 const PRACTICE_EXAM_ID = [...DEMO_EXAM_IDS][0];
@@ -32,7 +36,7 @@ function examFilter(findMany: jest.Mock) {
     return findMany.mock.calls[0][0].where.examInstance.exam;
 }
 
-describe('getResults / getRecentResults — practice papers are excluded', () => {
+describe('getResults / getRecentResults — only the trial is excluded', () => {
     it('getResults filters out trial exams', async () => {
         const { svc, findMany } = service();
         await svc.getResults('u1');
@@ -41,19 +45,23 @@ describe('getResults / getRecentResults — practice papers are excluded', () =>
         );
     });
 
-    it('getResults filters out every demo exam by id', async () => {
-        const { svc, findMany } = service();
-        await svc.getResults('u1');
-        const notIn = examFilter(findMany).id.notIn as string[];
-        for (const id of DEMO_EXAM_IDS) expect(notIn).toContain(id);
-    });
-
     it('getRecentResults applies the same filter', async () => {
         const { svc, findMany } = service();
         await svc.getRecentResults('u1');
-        const f = examFilter(findMany);
-        expect(f.isTrial).toBe(false);
-        expect(f.id.notIn).toContain(PRACTICE_EXAM_ID);
+        expect(examFilter(findMany).isTrial).toBe(false);
+    });
+
+    // The regression this file exists for: a practice paper is scored, so it
+    // has to reach the results list, the dashboard and the XP total.
+    it.each([
+        ['getResults', (s: AttemptService) => s.getResults('u1')],
+        ['getRecentResults', (s: AttemptService) => s.getRecentResults('u1')],
+    ])('%s does NOT exclude the practice papers by id', async (_label, call) => {
+        const { svc, findMany } = service();
+        await call(svc);
+        const filter = examFilter(findMany) as Record<string, unknown>;
+        expect(filter.id).toBeUndefined();
+        expect(JSON.stringify(filter)).not.toContain(PRACTICE_EXAM_ID);
     });
 
     it('still scopes to the caller and to submitted statuses', async () => {

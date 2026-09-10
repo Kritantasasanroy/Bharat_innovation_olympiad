@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AttemptStatus, BookingStatus, ProctorEventType, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { DEMO_EXAM_IDS, isDemoExam } from '../common/demo-exams';
+import { isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
@@ -36,19 +36,20 @@ const STUDENT_VISIBLE_STATUSES = [
 ];
 
 /**
- * The trial rehearsal and the free practice papers are never scored and never
- * produce a result — anywhere. They exist so a student can find out what the
- * exam environment feels like, and a "score" on a practice run only invites the
- * wrong kind of attention to a number that means nothing.
+ * The **trial rehearsal** is never scored and never produces a result anywhere.
+ * It exists only so a student can find out what the exam environment feels like
+ * before the paper that counts, and a "score" on it invites the wrong kind of
+ * attention to a number that means nothing.
  *
- * Filtered out of every student-facing results list here rather than at each
- * call site, so the dashboard, the results page and the XP total all agree.
- * `isDemoExam` covers the practice papers by id; `isTrial` covers the
- * rehearsal.
+ * The free **practice papers** are deliberately NOT excluded: a student sits
+ * those to gauge themselves, so their score, results row and XP are the whole
+ * point. (They were briefly filtered out here too — that was wrong.)
+ *
+ * Applied here rather than at each call site, so the dashboard, the results page
+ * and the XP total all agree.
  */
 const RESULT_BEARING_EXAM = {
     isTrial: false,
-    id: { notIn: Array.from(new Set([...DEMO_EXAM_IDS])) },
 } as const;
 
 // Fields returned to students — correctAnswer intentionally excluded.

@@ -251,13 +251,16 @@ function ExamPlayPage() {
     const isTrialRun = Boolean(exam?.isTrial) || Boolean(nextExamId);
 
     /**
-     * True for the trial rehearsal AND the free practice papers — anything that
-     * is never scored and never produces a result.
+     * True for the trial rehearsal AND the free practice papers — anything a
+     * student sits to learn the environment rather than to be ranked.
      *
-     * `isTrialRun` stays for the rehearsal-only bits (Limon's tour, the
-     * "return to the real exam" hand-off). This is the wider gate: no
-     * feedback/score flow on submit, and violation notices stay on, because a
-     * practice run is exactly where a student should find out what trips them.
+     * This gates the **violation notices only**: on a practice run a student is
+     * meant to find out what trips them, so the popups, the counter and the
+     * capture toast stay on; on a real paper they are silent (still logged).
+     *
+     * It deliberately does NOT gate scoring. Only `isTrialRun` skips the
+     * feedback → submitted → results flow; a practice paper is scored and shows
+     * a result like any other.
      */
     const isPractice = isTrialRun || Boolean(exam?.isPractice);
 
@@ -832,10 +835,10 @@ function ExamPlayPage() {
     };
 
     const destinationAfterSubmit = async (redirectUrl?: string): Promise<string> => {
+        // Only the rehearsal skips the score flow. A practice paper IS scored and
+        // does produce a result — a student sits one to gauge themselves, so it
+        // goes through feedback → submitted → results like any other paper.
         if (isTrialRun) return finishTrialRun();
-        // A practice paper is never scored, so there is no feedback step, no
-        // submitted screen and no result to show — straight back to the dashboard.
-        if (isPractice) return '/dashboard';
         if (redirectUrl) return redirectUrl;
         // The feedback step comes first — it is asked while the exam is fresh,
         // and before any score — then hands off to the submitted page, which
@@ -862,7 +865,7 @@ function ExamPlayPage() {
             const result = await submitExam();
             window.location.href = await destinationAfterSubmit(result?.redirectUrl);
         } catch {
-            window.location.href = isPractice ? '/dashboard' : '/feedback/exam';
+            window.location.href = isTrialRun ? '/dashboard' : '/feedback/exam';
         } finally {
             setIsSubmitting(false);
         }

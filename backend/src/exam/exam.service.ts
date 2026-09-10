@@ -379,11 +379,13 @@ export class ExamService {
         // page can warn about a locked pass up front. Advisory only — the server
         // gate is what actually enforces it.
         const requiresAccessPass = !isDemoExam(exam.id);
-        // The trial rehearsal and the practice papers are never scored and
-        // never produce a result. The player reads this to skip the whole
-        // feedback -> submitted -> score flow and go straight back to the
-        // dashboard, and to keep showing violation notices (practice is where
-        // a student is meant to learn what trips them).
+        // The trial rehearsal and the free practice papers — anything sat to
+        // learn the environment rather than to be ranked. The player reads this
+        // to keep the violation notices ON: practice is exactly where a student
+        // should find out what trips them, while a real paper stays silent.
+        //
+        // NOT a "never scored" flag. A practice paper is scored and produces a
+        // result; only `isTrial` skips the feedback -> submitted -> results flow.
         const isPractice = isDemoExam(exam.id) || exam.isTrial === true;
 
         if (userId) {
