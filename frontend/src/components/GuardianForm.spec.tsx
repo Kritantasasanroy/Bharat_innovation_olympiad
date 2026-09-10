@@ -212,6 +212,47 @@ describe('GuardianForm', () => {
             expect(await screen.findByText(/upload the front/i)).toBeInTheDocument();
         });
 
+        // Aadhaar and passport are gone; a school-diary page / other document is
+        // a single picture, so the back control must disappear and one upload
+        // must be enough.
+        it('drops the second picture for a non-school-ID document', async () => {
+            cleanup();
+            mount();
+            expect(screen.queryByLabelText(/back of the card/i)).toBeInTheDocument();
+
+            fireEvent.change(screen.getByLabelText(/document type/i), {
+                target: { value: 'School Diary (student info page)' },
+            });
+
+            expect(screen.queryByLabelText(/back of the card/i)).not.toBeInTheDocument();
+            expect(screen.getByText(/one clear picture of the document is enough/i)).toBeInTheDocument();
+
+            fill();
+            fillStudent();
+            await upload(/picture of the document/i, 'diary.jpg');
+            consents().forEach((box) => fireEvent.click(box));
+            fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
+
+            await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+            expect(onSubmit.mock.calls[0][0]).toMatchObject({
+                idDocumentType: 'School Diary (student info page)',
+                idDocumentUrl: 'https://cdn.example/id.jpg',
+                idDocumentBackUrl: '',
+            });
+        });
+
+        it('has no Aadhaar or passport option', () => {
+            const select = screen.getByLabelText(/document type/i) as HTMLSelectElement;
+            const options = Array.from(select.options).map((o) => o.value);
+            expect(options).not.toContain('Aadhaar Card');
+            expect(options).not.toContain('Passport');
+            expect(options).toEqual([
+                'School ID Card',
+                'School Diary (student info page)',
+                'Other (any relevant document)',
+            ]);
+        });
+
         // The half-finished case, and the likelier one: the front is the side
         // everyone remembers.
         it('blocks submission when only the front has been uploaded', async () => {

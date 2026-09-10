@@ -75,23 +75,28 @@ export class GuardianService {
         if (!dto.gender) {
             throw new BadRequestException("Select the ward's gender.");
         }
-        if (!dto.idDocumentType?.trim()) {
+        const idDocumentType = dto.idDocumentType?.trim();
+        if (!idDocumentType) {
             throw new BadRequestException('Choose which ID document you are uploading.');
         }
 
-        // Both sides, and named separately in the error: "upload the document"
-        // when one of two is already attached tells a parent nothing about
-        // which half is missing.
+        // One picture is enough for a school-diary page or "other" document;
+        // only a school ID card, whose class/section is on the back, asks for
+        // two. Mirrors `TWO_SIDED_DOC` in `GuardianForm`.
+        const needsBackSide = idDocumentType === 'School ID Card';
+
         const idDocumentUrl = dto.idDocumentUrl?.trim();
         if (!idDocumentUrl) {
             throw new BadRequestException(
-                "Upload the front of the ward's ID — a school ID, Aadhaar card or passport.",
+                needsBackSide
+                    ? "Upload the front of the ward's school ID card."
+                    : "Upload a picture of the ward's identity document.",
             );
         }
         const idDocumentBackUrl = dto.idDocumentBackUrl?.trim();
-        if (!idDocumentBackUrl) {
+        if (needsBackSide && !idDocumentBackUrl) {
             throw new BadRequestException(
-                "Upload the back of the ward's ID as well. Both sides are needed.",
+                "Upload the back of the ward's school ID card as well. Both sides are needed.",
             );
         }
 
@@ -123,9 +128,12 @@ export class GuardianService {
             // values survive, but nothing collects them any more.
             city: dto.city?.trim() || null,
             state: dto.state?.trim() || null,
-            idDocumentType: dto.idDocumentType ?? null,
+            idDocumentType,
             idDocumentUrl,
-            idDocumentBackUrl,
+            // Explicitly null (not undefined) so switching a school ID re-submit
+            // to a one-picture document clears the old back rather than leaving
+            // a stale URL that Prisma's "skip undefined" would preserve.
+            idDocumentBackUrl: idDocumentBackUrl || null,
         };
 
         const profile = await this.prisma.guardianProfile.upsert({

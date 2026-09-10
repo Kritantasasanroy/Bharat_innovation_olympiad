@@ -82,18 +82,20 @@ export class SubmitGuardianDto {
     // `forbidNonWhitelisted`, so an old client still sending one now gets a
     // clear 400 rather than a 500 from Prisma about an unknown column.
 
-    // ── Student ID Document (School ID / Aadhaar / Passport), both sides ──
+    // ── Student ID Document (school ID card / school-diary page / other) ──
+    // The service demands one picture always, and a second (`idDocumentBackUrl`)
+    // only for a school ID card.
 
     @IsString()
     @IsOptional()
     idDocumentType?: string;
 
-    /** Front of the card. */
+    /** The document, or the front of a two-sided school card. */
     @IsString()
     @IsOptional()
     idDocumentUrl?: string;
 
-    /** Back of the card. Demanded by the service, same as the front. */
+    /** Back of the school ID card. Demanded by the service only for that type. */
     @IsString()
     @IsOptional()
     idDocumentBackUrl?: string;

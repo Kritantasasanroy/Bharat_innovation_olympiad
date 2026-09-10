@@ -72,17 +72,48 @@ describe('GuardianService', () => {
             expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
         });
 
-        // The back carries the class, section and school stamp on a school card,
-        // and the address on an Aadhaar — most of what makes the document worth
-        // checking. A front-only submission is not a verified identity.
+        // The back of a school card carries the class, section and school stamp —
+        // most of what makes it worth checking — so a school ID needs both sides.
         it.each([
             ['missing', undefined],
             ['blank', ''],
             ['whitespace only', '   '],
-        ])('rejects a submission whose back-of-card URL is %s', async (_label, url) => {
+        ])('rejects a School ID Card submission whose back-of-card URL is %s', async (_label, url) => {
             const { service, prisma } = serviceWith();
             await expect(
                 service.submit(USER, valid({ idDocumentBackUrl: url as string })),
+            ).rejects.toThrow(BadRequestException);
+            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
+        });
+
+        // A school-diary page or "other" document is a single picture — there is
+        // no second side to ask for, so a missing back must NOT block it.
+        it.each([
+            'School Diary (student info page)',
+            'Other (any relevant document)',
+        ])('accepts %s with one picture and no back', async (docType) => {
+            const { service, prisma } = serviceWith();
+            await service.submit(
+                USER,
+                valid({ idDocumentType: docType, idDocumentBackUrl: undefined }),
+            );
+            const { create } = prisma.guardianProfile.upsert.mock.calls[0][0];
+            expect(create.idDocumentType).toBe(docType);
+            expect(create.idDocumentUrl).toBe('https://cdn.example/id.jpg');
+            expect(create.idDocumentBackUrl).toBeNull();
+        });
+
+        it('still requires the one picture for a non-school-ID document', async () => {
+            const { service, prisma } = serviceWith();
+            await expect(
+                service.submit(
+                    USER,
+                    valid({
+                        idDocumentType: 'Other (any relevant document)',
+                        idDocumentUrl: undefined,
+                        idDocumentBackUrl: undefined,
+                    }),
+                ),
             ).rejects.toThrow(BadRequestException);
             expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
         });

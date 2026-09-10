@@ -31,19 +31,24 @@ export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const
 /**
  * Accepted ID documents, **in order of preference**.
  *
- * School ID comes first and is the default, and the order here is the order on
- * screen. It is the right document for this purpose and the wrong default was
- * doing real harm in both directions: a school ID proves the one thing the
- * olympiad actually needs to check — that this student attends the school and
- * class they registered under — which a passport does not show at all. And
- * Aadhaar is a national identity number belonging to a minor; collecting one by
- * default, when a card the school itself issued would do, is more of a child's
- * data than the task requires.
+ * School ID comes first and is the default. It proves the one thing the olympiad
+ * actually needs to check — that this student attends the school and class they
+ * registered under. Only the school card carries a class/section on the back, so
+ * it is the only option that asks for two pictures; the school-diary info page
+ * and any other document are a single picture.
  *
- * The other two stay, because a student between schools or without a card
- * issued yet must still be able to register.
+ * Aadhaar and passport were removed on purpose: a national identity number
+ * belonging to a minor is more of a child's data than this task requires when a
+ * document the school itself issued will do.
  */
-export const ID_DOC_TYPES = ['School ID Card', 'Aadhaar Card', 'Passport'] as const;
+export const ID_DOC_TYPES = [
+    'School ID Card',
+    'School Diary (student info page)',
+    'Other (any relevant document)',
+] as const;
+
+/** Only the school card has a class/section on the back worth a second picture. */
+const TWO_SIDED_DOC = 'School ID Card';
 
 /** Mirrors `DOCUMENT_RULES.maxBytes` on the server, so the reject is instant. */
 const MAX_DOCUMENT_MB = 10;
@@ -62,9 +67,9 @@ export interface GuardianFormValues {
     state: string;
     gender: string;
     idDocumentType: string;
-    /** Front of the card. */
+    /** The document, or the front of it for a two-sided school card. */
     idDocumentUrl: string;
-    /** Back of the card. Required, same as the front. */
+    /** Back of the card — only collected, and only required, for a school ID. */
     idDocumentBackUrl: string;
     parentalConsent: boolean;
     dataConsent: boolean;
@@ -132,6 +137,26 @@ export default function GuardianForm({
 
     const set = <K extends keyof GuardianFormValues>(key: K, value: GuardianFormValues[K]) =>
         setValues((v) => ({ ...v, [key]: value }));
+
+    /** Only the school ID asks for a second picture. */
+    const needsBackSide = values.idDocumentType === TWO_SIDED_DOC;
+
+    /**
+     * Changing the document type. Switching away from the school card drops the
+     * back picture — its upload control disappears, so a stale "✓ Uploaded" and
+     * a stray URL in the submit body would otherwise linger unseen.
+     */
+    const changeDocType = (next: string) => {
+        setValues((v) => ({
+            ...v,
+            idDocumentType: next,
+            ...(next === TWO_SIDED_DOC ? {} : { idDocumentBackUrl: '' }),
+        }));
+        if (next !== TWO_SIDED_DOC) {
+            setFileName((s) => ({ ...s, back: '' }));
+            setUploadError((s) => ({ ...s, back: '' }));
+        }
+    };
 
     /**
      * Uploads the ID document and keeps only the resulting URL.
@@ -215,13 +240,15 @@ export default function GuardianForm({
         }
         if (!values.idDocumentUrl) {
             setLocalError(
-                `Upload the front of the ward's ${values.idDocumentType.toLowerCase()}.`,
+                needsBackSide
+                    ? "Upload the front of the ward's school ID card."
+                    : 'Upload a picture of the document.',
             );
             return;
         }
-        if (!values.idDocumentBackUrl) {
+        if (needsBackSide && !values.idDocumentBackUrl) {
             setLocalError(
-                `Upload the back of the ward's ${values.idDocumentType.toLowerCase()} as well. Both sides are needed.`,
+                "Upload the back of the ward's school ID card as well. Both sides are needed.",
             );
             return;
         }
@@ -350,28 +377,33 @@ export default function GuardianForm({
             <fieldset className="guardian-fieldset">
                 <legend>Ward Identity Document (Mandatory)</legend>
                 {/* The preference is stated, not merely implied by the order of
-                    a dropdown. A parent reaching for Aadhaar by habit needs a
-                    reason to reach for the school card instead, and "it is the
-                    one that proves the class you registered under" is that
-                    reason. */}
+                    a dropdown. A parent needs a reason to reach for the school
+                    card, and "it is the one that proves the class you registered
+                    under" is that reason. */}
                 <p className="input-hint" style={{ marginTop: 0 }}>
                     <strong>Please use the ward&apos;s school ID card if you have one.</strong>{' '}
                     It is the document we prefer, because it shows the school and class the ward
-                    registered under. If there is no school card, an Aadhaar card or passport is
-                    accepted instead.
+                    registered under. If there is no school card, the student-info page of the
+                    school diary — or any other document that identifies the ward — is accepted instead.
                 </p>
-                <p className="input-hint">
-                    <strong>Both sides are required.</strong> The back of a school card usually
-                    carries the class, section and the school&apos;s stamp, and the back of an
-                    Aadhaar card carries the address, so one side on its own is not enough to verify.
-                </p>
+                {needsBackSide ? (
+                    <p className="input-hint">
+                        <strong>Both sides are required.</strong> The back of a school card usually
+                        carries the class, section and the school&apos;s stamp, so the front on its
+                        own is not enough to verify.
+                    </p>
+                ) : (
+                    <p className="input-hint">
+                        One clear picture of the document is enough.
+                    </p>
+                )}
 
                 <div className="input-group">
                     <label className="input-label" htmlFor="idDocumentType">Document type</label>
                     <select
                         id="idDocumentType" className="input-field"
                         value={values.idDocumentType}
-                        onChange={(e) => set('idDocumentType', e.target.value)}
+                        onChange={(e) => changeDocType(e.target.value)}
                     >
                         {ID_DOC_TYPES.map((t) => (
                             <option key={t} value={t}>
@@ -382,9 +414,15 @@ export default function GuardianForm({
                     </select>
                 </div>
 
-                <div className="form-row">
-                    {(['front', 'back'] as const).map((side) => {
+                <div className={needsBackSide ? 'form-row' : undefined}>
+                    {(needsBackSide ? (['front', 'back'] as const) : (['front'] as const)).map((side) => {
                         const url = side === 'front' ? values.idDocumentUrl : values.idDocumentBackUrl;
+                        const labelText =
+                            side === 'back'
+                                ? 'Back of the card'
+                                : needsBackSide
+                                  ? 'Front of the card'
+                                  : 'Picture of the document';
                         return (
                             <div className="input-group" key={side}>
                                 {/* The limit is in the label, not only in the
@@ -392,7 +430,7 @@ export default function GuardianForm({
                                     pick a 12 MB photo, not after waiting for it
                                     to be refused. */}
                                 <label className="input-label" htmlFor={`idDocument-${side}`}>
-                                    {side === 'front' ? 'Front of the card' : 'Back of the card'}{' '}
+                                    {labelText}{' '}
                                     <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
                                         (Accepted file formats- JPG, PNG, HEIC or PDF - max {MAX_DOCUMENT_MB} MB)
                                     </span>
@@ -423,8 +461,8 @@ export default function GuardianForm({
                 </div>
 
                 <p className="input-hint">
-                    A clear phone photo of each side is fine, it does not need to be a scan. If a
-                    photo is over {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
+                    A clear phone photo is fine, it does not need to be a scan. If a photo is over{' '}
+                    {MAX_DOCUMENT_MB} MB, retake it at a lower resolution.
                 </p>
             </fieldset>
 
