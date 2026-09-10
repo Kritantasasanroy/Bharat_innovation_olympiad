@@ -1801,7 +1801,7 @@ h4 {
 
 /* ── Feedback page ─────────────────────────────────────────────────────── */
 .fb-stars { white-space: nowrap; letter-spacing: 1px; }
-.fb-star { color: var(--border-color, #cbd5e1); }
+.fb-star { color: var(--text-tertiary); }
 .fb-star.on { color: #f5b301; }
 
 .fb-summary {

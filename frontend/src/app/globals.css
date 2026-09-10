@@ -2205,9 +2205,9 @@ h4 {
           font-size: 0.8rem;
           font-weight: 700;
           line-height: 1;
-          color: var(--accent-500, #b45309);
+          color: var(--primary-400);
           background: rgba(255, 203, 5, 0.14);
-          border: 1px solid rgba(255, 203, 5, 0.3);
+          border: 1px solid rgba(255, 203, 5, 0.35);
           white-space: nowrap;
         }
         .xp-pill__spark { font-size: 0.85em; }
@@ -2224,10 +2224,16 @@ h4 {
           border: 1px solid transparent;
           border-radius: 999px;
           background: transparent;
+          /* A <button> resets `color` to the UA's `buttontext`, which is dark —
+             so the name inside it was invisible on the dark navbar. Pin it to
+             the theme token, the way the old plain-<div> markup inherited it. */
+          color: var(--text-primary);
+          font-family: inherit;
           cursor: pointer;
           transition: background var(--transition-fast), border-color var(--transition-fast);
         }
         .navbar-account__trigger:hover { background: var(--bg-elevated); border-color: var(--border-subtle); }
+        .navbar-account__trigger .user-name { color: var(--text-primary); }
         .navbar-account__name { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
         .navbar-account__chev { font-size: 0.7rem; color: var(--text-muted); }
         .navbar-menu {
@@ -2320,7 +2326,7 @@ h4 {
           font-size: 2.4rem;
           line-height: 1;
           padding: 2px 4px;
-          color: var(--border-color, #cbd5e1);
+          color: var(--text-tertiary);
           transition: transform 0.12s ease, color 0.12s ease;
         }
         .rating-star:hover { transform: scale(1.15); }
@@ -2330,7 +2336,7 @@ h4 {
         .rating-comment__opt { color: var(--text-muted); font-weight: 500; }
         .rating-comment__count { font-size: 0.78rem; margin-top: 4px; }
         .rating-comment__count.is-short { color: var(--danger-400); }
-        .rating-comment__count.is-ok { color: var(--success-400, #22c55e); }
+        .rating-comment__count.is-ok { color: var(--success-400); }
         .rating-prompt__actions { margin-top: var(--space-3); width: 100%; }
         .rating-prompt__actions .btn { min-width: 220px; }
         @media (prefers-reduced-motion: reduce) {
