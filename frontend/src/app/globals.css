@@ -893,19 +893,16 @@ h4 {
 .exam-capture-mask h2 { font-size: 1.25rem; }
 .exam-capture-mask p { max-width: 460px; color: rgba(255, 255, 255, 0.75); font-size: 0.9rem; }
 
-/* ── Student self-view during an exam ──────────────────────────────────── */
+/* ── Student self-view — sits inside the exam header bar ───────────────── */
 .exam-selfview {
-  position: fixed;
-  top: 68px;
-  right: 16px;
-  width: 150px;
-  height: 112px;
-  border-radius: 12px;
+  position: relative;
+  flex-shrink: 0;
+  width: 64px;
+  height: 40px;
+  border-radius: 8px;
   overflow: hidden;
-  z-index: 60;
   background: #0b1220;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 .exam-selfview video {
   width: 100%;
@@ -916,13 +913,13 @@ h4 {
 }
 .exam-selfview__dot {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 8px;
-  height: 8px;
+  top: 4px;
+  left: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
   animation: selfviewPulse 2s ease-in-out infinite;
 }
 @keyframes selfviewPulse {
@@ -930,13 +927,7 @@ h4 {
   50% { opacity: 0.35; }
 }
 @media (max-width: 768px) {
-  .exam-selfview {
-    top: 60px;
-    right: 10px;
-    width: 96px;
-    height: 72px;
-    border-radius: 10px;
-  }
+  .exam-selfview { width: 52px; height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .exam-selfview__dot { animation: none; }

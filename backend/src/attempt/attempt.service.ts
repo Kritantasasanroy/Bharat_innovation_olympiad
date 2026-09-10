@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AttemptStatus, BookingStatus, ProctorEventType, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { isDemoExam } from '../common/demo-exams';
+import { DEMO_EXAM_IDS, isDemoExam } from '../common/demo-exams';
 import { examPhase, isStartable, startRefusalReason } from '../exam/exam-lifecycle';
 import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
@@ -33,6 +33,22 @@ const STUDENT_VISIBLE_STATUSES = [
     AttemptStatus.AUTO_SUBMITTED,
     AttemptStatus.DISQUALIFIED,
 ];
+
+/**
+ * The trial rehearsal and the free practice papers are never scored and never
+ * produce a result — anywhere. They exist so a student can find out what the
+ * exam environment feels like, and a "score" on a practice run only invites the
+ * wrong kind of attention to a number that means nothing.
+ *
+ * Filtered out of every student-facing results list here rather than at each
+ * call site, so the dashboard, the results page and the XP total all agree.
+ * `isDemoExam` covers the practice papers by id; `isTrial` covers the
+ * rehearsal.
+ */
+const RESULT_BEARING_EXAM = {
+    isTrial: false,
+    id: { notIn: Array.from(new Set([...DEMO_EXAM_IDS])) },
+} as const;
 
 // Fields returned to students — correctAnswer intentionally excluded.
 //
@@ -1019,6 +1035,7 @@ export class AttemptService {
                 // so a disqualified attempt is shown to its owner without being
                 // counted in anybody's ranking.
                 status: { in: STUDENT_VISIBLE_STATUSES },
+                examInstance: { exam: RESULT_BEARING_EXAM },
             },
             include: {
                 examInstance: {
@@ -1173,6 +1190,7 @@ export class AttemptService {
             where: {
                 userId,
                 status: { in: STUDENT_VISIBLE_STATUSES },
+                examInstance: { exam: RESULT_BEARING_EXAM },
             },
             include: {
                 examInstance: {

@@ -250,6 +250,17 @@ function ExamPlayPage() {
     }, []);
     const isTrialRun = Boolean(exam?.isTrial) || Boolean(nextExamId);
 
+    /**
+     * True for the trial rehearsal AND the free practice papers — anything that
+     * is never scored and never produces a result.
+     *
+     * `isTrialRun` stays for the rehearsal-only bits (Limon's tour, the
+     * "return to the real exam" hand-off). This is the wider gate: no
+     * feedback/score flow on submit, and violation notices stay on, because a
+     * practice run is exactly where a student should find out what trips them.
+     */
+    const isPractice = isTrialRun || Boolean(exam?.isPractice);
+
     const attemptId = attempt?.id || '';
     const { remaining, isExpired } = useTimer(attemptId);
 
@@ -699,7 +710,7 @@ function ExamPlayPage() {
         // paper when a violation is recorded — the review team needs it — but the
         // student is not told, in keeping with a real exam showing no violation
         // notices at all.
-        if (!photoCapturedAt || !isTrialRun) return;
+        if (!photoCapturedAt || !isPractice) return;
         setStatusToast({
             key: `photo-${photoCapturedAt}`,
             icon: '📸',
@@ -707,7 +718,7 @@ function ExamPlayPage() {
             message: 'A photo was taken because a violation was recorded just now. It is kept with your Innovation Olympiad exam for the review team, and it is the only time a picture of you is stored.',
             durationMs: 4500,
         });
-    }, [photoCapturedAt, isTrialRun]);
+    }, [photoCapturedAt, isPractice]);
 
     /**
      * Nothing has moved for {@link EXAM_IDLE_NUDGE_SEC} seconds.
@@ -822,6 +833,9 @@ function ExamPlayPage() {
 
     const destinationAfterSubmit = async (redirectUrl?: string): Promise<string> => {
         if (isTrialRun) return finishTrialRun();
+        // A practice paper is never scored, so there is no feedback step, no
+        // submitted screen and no result to show — straight back to the dashboard.
+        if (isPractice) return '/dashboard';
         if (redirectUrl) return redirectUrl;
         // The feedback step comes first — it is asked while the exam is fresh,
         // and before any score — then hands off to the submitted page, which
@@ -848,7 +862,7 @@ function ExamPlayPage() {
             const result = await submitExam();
             window.location.href = await destinationAfterSubmit(result?.redirectUrl);
         } catch {
-            window.location.href = isTrialRun ? '/dashboard' : '/feedback/exam';
+            window.location.href = isPractice ? '/dashboard' : '/feedback/exam';
         } finally {
             setIsSubmitting(false);
         }
@@ -1095,7 +1109,7 @@ function ExamPlayPage() {
                     detected and posted to `/proctor/events` exactly as before,
                     but silently. The rehearsal is where a student is meant to
                     find out what trips a strike, so there it shows everything. */}
-                {isTrialRun && visibleViolation && (
+                {isPractice && visibleViolation && (
                     <ViolationBanner
                         kind={visibleViolation.kind}
                         count={visibleViolation.count}
@@ -1107,7 +1121,7 @@ function ExamPlayPage() {
                 {/* ── Blocked action notice ── Practice run only, like the
                     violation banner above. The action is still blocked on a real
                     paper; the student just isn't shown a notice about it. */}
-                {isTrialRun && blockedNotice && (
+                {isPractice && blockedNotice && (
                     <div className="exam-blocked-notice" role="status">
                         <span className="exam-blocked-notice__icon" aria-hidden="true">🔒</span>
                         <span>{BLOCKED_ACTION_COPY[blockedNotice.action]}</span>
@@ -1125,7 +1139,7 @@ function ExamPlayPage() {
                 {/* ── Reload / back actually happened ── Practice run only.
                     The breach is still recorded to `/proctor/events` on a real
                     paper; the student just carries on without a notice. */}
-                {isTrialRun && breachNotice && (
+                {isPractice && breachNotice && (
                     <div className="exam-blocked-notice exam-blocked-notice--breach" role="status">
                         <span className="exam-blocked-notice__icon" aria-hidden="true">↻</span>
                         <span>{BREACH_COPY[breachNotice.breach]}</span>
@@ -1177,8 +1191,8 @@ function ExamPlayPage() {
                     protection, not a notice); the explanatory text is practice
                     only, so a real paper stays silent about violations. */}
                 {isMasked && (
-                    <div className="exam-capture-mask" role={isTrialRun ? 'alert' : 'presentation'}>
-                        {isTrialRun && (
+                    <div className="exam-capture-mask" role={isPractice ? 'alert' : 'presentation'}>
+                        {isPractice && (
                             <>
                                 <div className="exam-capture-mask__icon" aria-hidden="true">📷</div>
                                 <h2>Screen capture is not allowed</h2>
@@ -1316,10 +1330,10 @@ function ExamPlayPage() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        {/* Violation counter — practice run only. On a real
+                        {/* Violation counter — practice papers only. On a real
                             olympiad nothing about violations is shown to the
                             student; they are recorded to the backend silently. */}
-                        {isTrialRun && (
+                        {isPractice && (
                         <div data-limon="exam-violations" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             <div
                                 className="violation-badge"
@@ -1403,22 +1417,22 @@ function ExamPlayPage() {
                         <div className={`timer-display ${timerClass}`} data-limon="exam-timer">
                             ⏱ {formatTime(remaining)}
                         </div>
+
+                        {/* ── Student self-view ──
+                            The same `videoRef` face-api.js reads from, shown to
+                            the student so they can see their camera is working
+                            and they are in frame. It lives *inside* the header
+                            bar, sized to its height — it used to float over the
+                            top-right of the page and sat on top of the first
+                            question. A mirror, not a warning: it is on every
+                            exam, practice or real, and mirrored the way a selfie
+                            camera behaves. */}
+                        <div className="exam-selfview" aria-label="Your camera">
+                            <video ref={videoRef} autoPlay muted playsInline />
+                            <span className="exam-selfview__dot" aria-hidden="true" />
+                        </div>
                     </div>
                 </header>
-
-                {/* ── Student self-view ──
-                    The same `videoRef` face-api.js reads from, now shown to the
-                    student: a small live picture pinned to the top-right so they
-                    can see their camera is working and they are in frame. On
-                    every exam, practice or real — it is a mirror, not a warning,
-                    so it does not conflict with a real paper being silent about
-                    violations. Fixed, so it stays put while the paper scrolls;
-                    below the blocking overlays' z-index so a gate still covers
-                    it. Mirrored horizontally, the way people expect a selfie. */}
-                <div className="exam-selfview" aria-label="Your camera">
-                    <video ref={videoRef} autoPlay muted playsInline />
-                    <span className="exam-selfview__dot" aria-hidden="true" />
-                </div>
 
                 {/* ── Main Question Area ── */}
                 <main className="exam-main">

@@ -341,6 +341,12 @@ export class ExamService {
         // page can warn about a locked pass up front. Advisory only — the server
         // gate is what actually enforces it.
         const requiresAccessPass = !isDemoExam(exam.id);
+        // The trial rehearsal and the practice papers are never scored and
+        // never produce a result. The player reads this to skip the whole
+        // feedback -> submitted -> score flow and go straight back to the
+        // dashboard, and to keep showing violation notices (practice is where
+        // a student is meant to learn what trips them).
+        const isPractice = isDemoExam(exam.id) || exam.isTrial === true;
 
         if (userId) {
             // Sections are preserved, not collapsed. Each pillar is sat as a
@@ -351,6 +357,7 @@ export class ExamService {
             return {
                 ...exam,
                 requiresAccessPass,
+                isPractice,
                 sections: flattenedSections.map((section) => ({
                     ...section,
                     questions: seededShuffle(
@@ -361,7 +368,7 @@ export class ExamService {
             };
         }
 
-        return { ...exam, requiresAccessPass, sections: flattenedSections };
+        return { ...exam, requiresAccessPass, isPractice, sections: flattenedSections };
     }
 
     async findInstanceById(instanceId: string) {

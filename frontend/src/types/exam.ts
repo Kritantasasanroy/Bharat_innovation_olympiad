@@ -20,6 +20,8 @@ export interface Exam {
     isArchived?: boolean;
     /** The rehearsal paper — full proctored environment, never scored. */
     isTrial?: boolean;
+    /** Trial rehearsal or a practice paper — never scored, never a result. */
+    isPractice?: boolean;
     /** Whether a student must sit the trial before this exam will start. */
     requiresTrial?: boolean;
     sections: ExamSection[];
