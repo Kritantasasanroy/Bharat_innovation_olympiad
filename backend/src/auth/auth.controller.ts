@@ -59,9 +59,16 @@ export class AuthController {
         return { accessToken: token, user };
     }
 
-    /** PUBLIC — issue a sign-in / registration code to an email address. */
+    /**
+     * PUBLIC — issue a sign-in / registration code to an email address.
+     *
+     * `recordPendingApplicant` runs first and is fire-and-forget-safe (it
+     * swallows its own errors) — a student waiting on a code must never be
+     * blocked by the admin follow-up list failing to write.
+     */
     @Post('email/send-otp')
     async sendEmailOtp(@Body() dto: SendEmailOtpDto) {
+        await this.authService.recordPendingApplicant(dto);
         return this.emailOtpService.sendOtp('STUDENT', dto.email, dto.name);
     }
 

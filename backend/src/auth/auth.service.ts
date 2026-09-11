@@ -4,7 +4,7 @@ import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
 import { SlotAssignmentService } from '../slot/slot-assignment.service';
 import { RollNumberService } from '../user/roll-number.service';
-import { SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
+import { SendEmailOtpDto, SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 import { PhoneOtpService } from './phone-otp.service';
 import { normalizePhone } from './phone.helpers';
 
@@ -168,6 +168,39 @@ export class AuthService {
             throw new BadRequestException(
                 'Enter your class section, exactly as your school writes it. If your school does not use sections, write NA.',
             );
+        }
+    }
+
+    /**
+     * Snapshot a registration attempt the moment a code is sent for it, before
+     * anything is verified. Best-effort and silent on failure: this is an
+     * admin follow-up list, not part of the registration flow, so a write
+     * error here must never be why a student's code fails to send.
+     *
+     * Only called with the fields the details step actually collects
+     * (`dto.name` set), so a login request — email only — is a no-op; there is
+     * nothing to snapshot for someone who has typed nothing but their address.
+     */
+    async recordPendingApplicant(dto: SendEmailOtpDto): Promise<void> {
+        if (!dto.name?.trim()) return;
+        try {
+            const email = dto.email.trim().toLowerCase();
+            const data = {
+                firstName: dto.name.trim(),
+                lastName: dto.lastName?.trim() || '',
+                phone: dto.phone?.trim() || null,
+                classBand: dto.classBand ?? null,
+                schoolId: dto.schoolId ?? null,
+                schoolName: dto.schoolName?.trim() || null,
+                section: dto.section?.trim() || null,
+            };
+            await this.prisma.pendingApplicant.upsert({
+                where: { email },
+                create: { email, ...data },
+                update: data,
+            });
+        } catch (error) {
+            this.logger.warn(`Could not record pending applicant for ${dto.email}: ${(error as Error).message}`);
         }
     }
 

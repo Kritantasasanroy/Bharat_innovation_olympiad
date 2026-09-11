@@ -38,6 +38,38 @@ interface SchoolOption {
     code: string;
 }
 
+/** A registration attempt: a code was sent, and no account exists yet for that email. */
+interface PendingApplicant {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string | null;
+    classBand: number | null;
+    schoolId: string | null;
+    schoolName: string | null;
+    section: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Registered and email-verified, but no active access pass. */
+interface UnpaidStudent {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string | null;
+    classBand: number | null;
+    schoolId: string | null;
+    schoolName: string | null;
+    schoolCode: string | null;
+    registeredAt: string;
+    accessPassStatus: 'PENDING' | 'REVOKED' | null;
+}
+
+type View = 'all' | 'pending' | 'unpaid';
+
 /**
  * People management — the admin's full view of every user, with edit and
  * permanent delete. A delete archives the user's details (recoverable in
@@ -58,6 +90,23 @@ export default function StudentsAdminPage() {
     const [sortField, setSortField] = useState<SortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
+    /**
+     * Which of the three lists is on screen. `pending` and `unpaid` are
+     * read-only funnel views — nothing on them is an editable account yet
+     * (`pending`) or the thing being shown is the absence of a payment, not a
+     * property to edit (`unpaid`) — so they get their own state and their own
+     * load function rather than being folded into `users` with a client-side
+     * filter: the data comes from different endpoints with different shapes,
+     * and pretending otherwise would need every field below to be optional.
+     */
+    const [view, setView] = useState<View>('all');
+    const [pending, setPending] = useState<PendingApplicant[]>([]);
+    const [unpaid, setUnpaid] = useState<UnpaidStudent[]>([]);
+    const [pendingLoading, setPendingLoading] = useState(true);
+    const [unpaidLoading, setUnpaidLoading] = useState(true);
+    const [pendingError, setPendingError] = useState<string | null>(null);
+    const [unpaidError, setUnpaidError] = useState<string | null>(null);
+
     const load = useCallback(async (background = false) => {
         if (!background) setLoading(true);
         try {
@@ -72,13 +121,48 @@ export default function StudentsAdminPage() {
         }
     }, [role]);
 
+    const loadPending = useCallback(async (background = false) => {
+        if (!background) setPendingLoading(true);
+        try {
+            const { data } = await api.get<PendingApplicant[]>('/admin/manage/pending-applicants');
+            setPending(data);
+            setPendingError(null);
+        } catch {
+            if (!background) setPendingError('Could not load pending applicants.');
+        } finally {
+            if (!background) setPendingLoading(false);
+        }
+    }, []);
+
+    const loadUnpaid = useCallback(async (background = false) => {
+        if (!background) setUnpaidLoading(true);
+        try {
+            const { data } = await api.get<UnpaidStudent[]>('/admin/manage/unpaid-verified');
+            setUnpaid(data);
+            setUnpaidError(null);
+        } catch {
+            if (!background) setUnpaidError('Could not load unpaid students.');
+        } finally {
+            if (!background) setUnpaidLoading(false);
+        }
+    }, []);
+
+    // Only the visible tab polls — an admin on "Pending applicants" gains
+    // nothing from the main roster refetching every 12s in the background,
+    // and it would just be a wasted request.
     useEffect(() => {
-        void load();
+        const loaders: Record<View, (background?: boolean) => Promise<void>> = {
+            all: load,
+            pending: loadPending,
+            unpaid: loadUnpaid,
+        };
+        const active = loaders[view];
+        void active();
         const id = setInterval(() => {
-            if (document.visibilityState === 'visible') void load(true);
+            if (document.visibilityState === 'visible') void active(true);
         }, 12_000);
         return () => clearInterval(id);
-    }, [load]);
+    }, [view, load, loadPending, loadUnpaid]);
 
     useEffect(() => {
         api.get<SchoolOption[]>('/admin/schools').then(({ data }) => setSchools(data)).catch(() => {});
@@ -139,11 +223,46 @@ export default function StudentsAdminPage() {
                 <div className="page-header">
                     <h1>People</h1>
                     <p className="text-muted">
-                        Every registered user. Edit a profile, move a student between schools, or permanently
-                        delete an account. Deletions are archived and can be reviewed under Archive.
+                        {view === 'all'
+                            ? 'Every registered user. Edit a profile, move a student between schools, or permanently delete an account. Deletions are archived and can be reviewed under Archive.'
+                            : view === 'pending'
+                              ? "Sent a verification code and never completed it — no account exists for these yet. Details are exactly what they typed, so a number or email may simply be wrong."
+                              : 'Registered and their email is verified, but there is no active access pass — never started paying, or a payment never completed.'}
                     </p>
                 </div>
 
+                <div className="class-pills" style={{ marginBottom: '0.75rem' }}>
+                    {(
+                        [
+                            { id: 'all', label: 'All people' },
+                            { id: 'pending', label: `Pending applicants${pending.length ? ` (${pending.length})` : ''}` },
+                            { id: 'unpaid', label: `Registered, not paid${unpaid.length ? ` (${unpaid.length})` : ''}` },
+                        ] as { id: View; label: string }[]
+                    ).map((v) => (
+                        <button
+                            key={v.id}
+                            className={`class-pill ${view === v.id ? 'active' : ''}`}
+                            onClick={() => setView(v.id)}
+                        >
+                            {v.label}
+                        </button>
+                    ))}
+                </div>
+
+                {view === 'pending' ? (
+                    <PendingApplicantsView
+                        rows={pending}
+                        loading={pendingLoading}
+                        error={pendingError}
+                    />
+                ) : view === 'unpaid' ? (
+                    <UnpaidStudentsView
+                        rows={unpaid}
+                        loading={unpaidLoading}
+                        error={unpaidError}
+                    />
+                ) : (
+                <>
                 <div className="analytics-toolbar" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div className="class-pills">
                         {(['STUDENT', 'SCHOOL', 'ALL'] as RoleFilter[]).map((r) => (
@@ -335,6 +454,8 @@ export default function StudentsAdminPage() {
                         </table>
                     )}
                 </div>
+                </>
+                )}
             </div>
 
             {editing && (
@@ -525,5 +646,207 @@ function DeleteUserModal({
                 </form>
             </div>
         </div>
+    );
+}
+
+function PendingApplicantsView({
+    rows,
+    loading,
+    error,
+}: {
+    rows: PendingApplicant[];
+    loading: boolean;
+    error: string | null;
+}) {
+    const [query, setQuery] = useState('');
+    const visible = rows.filter((r) => {
+        const q = query.trim().toLowerCase();
+        if (!q) return true;
+        return [r.firstName, r.lastName, r.email, r.phone, r.schoolName].some((v) =>
+            (v ?? '').toLowerCase().includes(q),
+        );
+    });
+
+    return (
+        <>
+            <div className="analytics-toolbar" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+                <input
+                    className="search-input"
+                    placeholder="Search name, email, phone, school…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    style={{ flex: 1, minWidth: 200 }}
+                />
+                <span className="stats-pill">{visible.length} shown</span>
+            </div>
+
+            {error && <div className="form-error">{error}</div>}
+
+            <div className="glass-card table-responsive">
+                {loading ? (
+                    <div className="loading-container">
+                        <div className="spinner" />
+                    </div>
+                ) : visible.length === 0 ? (
+                    <div className="empty-state">
+                        <h3>No pending applicants</h3>
+                        <p className="text-muted">
+                            Nobody has an unfinished registration right now.
+                        </p>
+                    </div>
+                ) : (
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Class</th>
+                                <th>School</th>
+                                <th>Section</th>
+                                <th>Last code sent</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visible.map((r) => (
+                                <tr key={r.id}>
+                                    <td>
+                                        <strong>{r.firstName} {r.lastName}</strong>
+                                    </td>
+                                    <td className="text-muted">{r.email}</td>
+                                    <td className="text-muted">{r.phone ?? '—'}</td>
+                                    <td>
+                                        {r.classBand ? (
+                                            <span className="badge" style={{ background: 'rgba(125,200,50,0.15)', color: '#7dc832', fontWeight: 600 }}>
+                                                Class {r.classBand}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted">—</span>
+                                        )}
+                                    </td>
+                                    <td>{r.schoolName ?? <span className="text-muted">—</span>}</td>
+                                    <td className="text-muted">{r.section ?? '—'}</td>
+                                    <td className="text-muted">
+                                        {new Date(r.updatedAt).toLocaleString('en-IN', {
+                                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                                        })}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </>
+    );
+}
+
+function UnpaidStudentsView({
+    rows,
+    loading,
+    error,
+}: {
+    rows: UnpaidStudent[];
+    loading: boolean;
+    error: string | null;
+}) {
+    const [query, setQuery] = useState('');
+    const visible = rows.filter((r) => {
+        const q = query.trim().toLowerCase();
+        if (!q) return true;
+        return [r.firstName, r.lastName, r.email, r.phone, r.schoolName].some((v) =>
+            (v ?? '').toLowerCase().includes(q),
+        );
+    });
+
+    return (
+        <>
+            <div className="analytics-toolbar" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+                <input
+                    className="search-input"
+                    placeholder="Search name, email, phone, school…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    style={{ flex: 1, minWidth: 200 }}
+                />
+                <span className="stats-pill">{visible.length} shown</span>
+            </div>
+
+            {error && <div className="form-error">{error}</div>}
+
+            <div className="glass-card table-responsive">
+                {loading ? (
+                    <div className="loading-container">
+                        <div className="spinner" />
+                    </div>
+                ) : visible.length === 0 ? (
+                    <div className="empty-state">
+                        <h3>Nobody unpaid</h3>
+                        <p className="text-muted">Every verified student has an active access pass.</p>
+                    </div>
+                ) : (
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Class</th>
+                                <th>School</th>
+                                <th>Registered</th>
+                                <th>Payment status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visible.map((r) => (
+                                <tr key={r.id}>
+                                    <td>
+                                        <Link href={`/students/${r.id}`} style={{ textDecoration: 'none' }}>
+                                            <strong style={{ color: 'var(--primary-400)' }}>
+                                                {r.firstName} {r.lastName}
+                                            </strong>
+                                        </Link>
+                                    </td>
+                                    <td className="text-muted">{r.email}</td>
+                                    <td className="text-muted">{r.phone ?? '—'}</td>
+                                    <td>
+                                        {r.classBand ? (
+                                            <span className="badge" style={{ background: 'rgba(125,200,50,0.15)', color: '#7dc832', fontWeight: 600 }}>
+                                                Class {r.classBand}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted">—</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        {r.schoolName ? (
+                                            <span title={r.schoolCode ?? ''}>{r.schoolName}</span>
+                                        ) : (
+                                            <span className="text-muted">Independent</span>
+                                        )}
+                                    </td>
+                                    <td className="text-muted">
+                                        {new Date(r.registeredAt).toLocaleDateString('en-IN', {
+                                            day: 'numeric', month: 'short', year: 'numeric',
+                                        })}
+                                    </td>
+                                    <td>
+                                        {r.accessPassStatus === 'PENDING' ? (
+                                            <span className="badge badge-warning">Payment started, not completed</span>
+                                        ) : r.accessPassStatus === 'REVOKED' ? (
+                                            <span className="badge badge-danger">Revoked</span>
+                                        ) : (
+                                            <span className="badge" style={{ background: 'rgba(156,163,175,0.15)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                                Never started
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </>
     );
 }

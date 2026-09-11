@@ -63,18 +63,35 @@ async function neonFetch(path: string, body: object) {
 const OTP_BY_BACKEND = process.env.NEXT_PUBLIC_EMAIL_OTP_PROVIDER === 'backend';
 
 /**
+ * The registration details step's fields, as they stand the moment "Send
+ * Verification Code" is clicked — nothing here is proven yet, only typed.
+ */
+export interface RegistrationDetails {
+    name: string;
+    lastName?: string;
+    phone?: string;
+    classBand?: number;
+    schoolId?: string;
+    schoolName?: string;
+    section?: string;
+}
+
+/**
  * Ask our own API to email a 6-digit code.
  *
- * `name` greets the student in the email instead of it reading like a
- * notice about a stranger. Registration has it — the details step validates
- * a name before this is ever called — and passes it. Sign-in never does; a
- * student signing in has typed only their email, and the API resolves the
- * name from the account itself rather than asking the browser for it.
+ * `details.name` greets the student in the email instead of it reading like a
+ * notice about a stranger. Registration has it — the details step validates a
+ * name before this is ever called — and passes it, along with everything else
+ * on the form: the API snapshots it into the admin's "pending applicants" list
+ * (started registering, never verified), which is the only reason this call
+ * carries more than an email at all. Sign-in passes nothing; a student signing
+ * in has typed only their email, and the API resolves the display name from
+ * the account itself rather than asking the browser for it.
  */
-async function backendSendOtp(email: string, name?: string) {
+async function backendSendOtp(email: string, details?: RegistrationDetails) {
     try {
         const { default: api } = await import('@/lib/api');
-        const { data } = await api.post('/auth/email/send-otp', { email, ...(name ? { name } : {}) });
+        const { data } = await api.post('/auth/email/send-otp', { email, ...details });
         return { data, error: null };
     } catch (e: any) {
         return {
@@ -85,9 +102,9 @@ async function backendSendOtp(email: string, name?: string) {
 }
 
 /** Ask Neon to email a 6-digit code. */
-const sendOtp = (email: string, name?: string) =>
+const sendOtp = (email: string, details?: RegistrationDetails) =>
     OTP_BY_BACKEND
-        ? backendSendOtp(email, name)
+        ? backendSendOtp(email, details)
         : neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' });
 
 /** OTP helper functions — call the Better Auth email-otp endpoints directly */
@@ -104,7 +121,7 @@ export const emailOtp = {
      * requires an existing Neon Auth session — which new users on a fresh device/incognito
      * don't have, causing the OTP to never be sent.
      */
-    sendVerificationOtp: (email: string, name?: string) => sendOtp(email, name),
+    sendVerificationOtp: (email: string, details?: RegistrationDetails) => sendOtp(email, details),
 
     /**
      * Verify the OTP. Used for both login and registration.

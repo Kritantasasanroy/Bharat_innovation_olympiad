@@ -242,6 +242,143 @@ describe('deletePartner', () => {
     });
 });
 
+/**
+ * Two dedicated, purpose-built fakes rather than extending `createFakeDb`
+ * above — the query shapes these two methods issue (search-by-OR, a relation
+ * condition on `accessPass`) are different enough from the delete/update
+ * flows that a shared fake would need to grow a small Prisma engine to cover
+ * both honestly. Each fake interprets exactly the `where` shape its method
+ * produces, same as this file's header already promises: "the Prisma slice
+ * this service uses," not a general one.
+ */
+describe('listPendingApplicants', () => {
+    function setup(applicants: any[] = [], userEmails: string[] = []) {
+        const prisma: any = {
+            pendingApplicant: {
+                findMany: async ({ where = {} }: any) => {
+                    if (!where.OR) return [...applicants];
+                    const needle = (where.OR[0].firstName?.contains ?? '').toLowerCase();
+                    return applicants.filter((a) =>
+                        [a.firstName, a.lastName, a.email, a.phone].some((v) =>
+                            (v ?? '').toLowerCase().includes(needle),
+                        ),
+                    );
+                },
+            },
+            user: {
+                findMany: async ({ where }: any) =>
+                    userEmails.filter((e) => where.email.in.includes(e)).map((email) => ({ email })),
+            },
+        };
+        return { service: new AdminManagementService(prisma) };
+    }
+
+    const APPLICANT = {
+        id: 'pa1',
+        email: 'started@x.test',
+        firstName: 'Started',
+        lastName: 'Only',
+        phone: '+9199',
+        updatedAt: new Date(),
+    };
+
+    it('lists an applicant who never became a User', async () => {
+        const { service } = setup([APPLICANT], []);
+        const result = await service.listPendingApplicants();
+        expect(result).toHaveLength(1);
+        expect(result[0].email).toBe('started@x.test');
+    });
+
+    // The regression this exists to prevent: the moment registration
+    // completes, the same email should drop off this list without anything
+    // having to remember to delete or flag the PendingApplicant row.
+    it('excludes an applicant whose email now has a real account', async () => {
+        const { service } = setup([APPLICANT], ['started@x.test']);
+        const result = await service.listPendingApplicants();
+        expect(result).toHaveLength(0);
+    });
+
+    it('search matches across name, email and phone', async () => {
+        const { service } = setup([APPLICANT], []);
+        await expect(service.listPendingApplicants('started')).resolves.toHaveLength(1);
+        await expect(service.listPendingApplicants('9199')).resolves.toHaveLength(1);
+        await expect(service.listPendingApplicants('nomatch')).resolves.toHaveLength(0);
+    });
+});
+
+describe('listUnpaidVerified', () => {
+    function setup(users: any[]) {
+        const prisma: any = {
+            user: {
+                findMany: async ({ where }: any) => {
+                    let rows = users.filter((u) => u.role === where.role);
+                    rows = rows.filter((u) =>
+                        where.OR.some((clause: any) =>
+                            clause.accessPass?.is === null
+                                ? u.accessPassStatus == null
+                                : u.accessPassStatus != null && u.accessPassStatus !== 'ACTIVE',
+                        ),
+                    );
+                    if (where.AND) {
+                        const needle = (where.AND[0].OR[0].firstName?.contains ?? '').toLowerCase();
+                        rows = rows.filter((u) =>
+                            [u.firstName, u.lastName, u.email, u.phone].some((v) =>
+                                (v ?? '').toLowerCase().includes(needle),
+                            ),
+                        );
+                    }
+                    return rows.map((u) => ({
+                        ...u,
+                        school: null,
+                        accessPass: u.accessPassStatus ? { status: u.accessPassStatus, createdAt: new Date() } : null,
+                    }));
+                },
+            },
+        };
+        return { service: new AdminManagementService(prisma) };
+    }
+
+    const student = (over: any) => ({
+        id: over.id,
+        firstName: 'S',
+        lastName: 'One',
+        email: over.email,
+        phone: null,
+        phoneRaw: null,
+        classBand: 8,
+        schoolId: null,
+        createdAt: new Date(),
+        role: 'STUDENT',
+        accessPassStatus: over.accessPassStatus ?? null,
+    });
+
+    it('includes a verified student who never started paying', async () => {
+        const { service } = setup([student({ id: 'u1', email: 'a@x.test' })]);
+        const result = await service.listUnpaidVerified();
+        expect(result).toHaveLength(1);
+        expect(result[0].accessPassStatus).toBeNull();
+    });
+
+    it('includes a student whose access pass is PENDING or REVOKED, not just missing', async () => {
+        const { service } = setup([
+            student({ id: 'u1', email: 'pending@x.test', accessPassStatus: 'PENDING' }),
+            student({ id: 'u2', email: 'revoked@x.test', accessPassStatus: 'REVOKED' }),
+        ]);
+        const result = await service.listUnpaidVerified();
+        expect(result.map((r) => r.email).sort()).toEqual(['pending@x.test', 'revoked@x.test']);
+    });
+
+    it('excludes a student with an ACTIVE access pass', async () => {
+        const { service } = setup([student({ id: 'u1', email: 'paid@x.test', accessPassStatus: 'ACTIVE' })]);
+        await expect(service.listUnpaidVerified()).resolves.toHaveLength(0);
+    });
+
+    it('never includes a non-STUDENT role', async () => {
+        const { service } = setup([{ ...student({ id: 'u1', email: 'admin@x.test' }), role: 'ADMIN' }]);
+        await expect(service.listUnpaidVerified()).resolves.toHaveLength(0);
+    });
+});
+
 describe('updateUser', () => {
     it('rejects an email already taken by someone else', async () => {
         const { service, users } = setup();

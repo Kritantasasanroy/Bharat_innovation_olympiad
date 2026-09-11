@@ -43,6 +43,18 @@ export class AdminManagementController {
         return this.service.listUsers({ role, q, schoolId });
     }
 
+    /** Started registering (a code was sent) and never became an account. */
+    @Get('pending-applicants')
+    listPendingApplicants(@Query('q') q?: string) {
+        return this.service.listPendingApplicants(q);
+    }
+
+    /** Registered and email-verified, but no active access pass. */
+    @Get('unpaid-verified')
+    listUnpaidVerified(@Query('q') q?: string) {
+        return this.service.listUnpaidVerified(q);
+    }
+
     @Patch('users/:id')
     updateUser(
         @Param('id') id: string,

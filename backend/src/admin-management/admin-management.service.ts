@@ -128,6 +128,111 @@ export class AdminManagementService {
         });
     }
 
+    /**
+     * Registration attempts where a code was sent and the applicant never
+     * became a `User` — the "started, never finished" list.
+     *
+     * "Still pending" is derived here against `User`, the one place account
+     * existence is actually decided, rather than trusted from a flag on
+     * `PendingApplicant` that a bug could leave stale. The cost is a second
+     * query rather than one join; at this table's size (an admin follow-up
+     * list, not a hot path) that trade is not worth the alternative — a
+     * flag that silently drifts from the truth it is supposed to mirror.
+     */
+    async listPendingApplicants(q?: string) {
+        const where: Prisma.PendingApplicantWhereInput = {};
+        if (q?.trim()) {
+            const needle = q.trim();
+            where.OR = [
+                { firstName: { contains: needle, mode: 'insensitive' } },
+                { lastName: { contains: needle, mode: 'insensitive' } },
+                { email: { contains: needle, mode: 'insensitive' } },
+                { phone: { contains: needle, mode: 'insensitive' } },
+            ];
+        }
+
+        const applicants = await this.prisma.pendingApplicant.findMany({
+            where,
+            orderBy: { updatedAt: 'desc' },
+            take: 500,
+        });
+        if (applicants.length === 0) return [];
+
+        const verified = await this.prisma.user.findMany({
+            where: { email: { in: applicants.map((a) => a.email) } },
+            select: { email: true },
+        });
+        const verifiedEmails = new Set(verified.map((u) => u.email));
+
+        return applicants.filter((a) => !verifiedEmails.has(a.email));
+    }
+
+    /**
+     * Registered, email-verified students with no active access pass — the
+     * "finished registering, never paid" list. Covers both "never started a
+     * payment" (no `AccessPass` row at all — created only when an order is
+     * placed) and "started but never completed or was revoked" (a row that
+     * exists but is not `ACTIVE`), which is why this is two OR'd conditions
+     * rather than one `is: null` check.
+     */
+    async listUnpaidVerified(q?: string) {
+        const where: Prisma.UserWhereInput = {
+            role: Role.STUDENT,
+            OR: [{ accessPass: { is: null } }, { accessPass: { status: { not: 'ACTIVE' } } }],
+        };
+        if (q?.trim()) {
+            const needle = q.trim();
+            where.AND = [
+                {
+                    OR: [
+                        { firstName: { contains: needle, mode: 'insensitive' } },
+                        { lastName: { contains: needle, mode: 'insensitive' } },
+                        { email: { contains: needle, mode: 'insensitive' } },
+                        { phone: { contains: needle, mode: 'insensitive' } },
+                    ],
+                },
+            ];
+        }
+
+        const users = await this.prisma.user.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: 500,
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                phoneRaw: true,
+                classBand: true,
+                schoolId: true,
+                createdAt: true,
+                school: { select: { name: true, code: true } },
+                accessPass: { select: { status: true, createdAt: true } },
+            },
+        });
+
+        return users.map((u) => ({
+            id: u.id,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            email: u.email,
+            // The verified login number if there is one, else what was typed
+            // at registration — a student not yet phone-verified still needs a
+            // number an admin can call.
+            phone: u.phone ?? u.phoneRaw,
+            classBand: u.classBand,
+            schoolId: u.schoolId,
+            schoolName: u.school?.name ?? null,
+            schoolCode: u.school?.code ?? null,
+            registeredAt: u.createdAt,
+            // 'PENDING' | 'REVOKED' when an attempt exists but did not stick;
+            // null when the student never started paying at all.
+            accessPassStatus: u.accessPass?.status ?? null,
+        }));
+    }
+
     /** Edit a user. Email uniqueness and a valid target school are enforced. */
     async updateUser(id: string, dto: UpdateUserDto, actor: Actor) {
         const user = await this.prisma.user.findUnique({ where: { id } });

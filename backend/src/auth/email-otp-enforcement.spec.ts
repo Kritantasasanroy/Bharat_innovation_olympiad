@@ -29,6 +29,10 @@ function controller(overrides: { verifyOtp?: jest.Mock; sendOtp?: jest.Mock } = 
     const authService = {
         getUserByEmail: jest.fn().mockResolvedValue(USER),
         syncUser: jest.fn().mockResolvedValue(USER),
+        // Covered on its own in record-pending-applicant.spec.ts; here it only
+        // needs to exist so the controller's fire-and-forget call has something
+        // to await.
+        recordPendingApplicant: jest.fn().mockResolvedValue(undefined),
     };
     const jwtService = { sign: jest.fn().mockReturnValue('signed.jwt') };
     const ctrl = new AuthController(

@@ -122,12 +122,43 @@ export class SendEmailOtpDto {
      * The typed first name, from registration's details step — validated
      * non-empty there before this endpoint is ever called. Absent on a login
      * request, where a student has typed only their email; the account's own
-     * name is looked up server-side instead. Used only to greet the student in
-     * the emailed code, never trusted for anything else.
+     * name is looked up server-side instead. Used to greet the student in the
+     * emailed code, and — together with the fields below — to snapshot the
+     * registration attempt into `PendingApplicant` so an admin can see who
+     * started and never finished. Never trusted for anything else; none of
+     * this is proof of anything until the code is verified.
      */
     @IsString()
     @IsOptional()
     name?: string;
+
+    /** Present only alongside `name`, i.e. only from registration's details step. */
+    @IsString()
+    @IsOptional()
+    lastName?: string;
+
+    /** As typed — not yet a verified contact number. */
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
+    @IsInt()
+    @Min(6)
+    @Max(12)
+    @IsOptional()
+    classBand?: number;
+
+    @IsString()
+    @IsOptional()
+    schoolId?: string;
+
+    @IsString()
+    @IsOptional()
+    schoolName?: string;
+
+    @IsString()
+    @IsOptional()
+    section?: string;
 }
 
 export class SendPhoneOtpDto {

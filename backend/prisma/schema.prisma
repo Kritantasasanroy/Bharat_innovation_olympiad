@@ -1294,6 +1294,45 @@ model PhoneOtp {
   @@index([phone, expiresAt])
 }
 
+/// A registration attempt, captured the moment "Send Verification Code" is
+/// clicked — before the code is ever verified, and before any `User` row can
+/// exist. Every field the details step collects is snapshotted here, because
+/// this table exists specifically to answer "who started registering and never
+/// finished, and what did they type" — an admin follow-up list, not a source
+/// of truth for anything the app itself reads back.
+///
+/// Upserted by email on every send, so a retyped detail or a resend overwrites
+/// rather than accumulating duplicate rows for one person mid-attempt.
+///
+/// Deliberately has no `verifiedAt` flag and no delete-on-verify: "still
+/// pending" is defined as "no `User` exists for this email" (see
+/// `AdminManagementService.listPendingApplicants`), derived at read time
+/// against the one place account existence is actually decided, rather than a
+/// second flag this table would have to keep in step with it. `schoolId` and
+/// `schoolName` are an unenforced snapshot, not a foreign key — the point is
+/// what the applicant typed, which must survive even a since-deleted or
+/// never-onboarded school.
+model PendingApplicant {
+  id         String    @id @default(uuid())
+  email      String    @unique
+  firstName  String
+  lastName   String
+  /// As typed, not yet proven to be a working number — this table exists
+  /// before any OTP (email or phone) has succeeded.
+  phone      String?
+  classBand  Int?
+  schoolId   String?
+  schoolName String?
+  section    String?
+  /// First time this email reached the details step.
+  createdAt  DateTime  @default(now())
+  /// Most recent send — what an admin should trust if the applicant retyped
+  /// something between attempts.
+  updatedAt  DateTime  @updatedAt
+
+  @@index([updatedAt])
+}
+
 enum AccessPassStatus {
   /// Order created, payment not yet confirmed — grants nothing.
   PENDING

@@ -175,6 +175,21 @@ export default function RegisterPage() {
         }));
     };
 
+    /**
+     * Everything the details step currently holds, for the send-otp call.
+     * Read fresh at send time rather than stored once, so a resend after
+     * editing a field (a typo'd phone number, say) carries the correction.
+     */
+    const registrationDetails = () => ({
+        name: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        phone: phone.trim() || undefined,
+        classBand: formData.classBand,
+        schoolId: school?.id,
+        schoolName: school?.name,
+        section: section.trim() || undefined,
+    });
+
     // Step: send OTP to email
     const handleSendOtp = async (e: FormEvent) => {
         e.preventDefault();
@@ -204,7 +219,7 @@ export default function RegisterPage() {
         }
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, formData.firstName.trim());
+            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, registrationDetails());
             if (otpError) {
                 setError(
                     otpError.message ||
@@ -286,7 +301,7 @@ export default function RegisterPage() {
         setSuccess('');
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, formData.firstName.trim());
+            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, registrationDetails());
             if (otpError) {
                 setError(otpError.message || "We couldn't send another code just now. Wait a moment and try again.");
             } else {
