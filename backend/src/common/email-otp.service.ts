@@ -51,7 +51,29 @@ export class EmailOtpService {
         return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
     }
 
-    private sendCode(kind: EmailOtpKind, email: string, code: string): Promise<boolean> {
+    /**
+     * The name shown in a `STUDENT` code email.
+     *
+     * Registration passes the typed first name straight through — the form
+     * validates it before the OTP step, so it is always there. Sign-in passes
+     * nothing, because a student signing in has typed only their email; this
+     * looks up the account instead. An email with no account (someone probing,
+     * or a genuine typo) resolves to `null`, and the template's fallback line
+     * is written to not reveal that distinction either way.
+     */
+    private async resolveStudentName(email: string, typed?: string): Promise<string | null> {
+        const trimmed = typed?.trim();
+        if (trimmed) return trimmed;
+        const user = await this.prisma.user.findUnique({ where: { email }, select: { firstName: true } });
+        return user?.firstName?.trim() || null;
+    }
+
+    private async sendCode(
+        kind: EmailOtpKind,
+        email: string,
+        code: string,
+        studentName?: string,
+    ): Promise<boolean> {
         switch (kind) {
             case 'SCHOOL':
                 return this.notifications.sendSchoolStartVerification(email, { code });
@@ -61,19 +83,31 @@ export class EmailOtpService {
                 return this.notifications.sendSchoolPasswordResetCode(email, { code });
             case 'PARTNER_RESET':
                 return this.notifications.sendPartnerPasswordResetCode(email, { code });
-            case 'STUDENT':
+            case 'STUDENT': {
                 // The only kind that lets a delivery failure through. The others
                 // are steps in a form a person is filling in and can retry; this
                 // one *is* the sign-in, so a student who is told "code sent"
                 // when nothing was sent has no way forward and no error to act
                 // on. `sendEmailOtp` throws, and that is the point.
+                const name = await this.resolveStudentName(email, studentName);
                 return this.notifications
-                    .sendEmailOtp(email, code, 'sign-in', Math.floor(CODE_TTL_MS / 60_000))
+                    .sendEmailOtp(email, code, name, Math.floor(CODE_TTL_MS / 60_000))
                     .then(() => true);
+            }
         }
     }
 
-    async sendOtp(kind: EmailOtpKind, rawEmail: string): Promise<{ sent: boolean; expiresInSeconds: number }> {
+    /**
+     * `studentName` is meaningful only for `kind: 'STUDENT'` — the other kinds
+     * ignore it. It is an extra parameter rather than a second method because
+     * every caller already goes through this one shared rate-limit / single-use
+     * bookkeeping, and duplicating that for one kind is how the two drift.
+     */
+    async sendOtp(
+        kind: EmailOtpKind,
+        rawEmail: string,
+        studentName?: string,
+    ): Promise<{ sent: boolean; expiresInSeconds: number }> {
         const email = rawEmail.trim().toLowerCase();
 
         const recentSends = await this.prisma.emailOtp.count({
@@ -97,7 +131,7 @@ export class EmailOtpService {
             data: { kind, email, codeHash: this.hash(code), expiresAt },
         });
 
-        const emailSent = await this.sendCode(kind, email, code);
+        const emailSent = await this.sendCode(kind, email, code, studentName);
 
         return { sent: emailSent, expiresInSeconds: Math.floor(CODE_TTL_MS / 1000) };
     }

@@ -286,20 +286,24 @@ export function partnerEmailVerificationEmail(vars: {
 /**
  * The student's sign-in / registration code.
  *
- * `purpose` changes only the first line. The code itself is valid for either,
- * so the wording must not imply a student is locked into the flow they started
- * — a student who asks to register and then signs in instead still has a good
- * code, and being told otherwise would read as a fault.
+ * `name` is deliberately not part of what a code is valid for, so the same
+ * code works whether a student registers or signs in instead — only the
+ * greeting changes, never the code's validity.
+ *
+ * `name` is `null` only when none is knowable yet: a sign-in code requested
+ * for an email with no account. That must not be worded as if the address
+ * were rejected — a code-entry box that also announces "we don't recognise
+ * you" is an account-enumeration oracle — so the fallback line addresses the
+ * address itself rather than a person, without claiming "someone" did it.
  */
 export function studentEmailOtpEmail(vars: {
     code: string;
-    purpose: 'sign-in' | 'register';
+    name: string | null;
     expiresInMinutes: number;
 }): RenderedEmail {
-    const opening =
-        vars.purpose === 'register'
-            ? 'Someone started a Bharat Innovation Olympiad registration with this email address.'
-            : 'Someone asked to sign in to Bharat Innovation Olympiad with this email address.';
+    const opening = vars.name
+        ? `Hi ${escapeHtml(vars.name)}, here is your Bharat Innovation Olympiad code.`
+        : 'Here is the Bharat Innovation Olympiad code requested for this email address.';
 
     return build(
         'Your Innovation Olympiad code',

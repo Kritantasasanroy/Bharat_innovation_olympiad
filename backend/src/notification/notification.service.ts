@@ -285,14 +285,14 @@ export class NotificationService implements OnModuleInit {
     async sendEmailOtp(
         to: string,
         code: string,
-        purpose: 'sign-in' | 'register',
+        name: string | null,
         expiresInMinutes = 5,
     ): Promise<void> {
-        const mail = studentEmailOtpEmail({ code, purpose, expiresInMinutes });
+        const mail = studentEmailOtpEmail({ code, name, expiresInMinutes });
         await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
         // The code itself is never logged — a log line with a live credential in
         // it is a credential in CloudWatch.
-        this.logger.log(`Sent sign-in code to ${to} (${purpose})`);
+        this.logger.log(`Sent sign-in code to ${to}`);
     }
 
     async sendWelcome(to: string, firstName: string, rollNumber?: string | null): Promise<void> {

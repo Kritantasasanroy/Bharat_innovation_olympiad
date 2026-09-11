@@ -48,6 +48,14 @@ export class NotificationServiceTestDouble extends NotificationService {
     sendParentApprovalEmail = jest.fn(
         async (_to: string, _guardianName: string, _studentName: string): Promise<boolean> => true,
     );
+    sendEmailOtp = jest.fn(
+        async (
+            _to: string,
+            _code: string,
+            _name: string | null,
+            _expiresInMinutes?: number,
+        ): Promise<void> => undefined,
+    );
 
     sendPartnerEmailVerification = jest.fn(
         async (_to: string, _vars: { contactPerson: string; orgName: string; token: string }): Promise<boolean> =>

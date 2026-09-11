@@ -107,6 +107,15 @@ describe('email sign-in requires a code the server issued', () => {
     it('sends a STUDENT-kind code', async () => {
         const { ctrl, sendOtp } = controller();
         await ctrl.sendEmailOtp({ email: 'ada@example.com' });
-        expect(sendOtp).toHaveBeenCalledWith('STUDENT', 'ada@example.com');
+        expect(sendOtp).toHaveBeenCalledWith('STUDENT', 'ada@example.com', undefined);
+    });
+
+    // Registration's details step validates a name before this endpoint is
+    // ever called; it rides along so the emailed code can greet the student
+    // by name instead of the endpoint having to resolve it itself.
+    it('passes a typed name through to the OTP service', async () => {
+        const { ctrl, sendOtp } = controller();
+        await ctrl.sendEmailOtp({ email: 'ada@example.com', name: 'Ada' });
+        expect(sendOtp).toHaveBeenCalledWith('STUDENT', 'ada@example.com', 'Ada');
     });
 });

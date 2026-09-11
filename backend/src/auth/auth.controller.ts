@@ -62,7 +62,7 @@ export class AuthController {
     /** PUBLIC — issue a sign-in / registration code to an email address. */
     @Post('email/send-otp')
     async sendEmailOtp(@Body() dto: SendEmailOtpDto) {
-        return this.emailOtpService.sendOtp('STUDENT', dto.email);
+        return this.emailOtpService.sendOtp('STUDENT', dto.email, dto.name);
     }
 
     /**

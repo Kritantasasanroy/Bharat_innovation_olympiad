@@ -204,7 +204,7 @@ export default function RegisterPage() {
         }
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email);
+            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, formData.firstName.trim());
             if (otpError) {
                 setError(
                     otpError.message ||
@@ -286,7 +286,7 @@ export default function RegisterPage() {
         setSuccess('');
         setIsLoading(true);
         try {
-            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email);
+            const { error: otpError } = await emailOtp.sendVerificationOtp(formData.email, formData.firstName.trim());
             if (otpError) {
                 setError(otpError.message || "We couldn't send another code just now. Wait a moment and try again.");
             } else {

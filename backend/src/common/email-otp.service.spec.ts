@@ -43,11 +43,15 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
     });
 }
 
-function createTestContext() {
+function createTestContext(users: { email: string; firstName: string }[] = []) {
     let nextId = 1;
     const rows: Row[] = [];
 
     const prisma = {
+        user: {
+            findUnique: async ({ where }: { where: { email: string } }) =>
+                users.find((u) => u.email === where.email) ?? null,
+        },
         emailOtp: {
             count: async ({ where = {} }: { where?: Record<string, unknown> }) =>
                 rows.filter((row) => matches(row, where)).length,
@@ -223,6 +227,86 @@ describe('EmailOtpService', () => {
 
         await expect(service.sendOtp('SCHOOL', 'coordinator@school.example')).rejects.toBeInstanceOf(
             BadRequestException,
+        );
+    });
+});
+
+/**
+ * The STUDENT kind, and specifically what name — if any — ends up in the
+ * email. This replaced Neon Auth's hosted OTP, whose mail read "Someone asked
+ * to sign in…" no matter who was actually signing in.
+ */
+describe('EmailOtpService — STUDENT name resolution', () => {
+    it('uses the typed name (registration) without touching the database', async () => {
+        const { service, notifications } = createTestContext();
+
+        await service.sendOtp('STUDENT', 'ada@example.com', 'Ada');
+
+        expect(notifications.sendEmailOtp).toHaveBeenCalledTimes(1);
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBe('Ada');
+    });
+
+    it('trims a typed name', async () => {
+        const { service, notifications } = createTestContext();
+
+        await service.sendOtp('STUDENT', 'ada@example.com', '  Ada  ');
+
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBe('Ada');
+    });
+
+    it('looks up the account name when none is typed (sign-in)', async () => {
+        const { service, notifications } = createTestContext([
+            { email: 'ada@example.com', firstName: 'Ada' },
+        ]);
+
+        await service.sendOtp('STUDENT', 'ada@example.com');
+
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBe('Ada');
+    });
+
+    it('normalises the email before the account lookup', async () => {
+        const { service, notifications } = createTestContext([
+            { email: 'ada@example.com', firstName: 'Ada' },
+        ]);
+
+        await service.sendOtp('STUDENT', 'ADA@Example.com');
+
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBe('Ada');
+    });
+
+    // A sign-in code requested for an unknown address — a typo, or someone
+    // probing. The mail must not say "someone", but it also must not say
+    // "we don't recognise this email": that would be an account-enumeration
+    // oracle from an endpoint that requires no authentication at all.
+    it('falls back to null, never to the account-not-found information, when no name is knowable', async () => {
+        const { service, notifications } = createTestContext();
+
+        const result = await service.sendOtp('STUDENT', 'nobody@example.com');
+
+        expect(result.sent).toBe(true);
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBeNull();
+    });
+
+    it('prefers a typed name over the account name if somehow both are present', async () => {
+        const { service, notifications } = createTestContext([
+            { email: 'ada@example.com', firstName: 'Account-Ada' },
+        ]);
+
+        await service.sendOtp('STUDENT', 'ada@example.com', 'Typed-Ada');
+
+        expect(notifications.sendEmailOtp.mock.calls[0][2]).toBe('Typed-Ada');
+    });
+
+    it('a STUDENT code is namespaced apart from SCHOOL/PARTNER — a shared address gets independent codes', async () => {
+        const { service, notifications } = createTestContext();
+        await service.sendOtp('STUDENT', 'shared@example.com', 'Ada');
+        const studentCode = notifications.sendEmailOtp.mock.calls[0][1];
+
+        await expect(service.verifyOtp('SCHOOL', 'shared@example.com', studentCode)).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
+        await expect(service.verifyOtp('STUDENT', 'shared@example.com', studentCode)).resolves.toBe(
+            'shared@example.com',
         );
     });
 });

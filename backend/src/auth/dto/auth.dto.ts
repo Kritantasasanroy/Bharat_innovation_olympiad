@@ -117,6 +117,17 @@ export class LoginSyncDto {
 export class SendEmailOtpDto {
     @IsEmail()
     email: string;
+
+    /**
+     * The typed first name, from registration's details step — validated
+     * non-empty there before this endpoint is ever called. Absent on a login
+     * request, where a student has typed only their email; the account's own
+     * name is looked up server-side instead. Used only to greet the student in
+     * the emailed code, never trusted for anything else.
+     */
+    @IsString()
+    @IsOptional()
+    name?: string;
 }
 
 export class SendPhoneOtpDto {
