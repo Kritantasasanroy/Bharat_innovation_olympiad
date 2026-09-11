@@ -49,18 +49,25 @@ export default function AdminLoginPage() {
             }
             router.push('/dashboard');
         } catch (err: unknown) {
-            const responseData =
-                typeof err === 'object' &&
-                err !== null &&
-                'response' in err &&
-                typeof (err as { response?: unknown }).response === 'object'
-                    ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data
-                    : undefined;
+            // A response with a body means the server was reached and rejected
+            // the request — that is a real "invalid credentials". No response at
+            // all (network failure, CORS block, DNS, the API misconfigured to
+            // point somewhere unreachable) is a different problem entirely, and
+            // showing the same "Invalid admin credentials" for it sends whoever
+            // is debugging looking at the password instead of the connection —
+            // exactly what happened investigating this once already.
+            const hasResponse =
+                typeof err === 'object' && err !== null && 'response' in err && (err as { response?: unknown }).response != null;
+            const responseData = hasResponse
+                ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data
+                : undefined;
             const msg = responseData?.message;
             if (Array.isArray(msg)) {
                 setError(msg.join(', '));
-            } else {
+            } else if (hasResponse) {
                 setError(msg || 'Invalid admin credentials');
+            } else {
+                setError("Couldn't reach the server. Check your connection and try again.");
             }
         } finally {
             setIsLoading(false);
