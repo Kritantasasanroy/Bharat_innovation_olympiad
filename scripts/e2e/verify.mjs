@@ -20,81 +20,7 @@
  * Exit code is the number of failures, so CI can gate on it.
  */
 
-const ENVS = {
-	dev: {
-		label: "dev (AWS)",
-		api: "https://api.dev.innovationolympiad.in",
-		exam: "https://exam.dev.innovationolympiad.in",
-		student: "https://dev.innovationolympiad.in",
-		school: "https://school.dev.innovationolympiad.in",
-		partner: "https://partner.dev.innovationolympiad.in",
-		admin: "https://admin.dev.innovationolympiad.in",
-	},
-	demo: {
-		label: "demo (Render + Vercel)",
-		api: "https://olympiad-backend-khlq.onrender.com",
-		exam: "https://olympiad-backend-khlq.onrender.com",
-		student: "https://www.innovationolympiad.in",
-		school: "https://school.innovationolympiad.in",
-		partner: "https://partner.innovationolympiad.in",
-		admin: "https://olympiad-admin-frontend.vercel.app",
-	},
-};
-
-// The ALB's WAF BotControl rule 403s anything that looks automated, so every
-// request here presents a normal browser UA. Without it the whole dev run is
-// a wall of 403s that says nothing about the deploy.
-const UA =
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
-
-let pass = 0;
-let fail = 0;
-const failures = [];
-
-const c = {
-	ok: (s) => `\x1b[32m${s}\x1b[0m`,
-	no: (s) => `\x1b[31m${s}\x1b[0m`,
-	dim: (s) => `\x1b[90m${s}\x1b[0m`,
-	head: (s) => `\x1b[1m${s}\x1b[0m`,
-};
-
-function check(name, condition, detail = "") {
-	if (condition) {
-		pass++;
-		console.log(`  ${c.ok("PASS")} ${name}${detail ? c.dim(`  ${detail}`) : ""}`);
-	} else {
-		fail++;
-		failures.push(name);
-		console.log(`  ${c.no("FAIL")} ${name}${detail ? `  ${detail}` : ""}`);
-	}
-}
-
-async function req(url, init = {}) {
-	const started = Date.now();
-	try {
-		const res = await fetch(url, {
-			...init,
-			headers: { "user-agent": UA, ...(init.headers ?? {}) },
-			signal: AbortSignal.timeout(init.timeoutMs ?? 30_000),
-		});
-		const text = await res.text();
-		let json = null;
-		try {
-			json = JSON.parse(text);
-		} catch {
-			/* not json */
-		}
-		return { status: res.status, text, json, headers: res.headers, ms: Date.now() - started };
-	} catch (e) {
-		return {
-			status: 0,
-			text: String(e),
-			json: null,
-			headers: new Headers(),
-			ms: Date.now() - started,
-		};
-	}
-}
+import { adminToken, c, check, ENVS, req, summarise } from "./harness.mjs";
 
 // ── Groups ───────────────────────────────────────────────────────────────────
 
@@ -220,18 +146,6 @@ async function checkGuards(env) {
 		// 401 = exists and is guarded. 404 = the route is missing, i.e. a stale build.
 		check(`${method} ${path} is guarded (not missing)`, r.status === 401, `${r.status}`);
 	}
-}
-
-async function adminToken(env) {
-	const email = process.env.BIO_ADMIN_EMAIL;
-	const password = process.env.BIO_ADMIN_PASSWORD;
-	if (!email || !password) return null;
-	const r = await req(`${env.api}/api/auth/admin-login`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ email, password }),
-	});
-	return r.json?.accessToken ?? null;
 }
 
 async function checkAdmin(env) {
@@ -407,11 +321,4 @@ if (arg === "both") {
 	process.exit(2);
 }
 
-console.log(c.head(`\n${"=".repeat(64)}`));
-console.log(`  ${c.ok(`${pass} passed`)}   ${fail ? c.no(`${fail} failed`) : "0 failed"}`);
-if (fail) {
-	console.log(c.no("\n  Failures:"));
-	for (const f of failures) console.log(`    · ${f}`);
-}
-console.log("");
-process.exit(Math.min(fail, 125));
+summarise();

@@ -20,7 +20,11 @@
 		"boundaries": "pnpm --filter @bio/exam-api lint:boundaries",
 		"verify": "node scripts/e2e/verify.mjs both",
 		"verify:dev": "node scripts/e2e/verify.mjs dev",
-		"verify:demo": "node scripts/e2e/verify.mjs demo"
+		"verify:demo": "node scripts/e2e/verify.mjs demo",
+		"pipeline": "node scripts/e2e/pipeline.mjs dev",
+		"pipeline:dev": "node scripts/e2e/pipeline.mjs dev",
+		"pipeline:demo": "node scripts/e2e/pipeline.mjs demo",
+		"pipeline:both": "node scripts/e2e/pipeline.mjs both"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
