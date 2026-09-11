@@ -7,14 +7,31 @@ import { AuthService } from './auth.service';
 import {
     LoginSyncDto,
     PhoneLoginSyncDto,
+    SendEmailOtpDto,
     SendPhoneOtpDto,
     SyncUserDto,
     UpdateProfileDto,
 } from './dto/auth.dto';
+import { EmailOtpService } from '../common/email-otp.service';
 import { PhoneOtpService } from './phone-otp.service';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+/**
+ * Who issues and checks the email sign-in code.
+ *
+ * `backend` — we do, and `/auth/sync` + `/auth/login-sync` will not mint a JWT
+ * without a valid one.
+ *
+ * Anything else (the default) — Neon Auth does, in the browser, and those two
+ * endpoints trust the caller's word that it happened. That is how this has
+ * always worked and it is why the switch exists: an environment is moved over
+ * deliberately, once its frontend is sending codes, rather than by a deploy
+ * that silently starts rejecting every login.
+ */
+const EMAIL_OTP_BY_BACKEND =
+    (process.env.EMAIL_OTP_PROVIDER?.trim().toLowerCase() ?? '') === 'backend';
 
 @Controller('auth')
 export class AuthController {
@@ -23,6 +40,7 @@ export class AuthController {
         private jwtService: JwtService,
         private partnerAdminApi: PartnerAdminApiClient,
         private phoneOtpService: PhoneOtpService,
+        private emailOtpService: EmailOtpService,
     ) { }
 
     /**
@@ -41,13 +59,40 @@ export class AuthController {
         return { accessToken: token, user };
     }
 
+    /** PUBLIC — issue a sign-in / registration code to an email address. */
+    @Post('email/send-otp')
+    async sendEmailOtp(@Body() dto: SendEmailOtpDto) {
+        return this.emailOtpService.sendOtp('STUDENT', dto.email);
+    }
+
     /**
-     * PUBLIC — called after Neon Auth OTP verification (registration).
-     * Accepts email + profile data in the body (Neon Auth already verified ownership via OTP).
-     * Creates the user in our DB and returns our own signed JWT.
+     * Prove the caller controls the address before any token is minted.
+     *
+     * Where the backend owns the code, a missing or wrong one is fatal. Where
+     * it does not, this is a no-op and the old Neon-verified-in-the-browser
+     * behaviour stands.
+     */
+    private async assertEmailOwnership(email: string, code?: string): Promise<void> {
+        if (!EMAIL_OTP_BY_BACKEND) return;
+        if (!code) {
+            throw new UnauthorizedException(
+                'A verification code is required. Request one first.',
+            );
+        }
+        await this.emailOtpService.verifyOtp('STUDENT', email, code);
+    }
+
+    /**
+     * PUBLIC — registration.
+     *
+     * The code is checked here rather than trusting the client's word that it
+     * verified, for the same reason `login-sync-phone` checks it: an endpoint
+     * that issued a JWT for any address in the body would let anyone register —
+     * and then sign in — as anyone.
      */
     @Post('sync')
     async syncUser(@Body() dto: SyncUserDto) {
+        await this.assertEmailOwnership(dto.email, dto.code);
         const user = await this.authService.syncUser(dto.email, dto);
 
         // Best-effort referral attribution: credit the signup to the partner
@@ -67,11 +112,16 @@ export class AuthController {
     }
 
     /**
-     * PUBLIC — called after Neon Auth OTP sign-in (login).
-     * Looks up the user by email and returns our own signed JWT.
+     * PUBLIC — sign in with an email code.
+     *
+     * Until the backend owned the code this endpoint took an address and
+     * returned a 24-hour JWT for it, trusting that the browser had been through
+     * Neon Auth first. Nothing stopped a caller skipping that step — the same
+     * hole `login-sync-phone` was written to avoid, on the other channel.
      */
     @Post('login-sync')
     async loginSync(@Body() dto: LoginSyncDto) {
+        await this.assertEmailOwnership(dto.email, dto.code);
         const user = await this.authService.getUserByEmail(dto.email);
         if (!user) {
             throw new UnauthorizedException('No account found for this email. Please register first.');

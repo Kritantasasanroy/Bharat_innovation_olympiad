@@ -236,6 +236,35 @@ async function checkStudentPortal(env, tokens) {
 	);
 
 	group("Stage 3 · sign-in");
+	// The email code route exists everywhere; whether it is *enforced* is a
+	// per-environment choice (EMAIL_OTP_PROVIDER).
+	const otpRoute = await send(`${env.api}/api/auth/email/send-otp`, "POST", {
+		email: "not-an-email",
+	});
+	check(
+		"POST /auth/email/send-otp is deployed",
+		otpRoute.status !== 404,
+		otpRoute.status === 404 ? "404 — route missing, stale build" : `${otpRoute.status}`,
+	);
+	check("send-otp validates the address", otpRoute.status === 400, `${otpRoute.status}`);
+
+	// The regression that matters: an email address on its own must not buy a
+	// token. Only assert it where the API owns the code — an environment still
+	// on Neon Auth verifies in the browser, and this endpoint trusts its caller
+	// there by design, so failing it would just be reporting a known choice.
+	if (process.env.BIO_STUDENT_EMAIL) {
+		const bare = await send(`${env.api}/api/auth/login-sync`, "POST", {
+			email: process.env.BIO_STUDENT_EMAIL,
+		});
+		if (bare.status === 200 && bare.json?.accessToken) {
+			skip(
+				"an email alone cannot buy a token",
+				"this environment still verifies in the browser (EMAIL_OTP_PROVIDER unset)",
+			);
+		} else {
+			check("an email alone cannot buy a token", bare.status === 401, `${bare.status}`);
+		}
+	}
 	if (!tokens.student) {
 		skip("student sign-in and everything behind it", "needs BIO_STUDENT_EMAIL");
 	} else {

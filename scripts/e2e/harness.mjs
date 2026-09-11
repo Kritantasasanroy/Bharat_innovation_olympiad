@@ -149,7 +149,23 @@ export async function adminToken(env) {
 	return r.json?.accessToken ?? null;
 }
 
+/**
+ * A student token for the signed-in checks.
+ *
+ * `BIO_STUDENT_TOKEN` first, because on an environment where the API owns the
+ * email code (`EMAIL_OTP_PROVIDER=backend`) there is deliberately no way to get
+ * one from an address alone — that used to work, and it working was the bug:
+ * `/auth/login-sync` handed out a 24-hour JWT to anyone who could name an
+ * account. A checker must not be the reason that stays possible, so it takes a
+ * token an operator minted rather than asking the API to skip its own rule.
+ *
+ * The `login-sync` fallback is for environments still on Neon Auth, where the
+ * browser is what verifies and this endpoint still trusts its caller.
+ */
 export async function studentToken(env) {
+	const supplied = process.env.BIO_STUDENT_TOKEN?.trim();
+	if (supplied) return supplied;
+
 	const email = process.env.BIO_STUDENT_EMAIL;
 	if (!email) return null;
 	const r = await send(`${env.api}/api/auth/login-sync`, "POST", { email });

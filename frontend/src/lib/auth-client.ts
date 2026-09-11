@@ -44,9 +44,43 @@ async function neonFetch(path: string, body: object) {
     return { data: json, error: null };
 }
 
+/**
+ * Who issues the email code.
+ *
+ * `backend` — our own API does, and delivers it through SES from a
+ * `noreply@` address on our domain. `verify` becomes a no-op here: the code is
+ * checked server-side by `/auth/login-sync` and `/auth/sync`, which is also
+ * where it is consumed, so checking it first would burn a single-use code and
+ * leave the sign-in that follows with nothing to present.
+ *
+ * Anything else — Neon Auth does, from its shared `auth@mail.myneon.app`
+ * sender, and the browser is the only thing that checks the result.
+ *
+ * Must match the API's `EMAIL_OTP_PROVIDER`. If the two disagree the failure is
+ * loud rather than silent: a backend expecting a code gets none and refuses the
+ * login.
+ */
+const OTP_BY_BACKEND = process.env.NEXT_PUBLIC_EMAIL_OTP_PROVIDER === 'backend';
+
+/** Ask our own API to email a 6-digit code. */
+async function backendSendOtp(email: string) {
+    try {
+        const { default: api } = await import('@/lib/api');
+        const { data } = await api.post('/auth/email/send-otp', { email });
+        return { data, error: null };
+    } catch (e: any) {
+        return {
+            data: null,
+            error: { message: e?.response?.data?.message || 'Could not send the code.' },
+        };
+    }
+}
+
 /** Ask Neon to email a 6-digit code. */
 const sendOtp = (email: string) =>
-    neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' });
+    OTP_BY_BACKEND
+        ? backendSendOtp(email)
+        : neonFetch('/email-otp/send-verification-otp', { email, type: 'sign-in' });
 
 /** OTP helper functions — call the Better Auth email-otp endpoints directly */
 export const emailOtp = {
@@ -73,7 +107,9 @@ export const emailOtp = {
      * `/auth/sync` and `/auth/login-sync`.
      */
     signIn: (email: string, otp: string) =>
-        neonFetch('/sign-in/email-otp', { email, otp }),
+        OTP_BY_BACKEND
+            ? Promise.resolve({ data: { deferred: true }, error: null })
+            : neonFetch('/sign-in/email-otp', { email, otp }),
 
     /**
      * @deprecated Use signIn() instead.
@@ -81,7 +117,9 @@ export const emailOtp = {
      * so it fails for new users on fresh devices.
      */
     verifyEmail: (email: string, otp: string) =>
-        neonFetch('/sign-in/email-otp', { email, otp }),
+        OTP_BY_BACKEND
+            ? Promise.resolve({ data: { deferred: true }, error: null })
+            : neonFetch('/sign-in/email-otp', { email, otp }),
 };
 
 /**

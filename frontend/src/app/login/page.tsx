@@ -97,7 +97,11 @@ export default function LoginPage() {
                     setIsLoading(false);
                     return;
                 }
-                await loginWithEmail(email);
+                // The code travels with the sign-in. Where our own API owns it,
+                // `signIn` above deferred rather than checked — verifying there
+                // would have consumed a single-use code and left this call with
+                // nothing to present.
+                await loginWithEmail(email, otp);
             }
             router.push('/dashboard');
         } catch (err: any) {

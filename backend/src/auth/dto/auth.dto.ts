@@ -16,6 +16,11 @@ export class SyncUserDto {
     @IsEmail()
     email: string;  // ← email now comes in the body (no JwtAuthGuard needed)
 
+    /** See `LoginSyncDto.code` — required wherever `EMAIL_OTP_PROVIDER=backend`. */
+    @IsString()
+    @IsOptional()
+    code?: string;
+
     /**
      * Mandatory mobile number. Every WhatsApp notification (submission,
      * schedule, result, reminder — see `WhatsAppService`) is sent to this
@@ -94,6 +99,24 @@ export class SyncUserDto {
 export class LoginSyncDto {
     @IsEmail()
     email: string;  // For login flow: just sync/retrieve by email and return our JWT
+
+    /**
+     * The 6-digit code from `POST /auth/email/send-otp`.
+     *
+     * Optional in the DTO but **required at runtime wherever
+     * `EMAIL_OTP_PROVIDER=backend`** — see `AuthController.loginSync`. It is
+     * optional here only so an environment still on Neon Auth keeps working
+     * during the migration; the controller, not the validator, is what enforces
+     * it, because the answer depends on how that environment is configured.
+     */
+    @IsString()
+    @IsOptional()
+    code?: string;
+}
+
+export class SendEmailOtpDto {
+    @IsEmail()
+    email: string;
 }
 
 export class SendPhoneOtpDto {

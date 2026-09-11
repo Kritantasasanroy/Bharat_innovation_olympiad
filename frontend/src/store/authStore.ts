@@ -9,7 +9,7 @@ interface AuthState {
 
     login: (email: string, password: string) => Promise<void>;
     register: (data: any) => Promise<void>;
-    loginWithEmail: (email: string) => Promise<void>;
+    loginWithEmail: (email: string, code?: string) => Promise<void>;
     loginWithPhone: (phone: string, code: string) => Promise<void>;
     logout: () => Promise<void>;
     loadUser: () => Promise<void>;
@@ -46,12 +46,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     },
 
     /**
-     * Student login — called after OTP sign-in succeeds.
-     * POSTs to /auth/login-sync (public endpoint) with just the email.
-     * Gets back our own signed JWT — no Neon session token needed.
+     * Student login.
+     *
+     * `code` is the emailed OTP. Where the API owns the code
+     * (`EMAIL_OTP_PROVIDER=backend`) it verifies and consumes it here and only
+     * then issues a JWT — the same shape as `loginWithPhone`. Where Neon Auth
+     * still owns it the field is simply absent and the endpoint behaves as it
+     * always has.
      */
-    loginWithEmail: async (email: string) => {
-        const { data } = await api.post<{ accessToken: string; user: User }>('/auth/login-sync', { email });
+    loginWithEmail: async (email: string, code?: string) => {
+        const { data } = await api.post<{ accessToken: string; user: User }>('/auth/login-sync', { email, code });
         localStorage.setItem('accessToken', data.accessToken);
         set({ user: data.user, isAuthenticated: true, isLoading: false });
     },

@@ -711,6 +711,11 @@ enum EmailOtpKind {
   PARTNER
   SCHOOL_RESET
   PARTNER_RESET
+  /// A student signing in or registering on the portal. Added when email sign-in
+  /// moved off Neon Auth's hosted endpoints onto this table, which already had
+  /// exactly the right shape — the `kind` discriminator is what keeps a
+  /// student's code from being redeemable on the school or partner flow.
+  STUDENT
 }
 
 /// The email-verify-first step of self-service onboarding: a coordinator or

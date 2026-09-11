@@ -7,6 +7,7 @@ import { SlotModule } from '../slot/slot.module';
 import { UserModule } from '../user/user.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailOtpService } from '../common/email-otp.service';
 import { PhoneOtpService } from './phone-otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -23,7 +24,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         UserModule,
     ],
     controllers: [AuthController],
-    providers: [AuthService, PhoneOtpService, JwtStrategy],
+    providers: [AuthService, PhoneOtpService, EmailOtpService, JwtStrategy],
     exports: [AuthService, JwtModule],
 })
 export class AuthModule { }

@@ -262,6 +262,11 @@ export default function RegisterPage() {
                 termsVersion: TERMS_VERSION,
                 ...(referralCode ? { referralCode } : {}),
                 phone: phone.trim(),
+                // The emailed code. Where our own API owns it, `verifyEmail`
+                // above deferred rather than checked, and this is where it is
+                // proved and consumed — so a registration cannot be completed
+                // for an address the person does not control.
+                code: otp,
             });
             clearReferralCode();
             setSuccess('');

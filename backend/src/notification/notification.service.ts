@@ -3,6 +3,7 @@ import {
     ConsoleEmailProvider,
     EmailProvider,
     ResendEmailProvider,
+    SesEmailProvider,
 } from './email.provider';
 import {
     RenderedEmail,
@@ -33,6 +34,7 @@ import {
     schoolRejectedEmail,
     schoolRevokedEmail,
     slotConfirmedEmail,
+    studentEmailOtpEmail,
     welcomeEmail,
     parentApprovalEmail,
 } from './templates';
@@ -72,12 +74,31 @@ export class NotificationService implements OnModuleInit {
         // onboarding address works untouched for first-run testing.
         const from = process.env.EMAIL_FROM?.trim() || 'onboarding@resend.dev';
 
-        if (apiKey) {
+        // EMAIL_PROVIDER picks the transport explicitly rather than inferring it
+        // from which key happens to be present. Both can be configured at once
+        // during a migration, and "whichever key exists wins" is exactly the
+        // kind of implicit rule that sends mail from the wrong place after an
+        // unrelated deploy. Unset = resend, so nothing changes for an
+        // environment that has not opted in.
+        const provider = (process.env.EMAIL_PROVIDER?.trim() || 'resend').toLowerCase();
+
+        if (provider === 'ses') {
+            // No API key: the SDK resolves the instance profile. STORAGE_REGION
+            // is reused because SES runs in the same Region as the rest of the
+            // stack and a second Region variable would only ever disagree.
+            const region = process.env.SES_REGION?.trim() || process.env.STORAGE_REGION?.trim() || 'ap-south-2';
+            this.email = new SesEmailProvider(
+                from,
+                region,
+                process.env.SES_CONFIGURATION_SET?.trim() || undefined,
+            );
+            this.logger.log(`Email provider: ses (from ${from}, region ${region})`);
+        } else if (apiKey) {
             this.email = new ResendEmailProvider(apiKey, from);
             this.logger.log(`Email provider: resend (from ${from})`);
         } else {
             this.logger.warn(
-                'RESEND_API_KEY not set — emails will be logged, not delivered.',
+                'No email provider configured (EMAIL_PROVIDER=ses or RESEND_API_KEY) — emails will be logged, not delivered.',
             );
         }
 
@@ -252,6 +273,28 @@ export class NotificationService implements OnModuleInit {
     // business action that triggered it.
 
     /** Milestone 1 — registration complete. */
+    /**
+     * The student's sign-in / registration code.
+     *
+     * Bypasses `deliver` on purpose: every other mail here is a notification
+     * about something that already happened, so swallowing a failure is right.
+     * This one *is* the flow — a student is sitting at a code box waiting for
+     * it, and a swallowed failure would leave them there forever with no error
+     * and no code. `EmailOtpService` lets this throw.
+     */
+    async sendEmailOtp(
+        to: string,
+        code: string,
+        purpose: 'sign-in' | 'register',
+        expiresInMinutes = 5,
+    ): Promise<void> {
+        const mail = studentEmailOtpEmail({ code, purpose, expiresInMinutes });
+        await this.email.send({ to, subject: mail.subject, html: mail.html, text: mail.text });
+        // The code itself is never logged — a log line with a live credential in
+        // it is a credential in CloudWatch.
+        this.logger.log(`Sent sign-in code to ${to} (${purpose})`);
+    }
+
     async sendWelcome(to: string, firstName: string, rollNumber?: string | null): Promise<void> {
         await this.deliver(to, welcomeEmail({ firstName, rollNumber, appUrl: this.appUrl }));
     }

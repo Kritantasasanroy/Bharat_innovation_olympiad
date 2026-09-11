@@ -283,6 +283,34 @@ export function partnerEmailVerificationEmail(vars: {
  * application page itself, not a link — the same OTP shape as student
  * registration.
  */
+/**
+ * The student's sign-in / registration code.
+ *
+ * `purpose` changes only the first line. The code itself is valid for either,
+ * so the wording must not imply a student is locked into the flow they started
+ * — a student who asks to register and then signs in instead still has a good
+ * code, and being told otherwise would read as a fault.
+ */
+export function studentEmailOtpEmail(vars: {
+    code: string;
+    purpose: 'sign-in' | 'register';
+    expiresInMinutes: number;
+}): RenderedEmail {
+    const opening =
+        vars.purpose === 'register'
+            ? 'Someone started a Bharat Innovation Olympiad registration with this email address.'
+            : 'Someone asked to sign in to Bharat Innovation Olympiad with this email address.';
+
+    return build(
+        'Your Innovation Olympiad code',
+        'Your sign-in code',
+        `<p style="margin:0 0 12px;">${opening}</p>
+     <p style="margin:0 0 12px;">Enter this code to continue.</p>
+     ${factTable([factRow('Code', vars.code)])}
+     <p style="margin:16px 0 0;color:#6b7280;font-size:14px;">This code expires in ${vars.expiresInMinutes} minutes and can be used once. If you did not ask for it, you can ignore this email — nobody can sign in without it.</p>`,
+    );
+}
+
 export function partnerStartVerificationEmail(vars: { code: string }): RenderedEmail {
     return build(
         'Your Innovation Olympiad partner application code',

@@ -10,7 +10,13 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 5;
 const SEND_WINDOW_MS = 15 * 60 * 1000;
 
-export type EmailOtpKind = 'SCHOOL' | 'PARTNER' | 'SCHOOL_RESET' | 'PARTNER_RESET';
+export type EmailOtpKind =
+    | 'SCHOOL'
+    | 'PARTNER'
+    | 'SCHOOL_RESET'
+    | 'PARTNER_RESET'
+    /** A student signing in or registering on the portal. */
+    | 'STUDENT';
 
 /**
  * Email verify-first, by 6-digit code — the same OTP shape as student
@@ -22,6 +28,12 @@ export type EmailOtpKind = 'SCHOOL' | 'PARTNER' | 'SCHOOL_RESET' | 'PARTNER_RESE
  * proves control of the address. The `_RESET` kinds are namespaced apart from
  * their non-reset counterpart so a code sent for one purpose can never be
  * replayed to complete the other.
+ *
+ * `STUDENT` was added when student email sign-in moved off Neon Auth's hosted
+ * `/email-otp/*` endpoints: Neon sent the code from a shared address we do not
+ * control, and the browser was the only thing that checked the result. The same
+ * namespacing applies — a student's code is not redeemable on a school or
+ * partner flow, and vice versa.
  */
 @Injectable()
 export class EmailOtpService {
@@ -49,6 +61,15 @@ export class EmailOtpService {
                 return this.notifications.sendSchoolPasswordResetCode(email, { code });
             case 'PARTNER_RESET':
                 return this.notifications.sendPartnerPasswordResetCode(email, { code });
+            case 'STUDENT':
+                // The only kind that lets a delivery failure through. The others
+                // are steps in a form a person is filling in and can retry; this
+                // one *is* the sign-in, so a student who is told "code sent"
+                // when nothing was sent has no way forward and no error to act
+                // on. `sendEmailOtp` throws, and that is the point.
+                return this.notifications
+                    .sendEmailOtp(email, code, 'sign-in', Math.floor(CODE_TTL_MS / 60_000))
+                    .then(() => true);
         }
     }
 
