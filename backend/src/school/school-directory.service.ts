@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PincodeService } from '../geo/pincode.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddSchoolDto } from './dto/school.dto';
 import { isValidPincode, normalizeSchoolCode, schoolNameKey } from './school-directory.helpers';
@@ -69,10 +68,7 @@ const toEntry = (s: {
  */
 @Injectable()
 export class SchoolDirectoryService {
-    constructor(
-        private prisma: PrismaService,
-        private pincode: PincodeService,
-    ) {}
+    constructor(private prisma: PrismaService) {}
 
     /**
      * Search the directory of **onboarded** schools. Student-added schools that
@@ -186,9 +182,11 @@ export class SchoolDirectoryService {
     }
 
     /**
-     * A student's school is not listed, so they add it by name + pincode. City
-     * and state come from the pincode, never from the student, so two people
-     * adding the same school agree about where it is.
+     * A student's school is not listed, so they add it by name, pincode, city
+     * and state. City/state are resolved client-side from the pincode when
+     * possible (via `/geo/pincode/:pincode`, the same lookup this service used
+     * to run itself) but are taken as given here — a client that typed them
+     * manually, because the lookup didn't have that pincode, is not blocked.
      *
      * Idempotent by `(nameKey, pincode)`: adding a school that already exists
      * returns the existing row rather than creating a second one. That holds even
@@ -204,6 +202,11 @@ export class SchoolDirectoryService {
             throw new BadRequestException('A pincode is six digits, e.g. 441108.');
         }
         const pincode = dto.pincode.trim();
+        const city = dto.city.trim();
+        const state = dto.state.trim();
+        if (!city || !state) {
+            throw new BadRequestException('Enter the school\'s city and state.');
+        }
 
         const existing = await this.prisma.school.findUnique({
             where: { nameKey_pincode: { nameKey, pincode } },
@@ -219,8 +222,6 @@ export class SchoolDirectoryService {
         });
         if (existing) return toEntry(existing);
 
-        const location = await this.pincode.lookup(pincode);
-
         try {
             const school = await this.prisma.school.create({
                 data: {
@@ -229,8 +230,8 @@ export class SchoolDirectoryService {
                     // Student-added schools are not assigned a code. They are only
                     // visible to staff in the "Student-onboarded schools" section.
                     code: null,
-                    city: location.city,
-                    state: location.state,
+                    city,
+                    state,
                     pincode,
                     // No coordinator and no portal until staff approve a request.
                     onboardedAt: null,

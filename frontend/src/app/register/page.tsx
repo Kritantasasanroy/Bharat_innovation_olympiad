@@ -11,6 +11,7 @@ import { emailOtp, isValidPhone } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import { describeCameraError, describeError } from '@/lib/errors';
 import SchoolPicker from '@/components/SchoolPicker';
+import { GENDERS } from '@/components/GuardianForm';
 import GuardianStep from './steps/GuardianStep';
 import PaymentStep from './steps/PaymentStep';
 import PresenceStep from './steps/PresenceStep';
@@ -18,34 +19,40 @@ import type { DirectorySchool } from '@/lib/schools';
 import { FormEvent, useState, useEffect } from 'react';
 
 /**
- * Student registration, in six steps.
+ * Student registration, in five steps.
  *
  * ## The order, and why it is this order
  *
- * `presence` → `details` → `verify` → `payment` → `face` → `guardian`
+ * `presence` → `details` → `verify` → `payment` → `guardian`
  *
  *  - **presence first**, before a single field: the student has to be at the
- *    keyboard for the face scan, and discovering that at step 5 is too late.
- *    It also carries the T&C acceptance, so nobody types their details before
- *    seeing what they are agreeing to.
+ *    keyboard for the face scan, and discovering that at the last step is too
+ *    late. It also carries the T&C acceptance, so nobody types their details
+ *    before seeing what they are agreeing to.
+ *  - **details now also collects the parent/guardian's own contact details,
+ *    the ward's date of birth and gender** — everything about the family that
+ *    isn't the face scan, the ID document or the consents themselves. That
+ *    used to live on the final step, asked of a parent who had usually
+ *    wandered off by then; collecting it up front means the final step is
+ *    something the participant can finish entirely on their own.
  *  - **verify before the account exists**: the account is created at the end of
  *    `verify`, once the email is proven. Everything after that point can rely on
- *    a real, authenticated user, which is why `payment`, `face` and `guardian`
- *    can simply call authenticated endpoints.
- *  - **payment before face**: paying confirms the season and unlocks the
- *    dashboard. If a student abandons during the face scan they can still sign
+ *    a real, authenticated user, which is why `payment` and `guardian` can
+ *    simply call authenticated endpoints.
+ *  - **payment before guardian**: paying confirms the season and unlocks the
+ *    dashboard. If a student abandons during the last step they can still sign
  *    in and complete it later.
- *  - **face before guardian**: it is the step that needs the student personally,
- *    so it happens while they are certainly still there. The parent section can
- *    be finished by a parent leaning over afterwards.
- *  - **guardian last**: it is the only step that does not have to be done by the
- *    participant, so it is placed last when the student may need a parent.
+ *  - **guardian last, and it is "Student identification"**: face scan, ID
+ *    upload and the two consents, in one place. The face scan needs the
+ *    student personally, so it happens first on this page, while they are
+ *    certainly still there; the ID upload and consent that follow can be
+ *    finished by a parent leaning over afterwards.
  *
  * Each step lives in its own component under `./steps/`. Only `details` and
  * `verify` remain inline, because they share the form state and the OTP handshake.
  */
 
-type Step = 'presence' | 'details' | 'verify' | 'payment' | 'face' | 'guardian';
+type Step = 'presence' | 'details' | 'verify' | 'payment' | 'guardian';
 
 /** Ordered, so the progress indicator and the labels derive from one list. */
 const STEPS: { id: Step; label: string }[] = [
@@ -53,8 +60,7 @@ const STEPS: { id: Step; label: string }[] = [
     { id: 'details', label: 'Your details' },
     { id: 'verify', label: 'Verify email' },
     { id: 'payment', label: 'Payment' },
-    { id: 'face', label: 'Face scan' },
-    { id: 'guardian', label: 'Parent consent' },
+    { id: 'guardian', label: 'Student identification' },
 ];
 
 const SUBTITLES: Record<Step, string> = {
@@ -62,8 +68,7 @@ const SUBTITLES: Record<Step, string> = {
     details: 'Create your participant account',
     verify: 'Verify your email',
     payment: 'Complete your payment',
-    face: 'Enrol your face',
-    guardian: 'Parent or guardian consent',
+    guardian: 'Face scan, ID and consent',
 };
 
 export default function RegisterPage() {
@@ -96,18 +101,30 @@ export default function RegisterPage() {
     // Mobile number stored for WhatsApp notifications.
     const [phone, setPhone] = useState('');
 
+    // ── Parent/guardian details, collected here now instead of on the final
+    // step (see the module doc comment above for why). A single name field —
+    // GuardianForm still has two columns for the standalone `/guardian`
+    // backfill page, but the whole name is sent as `guardianFirstName`; the
+    // backend accepts an empty `guardianLastName`.
+    const [guardianName, setGuardianName] = useState('');
+    const [guardianEmail, setGuardianEmail] = useState('');
+    const [guardianPhone, setGuardianPhone] = useState('');
+    const [gender, setGender] = useState('');
+    const [dob, setDob] = useState('');
+
     // No inline verify step: the code is submitted with the form and checked
     // server-side at /auth/sync. Verifying here would consume the single-use
     // code before registration could use it.
 
-    // Mandatory face enrollment (after account creation)
+    // Mandatory face enrollment (after account creation) — now a section on
+    // the "Student identification" step rather than a step of its own.
     const [faceCameraOn, setFaceCameraOn] = useState(false);
     const [faceCapturing, setFaceCapturing] = useState(false);
     const [faceMsg, setFaceMsg] = useState('');
+    const [faceScanDone, setFaceScanDone] = useState(false);
     const {
         videoRef,
         isLoaded: modelsLoaded,
-        loadingProgress,
         startEnrollmentCamera,
         stopProctoring,
         captureDescriptor,
@@ -149,8 +166,8 @@ export default function RegisterPage() {
             const ok = await enrollFace(descriptor, photo);
             if (ok) {
                 stopProctoring();
-                // Face enrolled — proceed to parent consent.
-                setStep('guardian');
+                // Face enrolled — the rest of this same step (ID + consent) unlocks.
+                setFaceScanDone(true);
             } else {
                 setFaceMsg(
                     "We couldn't save your face scan. Make sure your whole face is lit and in frame, then capture again.",
@@ -200,6 +217,30 @@ export default function RegisterPage() {
         }
         if (!formData.email.trim()) {
             setError('Please enter your email address.');
+            return;
+        }
+        // These four are collected here now but only submitted at the final
+        // "Student identification" step, whose form no longer has fields for
+        // them (see GuardianStep's `hideGuardianInfoFields`) — so they have to
+        // be right before the student ever leaves this page.
+        if (!guardianName.trim()) {
+            setError("Please enter the parent or guardian's name.");
+            return;
+        }
+        if (!guardianEmail.trim()) {
+            setError("Please enter the parent or guardian's email address.");
+            return;
+        }
+        if (!guardianPhone.trim()) {
+            setError("Please enter the parent or guardian's mobile number.");
+            return;
+        }
+        if (!dob) {
+            setError("Please enter the participant's date of birth.");
+            return;
+        }
+        if (!gender) {
+            setError("Please select the participant's gender.");
             return;
         }
 
@@ -286,7 +327,7 @@ export default function RegisterPage() {
             clearReferralCode();
             setSuccess('');
 
-            // Account created — payment is next, then face enrollment and parent consent.
+            // Account created — payment is next, then student identification.
             setStep('payment');
         } catch (err: any) {
             console.error('Verify OTP error:', err);
@@ -321,9 +362,9 @@ export default function RegisterPage() {
     return (
         <div className="auth-page">
             {/* Limon walks through registration, once, and only on the details
-                step — the later steps are OTP entry, payment, a face scan and a
-                parent section, each of which is a single focused action that a tour
-                would only get in the way of. */}
+                step — the later steps are OTP entry, payment, and student
+                identification, each of which is a single focused action that a
+                tour would only get in the way of. */}
             <LimonTour tourId="register" ready={step === 'details'} />
             <div style={{ position: 'fixed', top: 'var(--space-4)', right: 'var(--space-4)', zIndex: 100 }}>
                 <ThemeToggle />
@@ -341,7 +382,7 @@ export default function RegisterPage() {
                     <p className="auth-subtitle">{SUBTITLES[step]}</p>
                 </div>
 
-                {/* Progress — six steps is enough that "am I nearly done?" needs answering. */}
+                {/* Progress — five steps is enough that "am I nearly done?" needs answering. */}
                 <ol className="register-progress" aria-label="Registration progress" data-limon="register-steps">
                     {STEPS.map((s, i) => (
                         <li
@@ -378,83 +419,31 @@ export default function RegisterPage() {
                     <PaymentStep
                         studentEmail={user?.email ?? formData.email}
                         rollNumber={user?.rollNumber}
-                        onDone={() => { setError(''); setStep('face'); }}
+                        onDone={() => { setError(''); setStep('guardian'); }}
                     />
                 ) : step === 'guardian' ? (
                     <GuardianStep
                         studentName={`${formData.firstName} ${formData.lastName}`.trim() || undefined}
-                        onDone={() => router.push('/feedback/registration')}
+                        guardianInfo={{
+                            guardianFirstName: guardianName.trim(),
+                            // Not collected on this flow — the backend no longer
+                            // requires it (see `SubmitGuardianDto.relationship`).
+                            relationship: '',
+                            guardianEmail: guardianEmail.trim(),
+                            guardianPhone: guardianPhone.trim(),
+                            studentDob: dob,
+                            gender,
+                        }}
+                        videoRef={videoRef}
+                        modelsLoaded={modelsLoaded}
+                        faceCameraOn={faceCameraOn}
+                        faceCapturing={faceCapturing}
+                        faceMsg={faceMsg}
+                        faceScanDone={faceScanDone}
+                        onStartFaceCapture={handleStartFaceCapture}
+                        onCaptureFace={handleCaptureFace}
+                        onDone={() => { stopProctoring(); router.push('/feedback/registration'); }}
                     />
-                ) : step === 'face' ? (
-                    <div className="auth-form">
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
-                            Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor used to verify
-                            you during the exam, and this one photo is kept and printed on your certificate. This step cannot be skipped, and{' '}
-                            <strong>the participant must do it themselves ( Not parents or somebody else)</strong>.
-                        </p>
-
-                        <div className="scan-warning" role="note">
-                            <strong>This scan is the participant&apos;s exam identity.</strong> On exam day the
-                            same face is checked against the photo ID uploaded during registration, and again
-                            by the camera continuously throughout the paper. If the person sitting the exam does
-                            not match this scan, <strong>the attempt can be disqualified.</strong> So scan the
-                            actual participant now, in good light, with nothing covering the face.
-                        </div>
-
-                        {faceMsg && (
-                            <div style={{
-                                padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center',
-                                background: faceMsg.startsWith('No face') || faceMsg.startsWith('Enrollment failed') || faceMsg.startsWith('Could not access')
-                                    ? 'rgba(239,68,68,0.12)' : 'var(--bg-elevated)',
-                                color: faceMsg.startsWith('No face') || faceMsg.startsWith('Enrollment failed') || faceMsg.startsWith('Could not access')
-                                    ? '#dc2626' : 'var(--text-secondary)',
-                                border: '1px solid var(--border-color)',
-                            }}>
-                                {faceMsg}
-                            </div>
-                        )}
-
-                        {faceCameraOn && (
-                            <div style={{ position: 'relative', margin: '0 auto 1.25rem', borderRadius: '12px', overflow: 'hidden', background: '#000', maxWidth: '320px' }}>
-                                <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', display: 'block', transform: 'scaleX(-1)' }} />
-                                <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--primary-400)', borderRadius: '12px', pointerEvents: 'none' }} />
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                            {!faceCameraOn ? (
-                                <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={handleStartFaceCapture}>
-                                    Enable Camera & Enroll Face
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="btn btn-primary btn-lg auth-submit"
-                                    onClick={handleCaptureFace}
-                                    disabled={faceCapturing || !modelsLoaded}
-                                >
-                                    {faceCapturing ? 'Saving…' : modelsLoaded ? 'Capture & Continue' : loadingProgress || 'Loading models…'}
-                                </button>
-                            )}
-
-                            <button
-                                type="button"
-                                className="btn"
-                                onClick={() => { stopProctoring(); setStep('guardian'); }}
-                                style={{
-                                    background: 'transparent',
-                                    color: 'var(--text-secondary)',
-                                    fontSize: '0.85rem',
-                                    textDecoration: 'underline',
-                                    border: 'none',
-                                    padding: '0.25rem',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                Skip for now (Enroll face later from a device with camera)
-                            </button>
-                        </div>
-                    </div>
                 ) : step === 'details' ? (
                     <form onSubmit={handleSendOtp} className="auth-form">
                         <div className="form-row">
@@ -477,25 +466,79 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="input-group">
-                            <label className="input-label" htmlFor="email">Email Address</label>
+                            <label className="input-label" htmlFor="guardianName">Parent / Guardian Name</label>
                             <input
-                                id="email" name="email" type="email" className="input-field"
-                                placeholder="you@example.com" value={formData.email}
-                                onChange={handleChange} required suppressHydrationWarning
+                                id="guardianName" name="guardianName" type="text" className="input-field"
+                                placeholder="Full name" value={guardianName}
+                                onChange={(e) => setGuardianName(e.target.value)} required
                             />
                         </div>
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="email">Participant&apos;s Email</label>
+                                <input
+                                    id="email" name="email" type="email" className="input-field"
+                                    placeholder="you@example.com" value={formData.email}
+                                    onChange={handleChange} required suppressHydrationWarning
+                                />
+                                <p className="input-hint">We&apos;ll send your verification code here.</p>
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianEmail">Parent&apos;s Email</label>
+                                <input
+                                    id="guardianEmail" name="guardianEmail" type="email" className="input-field"
+                                    placeholder="parent@example.com" value={guardianEmail}
+                                    onChange={(e) => setGuardianEmail(e.target.value)} required
+                                />
+                            </div>
+                        </div>
 
-                        <div className="input-group">
-                            <label className="input-label" htmlFor="phone">
-                                Mobile Number <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(for WhatsApp exam updates)</span>
-                            </label>
-                            <input
-                                id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
-                                className="input-field" placeholder="+91 98765 43210"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                suppressHydrationWarning
-                            />
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="phone">
+                                    Participant&apos;s Mobile <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(for WhatsApp updates)</span>
+                                </label>
+                                <input
+                                    id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
+                                    className="input-field" placeholder="+91 98765 43210"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    suppressHydrationWarning
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianPhone">
+                                    Parent&apos;s Mobile <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(preferred WhatsApp)</span>
+                                </label>
+                                <input
+                                    id="guardianPhone" name="guardianPhone" type="tel" inputMode="tel" autoComplete="tel"
+                                    className="input-field" placeholder="+91 98765 43210"
+                                    value={guardianPhone}
+                                    onChange={(e) => setGuardianPhone(e.target.value)} required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="gender">Gender</label>
+                                <select
+                                    id="gender" name="gender" className="input-field" required
+                                    value={gender} onChange={(e) => setGender(e.target.value)}
+                                >
+                                    <option value="" disabled>Select…</option>
+                                    {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                                </select>
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="dob">Date of Birth</label>
+                                <input
+                                    id="dob" name="dob" type="date" className="input-field" required
+                                    max={new Date().toISOString().slice(0, 10)}
+                                    value={dob}
+                                    onChange={(e) => setDob(e.target.value)}
+                                />
+                            </div>
                         </div>
 
                         <div className="input-group" data-limon="register-class">

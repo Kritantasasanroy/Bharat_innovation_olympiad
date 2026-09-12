@@ -59,7 +59,7 @@ export const PRESENCE_POINTS = [
     {
         icon: '⏱️',
         title: 'Set aside about ten minutes - Registration runs in one sitting',
-        body: 'details, email verification, payment, face scan, and parent consent.',
+        body: 'details, email verification, payment, and student identification (face scan, ID and consent).',
     },
 ] as const;
 
@@ -86,7 +86,7 @@ export const NEXT_STEPS = [
 /** The confirmation shown once payment is received. */
 export const THANK_YOU = {
     heading: 'Payment received — you\'re almost registered.',
-    body: 'Your roll number has already been issued. Continue with the face scan and parent consent to finish. We have emailed your roll number, so keep that email safe for further reference.',
+    body: 'Your roll number has already been issued. Continue with student identification (face scan, ID and consent) to finish. We have emailed your roll number, so keep that email safe for further reference.',
 } as const;
 
 /**

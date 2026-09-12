@@ -109,9 +109,9 @@ export default function PresenceStep({
                         onChange={(e) => onDataConsentChange(e.target.checked)}
                     />
                     <span>
-                        I agree that the details entered here may be processed to run the Olympiad,
-                        registering the participant, proctoring their exam, marking, ranking and issuing
-                        certificates, reports, as well as other programs as part of the ecosystem . A parent or guardian confirms this again later in the form.
+                        I give my consent for the collection and use of the ward&apos;s details and face
+                        scan for Olympiad registration, verification, and participation and related
+                        activities.
                     </span>
                 </label>
             </div>

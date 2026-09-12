@@ -40,10 +40,13 @@ const SECTION_MAX_LENGTH = 10;
  *     its own. Pincode is the fast path: it hits an indexed column and is
  *     instant. Name needs three or more characters.
  *  2. Enter the school code staff issued the school on approval, which assigns
- *     the student to it directly.
- *  3. Add the school, if it isn’t listed. City and state come from the pincode,
- *     so two students adding the same school agree about where it is; the
- *     backend refuses to create a duplicate.
+ *     the student to it directly. A small link, not a tab of equal weight —
+ *     almost nobody has one, and most students should never see it as a choice
+ *     to make.
+ *  3. Add the school, if it isn't listed, with its name, city, state and
+ *     pincode. The pincode fills in city and state automatically when it is
+ *     recognised — entered first, as the fast path — but a student can also
+ *     just type them in, and typing over an auto-filled value always wins.
  *
  * ## School is required
  *
@@ -63,7 +66,8 @@ const SECTION_MAX_LENGTH = 10;
  * Free text, not an A–H dropdown: Indian schools name sections inconsistently
  * ("A", "B2", "Rose", "Alpha") and a fixed list would leave real students unable
  * to register. It appears only after a school is picked, so the two are never out
- * of step.
+ * of step. Required — a school-level report cannot be split into classes if a
+ * third of its rows have no section.
  */
 export default function SchoolPicker({ value, onChange, section, onSectionChange }: Props) {
     const [mode, setMode] = useState<Mode>('search');
@@ -83,8 +87,18 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
     const [adding, setAdding] = useState(false);
     const [newName, setNewName] = useState('');
     const [addPincode, setAddPincode] = useState('');
-    const [location, setLocation] = useState<{ city: string; state: string } | null>(null);
+    const [addCity, setAddCity] = useState('');
+    const [addState, setAddState] = useState('');
     const [locating, setLocating] = useState(false);
+    /**
+     * Once a student edits city or state themselves, the pincode lookup must
+     * never overwrite it again — "if pin entered first auto-detect, otherwise
+     * don't auto-select" cuts both ways: a pincode entered *after* a manual
+     * edit does not get to win either. Refs, not state, so touching a field
+     * doesn't re-run the lookup effect.
+     */
+    const cityTouchedRef = useRef(false);
+    const stateTouchedRef = useRef(false);
 
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -150,23 +164,44 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
         };
     }, [name, pincode, mode, value]);
 
-    // Fill city and state as soon as a complete pincode is typed (add form only).
+    // Fill city and state as soon as a complete pincode is typed (add form
+    // only) — but only into whichever of the two the student hasn't already
+    // edited themselves.
     useEffect(() => {
         const clean = addPincode.replace(/\D/g, '').trim();
-        if (clean.length !== PINCODE_LENGTH) {
-            setLocation(null);
-            return;
-        }
+        if (clean.length !== PINCODE_LENGTH) return;
         let cancelled = false;
         setLocating(true);
         lookupPincode(clean)
-            .then((found) => !cancelled && setLocation({ city: found.city, state: found.state }))
-            .catch(() => !cancelled && setLocation(null))
+            .then((found) => {
+                if (cancelled) return;
+                if (!cityTouchedRef.current) setAddCity(found.city);
+                if (!stateTouchedRef.current) setAddState(found.state);
+            })
+            .catch(() => {
+                // Pincode not recognised — leave city/state exactly as they are;
+                // this is the "otherwise don't auto-select" case, not an error.
+            })
             .finally(() => !cancelled && setLocating(false));
         return () => {
             cancelled = true;
         };
     }, [addPincode]);
+
+    const resetAddLocation = useCallback(() => {
+        setAddCity('');
+        setAddState('');
+        cityTouchedRef.current = false;
+        stateTouchedRef.current = false;
+    }, []);
+
+    const openAddSchool = useCallback(() => {
+        setNewName(name);
+        setAddPincode(pincode);
+        resetAddLocation();
+        setAdding(true);
+        setOpen(false);
+    }, [name, pincode, resetAddLocation]);
 
     const select = useCallback(
         (school: DirectorySchool) => {
@@ -194,7 +229,14 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
         setBusy(true);
         setError('');
         try {
-            select(await addSchool(newName, addPincode.replace(/\D/g, '')));
+            select(
+                await addSchool(
+                    newName,
+                    addCity.trim(),
+                    addState.trim(),
+                    addPincode.replace(/\D/g, ''),
+                ),
+            );
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Could not select your school.');
         } finally {
@@ -270,36 +312,12 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
     return (
         <div className="input-group" ref={containerRef} style={{ position: 'relative' }}>
             <label className="input-label" htmlFor="schoolName">
-                School
+                School <span className="input-required">required</span>
             </label>
             <p className="input-hint" style={{ marginTop: 0, marginBottom: '0.5rem' }}>
                 Your results are grouped by school, so school level ranking & reports can be made.
-                Every participant needs one. Most participants should just search by name: a school code is only for participants whose school handed them one.
+                Every participant needs one.
             </p>
-
-            <div className="school-tabs">
-                <button
-                    type="button"
-                    className={`school-tab ${mode === 'search' ? 'active' : ''}`}
-                    onClick={() => {
-                        setMode('search');
-                        setError('');
-                    }}
-                >
-                    Search
-                </button>
-                <button
-                    type="button"
-                    className={`school-tab ${mode === 'code' ? 'active' : ''}`}
-                    onClick={() => {
-                        setMode('code');
-                        setError('');
-                        setAdding(false);
-                    }}
-                >
-                    I have a school code
-                </button>
-            </div>
 
             {mode === 'code' ? (
                 <>
@@ -335,20 +353,33 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         message from the school. <strong>You do not need one:</strong> if you
                         haven&apos;t been given a code, just search for your school by name instead.
                     </p>
+                    <p className="school-add-prompt">
+                        <button
+                            type="button"
+                            className="school-add-prompt__link"
+                            onClick={() => {
+                                setMode('search');
+                                setError('');
+                            }}
+                        >
+                            ← Back to school search
+                        </button>
+                    </p>
                 </>
             ) : adding ? (
-                /* Two fields and nothing else. Everything the directory needs
-                   beyond the name comes from the pincode, so a student who
-                   cannot find their school types what is on their uniform and
-                   what is on their address, and is done. */
+                /* Name plus the three location fields. Pincode fills city and
+                   state in automatically when it's recognised, but both stay
+                   editable — a student whose pincode the lookup doesn't know
+                   just types them in instead. */
                 <div className="school-add">
                     <p className="school-add__intro">
                         <strong>Select your school</strong>
                         <span>
-                            Type the full name as your school writes it, and the pincode of the
-                            area it is in. We fill in the city and state for you. Your school will
-                            not appear in the public list until it is officially onboarded, but you
-                            can continue registering.
+                            Type the full name as your school writes it, then its pincode. If we
+                            recognise the pincode we fill in the city and state for you — otherwise
+                            (or if it&apos;s not quite right) just type them in yourself. Your school
+                            will not appear in the public list until it is officially onboarded, but
+                            you can continue registering.
                         </span>
                     </p>
                     <label className="input-label" htmlFor="newSchoolName">
@@ -361,6 +392,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         value={newName}
                         onChange={(event) => setNewName(event.target.value)}
                     />
+
                     <label className="input-label" htmlFor="newSchoolPincode">
                         School pincode
                     </label>
@@ -375,15 +407,41 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                             setAddPincode(event.target.value.replace(/\D/g, '').slice(0, PINCODE_LENGTH))
                         }
                     />
-                    <p className="school-add__hint">
-                        {locating
-                            ? 'Looking up your pincode…'
-                            : location
-                              ? `📍 ${location.city}, ${location.state}`
-                              : addPincode.replace(/\D/g, '').length === PINCODE_LENGTH
-                                ? 'We could not find that pincode. Check the six digits and try again.'
-                                : 'City and state are filled in from your pincode.'}
-                    </p>
+                    {locating && <p className="input-hint">Looking up your pincode…</p>}
+
+                    <div className="form-row">
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="newSchoolCity">
+                                City
+                            </label>
+                            <input
+                                id="newSchoolCity"
+                                className="input-field"
+                                placeholder="e.g. Nagpur"
+                                value={addCity}
+                                onChange={(event) => {
+                                    cityTouchedRef.current = true;
+                                    setAddCity(event.target.value);
+                                }}
+                            />
+                        </div>
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="newSchoolState">
+                                State
+                            </label>
+                            <input
+                                id="newSchoolState"
+                                className="input-field"
+                                placeholder="e.g. Maharashtra"
+                                value={addState}
+                                onChange={(event) => {
+                                    stateTouchedRef.current = true;
+                                    setAddState(event.target.value);
+                                }}
+                            />
+                        </div>
+                    </div>
+
                     <div className="school-add__actions">
                         <button
                             type="button"
@@ -392,7 +450,7 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                 setAdding(false);
                                 setNewName('');
                                 setAddPincode('');
-                                setLocation(null);
+                                resetAddLocation();
                             }}
                         >
                             Back to search
@@ -400,7 +458,13 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                         <button
                             type="button"
                             className="btn btn-primary btn-sm"
-                            disabled={busy || !newName.trim() || !location}
+                            disabled={
+                                busy ||
+                                !newName.trim() ||
+                                !addCity.trim() ||
+                                !addState.trim() ||
+                                addPincode.replace(/\D/g, '').length !== PINCODE_LENGTH
+                            }
                             onClick={() => void submitNewSchool()}
                         >
                             {busy ? 'Saving…' : 'Select school'}
@@ -481,36 +545,37 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                 <button
                                     type="button"
                                     className="school-option school-option--add"
-                                    onClick={() => {
-                                        setNewName(name);
-                                        setAddPincode(pincode);
-                                        setAdding(true);
-                                        setOpen(false);
-                                    }}
+                                    onClick={openAddSchool}
                                 >
                                     + My school isn’t listed, select it
                                 </button>
                             )}
                         </div>
                     )}
-                    {/* The same escape hatch, outside the dropdown. */}
+                    {/* Two small, equally quiet escape hatches — neither is the
+                        common case, so neither gets a tab's worth of visual weight. */}
                     {!adding && (
-                        <p className="school-add-prompt">
-                            Can’t find it?{' '}
-                            <button
-                                type="button"
-                                className="school-add-prompt__link"
-                                onClick={() => {
-                                    setNewName(name);
-                                    setAddPincode(pincode);
-                                    setAdding(true);
-                                    setOpen(false);
-                                }}
-                            >
-                                Select your school
-                            </button>{' '}
-                            (it takes the name and a pincode).
-                        </p>
+                        <>
+                            <p className="school-add-prompt">
+                                Can’t find it?{' '}
+                                <button type="button" className="school-add-prompt__link" onClick={openAddSchool}>
+                                    Select your school
+                                </button>{' '}
+                                (it takes the name, city, state and pincode).
+                            </p>
+                            <p className="school-add-prompt">
+                                <button
+                                    type="button"
+                                    className="school-add-prompt__link"
+                                    onClick={() => {
+                                        setMode('code');
+                                        setError('');
+                                    }}
+                                >
+                                    I have a school code instead
+                                </button>
+                            </p>
+                        </>
                     )}
                 </>
             )}

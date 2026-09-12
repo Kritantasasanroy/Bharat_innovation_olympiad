@@ -29,8 +29,9 @@ export default function PaymentTerms({ compact = false }: { compact?: boolean })
                     account, or a later season.
                 </li>
                 <li>
-                    <strong>Your schedule is fixed and final.</strong> After paying you choose/allot an exam schedule for your exam. Once confirmed, a schedule cannot be changed from your
-                    account.
+                    <strong>Your exam schedule is fixed and final.</strong> After paying you will be
+                    allotted an exam schedule for your exam. Once confirmed, a schedule cannot be
+                    changed from your account.
                 </li>
                 {!compact && (
                     <li>

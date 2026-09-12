@@ -99,6 +99,9 @@ export const EMPTY_GUARDIAN: GuardianFormValues = {
 export default function GuardianForm({
     studentName,
     initial,
+    hideGuardianInfoFields = false,
+    requireFaceScan = false,
+    faceScanDone = false,
     submitLabel,
     busy,
     error,
@@ -107,6 +110,18 @@ export default function GuardianForm({
     /** Named in the consent wording so a parent knows exactly who they are consenting for. */
     studentName?: string;
     initial?: Partial<GuardianFormValues>;
+    /**
+     * The registration flow now collects the parent/guardian's name, email,
+     * phone, relationship, date of birth and gender earlier, on the details
+     * step — `initial` carries them in already, and this page only needs the
+     * ID document and the two consents. The standalone `/guardian` page (for
+     * a student who registered before any of this existed) still needs all of
+     * it, so it leaves this `false` and gets the full form.
+     */
+    hideGuardianInfoFields?: boolean;
+    /** Registration flow only: the face scan lives above this form, on the same page. */
+    requireFaceScan?: boolean;
+    faceScanDone?: boolean;
     submitLabel: string;
     busy: boolean;
     error?: string;
@@ -211,7 +226,7 @@ export default function GuardianForm({
         e.preventDefault();
         setLocalError('');
 
-        if (!values.guardianFirstName.trim() || !values.guardianLastName.trim()) {
+        if (!values.guardianFirstName.trim()) {
             setLocalError("Enter the parent or guardian's full name.");
             return;
         }
@@ -256,6 +271,10 @@ export default function GuardianForm({
             setLocalError('Both consents are required before the participant can appear for the exam');
             return;
         }
+        if (requireFaceScan && !faceScanDone) {
+            setLocalError('Complete the face scan above before submitting.');
+            return;
+        }
         await onSubmit(values);
     };
 
@@ -270,109 +289,113 @@ export default function GuardianForm({
                 {studentName ? ` ${studentName}` : ' the ward'} can appear for the olympiad exam.
             </p>
 
-            <fieldset className="guardian-fieldset">
-                <legend>Parent or guardian</legend>
+            {!hideGuardianInfoFields && (
+                <>
+                    <fieldset className="guardian-fieldset">
+                        <legend>Parent or guardian</legend>
 
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianFirstName">First name</label>
-                        <input
-                            id="guardianFirstName" className="input-field" type="text" required
-                            autoComplete="off" maxLength={80}
-                            value={values.guardianFirstName}
-                            onChange={(e) => set('guardianFirstName', e.target.value)}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianLastName">Last name</label>
-                        <input
-                            id="guardianLastName" className="input-field" type="text" required
-                            autoComplete="off" maxLength={80}
-                            value={values.guardianLastName}
-                            onChange={(e) => set('guardianLastName', e.target.value)}
-                        />
-                    </div>
-                </div>
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianFirstName">First name</label>
+                                <input
+                                    id="guardianFirstName" className="input-field" type="text" required
+                                    autoComplete="off" maxLength={80}
+                                    value={values.guardianFirstName}
+                                    onChange={(e) => set('guardianFirstName', e.target.value)}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianLastName">Last name</label>
+                                <input
+                                    id="guardianLastName" className="input-field" type="text" required
+                                    autoComplete="off" maxLength={80}
+                                    value={values.guardianLastName}
+                                    onChange={(e) => set('guardianLastName', e.target.value)}
+                                />
+                            </div>
+                        </div>
 
-                <div className="input-group">
-                    <label className="input-label" htmlFor="relationship">Relationship to the ward</label>
-                    <select
-                        id="relationship" className="input-field"
-                        value={values.relationship}
-                        onChange={(e) => set('relationship', e.target.value)}
-                    >
-                        {RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                </div>
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="relationship">Relationship to the ward</label>
+                            <select
+                                id="relationship" className="input-field"
+                                value={values.relationship}
+                                onChange={(e) => set('relationship', e.target.value)}
+                            >
+                                {RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                        </div>
 
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianEmail">Email address</label>
-                        <input
-                            id="guardianEmail" className="input-field" type="email" required
-                            inputMode="email" autoComplete="email" placeholder="parent@example.com"
-                            value={values.guardianEmail}
-                            onChange={(e) => set('guardianEmail', e.target.value)}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="guardianPhone">Mobile number</label>
-                        <input
-                            id="guardianPhone" className="input-field" type="tel" required
-                            inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210"
-                            value={values.guardianPhone}
-                            onChange={(e) => set('guardianPhone', e.target.value)}
-                        />
-                    </div>
-                </div>
-                <p className="input-hint">
-                    We use these to share updates on the olympiad and other useful information for your ward
-                </p>
-            </fieldset>
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianEmail">Email address</label>
+                                <input
+                                    id="guardianEmail" className="input-field" type="email" required
+                                    inputMode="email" autoComplete="email" placeholder="parent@example.com"
+                                    value={values.guardianEmail}
+                                    onChange={(e) => set('guardianEmail', e.target.value)}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianPhone">Mobile number</label>
+                                <input
+                                    id="guardianPhone" className="input-field" type="tel" required
+                                    inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210"
+                                    value={values.guardianPhone}
+                                    onChange={(e) => set('guardianPhone', e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <p className="input-hint">
+                            We use these to share updates on the olympiad and other useful information for your ward
+                        </p>
+                    </fieldset>
 
-            <fieldset className="guardian-fieldset">
-                <legend>About the ward (Mandatory)</legend>
-                <p className="input-hint" style={{ marginTop: 0 }}>
-                    Both are required. Neither affects the ward&apos;s score or rank. The date
-                    of birth has to match the ID you upload below, which is how we confirm the
-                    participant&apos;s identity for the Bharat Innovation Olympiad.
-                </p>
+                    <fieldset className="guardian-fieldset">
+                        <legend>About the ward (Mandatory)</legend>
+                        <p className="input-hint" style={{ marginTop: 0 }}>
+                            Both are required. Neither affects the ward&apos;s score or rank. The date
+                            of birth has to match the ID you upload below, which is how we confirm the
+                            participant&apos;s identity for the Bharat Innovation Olympiad.
+                        </p>
 
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="studentDob">Date of birth</label>
-                        <input
-                            id="studentDob" className="input-field" type="date"
-                            required
-                            max={new Date().toISOString().slice(0, 10)}
-                            value={values.studentDob}
-                            onChange={(e) => set('studentDob', e.target.value)}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="gender">Gender</label>
-                        <select
-                            id="gender" className="input-field"
-                            required
-                            value={values.gender}
-                            onChange={(e) => set('gender', e.target.value)}
-                        >
-                            {/* No blank default. "Prefer not to say" is a real
-                                answer and is in GENDERS; an empty option that
-                                looked identical to it just made the field
-                                skippable while appearing answered. */}
-                            <option value="" disabled>Select…</option>
-                            {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                    </div>
-                </div>
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="studentDob">Date of birth</label>
+                                <input
+                                    id="studentDob" className="input-field" type="date"
+                                    required
+                                    max={new Date().toISOString().slice(0, 10)}
+                                    value={values.studentDob}
+                                    onChange={(e) => set('studentDob', e.target.value)}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="gender">Gender</label>
+                                <select
+                                    id="gender" className="input-field"
+                                    required
+                                    value={values.gender}
+                                    onChange={(e) => set('gender', e.target.value)}
+                                >
+                                    {/* No blank default. "Prefer not to say" is a real
+                                        answer and is in GENDERS; an empty option that
+                                        looked identical to it just made the field
+                                        skippable while appearing answered. */}
+                                    <option value="" disabled>Select…</option>
+                                    {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                                </select>
+                            </div>
+                        </div>
 
-                {/* Pincode, city and state were here. Removed — the school
-                    already carries a location, so asking a parent for it again
-                    added three fields to the longest step of registration for
-                    nothing. The columns stay on `GuardianProfile` so existing
-                    rows keep their data; nothing new is collected. */}
-            </fieldset>
+                        {/* Pincode, city and state were here. Removed — the school
+                            already carries a location, so asking a parent for it again
+                            added three fields to the longest step of registration for
+                            nothing. The columns stay on `GuardianProfile` so existing
+                            rows keep their data; nothing new is collected. */}
+                    </fieldset>
+                </>
+            )}
 
             <fieldset className="guardian-fieldset">
                 <legend>Ward Identity Document (Mandatory)</legend>
@@ -476,15 +499,13 @@ export default function GuardianForm({
                         onChange={(e) => set('parentalConsent', e.target.checked)}
                     />
                     <span>
-                        <strong>I consent to my child taking part.</strong> I am the parent or legal
-                        guardian of{studentName ? <> <strong>{studentName}</strong></> : ' this ward'}, and
-                        I consent to them sitting the Bharat Innovation Olympiad under AI-assisted
-                        proctoring. I understand the webcam stays on for the exam, that face analysis
-                        runs in their own browser, that no video is ever recorded or stored, and
-                        that a still photo is saved only at the moment an exam violation is
-                        recorded, to be reviewed by a person alongside that Innovation Olympiad exam. Separately, one
-                        photo is captured once at registration, alongside the face scan, and is kept
-                        and printed on their certificate.
+                        I confirm that I am the parent or legal guardian
+                        of{studentName ? <> <strong>{studentName}</strong></> : ' this ward'} and consent
+                        to my child&apos;s participation, face scan, and processing of their personal
+                        data for the Bharat Innovation Olympiad, including AI-assisted proctoring. I
+                        confirm that my child is present and will complete the face scan themselves. I
+                        understand that the webcam remains on during the exam and consent can be
+                        withdrawn at any time.
                     </span>
                 </label>
 
@@ -510,12 +531,23 @@ export default function GuardianForm({
                         Both boxes must be ticked. Without them the ward cannot start an exam.
                     </p>
                 )}
+                {bothConsents && requireFaceScan && !faceScanDone && (
+                    <p className="input-hint">
+                        Complete the face scan above before submitting.
+                    </p>
+                )}
             </fieldset>
 
             <button
                 type="submit"
                 className="btn btn-primary btn-lg auth-submit"
-                disabled={busy || uploading.front || uploading.back || !bothConsents}
+                disabled={
+                    busy ||
+                    uploading.front ||
+                    uploading.back ||
+                    !bothConsents ||
+                    (requireFaceScan && !faceScanDone)
+                }
             >
                 {busy ? 'Saving…' : submitLabel}
             </button>

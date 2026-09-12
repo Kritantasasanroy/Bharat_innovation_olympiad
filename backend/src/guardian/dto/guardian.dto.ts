@@ -34,12 +34,17 @@ export class SubmitGuardianDto {
     @Length(1, 80)
     guardianFirstName: string;
 
+    // Optional: the registration flow now collects the parent/guardian's name
+    // as a single field and sends the whole thing as `guardianFirstName`.
+    @IsOptional()
     @IsString()
-    @Length(1, 80)
-    guardianLastName: string;
+    @MaxLength(80)
+    guardianLastName?: string;
 
+    // Optional: the registration flow doesn't collect this any more.
+    @IsOptional()
     @IsIn(RELATIONSHIPS as unknown as string[])
-    relationship: string;
+    relationship?: string;
 
     @IsEmail()
     guardianEmail: string;

@@ -117,8 +117,8 @@ export class GuardianService {
 
         const details = {
             guardianFirstName: dto.guardianFirstName.trim(),
-            guardianLastName: dto.guardianLastName.trim(),
-            relationship: dto.relationship,
+            guardianLastName: (dto.guardianLastName ?? '').trim(),
+            relationship: dto.relationship ?? '',
             guardianEmail: dto.guardianEmail.trim().toLowerCase(),
             guardianPhone,
             studentDob,

@@ -82,21 +82,19 @@ function createFakeDb() {
     return { prisma, schools };
 }
 
-const pincodeService: any = {
-    lookup: jest.fn(async (pincode: string) => ({ pincode, city: 'Nagpur', state: 'Maharashtra' })),
-};
+/** The city/state a real request would carry — resolved client-side from the pincode. */
+const NAGPUR = { city: 'Nagpur', state: 'Maharashtra' };
 
 function setup() {
     const db = createFakeDb();
-    pincodeService.lookup.mockClear();
-    return { ...db, service: new SchoolDirectoryService(db.prisma, pincodeService) };
+    return { ...db, service: new SchoolDirectoryService(db.prisma) };
 }
 
 describe('addToDirectory', () => {
-    it('adds a school, filling city and state from the pincode', async () => {
+    it('adds a school with the given city and state', async () => {
         const { service, schools } = setup();
 
-        const entry = await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        const entry = await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
 
         expect(entry).toMatchObject({
             name: 'Bright Future School',
@@ -109,12 +107,28 @@ describe('addToDirectory', () => {
         expect(schools).toHaveLength(1);
     });
 
+    it('trusts the city/state it was given rather than re-deriving them', async () => {
+        // The client is the one that called the pincode lookup (or the student
+        // typed these manually because the lookup did not recognise the
+        // pincode) — the service must not second-guess either case.
+        const { service } = setup();
+
+        const entry = await service.addToDirectory({
+            name: 'Manual Entry School',
+            pincode: '999999',
+            city: 'Somewhere',
+            state: 'Nowhere',
+        });
+
+        expect(entry).toMatchObject({ city: 'Somewhere', state: 'Nowhere' });
+    });
+
     it('never creates a duplicate, however the name was typed', async () => {
         const { service, schools } = setup();
-        const first = await service.addToDirectory({ name: "St. Xavier's High School", pincode: '441108' });
+        const first = await service.addToDirectory({ name: "St. Xavier's High School", pincode: '441108', ...NAGPUR });
 
         for (const variant of ['ST XAVIERS HIGH SCHOOL', 'st xavier’s  high-school', "St. Xavier's High School"]) {
-            const again = await service.addToDirectory({ name: variant, pincode: '441108' });
+            const again = await service.addToDirectory({ name: variant, pincode: '441108', ...NAGPUR });
             expect(again.id).toBe(first.id);
         }
         expect(schools).toHaveLength(1);
@@ -122,19 +136,10 @@ describe('addToDirectory', () => {
 
     it('treats the same name in a different pincode as a different school', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'DPS', pincode: '441108' });
-        await service.addToDirectory({ name: 'DPS', pincode: '110001' });
+        await service.addToDirectory({ name: 'DPS', pincode: '441108', ...NAGPUR });
+        await service.addToDirectory({ name: 'DPS', pincode: '110001', city: 'Delhi', state: 'Delhi' });
 
         expect(schools).toHaveLength(2);
-    });
-
-    it('does not spend a pincode lookup on a school it already knows', async () => {
-        const { service } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
-        expect(pincodeService.lookup).toHaveBeenCalledTimes(1);
-
-        await service.addToDirectory({ name: 'bright future school', pincode: '441108' });
-        expect(pincodeService.lookup).toHaveBeenCalledTimes(1);
     });
 
     it('returns the existing row when two people add the same school at once', async () => {
@@ -147,7 +152,7 @@ describe('addToDirectory', () => {
             return realCreate(args);
         };
 
-        const entry = await service.addToDirectory({ name: 'Race School', pincode: '441108' });
+        const entry = await service.addToDirectory({ name: 'Race School', pincode: '441108', ...NAGPUR });
 
         expect(entry.id).toBe('raced');
         expect(schools).toHaveLength(1);
@@ -166,17 +171,27 @@ describe('addToDirectory', () => {
         // A code collision is a real bug — swallowing it (or retrying forever)
         // would hide it.
         await expect(
-            service.addToDirectory({ name: 'Anything', pincode: '441108' }),
+            service.addToDirectory({ name: 'Anything', pincode: '441108', ...NAGPUR }),
         ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
     });
 
     it('rejects a bad pincode and a name that normalises to nothing', async () => {
         const { service } = setup();
-        await expect(service.addToDirectory({ name: 'OK', pincode: '44' })).rejects.toBeInstanceOf(
-            BadRequestException,
-        );
         await expect(
-            service.addToDirectory({ name: '!!!', pincode: '441108' }),
+            service.addToDirectory({ name: 'OK', pincode: '44', ...NAGPUR }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        await expect(
+            service.addToDirectory({ name: '!!!', pincode: '441108', ...NAGPUR }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a missing city or state', async () => {
+        const { service } = setup();
+        await expect(
+            service.addToDirectory({ name: 'OK', pincode: '441108', city: '', state: 'Maharashtra' }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        await expect(
+            service.addToDirectory({ name: 'OK', pincode: '441108', city: 'Nagpur', state: '' }),
         ).rejects.toBeInstanceOf(BadRequestException);
     });
 });
@@ -184,7 +199,7 @@ describe('addToDirectory', () => {
 describe('findByCode', () => {
     it('resolves a code however the student typed it', async () => {
         const { service, schools } = setup();
-        const added = await service.addToDirectory({ name: 'Bright Future', pincode: '441108' });
+        const added = await service.addToDirectory({ name: 'Bright Future', pincode: '441108', ...NAGPUR });
         // Student-added schools have no code; only onboarded schools do.
         const code = 'SCH-AAAAAA';
         schools[0].code = code;
@@ -208,7 +223,7 @@ describe('findByCode', () => {
 describe('search', () => {
     it('returns onboarded schools only, not student-added schools', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         // Mark the school as onboarded, like a staff approval would.
         schools[0].onboardedAt = new Date();
 
@@ -220,7 +235,7 @@ describe('search', () => {
 
     it('excludes student-added schools from the directory', async () => {
         const { service } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
 
         const results = await service.search({ name: 'Bright' });
 
@@ -229,7 +244,7 @@ describe('search', () => {
 
     it('matches on name and city, case-insensitively', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         for (const q of ['bright', 'BRIGHT FUTURE', 'nagpur']) {
@@ -239,7 +254,7 @@ describe('search', () => {
 
     it('matches on pincode', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         await expect(service.search({ pincode: '441108' })).resolves.toHaveLength(1);
@@ -248,7 +263,7 @@ describe('search', () => {
 
     it('combines name and pincode with AND', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         await expect(
@@ -261,7 +276,7 @@ describe('search', () => {
 
     it('returns an empty list when no search term is provided', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         await expect(service.search({})).resolves.toHaveLength(0);
@@ -269,7 +284,7 @@ describe('search', () => {
 
     it('ignores name searches under 3 characters', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         await expect(service.search({ name: 'Br' })).resolves.toHaveLength(0);
@@ -277,7 +292,7 @@ describe('search', () => {
 
     it('never exposes a coordinator', async () => {
         const { service, schools } = setup();
-        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108' });
+        await service.addToDirectory({ name: 'Bright Future School', pincode: '441108', ...NAGPUR });
         schools[0].onboardedAt = new Date();
 
         const [entry] = await service.search({ name: 'Bright' });

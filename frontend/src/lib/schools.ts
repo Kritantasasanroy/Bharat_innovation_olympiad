@@ -69,11 +69,16 @@ export async function findSchoolByCode(code: string): Promise<DirectorySchool> {
 }
 
 /** "My school isn't listed." Idempotent server-side — adding it twice is safe. */
-export async function addSchool(name: string, pincode: string): Promise<DirectorySchool> {
+export async function addSchool(
+    name: string,
+    city: string,
+    state: string,
+    pincode: string,
+): Promise<DirectorySchool> {
     const response = await fetch(`${API_URL}/api/schools/add`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, pincode }),
+        body: JSON.stringify({ name, city, state, pincode }),
     });
     if (!response.ok) {
         throw new Error(await readError(response, 'Could not add your school.'));

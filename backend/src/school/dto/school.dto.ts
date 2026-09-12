@@ -111,7 +111,12 @@ export class DecideSchoolDto {
     reason: string;
 }
 
-/** A student adding their own school to the directory (name + pincode only). */
+/**
+ * A student adding their own school to the directory: name, pincode, and the
+ * city/state the client resolved for that pincode (or typed manually, if the
+ * pincode lookup didn't apply). Still required so a lookup outage never blocks
+ * a student from registering.
+ */
 export class AddSchoolDto {
     @IsString()
     @IsNotEmpty()
@@ -119,6 +124,14 @@ export class AddSchoolDto {
 
     @Matches(PINCODE_PATTERN, { message: PINCODE_MESSAGE })
     pincode: string;
+
+    @IsString()
+    @IsNotEmpty()
+    city: string;
+
+    @IsString()
+    @IsNotEmpty()
+    state: string;
 }
 
 export class RegisterStudentDto {
