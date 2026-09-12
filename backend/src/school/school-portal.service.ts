@@ -5,6 +5,7 @@ import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResultsExportService } from '../results/results-export.service';
 import { RegisterStudentsDto, UpdateSchoolProfileDto } from './dto/school.dto';
+import { istWeekday, weekdayName } from '../slot/slot-assignment.rules';
 
 export type StudentStatus = 'INVITED' | 'REGISTERED' | 'PAID' | 'COMPLETED';
 
@@ -282,6 +283,120 @@ export class SchoolPortalService {
                 })),
             };
         });
+    }
+
+    /**
+     * The school's own exam calendar: one row per day, with how many of its
+     * participants sit that day.
+     *
+     * `slots()` above answers "where did my participants end up?" exam by exam.
+     * This answers the question a coordinator actually plans around — "how many
+     * of my children are out on the 27th, and in which class?" — which cuts
+     * across exams and cannot be read off the per-exam boards without the
+     * coordinator doing the arithmetic themselves.
+     *
+     * Scoped to this school by the booking filter, so the counts are the
+     * school's own and never the sitting's total. A coordinator seeing "50/50
+     * full" would learn nothing about their own eighteen participants.
+     */
+    async slotCalendar(schoolId: string) {
+        const bookings = await this.prisma.booking.findMany({
+            where: {
+                status: { in: ['PENDING', 'CONFIRMED'] },
+                user: { schoolId },
+            },
+            select: {
+                slot: {
+                    select: {
+                        id: true,
+                        slotDate: true,
+                        label: true,
+                        startsAt: true,
+                        endsAt: true,
+                        examInstance: {
+                            select: { id: true, exam: { select: { id: true, title: true } } },
+                        },
+                    },
+                },
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        rollNumber: true,
+                        classBand: true,
+                    },
+                },
+            },
+        });
+
+        const days = new Map<
+            number,
+            {
+                date: Date;
+                students: number;
+                classBands: Map<number, number>;
+                exams: Map<string, string>;
+                sittings: Map<
+                    string,
+                    {
+                        slotId: string;
+                        label: string | null;
+                        startsAt: Date;
+                        endsAt: Date;
+                        examTitle: string;
+                        students: number;
+                    }
+                >;
+            }
+        >();
+
+        for (const b of bookings) {
+            const key = b.slot.slotDate.getTime();
+            const day = days.get(key) ?? {
+                date: b.slot.slotDate,
+                students: 0,
+                classBands: new Map<number, number>(),
+                exams: new Map<string, string>(),
+                sittings: new Map(),
+            };
+
+            day.students += 1;
+            if (b.user.classBand !== null) {
+                day.classBands.set(b.user.classBand, (day.classBands.get(b.user.classBand) ?? 0) + 1);
+            }
+            day.exams.set(b.slot.examInstance.exam.id, b.slot.examInstance.exam.title);
+
+            const sitting = day.sittings.get(b.slot.id) ?? {
+                slotId: b.slot.id,
+                label: b.slot.label,
+                startsAt: b.slot.startsAt,
+                endsAt: b.slot.endsAt,
+                examTitle: b.slot.examInstance.exam.title,
+                students: 0,
+            };
+            sitting.students += 1;
+            day.sittings.set(b.slot.id, sitting);
+
+            days.set(key, day);
+        }
+
+        const now = new Date();
+        return [...days.values()]
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .map((day) => ({
+                date: day.date,
+                weekday: weekdayName(istWeekday(day.date)),
+                students: day.students,
+                hasEnded: [...day.sittings.values()].every((s) => s.endsAt < now),
+                exams: [...day.exams.entries()].map(([id, title]) => ({ id, title })),
+                byClassBand: [...day.classBands.entries()]
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([classBand, students]) => ({ classBand, students })),
+                sittings: [...day.sittings.values()].sort(
+                    (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+                ),
+            }));
     }
 
     /**

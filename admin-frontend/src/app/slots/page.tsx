@@ -50,8 +50,26 @@ interface SlotTiming {
     capacity: number;
     weekdays: number[];
     weekdayNames: string[];
+    priority: number;
     isActive: boolean;
     sortOrder: number;
+}
+
+/** One published exam day. */
+interface ScheduleDate {
+    id: string;
+    date: string;
+    weekday: string;
+    priority: number;
+    isActive: boolean;
+    note: string | null;
+}
+
+/** The sitting times the season publishes, served so the two never drift. */
+interface CalendarOptions {
+    times: { value: string; label: string; priorities: number[] }[];
+    defaultDurationMinutes: number;
+    defaultCapacity: number;
 }
 
 interface Sitting {
@@ -118,6 +136,26 @@ const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'F
 
 const IST = 'Asia/Kolkata';
 
+/** Tiers are filled in order, so the label has to say which comes first. */
+const PRIORITY_LABEL: Record<number, string> = {
+    1: 'Priority 1 — filled first',
+    2: 'Priority 2 — overflow',
+};
+
+const priorityName = (p: number) => PRIORITY_LABEL[p] ?? `Priority ${p}`;
+
+/** `YYYY-MM-DD` for a date, in IST — the form value a date input wants. */
+function istDateInputValue(iso: string) {
+    return new Date(iso).toLocaleDateString('en-CA', { timeZone: IST });
+}
+
+/** `HH:mm` plus minutes, wrapped at midnight. */
+function addMinutes(hhmm: string, minutes: number) {
+    const [h, m] = hhmm.split(':').map(Number);
+    const total = (h * 60 + m + minutes) % 1440;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-IN', {
         weekday: 'short',
@@ -162,6 +200,8 @@ export default function AdminSlotsPage() {
     const [sittings, setSittings] = useState<Sitting[]>([]);
     const [rules, setRules] = useState<AssignmentRules | null>(null);
     const [unassigned, setUnassigned] = useState<UnassignedStudent[]>([]);
+    const [scheduleDates, setScheduleDates] = useState<ScheduleDate[]>([]);
+    const [calendarOptions, setCalendarOptions] = useState<CalendarOptions | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [banner, setBanner] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
@@ -180,6 +220,9 @@ export default function AdminSlotsPage() {
         api.get<Exam[]>('/admin/exams')
             .then(({ data }) => setExams(data))
             .catch(() => setExams([]));
+        api.get<CalendarOptions>('/admin/slot-calendar/options')
+            .then(({ data }) => setCalendarOptions(data))
+            .catch(() => setCalendarOptions(null));
     }, []);
 
     useEffect(() => {
@@ -201,16 +244,18 @@ export default function AdminSlotsPage() {
     const loadInstance = useCallback(async (id: string) => {
         setLoading(true);
         try {
-            const [t, s, r, u] = await Promise.all([
+            const [t, s, r, u, d] = await Promise.all([
                 api.get<SlotTiming[]>(`/admin/exams/instances/${id}/slot-timings`),
                 api.get<Sitting[]>(`/admin/slots?examInstanceId=${id}`),
                 api.get<AssignmentRules>(`/admin/exams/instances/${id}/assignment-rules`),
                 api.get<UnassignedStudent[]>(`/admin/exams/instances/${id}/unassigned`),
+                api.get<ScheduleDate[]>(`/admin/exams/instances/${id}/schedule-dates`),
             ]);
             setTimings(t.data);
             setSittings(s.data);
             setRules(r.data);
             setUnassigned(u.data);
+            setScheduleDates(d.data);
         } catch (err) {
             setBanner({ tone: 'err', text: errorOf(err, 'Could not load this exam’s schedule.') });
         } finally {
@@ -224,6 +269,7 @@ export default function AdminSlotsPage() {
             setSittings([]);
             setRules(null);
             setUnassigned([]);
+            setScheduleDates([]);
             return;
         }
         loadInstance(instanceId);
@@ -249,13 +295,28 @@ export default function AdminSlotsPage() {
                 className="container animate-fade-in"
                 style={{ paddingTop: 'var(--space-8)', paddingBottom: 'var(--space-16)' }}
             >
-                <header style={{ marginBottom: 'var(--space-6)' }}>
-                    <h1 style={{ fontSize: '1.875rem', fontWeight: 700 }}>Exam Scheduling</h1>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-1)' }}>
-                        Participants are scheduled automatically when they register — on the first
-                        available sitting inside the window you set below. Set the timings and the
-                        seat counts here; dated sittings are created as they are needed.
-                    </p>
+                <header
+                    style={{
+                        marginBottom: 'var(--space-6)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: 'var(--space-4)',
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <div style={{ flex: '1 1 420px' }}>
+                        <h1 style={{ fontSize: '1.875rem', fontWeight: 700 }}>Exam Scheduling</h1>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-1)' }}>
+                            Participants are scheduled automatically — onto the earliest sitting
+                            with a free seat, working down the published dates in priority order.
+                            Set the dates, times and seat counts here; dated sittings are created as
+                            they are needed.
+                        </p>
+                    </div>
+                    <a className="btn btn-secondary" href="/slot-management">
+                        Slot management dashboard →
+                    </a>
                 </header>
 
                 {banner && (
@@ -408,9 +469,21 @@ export default function AdminSlotsPage() {
                             onError={(text) => setBanner({ tone: 'err', text })}
                         />
 
+                        <ScheduleDatesPanel
+                            instanceId={instanceId}
+                            dates={scheduleDates}
+                            onChanged={(text) => {
+                                setBanner({ tone: 'ok', text });
+                                refresh();
+                            }}
+                            onError={(text) => setBanner({ tone: 'err', text })}
+                        />
+
                         <TimingsPanel
                             instanceId={instanceId}
                             timings={timings}
+                            options={calendarOptions}
+                            usesCalendar={scheduleDates.length > 0}
                             onChanged={(text) => {
                                 setBanner({ tone: 'ok', text });
                                 refresh();
@@ -691,23 +764,327 @@ function RulesPanel({
 
 // ── Slot timings ──────────────────────────────────────────────────────────────
 
+// ── The published calendar ────────────────────────────────────────────────────
+
+/**
+ * The dates this exam runs, and the tier each belongs to.
+ *
+ * This is the panel that decides *when*; the timings panel below decides *at
+ * what hour*. Keeping them apart is what lets the season publish eight Sundays
+ * running seven sittings and eight Saturdays running two, without the admin
+ * entering seventy-two rows by hand — the tier on a date and the tier on a time
+ * are what pair them up.
+ */
+function ScheduleDatesPanel({
+    instanceId,
+    dates,
+    onChanged,
+    onError,
+}: {
+    instanceId: string;
+    dates: ScheduleDate[];
+    onChanged: (text: string) => void;
+    onError: (text: string) => void;
+}) {
+    const [adding, setAdding] = useState(false);
+    const [date, setDate] = useState('');
+    const [priority, setPriority] = useState(1);
+    const [note, setNote] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const byPriority = useMemo(() => {
+        const groups = new Map<number, ScheduleDate[]>();
+        for (const d of dates) {
+            groups.set(d.priority, [...(groups.get(d.priority) ?? []), d]);
+        }
+        return Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
+    }, [dates]);
+
+    const submit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!date) {
+            onError('Pick a date.');
+            return;
+        }
+        setBusy(true);
+        try {
+            await api.post('/admin/schedule-dates', {
+                examInstanceId: instanceId,
+                date,
+                priority,
+                note: note || undefined,
+            });
+            setDate('');
+            setNote('');
+            setAdding(false);
+            onChanged('Date added to the calendar.');
+        } catch (err) {
+            onError(errorOf(err, 'Could not add that date.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const seed = async () => {
+        if (
+            !confirm(
+                'Load the published season?\n\nThis adds the eight Priority 1 Sundays and the eight Priority 2 Saturdays, their sitting times, and the Diwali blackout. Dates and times already set up are left alone.',
+            )
+        )
+            return;
+        setBusy(true);
+        try {
+            const { data } = await api.post<{
+                datesAdded: number;
+                timingsAdded: number;
+            }>(`/admin/exams/instances/${instanceId}/schedule-dates/seed-standard`, {});
+            onChanged(
+                `Published calendar loaded — ${data.datesAdded} date(s) and ${data.timingsAdded} sitting time(s) added.`,
+            );
+        } catch (err) {
+            onError(errorOf(err, 'Could not load the published calendar.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const toggle = async (d: ScheduleDate) => {
+        try {
+            await api.put(`/admin/schedule-dates/${d.id}`, { isActive: !d.isActive });
+            onChanged(
+                d.isActive
+                    ? 'Date closed. Nobody new will be scheduled onto it; anyone already on it keeps their sitting.'
+                    : 'Date reopened.',
+            );
+        } catch (err) {
+            onError(errorOf(err, 'Could not change that date.'));
+        }
+    };
+
+    const remove = async (d: ScheduleDate) => {
+        if (!confirm(`Remove ${fmtDate(d.date)} from the calendar?`)) return;
+        try {
+            await api.delete(`/admin/schedule-dates/${d.id}`);
+            onChanged('Date removed.');
+        } catch (err) {
+            onError(errorOf(err, 'Could not remove that date.'));
+        }
+    };
+
+    return (
+        <section
+            className="glass-card"
+            style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}
+        >
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: 'var(--space-4)',
+                    marginBottom: 'var(--space-5)',
+                    flexWrap: 'wrap',
+                }}
+            >
+                <div>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Exam dates</h2>
+                    <p
+                        style={{
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.875rem',
+                            marginTop: 'var(--space-1)',
+                            maxWidth: '58ch',
+                        }}
+                    >
+                        The days this exam runs, filled in priority order — every Priority 1 date is
+                        full before a Priority 2 one is used. With no dates here, scheduling falls
+                        back to the older weekday rules below.
+                    </p>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={seed} disabled={busy}>
+                        Load published season
+                    </button>
+                    <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setAdding((v) => !v)}
+                    >
+                        + Add date
+                    </button>
+                </div>
+            </div>
+
+            {adding && (
+                <form
+                    onSubmit={submit}
+                    style={{
+                        display: 'flex',
+                        gap: 'var(--space-4)',
+                        flexWrap: 'wrap',
+                        alignItems: 'flex-end',
+                        background: 'var(--bg-elevated)',
+                        padding: 'var(--space-4)',
+                        borderRadius: 'var(--radius-md)',
+                        marginBottom: 'var(--space-5)',
+                    }}
+                >
+                    <div style={{ flex: '1 1 180px' }}>
+                        <label className="input-label" htmlFor="sd-date">
+                            Date (IST)
+                        </label>
+                        <input
+                            id="sd-date"
+                            className="input-field"
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div style={{ flex: '1 1 200px' }}>
+                        <label className="input-label" htmlFor="sd-priority">
+                            Priority
+                        </label>
+                        <select
+                            id="sd-priority"
+                            className="input-field"
+                            value={priority}
+                            onChange={(e) => setPriority(Number(e.target.value))}
+                        >
+                            <option value={1}>{priorityName(1)}</option>
+                            <option value={2}>{priorityName(2)}</option>
+                        </select>
+                    </div>
+                    <div style={{ flex: '2 1 220px' }}>
+                        <label className="input-label" htmlFor="sd-note">
+                            Note (optional)
+                        </label>
+                        <input
+                            id="sd-note"
+                            className="input-field"
+                            value={note}
+                            placeholder="Diwali — no sittings"
+                            onChange={(e) => setNote(e.target.value)}
+                        />
+                    </div>
+                    <button type="submit" className="btn btn-primary" disabled={busy}>
+                        {busy ? 'Adding…' : 'Add'}
+                    </button>
+                </form>
+            )}
+
+            {dates.length === 0 ? (
+                <p
+                    style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.9rem',
+                        padding: 'var(--space-6)',
+                        textAlign: 'center',
+                        background: 'var(--bg-elevated)',
+                        borderRadius: 'var(--radius-md)',
+                    }}
+                >
+                    No dates published. Load the season, or add dates one at a time.
+                </p>
+            ) : (
+                byPriority.map(([tier, tierDates]) => (
+                    <div key={tier} style={{ marginBottom: 'var(--space-5)' }}>
+                        <h3
+                            style={{
+                                fontSize: '0.8rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                                color: 'var(--text-secondary)',
+                                marginBottom: 'var(--space-3)',
+                            }}
+                        >
+                            {priorityName(tier)} · {tierDates.filter((d) => d.isActive).length} open
+                        </h3>
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 'var(--space-2)',
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            {tierDates.map((d) => (
+                                <div
+                                    key={d.id}
+                                    style={{
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: 'var(--space-3) var(--space-4)',
+                                        background: d.isActive
+                                            ? 'var(--bg-input)'
+                                            : 'transparent',
+                                        opacity: d.isActive ? 1 : 0.55,
+                                        minWidth: 175,
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                                        {fmtDate(d.date)}
+                                    </div>
+                                    <div
+                                        className="text-muted"
+                                        style={{ fontSize: '0.78rem', minHeight: '1.1em' }}
+                                    >
+                                        {d.isActive ? d.note ?? '' : d.note ?? 'Closed'}
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            gap: 'var(--space-2)',
+                                            marginTop: 'var(--space-2)',
+                                        }}
+                                    >
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => toggle(d)}
+                                        >
+                                            {d.isActive ? 'Close' : 'Reopen'}
+                                        </button>
+                                        <button
+                                            className="btn btn-danger btn-sm"
+                                            onClick={() => remove(d)}
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))
+            )}
+        </section>
+    );
+}
+
+// ── Recurring sitting times ───────────────────────────────────────────────────
+
 const BLANK_TIMING = {
     label: '',
-    startTime: '10:00',
-    endTime: '12:00',
+    startTime: '08:30',
+    endTime: '10:00',
     capacity: 50,
     weekdays: [0, 6] as number[],
+    priority: 1,
     isActive: true,
 };
 
 function TimingsPanel({
     instanceId,
     timings,
+    options,
+    usesCalendar,
     onChanged,
     onError,
 }: {
     instanceId: string;
     timings: SlotTiming[];
+    options: CalendarOptions | null;
+    /** True once dates are published — the tier, not the weekday, then applies. */
+    usesCalendar: boolean;
     onChanged: (text: string) => void;
     onError: (text: string) => void;
 }) {
@@ -729,6 +1106,7 @@ function TimingsPanel({
             endTime: t.endTime,
             capacity: t.capacity,
             weekdays: t.weekdays,
+            priority: t.priority ?? 1,
             isActive: t.isActive,
         });
         setEditingId(t.id);
@@ -742,7 +1120,7 @@ function TimingsPanel({
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
-        if (form.weekdays.length === 0) {
+        if (!usesCalendar && form.weekdays.length === 0) {
             onError('Pick at least one day for this timing.');
             return;
         }
@@ -755,6 +1133,7 @@ function TimingsPanel({
                     endTime: form.endTime,
                     capacity: form.capacity,
                     weekdays: form.weekdays,
+                    priority: form.priority,
                     isActive: form.isActive,
                 });
                 onChanged(
@@ -846,7 +1225,8 @@ function TimingsPanel({
                         <thead>
                             <tr>
                                 <th>Timing</th>
-                                <th>Days</th>
+                                <th>Priority</th>
+                                <th>{usesCalendar ? 'Days (fallback)' : 'Days'}</th>
                                 <th>Seats each</th>
                                 <th>Status</th>
                                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -865,6 +1245,7 @@ function TimingsPanel({
                                             </div>
                                         )}
                                     </td>
+                                    <td style={{ fontSize: '0.875rem' }}>{t.priority ?? 1}</td>
                                     <td style={{ fontSize: '0.875rem' }}>
                                         {t.weekdayNames.join(', ')}
                                     </td>
@@ -901,20 +1282,103 @@ function TimingsPanel({
                 <Modal title={editingId ? 'Edit timing' : 'Add timing'} onClose={close}>
                     <form onSubmit={submit}>
                         <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-                            <div style={{ flex: '1 1 140px' }}>
+                            <div style={{ flex: '1 1 200px' }}>
+                                <label className="input-label" htmlFor="t-priority">
+                                    Priority
+                                </label>
+                                <select
+                                    id="t-priority"
+                                    className="input-field"
+                                    value={form.priority}
+                                    onChange={(e) => {
+                                        const priority = Number(e.target.value);
+                                        // A tier-2 day runs only the evening
+                                        // sittings, so a start time the new tier
+                                        // does not offer has to give way rather
+                                        // than sit there looking selected.
+                                        const allowed = (options?.times ?? []).filter((t) =>
+                                            t.priorities.includes(priority),
+                                        );
+                                        setForm((f) => ({
+                                            ...f,
+                                            priority,
+                                            startTime:
+                                                allowed.some((t) => t.value === f.startTime) ||
+                                                allowed.length === 0
+                                                    ? f.startTime
+                                                    : allowed[0].value,
+                                            endTime:
+                                                allowed.some((t) => t.value === f.startTime) ||
+                                                allowed.length === 0
+                                                    ? f.endTime
+                                                    : addMinutes(
+                                                          allowed[0].value,
+                                                          options?.defaultDurationMinutes ?? 90,
+                                                      ),
+                                        }));
+                                    }}
+                                >
+                                    <option value={1}>{priorityName(1)}</option>
+                                    <option value={2}>{priorityName(2)}</option>
+                                </select>
+                            </div>
+                            <div style={{ flex: '1 1 160px' }}>
                                 <label className="input-label" htmlFor="t-start">
                                     Starts (IST)
                                 </label>
-                                <input
-                                    id="t-start"
-                                    className="input-field"
-                                    type="time"
-                                    value={form.startTime}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, startTime: e.target.value }))
-                                    }
-                                    required
-                                />
+                                {options ? (
+                                    <select
+                                        id="t-start"
+                                        className="input-field"
+                                        value={form.startTime}
+                                        onChange={(e) => {
+                                            const startTime = e.target.value;
+                                            setForm((f) => ({
+                                                ...f,
+                                                startTime,
+                                                // The end follows the start by the
+                                                // gap the published schedule runs
+                                                // on, so the common case needs no
+                                                // second edit — and an admin who
+                                                // wants a shorter paper can still
+                                                // shorten it below.
+                                                endTime: addMinutes(
+                                                    startTime,
+                                                    options.defaultDurationMinutes,
+                                                ),
+                                            }));
+                                        }}
+                                        required
+                                    >
+                                        {options.times
+                                            .filter((t) => t.priorities.includes(form.priority))
+                                            .map((t) => (
+                                                <option key={t.value} value={t.value}>
+                                                    {t.label}
+                                                </option>
+                                            ))}
+                                        {/* A time already saved that the season no
+                                            longer publishes must stay selectable,
+                                            or opening the form would silently move
+                                            an existing sitting. */}
+                                        {!options.times.some((t) => t.value === form.startTime) && (
+                                            <option value={form.startTime}>
+                                                {form.startTime} (not on the published list)
+                                            </option>
+                                        )}
+                                    </select>
+                                ) : (
+                                    <input
+                                        id="t-start"
+                                        className="input-field"
+                                        type="time"
+                                        value={form.startTime}
+                                        onChange={(e) =>
+                                            setForm((f) => ({ ...f, startTime: e.target.value }))
+                                        }
+                                        required
+                                    />
+                                )}
                             </div>
                             <div style={{ flex: '1 1 140px' }}>
                                 <label className="input-label" htmlFor="t-end">
@@ -963,7 +1427,22 @@ function TimingsPanel({
                         </div>
 
                         <div style={{ marginTop: 'var(--space-4)' }}>
-                            <span className="input-label">Runs on</span>
+                            <span className="input-label">
+                                {usesCalendar ? 'Runs on (fallback only)' : 'Runs on'}
+                            </span>
+                            {usesCalendar && (
+                                <p
+                                    style={{
+                                        fontSize: '0.8rem',
+                                        color: 'var(--text-secondary)',
+                                        marginBottom: 'var(--space-2)',
+                                    }}
+                                >
+                                    This exam runs on published dates, so the priority above decides
+                                    which days use this time. These weekdays only matter if every
+                                    date is later removed.
+                                </p>
+                            )}
                             <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                                 {WEEKDAYS.map((d) => {
                                     const on = form.weekdays.includes(d.value);

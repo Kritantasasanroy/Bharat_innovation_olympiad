@@ -10,14 +10,19 @@ import type { ExamSlot } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+    CalendarCandidate,
     CandidateDate,
+    ScheduleDay,
     SearchRules,
     UnassignedReason,
+    addDays,
+    calendarCandidates,
     candidateDates,
     istStartOfDay,
     slotWindow,
     unassignedMessage,
     weekdayName,
+    windowsOverlap,
 } from './slot-assignment.rules';
 import { SlotTimingService } from './slot-timing.service';
 
@@ -41,6 +46,21 @@ export interface AssignmentResult {
     message?: string;
     /** How many dates were tried before giving up — for admin diagnostics. */
     datesConsidered?: number;
+    /** The tier the sitting came from, when the exam runs a published calendar. */
+    priority?: number;
+}
+
+/**
+ * The ordered list of days to try for one student, and how it was arrived at.
+ *
+ * Two sources produce one of these. An instance with a published calendar
+ * (`ExamScheduleDate` rows) uses that, in priority-then-date order. One without
+ * falls back to the weekday search that predates the calendar, so exams
+ * configured before it keep behaving exactly as they did.
+ */
+interface PlacementPlan {
+    candidates: (CandidateDate & { priority?: number })[];
+    usesCalendar: boolean;
 }
 
 /**
@@ -172,18 +192,45 @@ export class SlotAssignmentService {
         rules: SearchRules,
         assignedBy: string | null,
     ): Promise<AssignmentResult> {
-        const dates = candidateDates(rules);
-        if (dates.length === 0) {
-            return this.unassigned(instance.id, 'NO_CANDIDATE_DATES', rules, 0);
+        const plan = await this.buildPlan(instance.id, rules);
+        if (plan.candidates.length === 0) {
+            return this.unassigned(
+                instance.id,
+                plan.usesCalendar ? 'NO_SCHEDULE_DATES' : 'NO_CANDIDATE_DATES',
+                rules,
+                0,
+            );
         }
 
         // A sitting outside the exam instance's own window could never be sat:
         // the phase gate refuses to start an exam before it opens or after it
         // closes, no matter what the student's slot says.
-        const inWindow = dates.filter((d) => this.dateFitsExamWindow(d, instance));
+        const inWindow = plan.candidates.filter((d) => this.dateFitsExamWindow(d, instance));
         if (inWindow.length === 0) {
-            return this.unassigned(instance.id, 'OUTSIDE_EXAM_WINDOW', rules, dates.length);
+            return this.unassigned(
+                instance.id,
+                'OUTSIDE_EXAM_WINDOW',
+                rules,
+                plan.candidates.length,
+            );
         }
+
+        // The lead time survives the move to a published calendar, but as a
+        // *preference* rather than a filter. A student registering four days
+        // before the last Sunday of the season would otherwise be barred from
+        // every remaining date and left with no sitting at all -- the one
+        // outcome the calendar exists to prevent. So the dates a fortnight or
+        // more out are offered first, in priority order, and only if every one
+        // of those is full does the search fall back to the nearer ones.
+        const earliest = addDays(istStartOfDay(rules.registeredAt), rules.leadDays);
+        const passes = plan.usesCalendar
+            ? [
+                  inWindow.filter((d) => d.date >= earliest),
+                  inWindow.filter((d) => d.date < earliest),
+              ]
+            : // The legacy weekday search bakes the lead into the dates it
+              // produces, so there is nothing left to split.
+              [inWindow];
 
         let sawAnyTiming = false;
         // A timing exists for the day but every one of its sittings was pushed
@@ -191,46 +238,123 @@ export class SlotAssignmentService {
         // different problem from "full", and telling an admin to add seats when
         // the real fix is to widen the exam window would send them the wrong way.
         let sawOnlyUnusable = true;
+        let sawCollision = false;
+        let tried = 0;
         const now = new Date();
 
-        for (const candidate of inWindow) {
-            const timings = await this.timings.timingsForWeekday(instance.id, candidate.weekday);
-            if (timings.length === 0) continue;
-            sawAnyTiming = true;
+        for (const pass of passes) {
+            for (const candidate of pass) {
+                tried += 1;
+                const timings = plan.usesCalendar
+                    ? await this.timings.timingsForPriority(instance.id, candidate.priority ?? 1)
+                    : await this.timings.timingsForWeekday(instance.id, candidate.weekday);
+                if (timings.length === 0) continue;
+                sawAnyTiming = true;
 
-            for (const timing of timings) {
-                // Work out the real instants *before* materialising anything. A
-                // sitting that has already started is a worthless seat, and one
-                // that falls outside the exam's own window could never be sat —
-                // creating either would leave a permanently unusable row behind
-                // and make the sittings list lie about what is on offer.
-                const when = slotWindow(candidate.date, timing.startMinute, timing.endMinute);
-                if (when.startsAt <= now) continue;
-                if (when.startsAt < instance.startsAt || when.endsAt > instance.endsAt) continue;
+                for (const timing of timings) {
+                    // Work out the real instants *before* materialising anything. A
+                    // sitting that has already started is a worthless seat, and one
+                    // that falls outside the exam's own window could never be sat --
+                    // creating either would leave a permanently unusable row behind
+                    // and make the sittings list lie about what is on offer.
+                    const when = slotWindow(candidate.date, timing.startMinute, timing.endMinute);
+                    if (when.startsAt <= now) continue;
+                    if (when.startsAt < instance.startsAt || when.endsAt > instance.endsAt) continue;
 
-                sawOnlyUnusable = false;
+                    sawOnlyUnusable = false;
 
-                const slot = await this.timings.ensureSlot(timing, candidate.date);
-                const bookingId = await this.claimSeat(userId, slot, assignedBy);
-                if (!bookingId) continue;
+                    // A participant sitting another exam at this hour cannot sit
+                    // this one. Checked before the row is materialised, so a clash
+                    // does not leave an empty sitting behind on a date nobody used.
+                    if (await this.collidesWithExistingBooking(userId, instance.id, when)) {
+                        sawCollision = true;
+                        continue;
+                    }
 
-                return {
-                    status: 'ASSIGNED',
-                    examInstanceId: instance.id,
-                    bookingId,
-                    slotId: slot.id,
-                    slotStartsAt: slot.startsAt,
-                    datesConsidered: inWindow.indexOf(candidate) + 1,
-                };
+                    const slot = await this.timings.ensureSlot(timing, candidate.date);
+                    const bookingId = await this.claimSeat(userId, slot, assignedBy);
+                    if (!bookingId) continue;
+
+                    return {
+                        status: 'ASSIGNED',
+                        examInstanceId: instance.id,
+                        bookingId,
+                        slotId: slot.id,
+                        slotStartsAt: slot.startsAt,
+                        datesConsidered: tried,
+                        priority: candidate.priority,
+                    };
+                }
             }
         }
 
         let reason: UnassignedReason;
         if (!sawAnyTiming) reason = 'NO_TIMINGS';
         else if (sawOnlyUnusable) reason = 'OUTSIDE_EXAM_WINDOW';
+        else if (sawCollision) reason = 'CLASHES_WITH_ANOTHER_EXAM';
         else reason = 'ALL_FULL';
 
-        return this.unassigned(instance.id, reason, rules, inWindow.length);
+        return this.unassigned(instance.id, reason, rules, tried);
+    }
+
+    /**
+     * The days to try, from the published calendar when there is one.
+     *
+     * Dates already past are dropped inside `calendarCandidates`, so a season
+     * half over does not make every placement walk a month of dead Sundays
+     * before it reaches a live one.
+     */
+    private async buildPlan(examInstanceId: string, rules: SearchRules): Promise<PlacementPlan> {
+        const days = await this.prisma.examScheduleDate.findMany({
+            where: { examInstanceId },
+            select: { date: true, priority: true, isActive: true },
+            orderBy: [{ priority: 'asc' }, { date: 'asc' }],
+        });
+
+        if (days.length === 0) {
+            return { candidates: candidateDates(rules), usesCalendar: false };
+        }
+
+        const candidates: CalendarCandidate[] = calendarCandidates(
+            days as ScheduleDay[],
+            rules.registeredAt,
+            new Date(),
+        );
+        return { candidates, usesCalendar: true };
+    }
+
+    /**
+     * Does this sitting clash with one the participant already holds?
+     *
+     * Other exams only -- a second booking for the same instance is impossible
+     * by the time this runs, and comparing an instance against itself would have
+     * every student collide with their own seat.
+     *
+     * This is the "no two sittings collide" rule. Two exams a class takes can
+     * legitimately fall on the same Sunday; what they must not do is overlap in
+     * time, because one participant cannot sit both. The comparison is half-open,
+     * so the 10:00-11:30 paper and the 11:30-13:00 one are back to back rather
+     * than in conflict -- which matters, because the whole published schedule
+     * runs on that 90-minute cadence.
+     */
+    private async collidesWithExistingBooking(
+        userId: string,
+        examInstanceId: string,
+        when: { startsAt: Date; endsAt: Date },
+    ): Promise<boolean> {
+        const clash = await this.prisma.booking.findFirst({
+            where: {
+                userId,
+                status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+                slot: {
+                    examInstanceId: { not: examInstanceId },
+                    startsAt: { lt: when.endsAt },
+                    endsAt: { gt: when.startsAt },
+                },
+            },
+            select: { id: true },
+        });
+        return clash !== null;
     }
 
     /**
@@ -285,6 +409,17 @@ export class SlotAssignmentService {
         });
 
         if (existing?.slotId === slotId) return existing;
+
+        // An admin moving someone by hand is still subject to the one rule the
+        // auto-assigner cannot bend: a participant cannot be in two places at
+        // once. Reported as a conflict rather than silently allowed, because the
+        // clash is with a booking on a *different* exam that this screen does
+        // not show -- so an admin would have no way to see what they had broken.
+        if (await this.collidesWithExistingBooking(userId, slot.examInstanceId, slot)) {
+            throw new ConflictException(
+                'This participant already sits another exam at that time. Move that booking first, or pick a sitting at a different hour.',
+            );
+        }
 
         const moved = await this.prisma.$transaction(async (tx) => {
             const claim = await tx.examSlot.updateMany({
@@ -404,6 +539,52 @@ export class SlotAssignmentService {
         return { ...summary, failures: failures.slice(0, 20) };
     }
 
+    /**
+     * Runs the backfill across every exam that uses sittings.
+     *
+     * This is the "everyone gets a date" guarantee made operational. Three
+     * things leave a participant unscheduled and none of them are their fault:
+     * they registered before the calendar existed, every sitting was full at the
+     * moment they signed up, or the exam itself was created after they had
+     * already registered. All three are fixed by the same sweep, which is why it
+     * is one method and not three.
+     *
+     * Idempotent and safe to run repeatedly -- a participant who already holds a
+     * seat is skipped by the query, not re-placed.
+     */
+    async backfillAll() {
+        const instances = await this.slotBearingInstances();
+        const perInstance: {
+            examInstanceId: string;
+            considered: number;
+            assigned: number;
+            unassigned: number;
+        }[] = [];
+
+        for (const instanceId of instances) {
+            try {
+                const result = await this.backfillInstance(instanceId);
+                perInstance.push({
+                    examInstanceId: instanceId,
+                    considered: result.considered,
+                    assigned: result.assigned,
+                    unassigned: result.unassigned,
+                });
+            } catch (err) {
+                this.logger.error(
+                    `Backfill failed for instance ${instanceId}: ${(err as Error).message}`,
+                );
+            }
+        }
+
+        return {
+            instances: perInstance.length,
+            assigned: perInstance.reduce((n, r) => n + r.assigned, 0),
+            stillUnassigned: perInstance.reduce((n, r) => n + r.unassigned, 0),
+            perInstance,
+        };
+    }
+
     /** Students of an instance with no sitting, for the admin's attention list. */
     async listUnassigned(examInstanceId: string) {
         const instance = await this.prisma.examInstance.findUnique({
@@ -464,11 +645,14 @@ export class SlotAssignmentService {
 
         const registeredAt = user.activatedAt ?? user.createdAt;
         const rules = this.rulesFor(instance, registeredAt);
-        const dates = candidateDates(rules);
+        const plan = await this.buildPlan(instance.id, rules);
+        const dates = plan.candidates;
 
         const steps = [];
         for (const candidate of dates) {
-            const timings = await this.timings.timingsForWeekday(instance.id, candidate.weekday);
+            const timings = plan.usesCalendar
+                ? await this.timings.timingsForPriority(instance.id, candidate.priority ?? 1)
+                : await this.timings.timingsForWeekday(instance.id, candidate.weekday);
             const slots = await this.prisma.examSlot.findMany({
                 where: { slotDate: candidate.date, examInstanceId: instance.id },
                 select: { id: true, label: true, startsAt: true, capacity: true, booked: true },
@@ -479,6 +663,7 @@ export class SlotAssignmentService {
                 weekday: weekdayName(candidate.weekday),
                 daysFromRegistration: candidate.daysFromRegistration,
                 preferenceRank: candidate.preferenceRank,
+                priority: candidate.priority ?? null,
                 withinExamWindow: this.dateFitsExamWindow(candidate, instance),
                 timingCount: timings.length,
                 sittings: slots,
@@ -486,7 +671,12 @@ export class SlotAssignmentService {
             });
         }
 
-        return { registeredAt, rules: { ...rules, dayPreferenceNames: rules.dayPreference.map(weekdayName) }, steps };
+        return {
+            registeredAt,
+            usesPublishedCalendar: plan.usesCalendar,
+            rules: { ...rules, dayPreferenceNames: rules.dayPreference.map(weekdayName) },
+            steps,
+        };
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

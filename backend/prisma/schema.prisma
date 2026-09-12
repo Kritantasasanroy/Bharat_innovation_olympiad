@@ -436,6 +436,7 @@ model ExamInstance {
   attempts                    Attempt[]
   slots                       ExamSlot[]
   slotTimings                 SlotTiming[]
+  scheduleDates               ExamScheduleDate[]
   exam                        Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
   certificates                Certificate[]
   trialCompletions            TrialCompletion[]
@@ -1109,6 +1110,38 @@ enum ProctorEventType {
 /// so the set of dates that must exist is unknowable in advance — an admin
 /// hand-creating one row per calendar date could never keep up, and any Sunday
 /// they forgot would silently push students onto a Saturday.
+/// One published exam day, and the tier it belongs to.
+///
+/// The season announces its dates up front, so an instance's sittings are a
+/// fixed list rather than something derived from each student's signup date.
+/// The assigner walks these rows in `(priority, date)` order and seats every
+/// student into the first sitting with a free seat — tier 1 exhausted before
+/// tier 2 is looked at.
+///
+/// An instance with no rows here falls back to the older weekday search
+/// (`ExamInstance.slotDayPreference`), so exams configured before the calendar
+/// existed keep working unchanged.
+model ExamScheduleDate {
+  id             String       @id @default(uuid())
+  examInstanceId String
+  examInstance   ExamInstance @relation(fields: [examInstanceId], references: [id], onDelete: Cascade)
+  /// Midnight IST of the day, held as a UTC instant — the same canonical form
+  /// `ExamSlot.slotDate` uses, so the two join without a timezone round trip.
+  date           DateTime
+  /// 1 is filled before 2. Also selects which timings the day runs.
+  priority       Int          @default(1)
+  /// A blackout day — Diwali, say — is stored as an inactive row rather than
+  /// omitted, so the gap shows on the calendar with its reason attached
+  /// instead of looking like a date somebody forgot.
+  isActive       Boolean      @default(true)
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([examInstanceId, date])
+  @@index([examInstanceId, priority, date])
+}
+
 model SlotTiming {
   id             String       @id @default(uuid())
   examInstanceId String
@@ -1124,7 +1157,15 @@ model SlotTiming {
   /// student is already booked into can never shrink underneath them.
   capacity       Int          @default(50)
   /// Which days this timing runs on. 0 = Sunday … 6 = Saturday, IST.
+  ///
+  /// Only consulted for instances that have **no** `ExamScheduleDate` rows. Once
+  /// a published calendar exists the date decides the day, and `priority` — not
+  /// the weekday — decides which timings that date runs.
   weekdays       Int[]        @default([0, 6])
+  /// The calendar tier this timing belongs to. A timing is only ever used on a
+  /// schedule date of the same tier, which is what stops a tier-2 Saturday —
+  /// which runs only the two evening sittings — from opening a 08:30 one.
+  priority       Int          @default(1)
   isActive       Boolean      @default(true)
   sortOrder      Int          @default(0)
   createdAt      DateTime     @default(now())

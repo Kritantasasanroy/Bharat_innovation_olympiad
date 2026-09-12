@@ -344,6 +344,12 @@ export const portalApi = {
 	 * registration date, so there is no school-level slot left to pick.
 	 */
 	slots: (token: string) => authed<SlotBoard[]>("/school/portal/slots", token),
+	/**
+	 * The same placements arranged by day rather than by exam -- what the month
+	 * calendar draws. Counts are this school's own, never the sitting's total.
+	 */
+	slotCalendar: (token: string) =>
+		authed<SchoolCalendarDay[]>("/school/portal/slot-calendar", token),
 	monitoring: (token: string) => authed<PortalMonitoring>("/school/portal/monitoring", token),
 	results: (token: string) => authed<PortalResult[]>("/school/portal/results", token),
 	/** Exams whose results have been released to schools (item 18). */
@@ -444,6 +450,26 @@ export interface BoardSlot {
 	readonly endsAt: string;
 	readonly students: number;
 	readonly hasEnded: boolean;
+}
+
+/** One day this school has participants sitting on. */
+export interface SchoolCalendarDay {
+	/** Midnight IST of the day. */
+	readonly date: string;
+	readonly weekday: string;
+	/** How many of this school's participants sit that day, across all exams. */
+	readonly students: number;
+	readonly hasEnded: boolean;
+	readonly exams: { readonly id: string; readonly title: string }[];
+	readonly byClassBand: { readonly classBand: number; readonly students: number }[];
+	readonly sittings: {
+		readonly slotId: string;
+		readonly label: string | null;
+		readonly startsAt: string;
+		readonly endsAt: string;
+		readonly examTitle: string;
+		readonly students: number;
+	}[];
 }
 
 export interface SlotBoard {

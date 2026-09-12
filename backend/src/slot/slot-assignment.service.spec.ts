@@ -44,16 +44,25 @@ interface FakeBooking {
     assignedBy: string | null;
 }
 
+interface FakeScheduleDate {
+    date: Date;
+    priority: number;
+    isActive: boolean;
+}
+
 /**
  * Enough of Prisma to run the assigner: the atomic `updateMany` capacity claim,
  * the booking lookups, and a `$transaction` that just runs the callback (the
  * fake is single-threaded, so the interleaving a real transaction protects
  * against cannot occur here — the oversell test drives the guard directly).
  */
-function createFakeDb(opts: { instance?: typeof INSTANCE } = {}) {
+function createFakeDb(
+    opts: { instance?: typeof INSTANCE; scheduleDates?: FakeScheduleDate[] } = {},
+) {
     const instance = opts.instance ?? INSTANCE;
     const slots: FakeSlot[] = [];
     const bookings: FakeBooking[] = [];
+    const scheduleDates: FakeScheduleDate[] = opts.scheduleDates ?? [];
     const users = new Map<string, { createdAt: Date; activatedAt: Date | null; role: string }>();
     let seq = 0;
 
@@ -68,12 +77,31 @@ function createFakeDb(opts: { instance?: typeof INSTANCE } = {}) {
         },
         booking: {
             findFirst: async ({ where, include }: any) => {
+                // Two shapes reach this: "does this student hold a seat for
+                // *this* instance?" and the collision check's "…for any *other*
+                // instance, overlapping this window?". They differ only in the
+                // slot filter, so both are answered by matching it faithfully.
+                const slotFilter = where.slot ?? {};
+                const matchesSlot = (slot: FakeSlot | undefined) => {
+                    if (!slot) return false;
+                    const wanted = slotFilter.examInstanceId;
+                    if (typeof wanted === 'string' && slot.examInstanceId !== wanted) return false;
+                    if (wanted?.not !== undefined && slot.examInstanceId === wanted.not) {
+                        return false;
+                    }
+                    if (slotFilter.startsAt?.lt && !(slot.startsAt < slotFilter.startsAt.lt)) {
+                        return false;
+                    }
+                    if (slotFilter.endsAt?.gt && !(slot.endsAt > slotFilter.endsAt.gt)) {
+                        return false;
+                    }
+                    return true;
+                };
                 const found = bookings.find(
                     (b) =>
                         b.userId === where.userId &&
                         (where.status?.in ?? [b.status]).includes(b.status) &&
-                        slots.find((s) => s.id === b.slotId)?.examInstanceId ===
-                            (where.slot?.examInstanceId ?? instance.id),
+                        matchesSlot(slots.find((s) => s.id === b.slotId)),
                 );
                 if (!found) return null;
                 if (!include?.slot) return found;
@@ -120,10 +148,13 @@ function createFakeDb(opts: { instance?: typeof INSTANCE } = {}) {
                 return { count: 1 };
             },
         },
+        examScheduleDate: {
+            findMany: async () => scheduleDates,
+        },
         $transaction: async (fn: any) => (typeof fn === 'function' ? fn(client) : Promise.all(fn)),
     };
 
-    return { client, slots, bookings, users, instance };
+    return { client, slots, bookings, users, instance, scheduleDates };
 }
 
 /**
@@ -136,6 +167,7 @@ interface FakeTiming {
     startMinute: number;
     endMinute: number;
     capacity: number;
+    priority?: number;
 }
 
 function createFakeTimings(
@@ -145,6 +177,10 @@ function createFakeTimings(
     return {
         timingsForWeekday: async (_instanceId: string, weekday: number) =>
             timings.filter((t) => t.weekdays.includes(weekday)) as never,
+        timingsForPriority: async (_instanceId: string, priority: number) =>
+            timings
+                .filter((t) => (t.priority ?? 1) === priority)
+                .sort((a, b) => a.startMinute - b.startMinute) as never,
         ensureSlot: async (timing: any, slotDate: Date) => {
             const found = db.slots.find(
                 (s) => s.timingId === timing.id && s.slotDate.getTime() === slotDate.getTime(),
@@ -167,14 +203,34 @@ function createFakeTimings(
     } as unknown as SlotTimingService;
 }
 
-function setup(timingSpec: FakeTiming[]) {
-    const db = createFakeDb();
+function setup(timingSpec: FakeTiming[], scheduleDates?: FakeScheduleDate[]) {
+    const db = createFakeDb({ scheduleDates });
     const service = new SlotAssignmentService(
         db.client as never,
         createFakeTimings(db, timingSpec),
     );
     return { ...db, service };
 }
+
+/** A published day, given as `YYYY-MM-DD` in IST. */
+const scheduled = (date: string, priority: number, isActive = true): FakeScheduleDate => ({
+    date: istStartOfDay(ist(`${date}T00:00:00`)),
+    priority,
+    isActive,
+});
+
+/**
+ * A published day `days` from today, for the tests about the lead time.
+ *
+ * Those have to be relative: dates already past are dropped before the lead is
+ * ever consulted, so a fixed date would test the lead rule today and the
+ * past-date rule a month from now.
+ */
+const scheduledInDays = (days: number, priority = 1): FakeScheduleDate => ({
+    date: istStartOfDay(new Date(Date.now() + days * 24 * 60 * 60_000)),
+    priority,
+    isActive: true,
+});
 
 /** A student who registered on Tuesday 1 Sep 2026. */
 function register(db: { users: Map<string, any> }, id: string, on = ist('2026-09-01T10:00:00')) {
@@ -457,5 +513,251 @@ describe('SlotAssignmentService.reassign', () => {
         // The original seat is untouched by the failed move.
         expect(db.slots[0].booked).toBe(1);
         expect(db.bookings[0].slotId).toBe(db.slots[0].id);
+    });
+});
+
+// ── The published calendar ───────────────────────────────────────────────────
+
+/**
+ * A cut-down season with the shape of the real one: two tier-1 Sundays running
+ * three sittings, and the tier-2 Saturday *before* the first of them running
+ * only the late one. The Saturday sitting comes first on a calendar and last in
+ * the fill order, which is the whole point of a tier and the thing easiest to
+ * get backwards.
+ */
+const TIER_1_MORNING: FakeTiming = {
+    id: 'p1-0830', weekdays: [0], startMinute: 510, endMinute: 600, capacity: 2, priority: 1,
+};
+const TIER_1_MIDDAY: FakeTiming = {
+    id: 'p1-1000', weekdays: [0], startMinute: 600, endMinute: 690, capacity: 2, priority: 1,
+};
+const TIER_2_EVENING: FakeTiming = {
+    id: 'p2-1730', weekdays: [6], startMinute: 1050, endMinute: 1140, capacity: 2, priority: 2,
+};
+
+const SEASON = [
+    scheduled('2026-09-26', 2),
+    scheduled('2026-09-27', 1),
+    scheduled('2026-10-03', 2),
+    scheduled('2026-10-04', 1),
+];
+
+describe('the published calendar', () => {
+    it('seats the first participant on the first tier-1 date, not the earlier tier-2 one', async () => {
+        const db = setup([TIER_1_MORNING, TIER_1_MIDDAY, TIER_2_EVENING], SEASON);
+        register(db, 'stu-1');
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(result.priority).toBe(1);
+        // Sunday the 27th at 08.30 — the earliest sitting of the top tier, even
+        // though Saturday the 26th is a day earlier on the calendar.
+        expect(day(result.slotStartsAt!)).toBe('2026-09-27');
+        expect(result.slotStartsAt!.getTime()).toBe(
+            ist('2026-09-27T08:30:00').getTime(),
+        );
+    });
+
+    it('fills a date sitting by sitting, then rolls to the next date of the same tier', async () => {
+        const db = setup([TIER_1_MORNING, TIER_1_MIDDAY, TIER_2_EVENING], SEASON);
+
+        // Four seats on Sunday the 27th: 08.30 x2, then 10.00 x2.
+        for (let i = 0; i < 5; i += 1) {
+            register(db, `stu-${i}`);
+            await db.service.ensureAssignment(`stu-${i}`, 'inst-1');
+        }
+
+        const dates = db.bookings.map(
+            (b) => db.slots.find((s) => s.id === b.slotId)!.startsAt,
+        );
+        expect(dates.map((d) => day(d))).toEqual([
+            '2026-09-27',
+            '2026-09-27',
+            '2026-09-27',
+            '2026-09-27',
+            '2026-10-04',
+        ]);
+        expect(dates.slice(0, 4).map((d) => d.getTime())).toEqual([
+            ist('2026-09-27T08:30:00').getTime(),
+            ist('2026-09-27T08:30:00').getTime(),
+            ist('2026-09-27T10:00:00').getTime(),
+            ist('2026-09-27T10:00:00').getTime(),
+        ]);
+    });
+
+    it('only falls through to tier 2 once every tier-1 date is full', async () => {
+        const db = setup([TIER_1_MORNING, TIER_1_MIDDAY, TIER_2_EVENING], SEASON);
+
+        // Two Sundays x two sittings x two seats = eight tier-1 places.
+        for (let i = 0; i < 9; i += 1) {
+            register(db, `stu-${i}`);
+            await db.service.ensureAssignment(`stu-${i}`, 'inst-1');
+        }
+
+        const ninth = db.bookings[8];
+        const slot = db.slots.find((s) => s.id === ninth.slotId)!;
+        expect(day(slot.startsAt)).toBe('2026-09-26');
+        expect(slot.timingId).toBe('p2-1730');
+    });
+
+    it('never seats anyone on a blacked-out date', async () => {
+        const db = setup(
+            [TIER_1_MORNING],
+            [scheduled('2026-11-08', 1, false), scheduled('2026-11-15', 1)],
+        );
+        register(db, 'stu-1');
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(day(result.slotStartsAt!)).toBe('2026-11-15');
+    });
+
+    it('reports a calendar whose every date is closed, rather than silently doing nothing', async () => {
+        const db = setup([TIER_1_MORNING], [scheduled('2026-11-08', 1, false)]);
+        register(db, 'stu-1');
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('UNASSIGNED');
+        expect(result.reason).toBe('NO_SCHEDULE_DATES');
+    });
+
+    /**
+     * The lead time stops being a filter once dates are published. A student
+     * registering days before the last sitting of the season must still get a
+     * seat — being told "no date available" because the season is nearly over is
+     * exactly the failure the calendar exists to prevent.
+     */
+    it('falls back to a date inside the lead time rather than leaving anyone unscheduled', async () => {
+        const soon = scheduledInDays(3);
+        const db = setup([TIER_1_MORNING], [soon]);
+        // Registering today, with the only published date three days out —
+        // well inside the fortnight lead, and still the right answer.
+        register(db, 'stu-1', new Date());
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(day(result.slotStartsAt!)).toBe(day(soon.date));
+    });
+
+    it('prefers a date outside the lead time over a nearer one', async () => {
+        const soon = scheduledInDays(3);
+        const later = scheduledInDays(21);
+        const db = setup([TIER_1_MORNING], [soon, later]);
+        register(db, 'stu-1', new Date());
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(day(result.slotStartsAt!)).toBe(day(later.date));
+    });
+});
+
+// ── Collisions ───────────────────────────────────────────────────────────────
+
+describe('two sittings never collide for one participant', () => {
+    /**
+     * A participant already sitting another exam at 08.30 on the 27th is pushed
+     * to the next sitting rather than double-booked. The clash is with a booking
+     * on a *different* instance, which is the only way it can arise: one
+     * instance seats a student once.
+     */
+    it('skips a sitting that overlaps one the participant already holds elsewhere', async () => {
+        const db = setup([TIER_1_MORNING, TIER_1_MIDDAY], SEASON);
+        register(db, 'stu-1');
+
+        db.slots.push({
+            id: 'other-exam-slot',
+            examInstanceId: 'inst-other',
+            timingId: null,
+            slotDate: istStartOfDay(ist('2026-09-27T00:00:00')),
+            label: null,
+            startsAt: ist('2026-09-27T08:30:00'),
+            endsAt: ist('2026-09-27T10:00:00'),
+            capacity: 50,
+            booked: 1,
+        });
+        db.bookings.push({
+            id: 'bk-other',
+            userId: 'stu-1',
+            slotId: 'other-exam-slot',
+            status: 'CONFIRMED',
+            assignedBy: null,
+        });
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(result.slotStartsAt!.getTime()).toBe(ist('2026-09-27T10:00:00').getTime());
+    });
+
+    /**
+     * Back-to-back is not a collision. The season runs sittings 90 minutes
+     * apart, so treating a shared boundary as an overlap would put every
+     * consecutive pair in conflict.
+     */
+    it('treats a sitting that ends exactly as another begins as free', async () => {
+        const db = setup([TIER_1_MIDDAY], SEASON);
+        register(db, 'stu-1');
+
+        db.slots.push({
+            id: 'other-exam-slot',
+            examInstanceId: 'inst-other',
+            timingId: null,
+            slotDate: istStartOfDay(ist('2026-09-27T00:00:00')),
+            label: null,
+            startsAt: ist('2026-09-27T08:30:00'),
+            endsAt: ist('2026-09-27T10:00:00'),
+            capacity: 50,
+            booked: 1,
+        });
+        db.bookings.push({
+            id: 'bk-other',
+            userId: 'stu-1',
+            slotId: 'other-exam-slot',
+            status: 'CONFIRMED',
+            assignedBy: null,
+        });
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(result.slotStartsAt!.getTime()).toBe(ist('2026-09-27T10:00:00').getTime());
+    });
+
+    it('refuses an admin move into a sitting the participant cannot be at', async () => {
+        const db = setup([TIER_1_MORNING], SEASON);
+        register(db, 'stu-1');
+        await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        db.slots.push({
+            id: 'other-exam-slot',
+            examInstanceId: 'inst-other',
+            timingId: null,
+            slotDate: istStartOfDay(ist('2026-10-04T00:00:00')),
+            label: null,
+            startsAt: ist('2026-10-04T08:30:00'),
+            endsAt: ist('2026-10-04T10:00:00'),
+            capacity: 50,
+            booked: 1,
+        });
+        db.bookings.push({
+            id: 'bk-other',
+            userId: 'stu-1',
+            slotId: 'other-exam-slot',
+            status: 'CONFIRMED',
+            assignedBy: null,
+        });
+
+        // The tier-1 08.30 sitting on 4 Oct, which the other exam now occupies.
+        const target = await db.service['timings'].ensureSlot(
+            { id: 'p1-0830', examInstanceId: 'inst-1', startMinute: 510, endMinute: 600, capacity: 2 } as never,
+            istStartOfDay(ist('2026-10-04T00:00:00')),
+        );
+
+        await expect(db.service.reassign('stu-1', target.id, 'admin-1')).rejects.toThrow(
+            /already sits another exam/i,
+        );
     });
 });

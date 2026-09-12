@@ -15,6 +15,8 @@ import {
     validateSlotWindow,
 } from './exam-lifecycle';
 import { parseMinuteOfDay } from '../slot/slot-assignment.rules';
+import { SlotAssignmentService } from '../slot/slot-assignment.service';
+import { SlotScheduleDateService } from '../slot/slot-schedule-date.service';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
 // Uses a simple mulberry32 PRNG seeded from the userId hash so each
@@ -71,6 +73,8 @@ export class ExamService {
         private storage: ObjectStorageService,
         private config: ConfigService,
         private drive: GoogleDriveService,
+        private scheduleDates: SlotScheduleDateService,
+        private slotAssignment: SlotAssignmentService,
     ) { }
 
     /**
@@ -551,9 +555,33 @@ export class ExamService {
             endTime: string;
             capacity?: number;
             weekdays?: number[];
+            /** Calendar tier: 1 is filled before 2. */
+            priority?: number;
+        }[];
+        /**
+         * Creates the season's published calendar for this exam -- its dates and
+         * the timings each tier runs -- instead of taking `slotTimings`. The
+         * usual path: an exam that runs on the published schedule should not be
+         * configured date by date.
+         */
+        useStandardCalendar?: boolean;
+        /** Specific dates, when the exam does not run on the standard calendar. */
+        scheduleDates?: {
+            date: string;
+            priority?: number;
+            isActive?: boolean;
+            note?: string;
         }[];
     }) {
-        const { instance, slotTimings, isPublished, isResultReleased, ...examData } = input;
+        const {
+            instance,
+            slotTimings,
+            isPublished,
+            isResultReleased,
+            useStandardCalendar,
+            scheduleDates,
+            ...examData
+        } = input;
 
         const instanceWindow = {
             startsAt: new Date(instance.startsAt),
@@ -584,11 +612,12 @@ export class ExamService {
                 endMinute,
                 capacity: t.capacity ?? 50,
                 weekdays: t.weekdays ?? [0, 6],
+                priority: t.priority ?? 1,
                 sortOrder: i,
             };
         });
 
-        return this.prisma.$transaction(async (tx) => {
+        const created = await this.prisma.$transaction(async (tx) => {
             const exam = await tx.exam.create({
                 data: {
                     ...examData,
@@ -629,11 +658,44 @@ export class ExamService {
                 orderBy: [{ sortOrder: 'asc' }, { startMinute: 'asc' }],
             });
 
-            // No dated sittings are created here on purpose. Which Sundays exist
-            // depends on when students register, so they are materialised by the
-            // assigner when a student actually needs one.
+            // No dated sittings are created here on purpose. A sitting is
+            // materialised the first time somebody is actually put on it, so a
+            // season's calendar costs its date rows and nothing else until it
+            // starts filling.
             return { exam, instance: examInstance, slotTimings: createdTimings };
         });
+
+        // The calendar is written outside the transaction because the seeder is
+        // idempotent and re-runnable: a failure here leaves an exam that an
+        // admin can seed from the scheduling page with one click, which is a far
+        // better outcome than rolling back a fully built exam and its paper.
+        if (useStandardCalendar) {
+            await this.scheduleDates.seedStandardCalendar(created.instance.id);
+        } else if (scheduleDates?.length) {
+            for (const d of scheduleDates) {
+                await this.scheduleDates.create({
+                    examInstanceId: created.instance.id,
+                    date: d.date,
+                    priority: d.priority,
+                    isActive: d.isActive,
+                    note: d.note,
+                });
+            }
+        }
+
+        // Participants who registered before this exam existed have no sitting
+        // for it, and nothing else would ever give them one -- registration has
+        // already happened for them. Best-effort: a scheduling failure must not
+        // fail the exam that was just created successfully.
+        this.slotAssignment
+            .backfillInstance(created.instance.id)
+            .catch((err) =>
+                this.logger.warn(
+                    `Could not schedule existing participants for new exam ${created.exam.id}: ${err.message}`,
+                ),
+            );
+
+        return created;
     }
 
     async deleteExam(id: string) {
@@ -1347,7 +1409,30 @@ export class ExamService {
         });
         if (!check.ok) throw new BadRequestException(check.reason);
 
-        return this.prisma.exam.update({ where: { id }, data: { isPublished: true } });
+        const published = await this.prisma.exam.update({
+            where: { id },
+            data: { isPublished: true },
+        });
+
+        // Publishing is the moment an exam starts needing seats. Every
+        // participant of an eligible class gets one now rather than whenever
+        // they next happen to open their schedule. Best-effort for the same
+        // reason as above -- the publish itself has already succeeded.
+        const instances = await this.prisma.examInstance.findMany({
+            where: { examId: id },
+            select: { id: true },
+        });
+        for (const instance of instances) {
+            this.slotAssignment
+                .backfillInstance(instance.id)
+                .catch((err) =>
+                    this.logger.warn(
+                        `Could not schedule participants on publishing exam ${id}: ${err.message}`,
+                    ),
+                );
+        }
+
+        return published;
     }
 
     /** Un-publishes an exam, taking it straight back out of every student's list. */

@@ -213,7 +213,11 @@ export type UnassignedReason =
     /** The search window falls entirely outside the exam instance's own window. */
     | 'OUTSIDE_EXAM_WINDOW'
     /** The rules themselves produce no dates at all. */
-    | 'NO_CANDIDATE_DATES';
+    | 'NO_CANDIDATE_DATES'
+    /** The exam publishes a calendar, but every date on it is past or closed. */
+    | 'NO_SCHEDULE_DATES'
+    /** Seats were free, but the participant already sits another exam then. */
+    | 'CLASHES_WITH_ANOTHER_EXAM';
 
 export function unassignedMessage(reason: UnassignedReason, rules: SearchRules): string {
     const days = `${rules.leadDays}–${rules.horizonDays} days after registration`;
@@ -227,5 +231,95 @@ export function unassignedMessage(reason: UnassignedReason, rules: SearchRules):
             return `The ${days} window falls outside this exam's own dates. Extend the exam window, or shorten the lead time.`;
         case 'NO_CANDIDATE_DATES':
             return 'The assignment rules produce no eligible dates. Check the lead time, horizon and preferred days.';
+        case 'NO_SCHEDULE_DATES':
+            return 'Every date on this exam calendar is in the past or closed. Add a date, or reopen one.';
+        case 'CLASHES_WITH_ANOTHER_EXAM':
+            return 'Every sitting with a free seat overlaps one this participant already holds for another exam. Move the other booking, or add a sitting at a different hour.';
     }
+}
+
+// ── The published calendar ────────────────────────────────────────────────────
+
+/**
+ * A day the exam runs, reduced to what the ordering needs.
+ *
+ * `date` is midnight IST as a UTC instant, the same canonical form
+ * `istStartOfDay` produces and `ExamSlot.slotDate` stores.
+ */
+export interface ScheduleDay {
+    date: Date;
+    priority: number;
+    isActive: boolean;
+}
+
+/** A schedule day, with where it sat in the fill order. */
+export interface CalendarCandidate extends CandidateDate {
+    priority: number;
+}
+
+/**
+ * The published dates in the order the assigner must fill them.
+ *
+ * **Priority-major, then earliest date.** Every tier-1 Sunday is exhausted
+ * before the first tier-2 Saturday is looked at, which is the whole point of a
+ * tier: the Saturdays are overflow, not an alternative offered in parallel.
+ * Ordering by date instead would seat a student on Saturday the 26th while
+ * Sunday the 27th still had seats — the opposite of what the schedule intends.
+ *
+ * Blacked-out days (Diwali) are dropped here rather than filtered by the caller,
+ * so there is exactly one place that decides a date is unusable.
+ *
+ * `notBefore` drops days that have already passed; `daysFromRegistration` is
+ * carried through only for the admin's "why this date?" explanation, and no
+ * longer influences the order.
+ */
+export function calendarCandidates(
+    days: ScheduleDay[],
+    registeredAt: Date,
+    notBefore?: Date,
+): CalendarCandidate[] {
+    const registrationDay = istStartOfDay(registeredAt);
+    const floor = notBefore ? istStartOfDay(notBefore).getTime() : Number.NEGATIVE_INFINITY;
+
+    return days
+        .filter((d) => d.isActive && d.date.getTime() >= floor)
+        .sort((a, b) => a.priority - b.priority || a.date.getTime() - b.date.getTime())
+        .map((d, index) => ({
+            date: d.date,
+            priority: d.priority,
+            weekday: istWeekday(d.date),
+            // The tier *is* the preference rank now — there is no weekday
+            // preference left to rank by once the dates are published.
+            preferenceRank: index,
+            daysFromRegistration: Math.round(
+                (d.date.getTime() - registrationDay.getTime()) / MS_PER_DAY,
+            ),
+        }));
+}
+
+// ── Collisions ────────────────────────────────────────────────────────────────
+
+/**
+ * Do two half-open time windows overlap?
+ *
+ * Half-open — `[start, end)` — is what makes back-to-back sittings legal: the
+ * 10:00–11:30 paper and the 11:30–13:00 one touch at 11:30 and do not clash, and
+ * the published schedule runs on exactly that 90-minute cadence. Treating the
+ * boundary as an overlap would make every consecutive pair in the season collide.
+ */
+export function windowsOverlap(
+    a: { startsAt: Date; endsAt: Date },
+    b: { startsAt: Date; endsAt: Date },
+): boolean {
+    return a.startsAt < b.endsAt && b.startsAt < a.endsAt;
+}
+
+/** The same question for two times-of-day on a shared date. */
+export function minuteRangesOverlap(
+    a: { startMinute: number; endMinute: number },
+    b: { startMinute: number; endMinute: number },
+): boolean {
+    const endOf = (r: { startMinute: number; endMinute: number }) =>
+        r.endMinute > r.startMinute ? r.endMinute : r.endMinute + 1440;
+    return a.startMinute < endOf(b) && b.startMinute < endOf(a);
 }

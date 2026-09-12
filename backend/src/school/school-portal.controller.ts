@@ -85,6 +85,15 @@ export class SchoolPortalController {
         return this.portal.slots(this.schoolOf(schoolId));
     }
 
+    /**
+     * The same placements, by day rather than by exam -- what the coordinator's
+     * calendar draws.
+     */
+    @Get('slot-calendar')
+    slotCalendar(@CurrentUser('schoolId') schoolId: string) {
+        return this.portal.slotCalendar(this.schoolOf(schoolId));
+    }
+
     @Get('monitoring')
     monitoring(@CurrentUser('schoolId') schoolId: string) {
         return this.portal.monitoring(this.schoolOf(schoolId));

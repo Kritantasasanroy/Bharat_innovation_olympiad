@@ -5,6 +5,7 @@ import { CreateSlotTimingDto, UpdateSlotTimingDto } from './dto/slot.dto';
 import {
     formatMinuteOfDay,
     istStartOfDay,
+    minuteRangesOverlap,
     parseMinuteOfDay,
     slotWindow,
     weekdayName,
@@ -42,6 +43,8 @@ export class SlotTimingService {
         if (!instance) throw new NotFoundException('Exam instance not found');
 
         const { startMinute, endMinute } = this.parseWindow(dto.startTime, dto.endTime);
+        const priority = dto.priority ?? 1;
+        await this.assertNoOverlap(dto.examInstanceId, priority, { startMinute, endMinute }, null);
 
         const timing = await this.prisma.slotTiming.create({
             data: {
@@ -51,8 +54,9 @@ export class SlotTimingService {
                 endMinute,
                 capacity: dto.capacity ?? 50,
                 weekdays: dto.weekdays ?? [0, 6],
+                priority,
                 isActive: dto.isActive ?? true,
-                sortOrder: dto.sortOrder ?? 0,
+                sortOrder: dto.sortOrder ?? startMinute,
             },
         });
         return this.decorate(timing);
@@ -65,6 +69,12 @@ export class SlotTimingService {
         const startTime = dto.startTime ?? formatMinuteOfDay(timing.startMinute);
         const endTime = dto.endTime ?? formatMinuteOfDay(timing.endMinute);
         const { startMinute, endMinute } = this.parseWindow(startTime, endTime);
+        await this.assertNoOverlap(
+            timing.examInstanceId,
+            dto.priority ?? timing.priority,
+            { startMinute, endMinute },
+            timing.id,
+        );
 
         const updated = await this.prisma.slotTiming.update({
             where: { id: timingId },
@@ -74,6 +84,7 @@ export class SlotTimingService {
                 ...(dto.endTime !== undefined && { endMinute }),
                 ...(dto.capacity !== undefined && { capacity: dto.capacity }),
                 ...(dto.weekdays !== undefined && { weekdays: this.normaliseWeekdays(dto.weekdays) }),
+                ...(dto.priority !== undefined && { priority: dto.priority }),
                 ...(dto.isActive !== undefined && { isActive: dto.isActive }),
                 ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
             },
@@ -142,6 +153,25 @@ export class SlotTimingService {
     }
 
     /**
+     * The active timings for a calendar tier, earliest first.
+     *
+     * The tier, not the weekday, is what selects the times once an exam
+     * publishes a calendar: a tier-2 Saturday runs only the two evening
+     * sittings, and asking by weekday would hand it all seven.
+     *
+     * Ordering is earliest-start-first rather than by `sortOrder`, because on a
+     * published day the fill order *is* the clock: 8.30 fills before 10.00
+     * before 11.30. `sortOrder` remains the tie-break for two timings that start
+     * together, which the overlap guard should now prevent anyway.
+     */
+    async timingsForPriority(examInstanceId: string, priority: number): Promise<SlotTiming[]> {
+        return this.prisma.slotTiming.findMany({
+            where: { examInstanceId, isActive: true, priority },
+            orderBy: [{ startMinute: 'asc' }, { sortOrder: 'asc' }],
+        });
+    }
+
+    /**
      * The sitting for `(timing, date)`, creating it if it does not exist yet.
      *
      * Two students registering at the same moment can both find nothing and both
@@ -193,6 +223,46 @@ export class SlotTimingService {
             throw new BadRequestException('A sitting must be longer than zero minutes.');
         }
         return { startMinute, endMinute };
+    }
+
+    /**
+     * Refuses a timing that would run into another on the same day.
+     *
+     * This is the "no two sittings collide for the same exam" rule, and it is
+     * enforced here rather than at assignment time because a collision is a
+     * configuration mistake, not a runtime condition: two overlapping sittings
+     * on the same date compete for the same invigilation and the same hall, and
+     * a participant assigned to the later one is told a start time that has
+     * already been claimed. The published schedule runs 90 minutes apart, so the
+     * usual way to trip this is lengthening a paper past its gap -- which is
+     * exactly the moment an admin needs to be told.
+     *
+     * Only timings of the same tier are compared, since a tier-1 Sunday and a
+     * tier-2 Saturday are different days and cannot collide by construction.
+     * Paused timings are compared too: reactivating one must not be a silent
+     * route back into a clash.
+     */
+    private async assertNoOverlap(
+        examInstanceId: string,
+        priority: number,
+        window: { startMinute: number; endMinute: number },
+        ignoreTimingId: string | null,
+    ): Promise<void> {
+        const siblings = await this.prisma.slotTiming.findMany({
+            where: {
+                examInstanceId,
+                priority,
+                ...(ignoreTimingId ? { id: { not: ignoreTimingId } } : {}),
+            },
+            select: { id: true, startMinute: true, endMinute: true },
+        });
+
+        const clash = siblings.find((t) => minuteRangesOverlap(window, t));
+        if (clash) {
+            throw new BadRequestException(
+                `That sitting would overlap the ${formatMinuteOfDay(clash.startMinute)}-${formatMinuteOfDay(clash.endMinute)} sitting on the same day. Sittings on one date must not run into each other.`,
+            );
+        }
     }
 
     private normaliseWeekdays(weekdays: number[]): number[] {

@@ -35,7 +35,14 @@ describe('findExamById — answer-key exposure', () => {
             },
         };
 
-        const service = new ExamService(prisma as any, objectStorageStub(), {} as any, {} as any);
+        const service = new ExamService(
+            prisma as any,
+            objectStorageStub(),
+            {} as any,
+            {} as any,
+            {} as any,
+            {} as any,
+        );
         await service.findExamById('exam-1', userId);
         return captured!;
     };

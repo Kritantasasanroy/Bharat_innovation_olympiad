@@ -49,6 +49,13 @@ export class CreateSlotTimingDto {
     @Type(() => Number)
     weekdays?: number[];
 
+    /** Calendar tier: 1 is filled before 2, and selects which dates run it. */
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9)
+    priority?: number;
+
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
@@ -86,6 +93,12 @@ export class UpdateSlotTimingDto {
     @Max(6, { each: true })
     @Type(() => Number)
     weekdays?: number[];
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9)
+    priority?: number;
 
     @IsOptional()
     @IsBoolean()
@@ -168,4 +181,52 @@ export class UpdateAssignmentRulesDto {
     @Max(6, { each: true })
     @Type(() => Number)
     slotDayPreference?: number[];
+}
+
+// ── The published calendar ────────────────────────────────────────────────────
+
+/** One day added to an exam's published calendar. */
+export class CreateScheduleDateDto {
+    @IsUUID()
+    examInstanceId: string;
+
+    /** `YYYY-MM-DD`, read as an IST calendar day. */
+    @IsDateString()
+    date: string;
+
+    /** 1 is filled before 2, and decides which timings the day runs. */
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9)
+    priority?: number;
+
+    /** False marks a blackout — a day kept on the calendar but closed. */
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
+
+    @IsOptional()
+    @IsString()
+    note?: string;
+}
+
+export class UpdateScheduleDateDto {
+    @IsOptional()
+    @IsDateString()
+    date?: string;
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9)
+    priority?: number;
+
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
+
+    @IsOptional()
+    @IsString()
+    note?: string;
 }

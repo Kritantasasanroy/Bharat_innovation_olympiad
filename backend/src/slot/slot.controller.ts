@@ -17,13 +17,18 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import {
     AssignSlotDto,
+    CreateScheduleDateDto,
     CreateSlotDto,
     CreateSlotTimingDto,
     UpdateAssignmentRulesDto,
+    UpdateScheduleDateDto,
     UpdateSlotDto,
     UpdateSlotTimingDto,
 } from './dto/slot.dto';
+import { SlotAnalyticsService } from './slot-analytics.service';
 import { SlotAssignmentService } from './slot-assignment.service';
+import { CALENDAR_TIMES, DEFAULT_SITTING_CAPACITY, DEFAULT_SITTING_MINUTES } from './slot-calendar';
+import { SlotScheduleDateService } from './slot-schedule-date.service';
 import { SlotTimingService } from './slot-timing.service';
 import { SlotService } from './slot.service';
 
@@ -35,6 +40,8 @@ export class SlotController {
         private slots: SlotService,
         private timings: SlotTimingService,
         private assignment: SlotAssignmentService,
+        private scheduleDates: SlotScheduleDateService,
+        private analytics: SlotAnalyticsService,
         private prisma: PrismaService,
     ) {}
 
@@ -139,6 +146,84 @@ export class SlotController {
     @Roles(...ADMIN)
     async listSittingStudents(@Param('id') id: string) {
         return this.slots.listSittingStudents(id);
+    }
+
+    // ── Admin: the published calendar ──────────────────────────────────────
+
+    /**
+     * The sitting times the season publishes.
+     *
+     * Served rather than hard-coded in the admin bundle so the dropdown an admin
+     * picks from and the times the seeder writes can never drift apart.
+     */
+    @Get('admin/slot-calendar/options')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    calendarOptions() {
+        return {
+            times: CALENDAR_TIMES,
+            defaultDurationMinutes: DEFAULT_SITTING_MINUTES,
+            defaultCapacity: DEFAULT_SITTING_CAPACITY,
+        };
+    }
+
+    @Get('admin/exams/instances/:instanceId/schedule-dates')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async listScheduleDates(@Param('instanceId') instanceId: string) {
+        return this.scheduleDates.list(instanceId);
+    }
+
+    @Post('admin/schedule-dates')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async createScheduleDate(@Body() dto: CreateScheduleDateDto) {
+        return this.scheduleDates.create(dto);
+    }
+
+    @Put('admin/schedule-dates/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async updateScheduleDate(@Param('id') id: string, @Body() dto: UpdateScheduleDateDto) {
+        return this.scheduleDates.update(id, dto);
+    }
+
+    @Delete('admin/schedule-dates/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async deleteScheduleDate(@Param('id') id: string) {
+        return this.scheduleDates.remove(id);
+    }
+
+    /** Creates the whole published season -- dates and their timings -- at once. */
+    @Post('admin/exams/instances/:instanceId/schedule-dates/seed-standard')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async seedCalendar(@Param('instanceId') instanceId: string) {
+        return this.scheduleDates.seedStandardCalendar(instanceId);
+    }
+
+    // ── Admin: slot management dashboard ────────────────────────────────
+
+    @Get('admin/exams/instances/:instanceId/slot-analytics')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async slotAnalytics(@Param('instanceId') instanceId: string) {
+        return this.analytics.forInstance(instanceId);
+    }
+
+    /**
+     * Places every unscheduled participant across every exam that uses sittings.
+     *
+     * The manual form of the same sweep registration triggers, for the cases
+     * registration cannot cover: participants who signed up before the calendar
+     * existed, and exams added after they registered.
+     */
+    @Post('admin/slots/assign-everyone')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async assignEveryone() {
+        return this.assignment.backfillAll();
     }
 
     // ── Admin: assignment rules ───────────────────────────────────────────────
