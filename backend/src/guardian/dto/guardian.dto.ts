@@ -41,9 +41,16 @@ export class SubmitGuardianDto {
     @MaxLength(80)
     guardianLastName?: string;
 
-    // Optional: the registration flow doesn't collect this any more.
+    // The registration flow doesn't collect this any more and sends '' — no
+    // longer `@IsIn`'d against RELATIONSHIPS, because `@IsOptional()` only
+    // skips validation for undefined/null, not for an empty string, so the
+    // enum check was still rejecting every registration-flow submission with
+    // "relationship must be one of the following values: Mother, Father,
+    // Legal guardian". The standalone `/guardian` page's own dropdown still
+    // sends a real value from RELATIONSHIPS; nothing stops it being one.
     @IsOptional()
-    @IsIn(RELATIONSHIPS as unknown as string[])
+    @IsString()
+    @MaxLength(80)
     relationship?: string;
 
     @IsEmail()

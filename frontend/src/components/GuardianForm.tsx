@@ -531,23 +531,23 @@ export default function GuardianForm({
                         Both boxes must be ticked. Without them the ward cannot start an exam.
                     </p>
                 )}
-                {bothConsents && requireFaceScan && !faceScanDone && (
+                {requireFaceScan && !faceScanDone && (
                     <p className="input-hint">
                         Complete the face scan above before submitting.
                     </p>
                 )}
             </fieldset>
 
+            {/* Deliberately NOT disabled just because a consent, the face scan,
+                or the ID upload isn't done yet — a silently-disabled button
+                gives no reason. Clicking runs the checks in handleSubmit
+                above, which turns each missing step into a specific message
+                in the red banner at the top instead. Only genuinely-can't-
+                submit-right-now states (saving, mid-upload) disable it. */}
             <button
                 type="submit"
                 className="btn btn-primary btn-lg auth-submit"
-                disabled={
-                    busy ||
-                    uploading.front ||
-                    uploading.back ||
-                    !bothConsents ||
-                    (requireFaceScan && !faceScanDone)
-                }
+                disabled={busy || uploading.front || uploading.back}
             >
                 {busy ? 'Saving…' : submitLabel}
             </button>

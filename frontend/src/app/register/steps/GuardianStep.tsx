@@ -201,9 +201,9 @@ export default function GuardianStep({
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
                 {faceScanDone ? (
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        ✓ Face scan complete.
-                    </p>
+                    <div className="auth-success" style={{ width: '100%', textAlign: 'center', fontWeight: 600 }}>
+                        ✓ Face scan complete
+                    </div>
                 ) : !faceCameraOn ? (
                     <button type="button" className="btn btn-primary btn-lg auth-submit" onClick={onStartFaceCapture}>
                         Enable Camera &amp; Scan Face

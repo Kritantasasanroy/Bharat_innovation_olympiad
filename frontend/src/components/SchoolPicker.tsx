@@ -473,49 +473,56 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                 </div>
             ) : (
                 <>
-                    <div className="school-search-row">
-                        <div className="school-search-field">
-                            <label className="input-label" htmlFor="schoolName">
-                                School name
-                            </label>
-                            <input
-                                id="schoolName"
-                                className="input-field"
-                                placeholder="Type your school name"
-                                value={name}
-                                autoComplete="off"
-                                onChange={(event) => {
-                                    setName(event.target.value);
-                                    setOpen(true);
-                                }}
-                                onFocus={() => setOpen(true)}
-                            />
+                    {/* The dropdown anchors to THIS wrapper, not to the outer
+                        `containerRef` div — that div also holds the hint text
+                        and the two links below, and `top: 100%` on the dropdown
+                        would resolve against their combined height too,
+                        landing the dropdown well below the inputs instead of
+                        flush beneath them. */}
+                    <div style={{ position: 'relative' }}>
+                        <div className="school-search-row">
+                            <div className="school-search-field">
+                                <label className="input-label" htmlFor="schoolName">
+                                    School name
+                                </label>
+                                <input
+                                    id="schoolName"
+                                    className="input-field"
+                                    placeholder="Type your school name"
+                                    value={name}
+                                    autoComplete="off"
+                                    onChange={(event) => {
+                                        setName(event.target.value);
+                                        setOpen(true);
+                                    }}
+                                    onFocus={() => setOpen(true)}
+                                />
+                            </div>
+                            <div className="school-search-field">
+                                <label className="input-label" htmlFor="schoolPincode">
+                                    Pincode
+                                </label>
+                                <input
+                                    id="schoolPincode"
+                                    className="input-field"
+                                    placeholder="6 digits"
+                                    inputMode="numeric"
+                                    maxLength={PINCODE_LENGTH}
+                                    value={pincode}
+                                    onChange={(event) => {
+                                        setPincode(event.target.value.replace(/\D/g, '').slice(0, PINCODE_LENGTH));
+                                        setOpen(true);
+                                    }}
+                                    onFocus={() => setOpen(true)}
+                                />
+                            </div>
                         </div>
-                        <div className="school-search-field">
-                            <label className="input-label" htmlFor="schoolPincode">
-                                Pincode
-                            </label>
-                            <input
-                                id="schoolPincode"
-                                className="input-field"
-                                placeholder="6 digits"
-                                inputMode="numeric"
-                                maxLength={PINCODE_LENGTH}
-                                value={pincode}
-                                onChange={(event) => {
-                                    setPincode(event.target.value.replace(/\D/g, '').slice(0, PINCODE_LENGTH));
-                                    setOpen(true);
-                                }}
-                                onFocus={() => setOpen(true)}
-                            />
-                        </div>
-                    </div>
-                    <p className="input-hint" style={{ marginTop: '0.25rem' }}>
-                        You can fill in either field or both. Pincode is the fastest way to find
-                        your school. Type at least 3 letters of the school name to see the list.
-                    </p>
+                        <p className="input-hint" style={{ marginTop: '0.25rem' }}>
+                            You can fill in either field or both. Pincode is the fastest way to find
+                            your school. Type at least 3 letters of the school name to see the list.
+                        </p>
 
-                    {open && (name.trim().length >= NAME_MIN_LENGTH || pincode.replace(/\D/g, '').length === PINCODE_LENGTH) && (
+                        {open && (name.trim().length >= NAME_MIN_LENGTH || pincode.replace(/\D/g, '').length === PINCODE_LENGTH) && (
                         <div className="school-dropdown">
                             {searching && results.length === 0 ? (
                                 <div className="school-dropdown__empty">Searching…</div>
@@ -551,7 +558,8 @@ export default function SchoolPicker({ value, onChange, section, onSectionChange
                                 </button>
                             )}
                         </div>
-                    )}
+                        )}
+                    </div>
                     {/* Two small, equally quiet escape hatches — neither is the
                         common case, so neither gets a tab's worth of visual weight. */}
                     {!adding && (

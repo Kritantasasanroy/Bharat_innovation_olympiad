@@ -94,15 +94,22 @@ describe('GuardianForm', () => {
         mount(WITH_DOCUMENT);
     });
 
-    it('disables submit until both consents are ticked', () => {
+    it('leaves submit enabled but blocks and explains when consents are missing', async () => {
+        // Not disabled: a silently-disabled button gives no reason. Clicking
+        // it runs validation instead, which turns "both consents are missing"
+        // into a message the parent can actually act on.
         const submit = screen.getByRole('button', { name: /save and continue/i });
-        expect(submit).toBeDisabled();
+        expect(submit).toBeEnabled();
+
+        fill();
+        fireEvent.click(submit);
+        expect(await screen.findByText(/both consents are required/i)).toBeInTheDocument();
+        expect(onSubmit).not.toHaveBeenCalled();
 
         fireEvent.click(consents()[0]);
-        expect(submit).toBeDisabled();
-
         fireEvent.click(consents()[1]);
-        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     });
 
     it('does not submit with only one consent ticked', async () => {
