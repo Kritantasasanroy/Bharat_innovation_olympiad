@@ -11,6 +11,8 @@ import { isDemoExam } from '../common/demo-exams';
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhone } from '../auth/phone.helpers';
+import { SlotAssignmentService } from '../slot/slot-assignment.service';
+import { RollNumberService } from '../user/roll-number.service';
 
 /**
  * The one-off platform fee, in paise. A student pays this once and can then sit
@@ -46,6 +48,8 @@ export class AccessPassService {
     constructor(
         private prisma: PrismaService,
         private notifications: NotificationService,
+        private rollNumbers: RollNumberService,
+        private slotAssignment: SlotAssignmentService,
     ) {
         this.razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID!,
@@ -260,7 +264,7 @@ export class AccessPassService {
         if (before?.status !== AccessPassStatus.ACTIVE) {
             const pass = await this.prisma.accessPass.findUnique({
                 where: { paymentId },
-                include: { user: { select: { email: true, firstName: true } } },
+                include: { user: { select: { id: true, email: true, firstName: true } } },
             });
             if (pass?.user) {
                 await this.notifications.sendAccessPassActivated(
@@ -268,8 +272,44 @@ export class AccessPassService {
                     pass.user.firstName,
                     pass.amount,
                 );
+                await this.grantFirstAccessMilestones(pass.user.id);
             }
         }
+    }
+
+    /**
+     * The registration milestones — a roll number, a sitting, and the welcome
+     * mail that carries both — moved here from account creation. They used to
+     * fire the moment `/auth/sync` ran, before a rupee had changed hands: a
+     * student who never paid still ended up with a roll number and a
+     * "registration complete" email, and a sitting reserved on their behalf.
+     * Paying is what earns all three now, so this runs once, on the first
+     * transition into ACTIVE, from every path that can cause one — the
+     * browser's checkout callback, the signed webhook, a shared-link match,
+     * and an admin's manual grant all funnel through here.
+     *
+     * `ensureFor` and `assignForNewStudent` are themselves idempotent, so a
+     * rare race between two of those paths confirming the same payment costs
+     * at most a duplicate welcome mail, not a duplicate roll number or seat.
+     */
+    private async grantFirstAccessMilestones(userId: string): Promise<void> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, firstName: true, classBand: true },
+        });
+        if (!user) return;
+
+        const rollNumber = await this.rollNumbers.ensureFor(user.id, user.classBand);
+
+        try {
+            await this.slotAssignment.assignForNewStudent(user.id);
+        } catch (err) {
+            this.logger.error(
+                `Slot auto-assignment failed for newly-paid user ${user.id}: ${(err as Error).message}`,
+            );
+        }
+
+        await this.notifications.sendWelcome(user.email, user.firstName, rollNumber);
     }
 
     /** Refund/chargeback → the pass stops unlocking exams. */
@@ -421,6 +461,7 @@ export class AccessPassService {
         // student who was already unlocked isn't thanked twice.
         if (before?.status !== AccessPassStatus.ACTIVE) {
             await this.notifications.sendAccessPassActivated(user.email, user.firstName, amount);
+            await this.grantFirstAccessMilestones(user.id);
         }
 
         this.logger.log(`Shared-link ₹1 unlock granted to ${user.email} (payment ${razorpayPaymentId}).`);
@@ -644,6 +685,7 @@ export class AccessPassService {
 
         if (before?.status !== AccessPassStatus.ACTIVE) {
             await this.notifications.sendAccessPassActivated(user.email, user.firstName, p.amount);
+            await this.grantFirstAccessMilestones(user.id);
             this.logger.log(
                 `Shared-link ₹1 pass granted to ${user.email} via reconcile (payment ${p.razorpayPaymentId}).`,
             );
@@ -669,7 +711,12 @@ export class AccessPassService {
         const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
         if (!user) throw new NotFoundException('User not found');
 
-        return this.prisma.accessPass.upsert({
+        const before = await this.prisma.accessPass.findUnique({
+            where: { userId },
+            select: { status: true },
+        });
+
+        const pass = await this.prisma.accessPass.upsert({
             where: { userId },
             create: {
                 userId,
@@ -679,6 +726,16 @@ export class AccessPassService {
             },
             update: { status: AccessPassStatus.ACTIVE, grantedAt: new Date(), revokedAt: null },
         });
+
+        // An offline payment or a support fix is still the moment this student
+        // earned their pass — the same milestones a real Razorpay confirmation
+        // would have triggered fire here too, on the same first-transition
+        // guard the other three grant paths use.
+        if (before?.status !== AccessPassStatus.ACTIVE) {
+            await this.grantFirstAccessMilestones(userId);
+        }
+
+        return pass;
     }
 
     async adminRevoke(userId: string) {

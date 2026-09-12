@@ -3,8 +3,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { getJwtSecret } from '../common/jwt-secret';
 import { PartnerModule } from '../partner/partner.module';
-import { SlotModule } from '../slot/slot.module';
-import { UserModule } from '../user/user.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailOtpService } from '../common/email-otp.service';
@@ -18,10 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
             secret: getJwtSecret(),
             signOptions: { expiresIn: '15m' },
         }),
-        SlotModule,
         PartnerModule,
-        // For RollNumberService — registration issues the student's roll number.
-        UserModule,
     ],
     controllers: [AuthController],
     providers: [AuthService, PhoneOtpService, EmailOtpService, JwtStrategy],

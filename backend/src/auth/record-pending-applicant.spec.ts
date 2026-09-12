@@ -17,7 +17,7 @@ function setup() {
             },
         },
     };
-    const service = new AuthService(prisma, {} as never, {} as never, {} as never, {} as never);
+    const service = new AuthService(prisma, {} as never);
     return { service, rows };
 }
 
@@ -80,7 +80,7 @@ describe('AuthService.recordPendingApplicant', () => {
         const prisma: any = {
             pendingApplicant: { upsert: async () => { throw new Error('db is down'); } },
         };
-        const service = new AuthService(prisma, {} as never, {} as never, {} as never, {} as never);
+        const service = new AuthService(prisma, {} as never);
 
         await expect(
             service.recordPendingApplicant({ email: 'ada@example.com', name: 'Ada' } as any),

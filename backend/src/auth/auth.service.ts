@@ -1,9 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationService } from '../notification/notification.service';
 import { normalizeSchoolCode } from '../school/school-directory.helpers';
-import { SlotAssignmentService } from '../slot/slot-assignment.service';
-import { RollNumberService } from '../user/roll-number.service';
 import { SendEmailOtpDto, SyncUserDto, UpdateProfileDto } from './dto/auth.dto';
 import { PhoneOtpService } from './phone-otp.service';
 import { normalizePhone } from './phone.helpers';
@@ -31,10 +28,7 @@ export class AuthService {
 
     constructor(
         private prisma: PrismaService,
-        private slotAssignment: SlotAssignmentService,
-        private notifications: NotificationService,
         private phoneOtpService: PhoneOtpService,
-        private rollNumbers: RollNumberService,
     ) { }
 
     /**
@@ -116,26 +110,6 @@ export class AuthService {
         if (isStudent && !schoolId) {
             throw new BadRequestException(
                 'Choose your school to continue. Search for it by name, city or pincode, enter your school code, or select it if it is not listed.',
-            );
-        }
-    }
-
-    /**
-     * Books this student their sitting for every exam that runs to a timetable.
-     *
-     * Deliberately swallows its own failures. A student whose Sundays are all
-     * full still has a valid account, and refusing to complete their registration
-     * over it would be the worst possible response — they would be left with no
-     * account *and* no date. The assigner logs what it could not place, the admin
-     * sees them on the instance's unassigned list, and the same search runs again
-     * the next time the student opens their schedule.
-     */
-    private async assignSlots(userId: string): Promise<void> {
-        try {
-            await this.slotAssignment.assignForNewStudent(userId);
-        } catch (err) {
-            this.logger.error(
-                `Slot auto-assignment failed for new user ${userId}: ${(err as Error).message}`,
             );
         }
     }
@@ -264,22 +238,11 @@ export class AuthService {
                 },
             });
 
-            // Issued here too, not only for brand-new accounts: a student who
-            // arrived through a school's roster is just as much a participant and
-            // needs a roll number on their admit card. `ensureFor` is a no-op if
-            // they somehow already have one.
-            const rollNumber = await this.rollNumbers.ensureFor(claimed.id, claimed.classBand);
-
-            // Claiming a roster row is this student's registration, so it is also
-            // the moment their sitting is chosen — the first eligible Sunday a
-            // fortnight out. `activatedAt` was just stamped above, and that is the
-            // date the search counts from.
-            await this.assignSlots(claimed.id);
-
-            // `claimed` was read before the roll number was written, so merge it
-            // in rather than returning a row that says `rollNumber: null` to a
-            // client that is about to display it.
-            return { ...claimed, rollNumber };
+            // No roll number, no sitting, no welcome mail yet — those are
+            // earned by paying, not by claiming an invited roster row.
+            // `AccessPassService` issues all three together the moment this
+            // student's pass first goes ACTIVE.
+            return claimed;
         }
 
         const schoolId = (await this.resolveSchoolId(dto)) ?? null;
@@ -312,22 +275,14 @@ export class AuthService {
             }
         });
 
-        const rollNumber = await this.rollNumbers.ensureFor(user.id, user.classBand);
-
-        // The sitting is chosen here, at registration, not later at payment: the
-        // whole rule is relative to *this* moment ("the first Sunday at least two
-        // weeks from now"), and a student who has not paid yet still needs to know
-        // when their exam is. Paying is a separate gate on actually starting it.
-        await this.assignSlots(user.id);
-
-        // Only for genuinely new accounts — claiming an invited roster row
-        // returns earlier, so a student is never welcomed twice.
-        //
-        // Milestone 1 of 4 (registration). The roll number rides along so the
-        // student has it in writing from the first minute.
-        await this.notifications.sendWelcome(user.email, user.firstName, rollNumber);
-
-        return { ...user, rollNumber };
+        // No roll number, no sitting, no welcome mail here. All three used to
+        // fire at this exact point — before a rupee had changed hands, which is
+        // exactly the complaint: a student who never paid still had a roll
+        // number and a "registration complete" email in their inbox, and a
+        // schedule assigned besides. They now fire together, from
+        // `AccessPassService`, at the moment this account's pass first goes
+        // ACTIVE — paying is what earns them, not typing an email address.
+        return user;
     }
 
     async getUserByEmail(email: string) {

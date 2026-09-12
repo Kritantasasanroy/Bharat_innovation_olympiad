@@ -36,7 +36,12 @@ describe('AccessPassService.reconcileForUser', () => {
                 create: jest.fn().mockResolvedValue({ id: 'pay-row-1' }),
             },
         };
-        const notifications = { sendAccessPassActivated: jest.fn().mockResolvedValue(undefined) };
+        const notifications = {
+            sendAccessPassActivated: jest.fn().mockResolvedValue(undefined),
+            sendWelcome: jest.fn().mockResolvedValue(undefined),
+        };
+        const rollNumbers = { ensureFor: jest.fn().mockResolvedValue('BIO26-G6-00001') };
+        const slotAssignment = { assignForNewStudent: jest.fn().mockResolvedValue([]) };
 
         if (overrides.peer) {
             process.env.SHARED_LINK_CHECK_URL = 'https://peer.example/api/payments/shared-link/check';
@@ -52,7 +57,7 @@ describe('AccessPassService.reconcileForUser', () => {
         jest.resetModules();
         const { AccessPassService: Fresh } = require('./access-pass.service');
         return {
-            svc: new Fresh(prisma, notifications) as AccessPassService,
+            svc: new Fresh(prisma, notifications, rollNumbers, slotAssignment) as AccessPassService,
             prisma,
             notifications,
         };
@@ -126,7 +131,7 @@ describe('AccessPassService.lookupSharedLinkPayment', () => {
             sharedLinkPayment: { findFirst: jest.fn().mockResolvedValue(row) },
         };
         return {
-            svc: new AccessPassService(prisma, {} as any),
+            svc: new AccessPassService(prisma, {} as any, {} as any, {} as any),
             prisma,
         };
     }

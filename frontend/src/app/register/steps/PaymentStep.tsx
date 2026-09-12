@@ -4,6 +4,7 @@ import PaymentTerms from '@/components/PaymentTerms';
 import api from '@/lib/api';
 import { describeError } from '@/lib/errors';
 import { THANK_YOU, NEXT_STEPS } from '@/lib/copy/onboarding';
+import { useAuthStore } from '@/store/authStore';
 import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -88,6 +89,13 @@ export default function PaymentStep({
     const loadPass = useCallback(async () => {
         const { data } = await api.get<AccessPass>('/access-pass/me');
         setPass(data);
+        if (data.isActive) {
+            // The roll number (and the sitting behind it) are now issued at
+            // this exact moment, not at account creation — the cached user
+            // from `/auth/sync` still has neither, so pull the fresh copy
+            // `rollNumber` on the confirmation screen below is about to read.
+            void useAuthStore.getState().loadUser();
+        }
         return data;
     }, []);
 

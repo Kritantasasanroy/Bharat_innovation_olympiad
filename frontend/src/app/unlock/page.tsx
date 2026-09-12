@@ -58,6 +58,14 @@ export default function UnlockPage() {
     const loadPass = useCallback(async () => {
         const res = await api.get<AccessPass>('/access-pass/me');
         setPass(res.data);
+        if (res.data.isActive) {
+            // The roll number (and the sitting behind it) are issued the
+            // moment payment activates the pass, not at account creation — so
+            // the cached user still shows neither until refreshed. Whatever
+            // this student opens next (the dashboard included) reads the same
+            // store, so this is the one place that has to pull it.
+            void useAuthStore.getState().loadUser();
+        }
         return res.data;
     }, []);
 
