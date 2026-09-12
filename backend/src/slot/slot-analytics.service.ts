@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { BookingStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { formatMinuteOfDay, istWeekday, weekdayName } from './slot-assignment.rules';
+import { examNeedsSlot, formatMinuteOfDay, istWeekday, weekdayName } from './slot-assignment.rules';
 
 const ACTIVE_BOOKING = { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] };
 
@@ -31,7 +31,16 @@ export class SlotAnalyticsService {
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: examInstanceId },
             include: {
-                exam: { select: { id: true, title: true, classBands: true, durationMinutes: true } },
+                exam: {
+                    select: {
+                        id: true,
+                        title: true,
+                        classBands: true,
+                        durationMinutes: true,
+                        isTrial: true,
+                        requiresSlot: true,
+                    },
+                },
             },
         });
         if (!instance) throw new NotFoundException('Exam instance not found');
@@ -172,15 +181,20 @@ export class SlotAnalyticsService {
 
         // Participants of an eligible class with no sitting for this instance —
         // the number the "assign everyone" button is there to drive to zero.
-        const unassigned = await this.prisma.user.count({
-            where: {
-                role: Role.STUDENT,
-                classBand: { in: instance.exam.classBands },
-                bookings: {
-                    none: { status: ACTIVE_BOOKING, slot: { examInstanceId } },
-                },
-            },
-        });
+        // Zero by definition for an exam exempt from sittings altogether
+        // (trial, demo, `requiresSlot: false`): nobody there is missing a seat,
+        // because nobody needs one.
+        const unassigned = examNeedsSlot(instance.exam)
+            ? await this.prisma.user.count({
+                  where: {
+                      role: Role.STUDENT,
+                      classBand: { in: instance.exam.classBands },
+                      bookings: {
+                          none: { status: ACTIVE_BOOKING, slot: { examInstanceId } },
+                      },
+                  },
+              })
+            : 0;
 
         const active = days.filter((d) => d.isActive);
         const totals = {

@@ -18,6 +18,7 @@ import {
     addDays,
     calendarCandidates,
     candidateDates,
+    examNeedsSlot,
     istStartOfDay,
     slotWindow,
     unassignedMessage,
@@ -391,12 +392,22 @@ export class SlotAssignmentService {
 
     // ── Admin overrides ───────────────────────────────────────────────────────
 
-    /**
+/**
      * Moves one student to a specific sitting, creating their booking if they
      * had none. This is the admin's manual override of the auto-assignment, and
      * the only way a student's date ever changes.
+     *
+     * `target` is either an existing sitting (`slotId`) or one that has never
+     * been opened yet (`timingId` + `date`) — the admin's calendar shows every
+     * configured date whether or not anyone has been placed on it, and picking
+     * one nobody has used yet must not be a dead end.
      */
-    async reassign(userId: string, slotId: string, adminId: string) {
+    async reassign(
+        userId: string,
+        target: { slotId?: string; timingId?: string; date?: string },
+        adminId: string,
+    ) {
+        const slotId = target.slotId ?? (await this.resolveOrOpenSlot(target));
         const slot = await this.prisma.examSlot.findUnique({ where: { id: slotId } });
         if (!slot) throw new NotFoundException('Sitting not found');
 
@@ -460,6 +471,47 @@ export class SlotAssignmentService {
         });
 
         return moved;
+    }
+
+    /**
+     * Turns a `{timingId, date}` pair into a real sitting id, opening it via
+     * `ensureSlot` if this is the first time anyone has been placed on it.
+     *
+     * This is the same materialisation the auto-assigner uses, run on demand
+     * for an admin's manual pick — the calendar and timings panels show every
+     * configured date and time whether or not a sitting has ever been opened
+     * on it, and an admin choosing one nobody has used yet must land on the
+     * same row a student registering that day would.
+     */
+    private async resolveOrOpenSlot(target: {
+        timingId?: string;
+        date?: string;
+    }): Promise<string> {
+        if (!target.timingId || !target.date) {
+            throw new BadRequestException(
+                'Provide either an existing sitting, or a timing and a date to open one on.',
+            );
+        }
+
+        const timing = await this.prisma.slotTiming.findUnique({ where: { id: target.timingId } });
+        if (!timing) throw new NotFoundException('Slot timing not found');
+
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: timing.examInstanceId },
+            select: { startsAt: true, endsAt: true },
+        });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const day = istStartOfDay(new Date(`${target.date.slice(0, 10)}T00:00:00+05:30`));
+        const when = slotWindow(day, timing.startMinute, timing.endMinute);
+        if (when.startsAt < instance.startsAt || when.endsAt > instance.endsAt) {
+            throw new BadRequestException(
+                'That sitting would fall outside the exam’s own window, so it cannot be opened.',
+            );
+        }
+
+        const slot = await this.timings.ensureSlot(timing, day);
+        return slot.id;
     }
 
     /**
@@ -589,9 +641,19 @@ export class SlotAssignmentService {
     async listUnassigned(examInstanceId: string) {
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: examInstanceId },
-            select: { exam: { select: { classBands: true } } },
+            select: {
+                exam: { select: { id: true, isTrial: true, requiresSlot: true, classBands: true } },
+            },
         });
         if (!instance) throw new NotFoundException('Exam instance not found');
+
+        // An exam exempt from sittings (trial, demo, or `requiresSlot: false`)
+        // has no one "unassigned" — every eligible student is correctly
+        // NOT_APPLICABLE and always will be. Without this check every such
+        // exam showed its whole eligible roster as unscheduled forever: a list
+        // that can never shrink, on a "Schedule everyone" button that can only
+        // ever refuse with "this exam does not use sittings."
+        if (!this.needsSlot(instance.exam)) return [];
 
         return this.prisma.user.findMany({
             where: {
@@ -684,11 +746,12 @@ export class SlotAssignmentService {
     /**
      * Practice papers and the trial rehearsal never run to a timetable, and an
      * exam with `requiresSlot: false` has had its gate waived — none of them get
-     * a sitting. This is the single predicate the whole slot system asks; the
-     * exam list and the start gate must agree with it.
+     * a sitting. Delegates to the shared predicate in `slot-assignment.rules`
+     * so every other consumer (the analytics dashboard, the admin unassigned
+     * list) reads the same answer this service does.
      */
     private needsSlot(exam: { id: string; isTrial: boolean; requiresSlot: boolean }): boolean {
-        return !exam.isTrial && !isDemoExam(exam.id) && exam.requiresSlot !== false;
+        return examNeedsSlot(exam);
     }
 
     /** Instance ids of published, non-archived exams that use sittings. */

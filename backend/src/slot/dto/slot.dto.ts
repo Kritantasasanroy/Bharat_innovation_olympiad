@@ -153,9 +153,31 @@ export class CreateSlotDto {
 }
 
 /** Moving one student to a specific sitting. */
+/**
+ * Moving one student to a specific sitting — either one that already exists,
+ * or one that has never been opened yet.
+ *
+ * A date an admin can see on the calendar has often never had anyone placed
+ * on it, so it has no `ExamSlot` row to reference by id. `timingId` + `date`
+ * names that sitting the same way the assigner does, and the service opens it
+ * (via the same `ensureSlot` the auto-assigner uses) before moving anyone in —
+ * an admin should never be blocked from placing someone on a date just
+ * because they would be the first.
+ */
 export class AssignSlotDto {
+    @IsOptional()
     @IsUUID()
-    slotId: string;
+    slotId?: string;
+
+    /** With `date`, names a not-yet-opened sitting instead of an existing one. */
+    @IsOptional()
+    @IsUUID()
+    timingId?: string;
+
+    /** `YYYY-MM-DD`, IST. Required together with `timingId`. */
+    @IsOptional()
+    @IsDateString()
+    date?: string;
 }
 
 /** The per-instance auto-assignment rules an admin can tune. */

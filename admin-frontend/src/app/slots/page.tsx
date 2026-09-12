@@ -32,6 +32,8 @@ interface Exam {
     title: string;
     requiresSlot?: boolean;
     isTrial?: boolean;
+    /** An unlimited-retake fixture — exempt from sittings the same as a trial. */
+    isDemoExam?: boolean;
 }
 
 interface ExamInstance {
@@ -186,6 +188,89 @@ function fillColor(booked: number, capacity: number) {
     if (pct >= 100) return 'var(--danger-400, #ef4444)';
     if (pct >= 80) return 'var(--warning-400, #f59e0b)';
     return 'var(--success-400, #22c55e)';
+}
+
+// ── Placement options ──────────────────────────────────────────────────────────
+
+/**
+ * One choice in a "place into" / "move to" dropdown — a sitting that may or
+ * may not have ever been opened yet.
+ *
+ * A sitting is only materialised into a real `ExamSlot` row the first time
+ * someone is actually placed on it, so a published date + timing an admin can
+ * see on the calendar routinely has nothing to reference by id. Encoding both
+ * shapes as one option, keyed the same way, is what lets a dropdown offer
+ * "every date this exam publishes" rather than only "every date somebody has
+ * already used" — the gap that made the panel look broken for a freshly
+ * configured exam with zero placements so far.
+ */
+interface PlacementOption {
+    /** `slot:<id>` for an existing sitting, `open:<timingId>:<date>` for one not yet opened. */
+    value: string;
+    label: string;
+    isFull: boolean;
+}
+
+/** Turns a chosen dropdown value back into what the PUT endpoint expects. */
+function parsePlacementValue(value: string): { slotId?: string; timingId?: string; date?: string } {
+    if (value.startsWith('slot:')) return { slotId: value.slice('slot:'.length) };
+    const rest = value.slice('open:'.length);
+    const sep = rest.indexOf(':');
+    return { timingId: rest.slice(0, sep), date: rest.slice(sep + 1) };
+}
+
+/**
+ * Every sitting an admin could place someone into for this instance, real or
+ * not-yet-opened, in schedule order.
+ *
+ * Built from the published calendar (`scheduleDates` x the timings each date's
+ * tier runs) when there is one, cross-referenced against `sittings` for the
+ * ones that already exist so their real seat count shows. An instance with no
+ * published calendar falls back to just the already-open sittings — the same
+ * behaviour as before, since there is no client-side way to enumerate the
+ * legacy weekday search's candidate dates.
+ */
+function buildPlacementOptions(
+    scheduleDates: ScheduleDate[],
+    timings: SlotTiming[],
+    sittings: Sitting[],
+): PlacementOption[] {
+    if (scheduleDates.length === 0) {
+        return sittings
+            .slice()
+            .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+            .map((s) => ({
+                value: `slot:${s.id}`,
+                label: `${fmtDate(s.startsAt)} ${fmtTime(s.startsAt)} — ${s.seatsLeft} left`,
+                isFull: s.isFull,
+            }));
+    }
+
+    const byTimingAndDate = new Map<string, Sitting>();
+    for (const s of sittings) {
+        if (!s.timingId) continue;
+        byTimingAndDate.set(`${s.timingId}@${s.slotDate.slice(0, 10)}`, s);
+    }
+
+    const options: PlacementOption[] = [];
+    for (const d of scheduleDates.filter((d) => d.isActive)) {
+        const dateKey = istDateInputValue(d.date);
+        const tierTimings = timings
+            .filter((t) => t.isActive && (t.priority ?? 1) === d.priority)
+            .sort((a, b) => a.startMinute - b.startMinute);
+
+        for (const t of tierTimings) {
+            const materialised = byTimingAndDate.get(`${t.id}@${dateKey}`);
+            const capacity = materialised?.capacity ?? t.capacity;
+            const booked = materialised?.booked ?? 0;
+            options.push({
+                value: materialised ? `slot:${materialised.id}` : `open:${t.id}:${dateKey}`,
+                label: `${fmtDate(d.date)} ${t.startTime}–${t.endTime} — ${Math.max(0, capacity - booked)} left`,
+                isFull: booked >= capacity,
+            });
+        }
+    }
+    return options;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -416,7 +501,20 @@ export default function AdminSlotsPage() {
                     </div>
                 )}
 
-                {selectedExam && !selectedExam.isTrial && selectedExam.requiresSlot === false && (
+                {selectedExam?.isDemoExam && !selectedExam.isTrial && (
+                    <div className="glass-card" style={{ padding: 'var(--space-5)' }}>
+                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                            This is an unlimited-retake practice fixture. It never uses sittings,
+                            regardless of the "requires slot" setting — participants can take it at
+                            any time, and none of them will ever appear as unscheduled.
+                        </p>
+                    </div>
+                )}
+
+                {selectedExam &&
+                    !selectedExam.isTrial &&
+                    !selectedExam.isDemoExam &&
+                    selectedExam.requiresSlot === false && (
                     <div
                         className="glass-card"
                         style={{
@@ -522,6 +620,8 @@ export default function AdminSlotsPage() {
                             instanceId={instanceId}
                             students={unassigned}
                             sittings={sittings}
+                            scheduleDates={scheduleDates}
+                            timings={timings}
                             onChanged={(text) => {
                                 setBanner({ tone: 'ok', text });
                                 refresh();
@@ -537,16 +637,18 @@ export default function AdminSlotsPage() {
                         students={roster.students}
                         loading={rosterLoading}
                         sittings={sittings}
+                        scheduleDates={scheduleDates}
+                        timings={timings}
                         moveTarget={moveTarget}
                         setMoveTarget={setMoveTarget}
                         movingId={movingId}
                         onClose={() => setRoster(null)}
                         onMove={async (userId) => {
-                            const slotId = moveTarget[userId];
-                            if (!slotId) return;
+                            const value = moveTarget[userId];
+                            if (!value) return;
                             setMovingId(userId);
                             try {
-                                await api.put(`/admin/students/${userId}/schedule`, { slotId });
+                                await api.put(`/admin/students/${userId}/schedule`, parsePlacementValue(value));
                                 setBanner({
                                     tone: 'ok',
                                     text: 'Participant moved. They have been sent their new date.',
@@ -1756,18 +1858,27 @@ function UnassignedPanel({
     instanceId,
     students,
     sittings,
+    scheduleDates,
+    timings,
     onChanged,
     onError,
 }: {
     instanceId: string;
     students: UnassignedStudent[];
     sittings: Sitting[];
+    scheduleDates: ScheduleDate[];
+    timings: SlotTiming[];
     onChanged: (text: string) => void;
     onError: (text: string) => void;
 }) {
     const [busy, setBusy] = useState(false);
     const [target, setTarget] = useState<Record<string, string>>({});
     const [placingId, setPlacingId] = useState<string | null>(null);
+
+    const options = useMemo(
+        () => buildPlacementOptions(scheduleDates, timings, sittings),
+        [scheduleDates, timings, sittings],
+    );
 
     const backfill = async () => {
         setBusy(true);
@@ -1792,11 +1903,11 @@ function UnassignedPanel({
     };
 
     const place = async (userId: string) => {
-        const slotId = target[userId];
-        if (!slotId) return;
+        const value = target[userId];
+        if (!value) return;
         setPlacingId(userId);
         try {
-            await api.put(`/admin/students/${userId}/schedule`, { slotId });
+            await api.put(`/admin/students/${userId}/schedule`, parsePlacementValue(value));
             onChanged('Participant scheduled and told their date.');
         } catch (err) {
             onError(errorOf(err, 'Could not schedule that participant.'));
@@ -1902,15 +2013,9 @@ function UnassignedPanel({
                                                 }
                                             >
                                                 <option value="">Choose a sitting…</option>
-                                                {sittings.map((sitting) => (
-                                                    <option
-                                                        key={sitting.id}
-                                                        value={sitting.id}
-                                                        disabled={sitting.isFull}
-                                                    >
-                                                        {fmtDate(sitting.startsAt)}{' '}
-                                                        {fmtTime(sitting.startsAt)} —{' '}
-                                                        {sitting.seatsLeft} left
+                                                {options.map((o) => (
+                                                    <option key={o.value} value={o.value} disabled={o.isFull}>
+                                                        {o.label}
                                                     </option>
                                                 ))}
                                             </select>
@@ -1940,6 +2045,8 @@ function RosterModal({
     students,
     loading,
     sittings,
+    scheduleDates,
+    timings,
     moveTarget,
     setMoveTarget,
     movingId,
@@ -1950,12 +2057,24 @@ function RosterModal({
     students: SittingStudent[];
     loading: boolean;
     sittings: Sitting[];
+    scheduleDates: ScheduleDate[];
+    timings: SlotTiming[];
     moveTarget: Record<string, string>;
     setMoveTarget: (fn: (t: Record<string, string>) => Record<string, string>) => void;
     movingId: string | null;
     onClose: () => void;
     onMove: (userId: string) => void;
 }) {
+    // Every other sitting -- moving into the one already open is a no-op the
+    // dropdown should not offer in the first place.
+    const options = useMemo(
+        () =>
+            buildPlacementOptions(scheduleDates, timings, sittings).filter(
+                (o) => o.value !== `slot:${sitting.id}`,
+            ),
+        [scheduleDates, timings, sittings, sitting.id],
+    );
+
     return (
         <Modal
             title={`${fmtDate(sitting.startsAt)} · ${fmtTime(sitting.startsAt)}–${fmtTime(sitting.endsAt)}`}
@@ -2010,19 +2129,11 @@ function RosterModal({
                                                 }
                                             >
                                                 <option value="">Choose a sitting…</option>
-                                                {sittings
-                                                    .filter((s) => s.id !== sitting.id)
-                                                    .map((s) => (
-                                                        <option
-                                                            key={s.id}
-                                                            value={s.id}
-                                                            disabled={s.isFull}
-                                                        >
-                                                            {fmtDate(s.startsAt)}{' '}
-                                                            {fmtTime(s.startsAt)} — {s.seatsLeft}{' '}
-                                                            left
-                                                        </option>
-                                                    ))}
+                                                {options.map((o) => (
+                                                    <option key={o.value} value={o.value} disabled={o.isFull}>
+                                                        {o.label}
+                                                    </option>
+                                                ))}
                                             </select>
                                             <button
                                                 className="btn btn-secondary btn-sm"

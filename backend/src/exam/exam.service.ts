@@ -485,6 +485,12 @@ export class ExamService {
                 canReleaseResults: release.ok,
                 releaseBlockedReason: release.ok ? null : release.reason,
                 hasEnded: last ? now > last.endsAt : false,
+                // Unlimited-retake fixtures never use sittings, same as a trial
+                // paper or `requiresSlot: false` -- but that exemption is a
+                // hardcoded id, not a column, so the scheduling page has no way
+                // to explain an exam that never fills its unassigned list
+                // without this flag.
+                isDemoExam: isDemoExam(exam.id),
             };
         });
     }

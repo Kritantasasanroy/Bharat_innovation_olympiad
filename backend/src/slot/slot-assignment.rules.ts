@@ -24,6 +24,7 @@
  * India does not observe DST, so a fixed offset is correct year-round rather
  * than merely convenient.
  */
+import { isDemoExam } from '../common/demo-exams';
 
 /** Asia/Kolkata is UTC+05:30, year-round — no daylight saving to track. */
 export const IST_OFFSET_MINUTES = 330;
@@ -322,4 +323,27 @@ export function minuteRangesOverlap(
     const endOf = (r: { startMinute: number; endMinute: number }) =>
         r.endMinute > r.startMinute ? r.endMinute : r.endMinute + 1440;
     return a.startMinute < endOf(b) && b.startMinute < endOf(a);
+}
+
+// ── Whether an exam uses sittings at all ─────────────────────────────────────
+
+/**
+ * Practice papers and the trial rehearsal never run to a timetable, and an
+ * exam with `requiresSlot: false` has had its gate waived — none of them get a
+ * sitting, ever, for any student.
+ *
+ * This is the single predicate the whole slot system asks, and every place
+ * that touches "does this student need a seat" or "is this student missing
+ * one" must agree with it. It used to live only inside the assigner, private
+ * — which is exactly how the analytics dashboard and the admin's unassigned
+ * list each grew their own copy of "who is eligible" without this half of the
+ * question, and both ended up reporting every enrolled student of a
+ * slot-exempt exam as permanently, unfixably unscheduled.
+ */
+export function examNeedsSlot(exam: {
+    id: string;
+    isTrial: boolean;
+    requiresSlot: boolean;
+}): boolean {
+    return !exam.isTrial && !isDemoExam(exam.id) && exam.requiresSlot !== false;
 }

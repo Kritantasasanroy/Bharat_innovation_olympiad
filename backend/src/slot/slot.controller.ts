@@ -289,7 +289,7 @@ export class SlotController {
         @Body() dto: AssignSlotDto,
         @CurrentUser('id') adminId: string,
     ) {
-        const booking = await this.assignment.reassign(userId, dto.slotId, adminId);
+        const booking = await this.assignment.reassign(userId, dto, adminId);
         // The student's date has changed and the message already in their inbox
         // is now wrong, so this is one of the few paths that must re-notify.
         await this.slots.notifySchedule(booking.id);

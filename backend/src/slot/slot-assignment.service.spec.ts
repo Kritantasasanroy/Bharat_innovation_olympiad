@@ -205,6 +205,16 @@ function createFakeTimings(
 
 function setup(timingSpec: FakeTiming[], scheduleDates?: FakeScheduleDate[]) {
     const db = createFakeDb({ scheduleDates });
+    // `resolveOrOpenSlot` reads a timing straight off `prisma`, not off the
+    // `SlotTimingService` mock -- the admin "place into an unopened sitting"
+    // path looks the timing up itself before ever calling `ensureSlot`.
+    (db.client as any).slotTiming = {
+        findUnique: async ({ where }: any) => {
+            const t = timingSpec.find((x) => x.id === where.id);
+            if (!t) return null;
+            return { examInstanceId: db.instance.id, ...t };
+        },
+    };
     const service = new SlotAssignmentService(
         db.client as never,
         createFakeTimings(db, timingSpec),
@@ -482,7 +492,7 @@ describe('SlotAssignmentService.reassign', () => {
             booked: 0,
         });
 
-        await db.service.reassign('stu-1', 'slot-target', 'admin-1');
+        await db.service.reassign('stu-1', { slotId: 'slot-target' }, 'admin-1');
 
         expect(from.booked).toBe(0);
         expect(db.slots.find((s) => s.id === 'slot-target')!.booked).toBe(1);
@@ -507,7 +517,7 @@ describe('SlotAssignmentService.reassign', () => {
             booked: 1,
         });
 
-        await expect(db.service.reassign('stu-1', 'slot-full', 'admin-1')).rejects.toThrow(
+        await expect(db.service.reassign('stu-1', { slotId: 'slot-full' }, 'admin-1')).rejects.toThrow(
             /full/i,
         );
         // The original seat is untouched by the failed move.
@@ -756,8 +766,55 @@ describe('two sittings never collide for one participant', () => {
             istStartOfDay(ist('2026-10-04T00:00:00')),
         );
 
-        await expect(db.service.reassign('stu-1', target.id, 'admin-1')).rejects.toThrow(
+        await expect(db.service.reassign('stu-1', { slotId: target.id }, 'admin-1')).rejects.toThrow(
             /already sits another exam/i,
         );
+    });
+});
+
+// ── Placing an admin's pick that has never been opened ───────────────────────
+
+describe('reassign onto a timing + date nobody has sat yet', () => {
+    it('opens the sitting and places the student, with no slotId in hand', async () => {
+        const db = setup([TIER_1_MORNING], SEASON);
+        register(db, 'stu-1');
+
+        expect(db.slots.length).toBe(0);
+
+        const booking = await db.service.reassign(
+            'stu-1',
+            { timingId: TIER_1_MORNING.id, date: '2026-09-27' },
+            'admin-1',
+        );
+
+        expect(db.slots.length).toBe(1);
+        const slot = db.slots.find((s) => s.id === booking.slotId)!;
+        expect(slot.startsAt.getTime()).toBe(ist('2026-09-27T08:30:00').getTime());
+        expect(slot.booked).toBe(1);
+    });
+
+    it('reuses the sitting a second student is placed into the same way', async () => {
+        const db = setup([TIER_1_MORNING], SEASON);
+        register(db, 'stu-1');
+        register(db, 'stu-2');
+
+        await db.service.reassign('stu-1', { timingId: TIER_1_MORNING.id, date: '2026-09-27' }, 'admin-1');
+        await db.service.reassign('stu-2', { timingId: TIER_1_MORNING.id, date: '2026-09-27' }, 'admin-1');
+
+        expect(db.slots.length).toBe(1);
+        expect(db.slots[0].booked).toBe(2);
+    });
+
+    it('refuses a timing/date with no timing, or a date outside the exam window', async () => {
+        const db = setup([TIER_1_MORNING], SEASON);
+        register(db, 'stu-1');
+
+        await expect(
+            db.service.reassign('stu-1', { timingId: 'no-such-timing', date: '2026-09-27' }, 'admin-1'),
+        ).rejects.toThrow(/not found/i);
+
+        await expect(
+            db.service.reassign('stu-1', { timingId: TIER_1_MORNING.id, date: '2099-01-01' }, 'admin-1'),
+        ).rejects.toThrow(/outside the exam/i);
     });
 });
