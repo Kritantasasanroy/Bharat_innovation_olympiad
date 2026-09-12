@@ -4,9 +4,16 @@ import AuthGuard from '@/components/layout/AuthGuard';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
+import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import UnlockMobile from './UnlockMobile';
+
+declare global {
+    interface Window {
+        Razorpay: any;
+    }
+}
 
 interface AccessPass {
     status: 'PENDING' | 'ACTIVE' | 'REVOKED' | null;
@@ -15,14 +22,18 @@ interface AccessPass {
     grantedAt: string | null;
 }
 
-// The shared Razorpay payment page (the ₹1 access link). Students pay here; the
-// signed webhook unlocks their account by the email/phone they enter.
-const PAYMENT_URL =
-    process.env.NEXT_PUBLIC_UNLOCK_PAYMENT_URL || 'https://rzp.io/rzp/ABtT74d';
+interface OrderResponse {
+    alreadyActive: boolean;
+    orderId?: string;
+    amount?: number;
+    currency?: string;
+    key?: string;
+}
 
-// ~3 minutes of polling after the payment page is opened.
-const MAX_POLLS = 45;
-const POLL_MS = 4000;
+// A brief poll after the checkout `handler` fires, purely to cover the gap
+// between our own write landing and the next read seeing it.
+const CONFIRM_POLLS = 10;
+const CONFIRM_POLL_MS = 2000;
 
 const BENEFITS = [
     'Sit every published olympiad exam this season, no per-exam fee',
@@ -35,10 +46,14 @@ export default function UnlockPage() {
     const user = useAuthStore((s) => s.user);
     const [pass, setPass] = useState<AccessPass | null>(null);
     const [loading, setLoading] = useState(true);
-    const [waiting, setWaiting] = useState(false);
-    const [checking, setChecking] = useState(false);
+    const [payLoading, setPayLoading] = useState(false);
     const [error, setError] = useState('');
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const [claimOpen, setClaimOpen] = useState(false);
+    const [claimPaymentId, setClaimPaymentId] = useState('');
+    const [claimBusy, setClaimBusy] = useState(false);
+    const [claimSent, setClaimSent] = useState(false);
+    const scriptReady = useRef(false);
+    const confirmPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const loadPass = useCallback(async () => {
         const res = await api.get<AccessPass>('/access-pass/me');
@@ -46,17 +61,12 @@ export default function UnlockPage() {
         return res.data;
     }, []);
 
-    /** Active check: reconcile against the ₹1 payment (local record + the peer
-     *  backend Razorpay calls), then re-read. `loadPass` alone only sees what is
-     *  already local — the gap when the webhook relay has not landed. */
-    const reconcileThenLoad = useCallback(async () => {
-        try {
-            await api.post('/access-pass/reconcile');
-        } catch {
-            /* best-effort */
+    const stopConfirmPoll = useCallback(() => {
+        if (confirmPollRef.current) {
+            clearInterval(confirmPollRef.current);
+            confirmPollRef.current = null;
         }
-        return loadPass();
-    }, [loadPass]);
+    }, []);
 
     useEffect(() => {
         loadPass()
@@ -64,59 +74,123 @@ export default function UnlockPage() {
                 setError(e.response?.data?.message || 'Could not load your access status.'),
             )
             .finally(() => setLoading(false));
-    }, [loadPass]);
+        return () => stopConfirmPoll();
+    }, [loadPass, stopConfirmPoll]);
 
-    const stopPolling = useCallback(() => {
-        if (pollRef.current) {
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-        }
-        setWaiting(false);
-    }, []);
-
-    // Once the pass goes active, stop polling. Always clear the timer on unmount.
-    useEffect(() => {
-        if (pass?.isActive) stopPolling();
-        return () => {
-            if (pollRef.current) clearInterval(pollRef.current);
-        };
-    }, [pass?.isActive, stopPolling]);
-
-    const startPolling = useCallback(() => {
-        setWaiting(true);
+    const confirmAfterHandler = useCallback(() => {
         let ticks = 0;
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(async () => {
+        stopConfirmPoll();
+        confirmPollRef.current = setInterval(async () => {
             ticks += 1;
             try {
-                const p = ticks % 3 === 0 ? await reconcileThenLoad() : await loadPass();
+                const p = await loadPass();
                 if (p.isActive) {
-                    stopPolling();
+                    stopConfirmPoll();
                     return;
                 }
             } catch {
                 // Transient — keep polling.
             }
-            if (ticks >= MAX_POLLS) stopPolling();
-        }, POLL_MS);
-    }, [loadPass, reconcileThenLoad, stopPolling]);
+            if (ticks >= CONFIRM_POLLS) stopConfirmPoll();
+        }, CONFIRM_POLL_MS);
+    }, [loadPass, stopConfirmPoll]);
 
-    const handlePay = () => {
+    /**
+     * Razorpay Checkout opens as a modal on this page — no hosted payment page
+     * to redirect to. Its `handler` fires synchronously with a payment id and
+     * signature, which goes straight to `/access-pass/verify`. The order this
+     * creates and the pass it activates are the same student's by construction
+     * (the order is created from this student's own session), so there is
+     * nothing left to match by email the way the old shared-link flow had to.
+     */
+    const openCheckout = useCallback(
+        (order: Required<Pick<OrderResponse, 'orderId' | 'amount' | 'currency' | 'key'>>) => {
+            const rzp = new window.Razorpay({
+                key: order.key,
+                amount: order.amount,
+                currency: order.currency,
+                name: 'Bharat Innovation Olympiad',
+                description: 'Exam access pass',
+                order_id: order.orderId,
+                prefill: { email: user?.email },
+                theme: { color: '#ffcb05' },
+                handler: async (response: {
+                    razorpay_order_id: string;
+                    razorpay_payment_id: string;
+                    razorpay_signature: string;
+                }) => {
+                    try {
+                        await api.post('/access-pass/verify', {
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                        });
+                        await loadPass();
+                    } catch {
+                        setError(
+                            'Payment received — confirming it now. If this takes more than a minute, use "Already paid but still locked?" below.',
+                        );
+                        confirmAfterHandler();
+                    } finally {
+                        setPayLoading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: () => setPayLoading(false),
+                },
+            });
+            rzp.on('payment.failed', (resp: { error?: { description?: string } }) => {
+                setPayLoading(false);
+                setError(`Payment failed: ${resp.error?.description || 'please try again'}`);
+            });
+            rzp.open();
+        },
+        [user?.email, loadPass, confirmAfterHandler],
+    );
+
+    const handlePay = async () => {
         setError('');
-        // Open the hosted ₹1 page in a new tab so this one can watch for unlock.
-        window.open(PAYMENT_URL, '_blank', 'noopener,noreferrer');
-        startPolling();
+        setPayLoading(true);
+        try {
+            const { data } = await api.post<OrderResponse>('/access-pass/create-order');
+            if (data.alreadyActive) {
+                await loadPass();
+                setPayLoading(false);
+                return;
+            }
+            if (!scriptReady.current || !window.Razorpay) {
+                setError('Payment could not start — please refresh the page and try again.');
+                setPayLoading(false);
+                return;
+            }
+            openCheckout(data as Required<OrderResponse>);
+        } catch (e: any) {
+            setError(e.response?.data?.message || 'Could not start the payment.');
+            setPayLoading(false);
+        }
     };
 
-    const handleCheckNow = async () => {
-        setChecking(true);
+    const handleClaim = async () => {
+        if (!claimPaymentId.trim()) return;
+        setClaimBusy(true);
         setError('');
         try {
-            await reconcileThenLoad();
-        } catch (e: any) {
-            setError(e.response?.data?.message || 'Could not refresh, please try again.');
+            await api.post('/grievances', {
+                type: 'GRIEVANCE',
+                subject: 'Paid but account still locked',
+                description:
+                    `Access-pass payment not reflected in the account.\n` +
+                    `Razorpay payment id: ${claimPaymentId.trim()}\n` +
+                    `Account email: ${user?.email ?? ''}\n` +
+                    `\nPlease verify the payment and grant the access pass.`,
+            });
+            setClaimSent(true);
+        } catch {
+            setError(
+                'Could not send that automatically. Please email the payment id to support, your payment is safe.',
+            );
         } finally {
-            setChecking(false);
+            setClaimBusy(false);
         }
     };
 
@@ -125,21 +199,35 @@ export default function UnlockPage() {
         maximumFractionDigits: 2,
     });
 
+    const razorpayScript = (
+        <Script
+            src="https://checkout.razorpay.com/v1/checkout.js"
+            onLoad={() => {
+                scriptReady.current = true;
+            }}
+        />
+    );
+
     const isMobile = useIsMobile();
     if (isMobile) {
         return (
             <AuthGuard allowedRoles={['STUDENT']}>
+                {razorpayScript}
                 <UnlockMobile
                     loading={loading}
                     pass={pass}
-                    waiting={waiting}
-                    checking={checking}
+                    payLoading={payLoading}
                     error={error}
                     rupees={rupees}
-                    userEmail={user?.email}
+                    claimOpen={claimOpen}
+                    claimPaymentId={claimPaymentId}
+                    claimBusy={claimBusy}
+                    claimSent={claimSent}
                     benefits={BENEFITS}
                     onPay={handlePay}
-                    onCheckNow={handleCheckNow}
+                    onOpenClaim={() => setClaimOpen(true)}
+                    onClaimPaymentIdChange={setClaimPaymentId}
+                    onClaim={handleClaim}
                 />
             </AuthGuard>
         );
@@ -147,6 +235,7 @@ export default function UnlockPage() {
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
+            {razorpayScript}
             <div style={{ maxWidth: '640px', margin: '0 auto', padding: 'var(--space-6, 1.5rem)' }}>
                 {loading ? (
                     <div style={{ display: 'flex', justifyContent: 'center', minHeight: '50vh', alignItems: 'center' }}>
@@ -197,54 +286,90 @@ export default function UnlockPage() {
                             ))}
                         </ul>
 
-                        {/* Matching is by the contact details entered on the hosted page, so
-                            spell out exactly what to type or the webhook can't find the account. */}
-                        <div
-                            style={{
-                                padding: '0.9rem 1rem', borderRadius: '10px', marginBottom: '1.25rem',
-                                background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.3)',
-                                fontSize: '0.9rem', color: 'var(--text-secondary)',
-                            }}
-                        >
-                            On the payment page, enter the email your account uses
-                            {user?.email ? (
-                                <>: <strong style={{ color: 'var(--text-primary)' }}>{user.email}</strong></>
-                            ) : null}
-                            . That&apos;s how we unlock your access automatically after payment.
-                        </div>
-
                         {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
-                        {waiting ? (
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <div className="spinner" style={{ width: '18px', height: '18px' }} />
-                                    <span style={{ color: 'var(--text-secondary)' }}>
-                                        Waiting for payment confirmation…
-                                    </span>
-                                </div>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', marginBottom: '1rem' }}>
-                                    Finish the ₹{rupees} payment in the other tab. This unlocks automatically,
-                                    usually within a few seconds.
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-lg"
+                            style={{ width: '100%' }}
+                            onClick={handlePay}
+                            disabled={payLoading}
+                        >
+                            {payLoading ? 'Opening payment…' : `Pay ₹${rupees} and unlock`}
+                        </button>
+
+                        {(claimOpen || error) && !claimSent && (
+                            <div
+                                style={{
+                                    marginTop: '1.25rem',
+                                    padding: '1rem',
+                                    borderRadius: '10px',
+                                    background: 'var(--bg-tertiary, rgba(127,127,127,0.1))',
+                                }}
+                            >
+                                <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>
+                                    Paid, but still locked?
+                                </h4>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Your payment is safe. Give us the Razorpay payment id from your
+                                    confirmation message or email (it looks like{' '}
+                                    <code>pay_XXXXXXXXXXXX</code>) and we will verify it from the admin
+                                    side.
                                 </p>
+                                <input
+                                    className="input-field"
+                                    placeholder="pay_XXXXXXXXXXXX"
+                                    value={claimPaymentId}
+                                    onChange={(e) => setClaimPaymentId(e.target.value.trim())}
+                                    style={{ width: '100%', marginBottom: '0.6rem' }}
+                                />
                                 <button
                                     type="button"
-                                    className="btn btn-primary"
+                                    className="btn btn-secondary"
                                     style={{ width: '100%' }}
-                                    onClick={handleCheckNow}
-                                    disabled={checking}
+                                    onClick={handleClaim}
+                                    disabled={claimBusy || !claimPaymentId.trim()}
                                 >
-                                    {checking ? 'Checking…' : "I've paid, check now"}
+                                    {claimBusy ? 'Sending…' : 'Send this to support'}
                                 </button>
                             </div>
-                        ) : (
+                        )}
+
+                        {claimSent && (
+                            <div
+                                style={{
+                                    marginTop: '1.25rem',
+                                    padding: '1rem',
+                                    borderRadius: '10px',
+                                    background: 'rgba(34,197,94,0.10)',
+                                    border: '1px solid rgba(34,197,94,0.3)',
+                                }}
+                            >
+                                <h4 style={{ margin: '0 0 0.4rem', fontSize: '0.95rem' }}>✅ Sent to support</h4>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                                    We have your payment id. Someone will unlock your account, and you
+                                    will get an email when it is done.
+                                </p>
+                            </div>
+                        )}
+
+                        {!claimOpen && !error && !claimSent && (
                             <button
                                 type="button"
-                                className="btn btn-primary btn-lg"
-                                style={{ width: '100%' }}
-                                onClick={handlePay}
+                                onClick={() => setClaimOpen(true)}
+                                style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    marginTop: '0.85rem',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-tertiary)',
+                                    fontSize: '0.85rem',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer',
+                                }}
                             >
-                                Pay ₹{rupees} and unlock
+                                Already paid but still locked?
                             </button>
                         )}
 

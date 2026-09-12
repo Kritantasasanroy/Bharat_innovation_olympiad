@@ -12,14 +12,18 @@ interface AccessPass {
 interface Props {
     loading: boolean;
     pass: AccessPass | null;
-    waiting: boolean;
-    checking: boolean;
+    payLoading: boolean;
     error: string;
     rupees: string;
-    userEmail?: string;
+    claimOpen: boolean;
+    claimPaymentId: string;
+    claimBusy: boolean;
+    claimSent: boolean;
     benefits: string[];
     onPay: () => void;
-    onCheckNow: () => void;
+    onOpenClaim: () => void;
+    onClaimPaymentIdChange: (value: string) => void;
+    onClaim: () => void;
 }
 
 /**
@@ -30,11 +34,24 @@ interface Props {
  * because the desktop card leans on a lot of small inline-styled text blocks
  * that read fine at arm's length on a laptop and cramped up close on a
  * phone; this reflows the same three states (loading / active / pay) with
- * larger type and a bottom-pinned CTA instead. All network calls and
- * polling stay owned by `page.tsx`.
+ * larger type and a bottom-pinned CTA instead. All network calls, and the
+ * Razorpay Checkout modal itself, stay owned by `page.tsx`.
  */
 export default function UnlockMobile({
-    loading, pass, waiting, checking, error, rupees, userEmail, benefits, onPay, onCheckNow,
+    loading,
+    pass,
+    payLoading,
+    error,
+    rupees,
+    claimOpen,
+    claimPaymentId,
+    claimBusy,
+    claimSent,
+    benefits,
+    onPay,
+    onOpenClaim,
+    onClaimPaymentIdChange,
+    onClaim,
 }: Props) {
     if (loading) {
         return (
@@ -79,31 +96,86 @@ export default function UnlockMobile({
                     ))}
                 </ul>
 
-                <div className="mob-unlock__note">
-                    On the payment page, enter the email your account uses
-                    {userEmail ? <>: <strong>{userEmail}</strong></> : null}. That&apos;s how we unlock
-                    your access automatically after payment.
-                </div>
-
                 {error && <div className="auth-error">{error}</div>}
 
-                {waiting ? (
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                            <div className="spinner" style={{ width: '18px', height: '18px' }} />
-                            <span style={{ color: 'var(--text-secondary)' }}>Waiting for payment confirmation…</span>
-                        </div>
-                        <p className="mob-auth__hint" style={{ marginBottom: '1rem' }}>
-                            Finish the ₹{rupees} payment in the other tab. This unlocks automatically, usually
-                            within a few seconds.
+                <button
+                    type="button"
+                    className="btn btn-primary btn-lg"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={onPay}
+                    disabled={payLoading}
+                >
+                    {payLoading ? 'Opening payment…' : `Pay ₹${rupees} and unlock`}
+                </button>
+
+                {(claimOpen || error) && !claimSent && (
+                    <div
+                        style={{
+                            marginTop: '1rem',
+                            padding: '0.9rem',
+                            borderRadius: '10px',
+                            background: 'var(--bg-tertiary, rgba(127,127,127,0.1))',
+                        }}
+                    >
+                        <h4 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem' }}>Paid, but still locked?</h4>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>
+                            Give us the Razorpay payment id from your confirmation message (looks like{' '}
+                            <code>pay_XXXXXXXXXXXX</code>) and we will verify it from the admin side.
                         </p>
-                        <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={onCheckNow} disabled={checking}>
-                            {checking ? 'Checking…' : "I've paid, check now"}
+                        <input
+                            className="input-field"
+                            placeholder="pay_XXXXXXXXXXXX"
+                            value={claimPaymentId}
+                            onChange={(e) => onClaimPaymentIdChange(e.target.value.trim())}
+                            style={{ width: '100%', marginBottom: '0.5rem' }}
+                        />
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ width: '100%' }}
+                            onClick={onClaim}
+                            disabled={claimBusy || !claimPaymentId.trim()}
+                        >
+                            {claimBusy ? 'Sending…' : 'Send this to support'}
                         </button>
                     </div>
-                ) : (
-                    <button type="button" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={onPay}>
-                        Pay ₹{rupees} and unlock
+                )}
+
+                {claimSent && (
+                    <div
+                        style={{
+                            marginTop: '1rem',
+                            padding: '0.9rem',
+                            borderRadius: '10px',
+                            background: 'rgba(34,197,94,0.10)',
+                            border: '1px solid rgba(34,197,94,0.3)',
+                        }}
+                    >
+                        <h4 style={{ margin: '0 0 0.35rem', fontSize: '0.9rem' }}>✅ Sent to support</h4>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                            We have your payment id. Someone will unlock your account, and you will get
+                            an email when it is done.
+                        </p>
+                    </div>
+                )}
+
+                {!claimOpen && !error && !claimSent && (
+                    <button
+                        type="button"
+                        onClick={onOpenClaim}
+                        style={{
+                            display: 'block',
+                            width: '100%',
+                            marginTop: '0.75rem',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-tertiary)',
+                            fontSize: '0.82rem',
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Already paid but still locked?
                     </button>
                 )}
 

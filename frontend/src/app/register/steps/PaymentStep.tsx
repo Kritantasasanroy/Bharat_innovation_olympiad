@@ -4,47 +4,62 @@ import PaymentTerms from '@/components/PaymentTerms';
 import api from '@/lib/api';
 import { describeError } from '@/lib/errors';
 import { THANK_YOU, NEXT_STEPS } from '@/lib/copy/onboarding';
+import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+declare global {
+    interface Window {
+        Razorpay: any;
+    }
+}
 
 /**
  * The payment registration step: pay, and unlock the account.
  *
- * ## How unlocking actually happens
+ * ## How unlocking happens
  *
- * There is no in-app Razorpay checkout. The student is sent to a hosted ₹1
- * payment link; Razorpay then calls our signed webhook, which matches the payer
- * to an account by the email or phone they typed on that page and activates the
- * access pass. So this page cannot know the outcome directly — it polls
- * `/access-pass/me` and waits.
+ * Razorpay Checkout opens as a modal on this page — no hosted payment page to
+ * redirect to, no separate tab to lose track of. On success it hands back a
+ * payment id and signature synchronously; the browser sends that straight to
+ * `/access-pass/verify`, which checks the signature and activates the pass in
+ * the same request.
  *
- * ## Why there are three ways out
+ * This is also why there is nothing to "match" any more: the order this page
+ * creates and the pass the verify call activates are the same student's, by
+ * construction — `/access-pass/create-order` is called with this student's own
+ * session. The previous flow (a single hosted ₹1 link shared by every student)
+ * had no such link; a signed webhook had to guess who had paid from whatever
+ * email or phone they typed on Razorpay's own page, and that webhook only ever
+ * reaches one environment — so a student registered on a second, otherwise
+ * identical environment had no local record of their own payment even after
+ * genuinely paying. None of that applies here.
  *
- * Because the webhook is the single point of failure and it lives in someone
- * else's dashboard. If it is misconfigured, every student who pays would sit here
- * forever, having been charged. So:
- *
- *  1. automatic polling, which handles the normal case in a few seconds;
- *  2. an explicit "I've paid — check now", for when polling has given up;
- *  3. a claim form that records the Razorpay payment id and raises it with the
- *     organisers, who can grant the pass by hand.
- *
- * The third is the one that matters. It converts "charged and stuck forever" into
- * "charged and resolved within a day", which is the difference between a bug and
- * a disaster.
+ * The webhook still exists as a second, independent confirmation of the same
+ * order (`payment.service.ts` matches it by `razorpayOrderId`, not by email) —
+ * whichever of the two lands first wins and the other is a no-op — but it is
+ * no longer load-bearing the way it was: the modal never leaves this page, so
+ * there is no "closed the other tab before it fired" gap left for it to cover.
  */
-
-const PAYMENT_URL =
-    process.env.NEXT_PUBLIC_UNLOCK_PAYMENT_URL || 'https://rzp.io/rzp/ABtT74d';
-
-/** ~3 minutes at 4s intervals — long enough for a slow webhook, short enough to stop. */
-const MAX_POLLS = 45;
-const POLL_MS = 4000;
 
 interface AccessPass {
     status: 'PENDING' | 'ACTIVE' | 'REVOKED' | null;
     isActive: boolean;
     amount: number;
 }
+
+interface OrderResponse {
+    alreadyActive: boolean;
+    orderId?: string;
+    amount?: number;
+    currency?: string;
+    key?: string;
+}
+
+/** A brief poll after the checkout `handler` fires, purely to cover the gap
+ * between our own write landing and the next read seeing it — not a
+ * substitute for the callback, which is what actually confirms payment. */
+const CONFIRM_POLLS = 10;
+const CONFIRM_POLL_MS = 2000;
 
 export default function PaymentStep({
     studentEmail,
@@ -57,18 +72,18 @@ export default function PaymentStep({
 }) {
     const [pass, setPass] = useState<AccessPass | null>(null);
     const [loading, setLoading] = useState(true);
-    const [waiting, setWaiting] = useState(false);
-    const [pollsExhausted, setPollsExhausted] = useState(false);
-    const [checking, setChecking] = useState(false);
+    const [payLoading, setPayLoading] = useState(false);
     const [error, setError] = useState('');
+    const scriptReady = useRef(false);
 
-    // The claim path — used only when the webhook has plainly not fired.
+    // The claim path — for a student who really has been charged but whose
+    // payment did not confirm automatically.
     const [claimOpen, setClaimOpen] = useState(false);
     const [claimPaymentId, setClaimPaymentId] = useState('');
     const [claimBusy, setClaimBusy] = useState(false);
     const [claimSent, setClaimSent] = useState(false);
 
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const confirmPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const loadPass = useCallback(async () => {
         const { data } = await api.get<AccessPass>('/access-pass/me');
@@ -76,99 +91,111 @@ export default function PaymentStep({
         return data;
     }, []);
 
-    /**
-     * The active check: ask the backend to reconcile against the ₹1 payment
-     * (its own record and the peer backend Razorpay calls), then re-read.
-     * `loadPass` alone only reports what is already local, which is exactly the
-     * gap when the webhook relay has not landed.
-     */
-    const reconcileThenLoad = useCallback(async () => {
-        try {
-            await api.post('/access-pass/reconcile');
-        } catch {
-            // Reconcile is best-effort — fall back to a plain read.
+    const stopConfirmPoll = useCallback(() => {
+        if (confirmPollRef.current) {
+            clearInterval(confirmPollRef.current);
+            confirmPollRef.current = null;
         }
-        return loadPass();
-    }, [loadPass]);
-
-    const stopPolling = useCallback(() => {
-        if (pollRef.current) {
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-        }
-        setWaiting(false);
     }, []);
 
     useEffect(() => {
         loadPass()
-            .catch(() => setError('We could not verify your payment status. You can still pay below, if you have already paid, use "I have paid, check now".'))
+            .catch(() =>
+                setError(
+                    'We could not verify your payment status. You can still pay below.',
+                ),
+            )
             .finally(() => setLoading(false));
-        // Always clear the timer on unmount — a poll firing after the student has
-        // navigated away sets state on a dead component.
-        return () => {
-            if (pollRef.current) clearInterval(pollRef.current);
-        };
-    }, [loadPass]);
+        return () => stopConfirmPoll();
+    }, [loadPass, stopConfirmPoll]);
 
-    useEffect(() => {
-        if (pass?.isActive) stopPolling();
-    }, [pass?.isActive, stopPolling]);
-
-    // Automatically check status when returning to this tab after paying on Razorpay
-    useEffect(() => {
-        if (!waiting) return;
-        const handleFocus = () => {
-            void reconcileThenLoad();
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [waiting, reconcileThenLoad]);
-
-    const startPolling = useCallback(() => {
-        setWaiting(true);
-        setPollsExhausted(false);
+    const confirmAfterHandler = useCallback(() => {
         let ticks = 0;
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(async () => {
+        stopConfirmPoll();
+        confirmPollRef.current = setInterval(async () => {
             ticks += 1;
             try {
-                // Reconcile every few ticks (not every tick — it may call a peer
-                // backend); a plain read on the others.
-                const p = ticks % 3 === 0 ? await reconcileThenLoad() : await loadPass();
+                const p = await loadPass();
                 if (p.isActive) {
-                    stopPolling();
+                    stopConfirmPoll();
                     return;
                 }
             } catch {
                 // Transient — keep polling rather than giving up on one bad response.
             }
-            if (ticks >= MAX_POLLS) {
-                stopPolling();
-                setPollsExhausted(true);
-            }
-        }, POLL_MS);
-    }, [loadPass, reconcileThenLoad, stopPolling]);
+            if (ticks >= CONFIRM_POLLS) stopConfirmPoll();
+        }, CONFIRM_POLL_MS);
+    }, [loadPass, stopConfirmPoll]);
 
-    const handlePay = () => {
-        setError('');
-        window.open(PAYMENT_URL, '_blank', 'noopener,noreferrer');
-        startPolling();
-    };
+    const openCheckout = useCallback(
+        (order: Required<Pick<OrderResponse, 'orderId' | 'amount' | 'currency' | 'key'>>) => {
+            const rzp = new window.Razorpay({
+                key: order.key,
+                amount: order.amount,
+                currency: order.currency,
+                name: 'Bharat Innovation Olympiad',
+                description: 'Exam access pass',
+                order_id: order.orderId,
+                prefill: { email: studentEmail },
+                theme: { color: '#ffcb05' },
+                handler: async (response: {
+                    razorpay_order_id: string;
+                    razorpay_payment_id: string;
+                    razorpay_signature: string;
+                }) => {
+                    try {
+                        await api.post('/access-pass/verify', {
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                        });
+                        await loadPass();
+                    } catch {
+                        // The signature check or the write itself failed on a
+                        // payment Razorpay has already told the browser succeeded —
+                        // a real charge with nothing yet to show for it, so this
+                        // keeps checking rather than leaving the student stuck on
+                        // a plain error.
+                        setError(
+                            'Payment received — confirming it now. If this takes more than a minute, use "Already paid but still locked?" below.',
+                        );
+                        confirmAfterHandler();
+                    } finally {
+                        setPayLoading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: () => setPayLoading(false),
+                },
+            });
+            rzp.on('payment.failed', (resp: { error?: { description?: string } }) => {
+                setPayLoading(false);
+                setError(`Payment failed: ${resp.error?.description || 'please try again'}`);
+            });
+            rzp.open();
+        },
+        [studentEmail, loadPass, confirmAfterHandler],
+    );
 
-    const handleCheckNow = async () => {
-        setChecking(true);
+    const handlePay = async () => {
         setError('');
+        setPayLoading(true);
         try {
-            const p = await reconcileThenLoad();
-            if (!p.isActive) {
-                setError(
-                    "We can't see your payment yet. Bank confirmations can take a minute or two, wait a moment and check again. If you have already been charged, use \"Already paid but still locked?\" below and the system will verify & unlock.",
-                );
+            const { data } = await api.post<OrderResponse>('/access-pass/create-order');
+            if (data.alreadyActive) {
+                await loadPass();
+                setPayLoading(false);
+                return;
             }
+            if (!scriptReady.current || !window.Razorpay) {
+                setError('Payment could not start — please refresh the page and try again.');
+                setPayLoading(false);
+                return;
+            }
+            openCheckout(data as Required<OrderResponse>);
         } catch (err) {
-            setError(describeError(err, 'check your payment'));
-        } finally {
-            setChecking(false);
+            setError(describeError(err, 'start the payment'));
+            setPayLoading(false);
         }
     };
 
@@ -248,6 +275,13 @@ export default function PaymentStep({
     // ── Not paid yet ──
     return (
         <div className="auth-form">
+            <Script
+                src="https://checkout.razorpay.com/v1/checkout.js"
+                onLoad={() => {
+                    scriptReady.current = true;
+                }}
+            />
+
             <div className="pay-amount">
                 <span className="pay-amount__value">₹{rupees}</span>
                 <span className="pay-amount__note">one-time · unlocks this season&apos;s exams</span>
@@ -255,49 +289,21 @@ export default function PaymentStep({
 
             <PaymentTerms />
 
-            {/* The webhook matches by the contact details typed on Razorpay's page,
-                so being explicit about which email to use is load-bearing, not
-                politeness — a different email means the unlock cannot find them. */}
-            <div className="pay-callout">
-                On the payment page, enter this exact email address:
-                <strong className="pay-callout__email">{studentEmail}</strong>. That is how your registration is confirmed automatically once you pay.
-            </div>
-
             {error && <div className="auth-error">{error}</div>}
 
-            {waiting ? (
-                <div className="pay-waiting">
-                    <div className="pay-waiting__row">
-                        <div className="spinner" style={{ width: '18px', height: '18px' }} />
-                        <span>Waiting for payment confirmation…</span>
-                    </div>
-                    <p className="input-hint">
-                        Finish the ₹{rupees} payment in the other tab. This unlocks by itself, usually
-                        within a few seconds.
-                    </p>
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ width: '100%' }}
-                        onClick={handleCheckNow}
-                        disabled={checking}
-                    >
-                        {checking ? 'Checking…' : "I've paid, check now"}
-                    </button>
-                </div>
-            ) : (
-                <button
-                    type="button"
-                    className="btn btn-primary btn-lg auth-submit"
-                    onClick={handlePay}
-                >
-                    Pay ₹{rupees} and finish registering
-                </button>
-            )}
+            <button
+                type="button"
+                className="btn btn-primary btn-lg auth-submit"
+                onClick={handlePay}
+                disabled={payLoading}
+            >
+                {payLoading ? 'Opening payment…' : `Pay ₹${rupees} and finish registering`}
+            </button>
 
-            {/* Only offered once automatic detection has genuinely had its chance —
-                showing it earlier would invite tickets for payments about to land. */}
-            {(pollsExhausted || claimOpen) && !claimSent && (
+            {/* Only offered once a payment attempt has genuinely failed to
+                confirm — showing it earlier would invite tickets for a payment
+                that is about to land normally. */}
+            {(claimOpen || error) && !claimSent && (
                 <div className="pay-claim">
                     <h4>Paid, but exam is still locked?</h4>
                     <p>
@@ -333,7 +339,7 @@ export default function PaymentStep({
                 </div>
             )}
 
-            {!pollsExhausted && !claimOpen && !claimSent && (
+            {!claimOpen && !error && !claimSent && (
                 <button type="button" className="pay-claim-link" onClick={() => setClaimOpen(true)}>
                     Already paid but still locked?
                 </button>
