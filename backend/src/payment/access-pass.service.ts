@@ -105,16 +105,34 @@ export class AccessPassService {
             return { alreadyActive: true as const };
         }
 
-        // Re-use the pending order rather than opening a second one.
+        // Re-use the pending order rather than opening a second one — but only
+        // if it still exists under the key this server is running with. An
+        // order id is scoped to the Razorpay account and mode (test vs live) it
+        // was created against; if the keys were rotated since — the one real
+        // way this ever happens — the old id is meaningless to the *new* key
+        // and Checkout would fail opaquely on it. Fetching it first turns that
+        // into "just make a fresh one" instead of a stuck student.
         if (existing?.payment && existing.payment.status === PaymentStatus.CREATED) {
-            return {
-                alreadyActive: false as const,
-                orderId: existing.payment.razorpayOrderId,
-                amount: existing.payment.amount,
-                currency: existing.payment.currency,
-                key: process.env.RAZORPAY_KEY_ID,
-                accessPassId: existing.id,
-            };
+            const stillValid = await this.razorpay.orders
+                .fetch(existing.payment.razorpayOrderId)
+                .then(() => true)
+                .catch(() => false);
+
+            if (stillValid) {
+                return {
+                    alreadyActive: false as const,
+                    orderId: existing.payment.razorpayOrderId,
+                    amount: existing.payment.amount,
+                    currency: existing.payment.currency,
+                    key: process.env.RAZORPAY_KEY_ID,
+                    accessPassId: existing.id,
+                };
+            }
+
+            await this.prisma.payment.update({
+                where: { id: existing.payment.id },
+                data: { status: PaymentStatus.FAILED },
+            });
         }
 
         const amount = ACCESS_PASS_AMOUNT_PAISE;
