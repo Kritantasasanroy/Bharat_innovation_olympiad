@@ -66,3 +66,9 @@ were copied verbatim from the previous account; `REDIS_URL` and `ADMIN_API_URL`
 point at the new in-account resources. `render.yaml` at the repo root is an
 aspirational blueprint (exam-api + workers) that is **not** deployed anywhere yet.
 
+The four Vercel frontends (student, admin, school, partner) were repointed to the
+new URLs on 2026-09-14 (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`,
+`NEXT_PUBLIC_PORTAL_API_URL`) and redeployed; their baked bundles reference the
+new backend with no stale references. Custom domains (www / school /
+partner.innovationolympiad.in) serve the same deployments.
+
