@@ -571,6 +571,12 @@ export class ExamService {
          * configured date by date.
          */
         useStandardCalendar?: boolean;
+        /**
+         * Seats per sitting when `useStandardCalendar` is set, overriding the
+         * season default. Only timings this call creates get it; re-seeding an
+         * already-configured instance never resizes what exists.
+         */
+        standardCalendarCapacity?: number;
         /** Specific dates, when the exam does not run on the standard calendar. */
         scheduleDates?: {
             date: string;
@@ -585,6 +591,7 @@ export class ExamService {
             isPublished,
             isResultReleased,
             useStandardCalendar,
+            standardCalendarCapacity,
             scheduleDates,
             ...examData
         } = input;
@@ -676,7 +683,10 @@ export class ExamService {
         // admin can seed from the scheduling page with one click, which is a far
         // better outcome than rolling back a fully built exam and its paper.
         if (useStandardCalendar) {
-            await this.scheduleDates.seedStandardCalendar(created.instance.id);
+            await this.scheduleDates.seedStandardCalendar(
+                created.instance.id,
+                standardCalendarCapacity,
+            );
         } else if (scheduleDates?.length) {
             for (const d of scheduleDates) {
                 await this.scheduleDates.create({

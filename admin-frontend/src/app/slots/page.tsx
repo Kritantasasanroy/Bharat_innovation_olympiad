@@ -557,6 +557,7 @@ export default function AdminSlotsPage() {
                         <RulesPanel
                             instanceId={instanceId}
                             rules={rules}
+                            usesCalendar={scheduleDates.length > 0}
                             onSaved={(next) => {
                                 setRules((r) => (r ? { ...r, ...next } : r));
                                 setBanner({
@@ -676,11 +677,14 @@ export default function AdminSlotsPage() {
 function RulesPanel({
     instanceId,
     rules,
+    usesCalendar,
     onSaved,
     onError,
 }: {
     instanceId: string;
     rules: AssignmentRules | null;
+    /** The instance publishes its calendar, which fixes the lead time. */
+    usesCalendar: boolean;
     onSaved: (next: Partial<AssignmentRules>) => void;
     onError: (text: string) => void;
 }) {
@@ -737,17 +741,24 @@ function RulesPanel({
         }
     };
 
-    const sentence =
-        preference.length > 0
-            ? `Each participant is offered the first ${WEEKDAY_FULL[preference[0]]} at least ${lead} days after they register. ` +
-              `If it is full, the next ${WEEKDAY_FULL[preference[0]]}, and so on up to ${horizon} days out` +
-              (preference.length > 1
-                  ? `. Only then are ${preference
-                        .slice(1)
-                        .map((d) => `${WEEKDAY_FULL[d]}s`)
-                        .join(', then ')} tried, in the same way.`
-                  : '.')
-            : '';
+    /**
+     * On a calendar instance the lead time is the season's own hardcoded week,
+     * not this form's to change — the published dates are what schools were
+     * told. The input is shown read-only rather than hidden, so the admin can
+     * still see the number the assigner is honouring instead of wondering.
+     */
+    const sentence = usesCalendar
+        ? `This exam runs on its published calendar, so participants are offered the earliest published date at least ${lead} days after they register — every Priority 1 date first, then Priority 2 — and only fall back to a nearer date when everything further out is full.`
+        : preference.length > 0
+          ? `Each participant is offered the first ${WEEKDAY_FULL[preference[0]]} at least ${lead} days after they register. ` +
+            `If it is full, the next ${WEEKDAY_FULL[preference[0]]}, and so on up to ${horizon} days out` +
+            (preference.length > 1
+                ? `. Only then are ${preference
+                      .slice(1)
+                      .map((d) => `${WEEKDAY_FULL[d]}s`)
+                      .join(', then ')} tried, in the same way.`
+                : '.')
+          : '';
 
     return (
         <section className="glass-card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
@@ -777,15 +788,38 @@ function RulesPanel({
                         <label className="input-label" htmlFor="lead">
                             Earliest sitting (days after registering)
                         </label>
-                        <input
-                            id="lead"
-                            className="input-field"
-                            type="number"
-                            min={0}
-                            max={365}
-                            value={lead}
-                            onChange={(e) => setLead(Number(e.target.value))}
-                        />
+                        {usesCalendar ? (
+                            <>
+                                <input
+                                    id="lead"
+                                    className="input-field"
+                                    type="number"
+                                    value={lead}
+                                    disabled
+                                    aria-describedby="lead-fixed-note"
+                                />
+                                <p
+                                    id="lead-fixed-note"
+                                    style={{
+                                        fontSize: '0.75rem',
+                                        color: 'var(--text-secondary)',
+                                        marginTop: 4,
+                                    }}
+                                >
+                                    Fixed at 7 days once a published calendar is active.
+                                </p>
+                            </>
+                        ) : (
+                            <input
+                                id="lead"
+                                className="input-field"
+                                type="number"
+                                min={0}
+                                max={365}
+                                value={lead}
+                                onChange={(e) => setLead(Number(e.target.value))}
+                            />
+                        )}
                     </div>
                     <div style={{ flex: '1 1 180px' }}>
                         <label className="input-label" htmlFor="horizon">

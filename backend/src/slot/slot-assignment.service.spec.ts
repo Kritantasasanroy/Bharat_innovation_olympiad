@@ -21,7 +21,7 @@ const INSTANCE = {
     slotLeadDays: 14,
     slotHorizonDays: 56,
     slotDayPreference: [0, 6],
-    exam: { id: 'exam-1', isTrial: false, requiresSlot: true },
+    exam: { id: 'exam-1', isTrial: false, requiresSlot: true, classBands: [8] },
 };
 
 interface FakeSlot {
@@ -63,7 +63,16 @@ function createFakeDb(
     const slots: FakeSlot[] = [];
     const bookings: FakeBooking[] = [];
     const scheduleDates: FakeScheduleDate[] = opts.scheduleDates ?? [];
-    const users = new Map<string, { createdAt: Date; activatedAt: Date | null; role: string }>();
+    const users = new Map<
+        string,
+        {
+            createdAt: Date;
+            activatedAt: Date | null;
+            role: string;
+            classBand: number | null;
+            rollNumber: string | null;
+        }
+    >();
     let seq = 0;
 
     const client = {
@@ -73,7 +82,36 @@ function createFakeDb(
         },
         user: {
             findUnique: async ({ where }: any) => users.get(where.id) ?? null,
-            findMany: async () => [],
+            findMany: async ({ where }: any) => {
+                // backfillInstance's candidate query: students of the exam's
+                // class bands with no active booking on this instance.
+                return Array.from(users.entries())
+                    .filter(([id, u]) => {
+                        if (where.role && u.role !== where.role) return false;
+                        if (where.classBand?.in && !where.classBand.in.includes(u.classBand)) {
+                            return false;
+                        }
+                        const none = where.bookings?.none;
+                        if (none) {
+                            const blocked = bookings.some((b) => {
+                                if (b.userId !== id) return false;
+                                if (!(none.status?.in ?? [b.status]).includes(b.status)) return false;
+                                const slotFilter = none.slot ?? {};
+                                const slot = slots.find((s) => s.id === b.slotId);
+                                if (
+                                    typeof slotFilter.examInstanceId === 'string' &&
+                                    slot?.examInstanceId !== slotFilter.examInstanceId
+                                ) {
+                                    return false;
+                                }
+                                return true;
+                            });
+                            if (blocked) return false;
+                        }
+                        return true;
+                    })
+                    .map(([id, u]) => ({ id, ...u }));
+            },
         },
         booking: {
             findFirst: async ({ where, include }: any) => {
@@ -215,11 +253,13 @@ function setup(timingSpec: FakeTiming[], scheduleDates?: FakeScheduleDate[]) {
             return { examInstanceId: db.instance.id, ...t };
         },
     };
+    const notifier = fakeNotifier();
     const service = new SlotAssignmentService(
         db.client as never,
         createFakeTimings(db, timingSpec),
+        notifier as never,
     );
-    return { ...db, service };
+    return { ...db, service, notifier };
 }
 
 /** A published day, given as `YYYY-MM-DD` in IST. */
@@ -242,9 +282,32 @@ const scheduledInDays = (days: number, priority = 1): FakeScheduleDate => ({
     isActive: true,
 });
 
+/**
+ * The notification half of SlotService, narrowed to what the assigner calls.
+ * Every test asserts against these fakes; nothing here sends anything.
+ */
+/**
+ * The notification half of SlotService, narrowed to what the assigner calls.
+ * Every test asserts against these mocks; nothing here sends anything.
+ */
+function fakeNotifier() {
+    return { notifySchedule: jest.fn(), notifyScheduleMany: jest.fn() };
+}
+
 /** A student who registered on Tuesday 1 Sep 2026. */
-function register(db: { users: Map<string, any> }, id: string, on = ist('2026-09-01T10:00:00')) {
-    db.users.set(id, { createdAt: on, activatedAt: on, role: 'STUDENT' });
+function register(
+    db: { users: Map<string, any> },
+    id: string,
+    on = ist('2026-09-01T10:00:00'),
+    opts: { classBand?: number | null; rollNumber?: string | null } = {},
+) {
+    db.users.set(id, {
+        createdAt: on,
+        activatedAt: on,
+        role: 'STUDENT',
+        classBand: opts.classBand !== undefined ? opts.classBand : 8,
+        rollNumber: opts.rollNumber ?? null,
+    });
     return id;
 }
 
@@ -363,6 +426,7 @@ describe('SlotAssignmentService.ensureAssignment', () => {
         const service = new SlotAssignmentService(
             db.client as never,
             createFakeTimings(db, [SUNDAY_10AM]),
+            fakeNotifier() as never,
         );
         register(db, 'stu-1');
 
@@ -419,12 +483,13 @@ describe('SlotAssignmentService.ensureAssignment', () => {
     it('leaves practice and trial exams out of the schedule entirely', async () => {
         const trial = {
             ...INSTANCE,
-            exam: { id: 'exam-trial', isTrial: true, requiresSlot: true },
+            exam: { id: 'exam-trial', isTrial: true, requiresSlot: true, classBands: [8] },
         };
         const db = createFakeDb({ instance: trial });
         const service = new SlotAssignmentService(
             db.client as never,
             createFakeTimings(db, [SUNDAY_10AM]),
+            fakeNotifier() as never,
         );
         register(db, 'stu-1');
 
@@ -438,12 +503,13 @@ describe('SlotAssignmentService.ensureAssignment', () => {
     it('leaves an exam with the slot gate waived out of the schedule too', async () => {
         const waived = {
             ...INSTANCE,
-            exam: { id: 'exam-1', isTrial: false, requiresSlot: false },
+            exam: { id: 'exam-1', isTrial: false, requiresSlot: false, classBands: [8] },
         };
         const db = createFakeDb({ instance: waived });
         const service = new SlotAssignmentService(
             db.client as never,
             createFakeTimings(db, [SUNDAY_10AM]),
+            fakeNotifier() as never,
         );
         register(db, 'stu-1');
 
@@ -462,6 +528,7 @@ describe('SlotAssignmentService.ensureAssignment', () => {
         const service = new SlotAssignmentService(
             db.client as never,
             createFakeTimings(db, [SUNDAY_10AM]),
+            fakeNotifier() as never,
         );
         register(db, 'stu-1');
 
@@ -816,5 +883,129 @@ describe('reassign onto a timing + date nobody has sat yet', () => {
         await expect(
             db.service.reassign('stu-1', { timingId: TIER_1_MORNING.id, date: '2099-01-01' }, 'admin-1'),
         ).rejects.toThrow(/outside the exam/i);
+    });
+});
+
+// ── Class-band eligibility ───────────────────────────────────────────────────
+
+describe('class-band eligibility', () => {
+    it('does not seat a student outside the exam’s class bands', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-1', ist('2026-09-01T10:00:00'), { classBand: 9 });
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('NOT_APPLICABLE');
+        expect(db.bookings).toHaveLength(0);
+        expect(db.slots).toHaveLength(0);
+        expect(db.notifier.notifySchedule).not.toHaveBeenCalled();
+    });
+
+    it('does not seat a student whose class band was never captured', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-1', ist('2026-09-01T10:00:00'), { classBand: null });
+
+        expect((await db.service.ensureAssignment('stu-1', 'inst-1')).status).toBe('NOT_APPLICABLE');
+        expect(db.bookings).toHaveLength(0);
+    });
+});
+
+// ── The calendar lead time ───────────────────────────────────────────────────
+
+describe('the calendar lead time', () => {
+    /**
+     * The instance column says 14 days; the published calendar says 7. The
+     * calendar wins — and the two dates here are chosen so the difference is
+     * visible: at +10 and +25 days out, a 14-day lead would skip the +10 date
+     * entirely, so landing on it proves the hardcoded floor is what ran.
+     */
+    it('uses the hardcoded 7-day floor on a calendar instance, not the per-instance lead', async () => {
+        const near = scheduledInDays(10);
+        const far = scheduledInDays(25);
+        const db = setup([TIER_1_MORNING], [near, far]);
+        register(db, 'stu-1', new Date());
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(day(result.slotStartsAt!)).toBe(day(near.date));
+    });
+});
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+describe('assignment notifications', () => {
+    it('sends the confirmation once, when a seat is newly claimed', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-1');
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(db.notifier.notifySchedule).toHaveBeenCalledTimes(1);
+        expect(db.notifier.notifySchedule).toHaveBeenCalledWith(result.bookingId);
+    });
+
+    it('does not re-send when the student already held the seat', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-1');
+
+        await db.service.ensureAssignment('stu-1', 'inst-1');
+        await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(db.notifier.notifySchedule).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends nothing when no seat could be found', async () => {
+        const db = setup([]);
+        register(db, 'stu-1');
+
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('UNASSIGNED');
+        expect(db.notifier.notifySchedule).not.toHaveBeenCalled();
+    });
+});
+
+// ── Backfill ─────────────────────────────────────────────────────────────────
+
+describe('SlotAssignmentService.backfillInstance', () => {
+    it('seats students in ascending roll-number order when seats are scarce', async () => {
+        // One published date, one sitting, two seats — and three students whose
+        // registration order is the exact reverse of their roll-number order.
+        // The season's numbering decides who sits, not who signed up first.
+        const db = setup([TIER_1_MORNING], [scheduled('2026-09-27', 1)]);
+        register(db, 'stu-3', ist('2026-09-01T08:00:00'), { rollNumber: 'BIO26-G8-00003' });
+        register(db, 'stu-1', ist('2026-09-01T09:00:00'), { rollNumber: 'BIO26-G8-00001' });
+        register(db, 'stu-2', ist('2026-09-01T10:00:00'), { rollNumber: 'BIO26-G8-00002' });
+
+        const result = await db.service.backfillInstance('inst-1');
+
+        expect(result.assigned).toBe(2);
+        expect(result.unassigned).toBe(1);
+        expect(db.bookings.map((b) => b.userId)).toEqual(['stu-1', 'stu-2']);
+    });
+
+    it('notifies the whole batch once, not once per student', async () => {
+        const db = setup([TIER_1_MORNING], [scheduled('2026-09-27', 1)]);
+        register(db, 'stu-1', ist('2026-09-01T08:00:00'), { rollNumber: 'BIO26-G8-00001' });
+        register(db, 'stu-2', ist('2026-09-01T09:00:00'), { rollNumber: 'BIO26-G8-00002' });
+
+        await db.service.backfillInstance('inst-1');
+
+        expect(db.notifier.notifyScheduleMany).toHaveBeenCalledTimes(1);
+        expect(db.notifier.notifyScheduleMany.mock.calls[0][0]).toHaveLength(2);
+        expect(db.notifier.notifySchedule).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing when nobody could be seated', async () => {
+        const db = setup([TIER_1_MORNING], [scheduled('2026-09-27', 1)]);
+        register(db, 'stu-1', ist('2026-09-01T08:00:00'), { rollNumber: 'BIO26-G8-00001' });
+
+        const result = await db.service.backfillInstance('inst-1');
+
+        expect(result.assigned).toBe(1);
+        expect(db.notifier.notifyScheduleMany).toHaveBeenCalledTimes(1);
+        expect(db.notifier.notifyScheduleMany.mock.calls[0][0]).toHaveLength(1);
     });
 });

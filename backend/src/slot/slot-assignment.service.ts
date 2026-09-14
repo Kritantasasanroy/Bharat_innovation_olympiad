@@ -21,11 +21,14 @@ import {
     examNeedsSlot,
     istStartOfDay,
     slotWindow,
+    sortByRollNumber,
     unassignedMessage,
     weekdayName,
     windowsOverlap,
 } from './slot-assignment.rules';
+import { CALENDAR_LEAD_DAYS } from './slot-calendar';
 import { SlotTimingService } from './slot-timing.service';
+import { SlotService } from './slot.service';
 
 export type AssignmentStatus =
     /** A sitting was found and the student is now booked into it. */
@@ -97,6 +100,7 @@ export class SlotAssignmentService {
     constructor(
         private prisma: PrismaService,
         private timings: SlotTimingService,
+        private slots: SlotService,
     ) {}
 
     // ── Entry points ──────────────────────────────────────────────────────────
@@ -111,7 +115,15 @@ export class SlotAssignmentService {
      * "unassigned" list and can place them by hand.
      */
     async assignForNewStudent(userId: string): Promise<AssignmentResult[]> {
-        const instances = await this.slotBearingInstances();
+        // The student's class band prunes the instance list before anything is
+        // read per instance — a grade-9 student has no business walking every
+        // grade-10 exam. `ensureAssignment` still re-checks the band itself, so
+        // this is an efficiency filter, never the gate.
+        const student = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { classBand: true },
+        });
+        const instances = await this.slotBearingInstances(student?.classBand ?? null);
         const results: AssignmentResult[] = [];
         for (const instanceId of instances) {
             try {
@@ -137,7 +149,11 @@ export class SlotAssignmentService {
     async ensureAssignment(userId: string, examInstanceId: string): Promise<AssignmentResult> {
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: examInstanceId },
-            include: { exam: { select: { id: true, isTrial: true, requiresSlot: true } } },
+            include: {
+                exam: {
+                    select: { id: true, isTrial: true, requiresSlot: true, classBands: true },
+                },
+            },
         });
         if (!instance) throw new NotFoundException('Exam instance not found');
 
@@ -165,15 +181,33 @@ export class SlotAssignmentService {
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { createdAt: true, activatedAt: true, role: true },
+            select: { createdAt: true, activatedAt: true, role: true, classBand: true },
         });
         if (!user) throw new NotFoundException('Student not found');
         if (user.role !== Role.STUDENT) {
             return { status: 'NOT_APPLICABLE', examInstanceId };
         }
 
+        // The exam is for specific class bands, and this student is not in one
+        // of them. Reported as NOT_APPLICABLE — the same answer a trial exam
+        // gives — because "no seat for you" and "this exam is not yours" need
+        // different fixes, and only the second is correct here.
+        if (user.classBand == null || !instance.exam.classBands.includes(user.classBand)) {
+            return { status: 'NOT_APPLICABLE', examInstanceId };
+        }
+
         const rules = this.rulesFor(instance, user.activatedAt ?? user.createdAt);
-        return this.place(userId, instance, rules, null);
+        const result = await this.place(userId, instance, rules, null);
+
+        // A newly claimed seat is an appointment the student has not been told
+        // about yet, so the confirmation goes out the moment it exists. The
+        // notification is best-effort by its own construction — it catches
+        // everything internally — so fire-and-forget keeps the assignment path
+        // from waiting on a mail round-trip.
+        if (result.status === 'ASSIGNED' && result.bookingId) {
+            void this.slots.notifySchedule(result.bookingId);
+        }
+        return result;
     }
 
     // ── The search ────────────────────────────────────────────────────────────
@@ -220,10 +254,17 @@ export class SlotAssignmentService {
         // *preference* rather than a filter. A student registering four days
         // before the last Sunday of the season would otherwise be barred from
         // every remaining date and left with no sitting at all -- the one
-        // outcome the calendar exists to prevent. So the dates a fortnight or
-        // more out are offered first, in priority order, and only if every one
-        // of those is full does the search fall back to the nearer ones.
-        const earliest = addDays(istStartOfDay(rules.registeredAt), rules.leadDays);
+        // outcome the calendar exists to prevent. So the dates a week or more
+        // out are offered first, in priority order, and only if every one of
+        // those is full does the search fall back to the nearer ones.
+        //
+        // On a published calendar the lead is the season's own hardcoded floor
+        // (`CALENDAR_LEAD_DAYS`), not the per-instance column — the published
+        // dates are what schools were told, and the week to prepare is part of
+        // that. The per-instance value keeps governing the legacy weekday
+        // search, where no calendar has been published to contradict it.
+        const effectiveLeadDays = plan.usesCalendar ? CALENDAR_LEAD_DAYS : rules.leadDays;
+        const earliest = addDays(istStartOfDay(rules.registeredAt), effectiveLeadDays);
         const passes = plan.usesCalendar
             ? [
                   inWindow.filter((d) => d.date >= earliest),
@@ -572,21 +613,35 @@ export class SlotAssignmentService {
                     },
                 },
             },
-            select: { id: true, createdAt: true, activatedAt: true },
+            select: { id: true, createdAt: true, activatedAt: true, rollNumber: true },
         });
+
+        // Scarce seats go to the lowest roll numbers first. Registration order
+        // would be arbitrary here — the cohort registered before this exam
+        // existed, so their signup order says nothing about who should sit
+        // first — while the roll number is the season's own ordering.
+        const ordered = sortByRollNumber(students);
 
         const summary = { considered: students.length, assigned: 0, unassigned: 0 };
         const failures: { userId: string; message: string }[] = [];
+        const assignedBookingIds: string[] = [];
 
-        for (const student of students) {
+        for (const student of ordered) {
             const rules = this.rulesFor(instance, student.activatedAt ?? student.createdAt);
             const result = await this.place(student.id, instance, rules, null);
-            if (result.status === 'ASSIGNED') summary.assigned += 1;
-            else {
+            if (result.status === 'ASSIGNED') {
+                summary.assigned += 1;
+                if (result.bookingId) assignedBookingIds.push(result.bookingId);
+            } else {
                 summary.unassigned += 1;
                 if (result.message) failures.push({ userId: student.id, message: result.message });
             }
         }
+
+        // One batched sweep, not one send per student: `notifyScheduleMany`
+        // drains in the background precisely so a whole cohort's confirmations
+        // do not trip WATI's rate limit the way fifty simultaneous sends would.
+        this.slots.notifyScheduleMany(assignedBookingIds);
 
         return { ...summary, failures: failures.slice(0, 20) };
     }
@@ -737,6 +792,11 @@ export class SlotAssignmentService {
             registeredAt,
             usesPublishedCalendar: plan.usesCalendar,
             rules: { ...rules, dayPreferenceNames: rules.dayPreference.map(weekdayName) },
+            // What the search actually honoured. On a calendar instance the
+            // per-instance `leadDays` is ignored in favour of the season's
+            // hardcoded floor, and reporting only the raw value would make this
+            // diagnostic disagree with the algorithm it explains.
+            effectiveLeadDays: plan.usesCalendar ? CALENDAR_LEAD_DAYS : rules.leadDays,
             steps,
         };
     }
@@ -754,8 +814,15 @@ export class SlotAssignmentService {
         return examNeedsSlot(exam);
     }
 
-    /** Instance ids of published, non-archived exams that use sittings. */
-    private async slotBearingInstances(): Promise<string[]> {
+    /**
+     * Instance ids of published, non-archived exams that use sittings.
+     *
+     * `classBand` narrows the sweep to exams the student's grade is actually
+     * eligible for, so a registration does not walk every exam in the system.
+     * Omitted — as `backfillAll` calls it — it stays unfiltered and sweeps
+     * everything.
+     */
+    private async slotBearingInstances(classBand?: number | null): Promise<string[]> {
         const now = new Date();
         const instances = await this.prisma.examInstance.findMany({
             where: {
@@ -765,6 +832,7 @@ export class SlotAssignmentService {
                     isTrial: false,
                     requiresSlot: true,
                     isPublished: true,
+                    ...(classBand != null ? { classBands: { has: classBand } } : {}),
                 },
             },
             select: { id: true, examId: true },

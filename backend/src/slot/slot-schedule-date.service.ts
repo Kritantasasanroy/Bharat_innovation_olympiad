@@ -129,6 +129,13 @@ export class SlotScheduleDateService {
      * Creates the season's published calendar — dates *and* the timings that go
      * with each tier — in one go.
      *
+     * `capacityOverride` sets the seats per sitting for every timing the seed
+     * creates, in place of the season default. It applies only to timings this
+     * call actually creates: an idempotent re-run that adds nothing also
+     * re-seats nothing, so an admin who seeded at 50 and re-runs with 80 does
+     * not silently resize the sittings already in use — that stays an explicit
+     * edit on the scheduling page.
+     *
      * Idempotent by construction: a date or timing that already exists is left
      * alone rather than duplicated, so an admin who clicks this twice, or who
      * seeds an instance that was half-configured by hand, ends up with exactly
@@ -136,7 +143,11 @@ export class SlotScheduleDateService {
      * open a second 50-seat sitting at the same hour and quietly double the
      * day's capacity.
      */
-    async seedStandardCalendar(examInstanceId: string) {
+    async seedStandardCalendar(examInstanceId: string, capacityOverride?: number) {
+        const capacity =
+            capacityOverride && capacityOverride > 0
+                ? capacityOverride
+                : DEFAULT_SITTING_CAPACITY;
         const instance = await this.prisma.examInstance.findUnique({
             where: { id: examInstanceId },
             select: { id: true },
@@ -188,7 +199,7 @@ export class SlotScheduleDateService {
                     label: t.label,
                     startMinute,
                     endMinute: startMinute + DEFAULT_SITTING_MINUTES,
-                    capacity: DEFAULT_SITTING_CAPACITY,
+                    capacity,
                     // Retained only for instances that later drop their calendar
                     // and fall back to the weekday search.
                     weekdays: priority === 1 ? [0] : [6],

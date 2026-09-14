@@ -118,6 +118,7 @@ export default function NewExamWizard() {
     // Step 3 — the sittings and the assignment rules
     const [mode, setMode] = useState<SittingMode>('standard');
     const [options, setOptions] = useState<CalendarOptions | null>(null);
+    const [standardCapacity, setStandardCapacity] = useState(50);
     const [dates, setDates] = useState<DateRow[]>([]);
     const [newDate, setNewDate] = useState('');
     const [newDatePriority, setNewDatePriority] = useState(1);
@@ -140,7 +141,10 @@ export default function NewExamWizard() {
 
     useEffect(() => {
         api.get<CalendarOptions>('/admin/slot-calendar/options')
-            .then(({ data }) => setOptions(data))
+            .then(({ data }) => {
+                setOptions(data);
+                setStandardCapacity(data.defaultCapacity);
+            })
             .catch(() => setOptions(null));
     }, []);
 
@@ -168,8 +172,8 @@ export default function NewExamWizard() {
             options?.times.filter((t) => t.priorities.includes(priority)).length ?? 0;
         // Eight dates in each tier; the Diwali rows are closed and seat nobody.
         const sittings = 8 * perTier(1) + 8 * perTier(2);
-        return { sittings, places: sittings * (options?.defaultCapacity ?? 50) };
-    }, [options]);
+        return { sittings, places: sittings * standardCapacity };
+    }, [options, standardCapacity]);
 
     /** The same arithmetic for a custom calendar: dates x their tier's times. */
     const customTotals = useMemo(() => {
@@ -247,9 +251,12 @@ export default function NewExamWizard() {
         if (step === 2) {
             if (horizonDays < leadDays) return 'The latest sitting must be further out than the earliest.';
 
-            // The published season needs nothing else: its dates, times and
-            // seats are all fixed, and the server writes them.
-            if (mode === 'standard') return null;
+            // The published season's dates and times are fixed; only its seat
+            // count is set here, and it needs the same floor as a custom one.
+            if (mode === 'standard') {
+                if (standardCapacity < 1) return 'Each sitting needs at least one seat.';
+                return null;
+            }
 
             if (dates.length === 0) return 'Add at least one exam date.';
             if (timings.length === 0) return 'Add at least one sitting time.';
@@ -270,19 +277,6 @@ export default function NewExamWizard() {
             const orphanTiming = timings.find((t) => !usedPriorities.includes(t.priority));
             if (orphanTiming) {
                 return `The ${orphanTiming.startTime} sitting is Priority ${orphanTiming.priority}, but no date uses that priority. Add a date for it, or change the sitting's priority.`;
-            }
-            // Two sittings of one tier overlapping would compete for the same
-            // date, hall and invigilation.
-            for (let i = 0; i < timings.length; i += 1) {
-                for (let j = i + 1; j < timings.length; j += 1) {
-                    const a = timings[i];
-                    const b = timings[j];
-                    if (a.priority !== b.priority) continue;
-                    const end = (t: TimingRow) => (t.endTime > t.startTime ? t.endTime : '24:00');
-                    if (a.startTime < end(b) && b.startTime < end(a)) {
-                        return `The ${a.startTime} and ${b.startTime} sittings overlap on the same day. Sittings on one date must not run into each other.`;
-                    }
-                }
             }
         }
         return null;
@@ -319,7 +313,7 @@ export default function NewExamWizard() {
                     slotDayPreference: dayPreference,
                 },
                 ...(mode === 'standard'
-                    ? { useStandardCalendar: true }
+                    ? { useStandardCalendar: true, standardCalendarCapacity: standardCapacity }
                     : {
                           scheduleDates: dates.map((d) => ({
                               date: d.date,
@@ -527,9 +521,27 @@ export default function NewExamWizard() {
                                         {options?.times.filter((t) => t.priorities.includes(1)).length ?? 7}{' '}
                                         sittings each, eight Priority 2 Saturdays running{' '}
                                         {options?.times.filter((t) => t.priorities.includes(2)).length ?? 2}{' '}
-                                        each, at {options?.defaultCapacity ?? 50} seats a sitting — and
-                                        7–9 November closed for Diwali.
+                                        each — and 7–9 November closed for Diwali.
                                     </p>
+                                    <div
+                                        className="form-group"
+                                        style={{ maxWidth: 220, marginTop: 'var(--space-3)' }}
+                                    >
+                                        <label>Seats per sitting</label>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            min={1}
+                                            value={standardCapacity}
+                                            onChange={(e) =>
+                                                setStandardCapacity(Number(e.target.value))
+                                            }
+                                        />
+                                        <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
+                                            {standardTotals.sittings} sittings × {standardCapacity} seats ={' '}
+                                            {standardTotals.places.toLocaleString()} places.
+                                        </p>
+                                    </div>
                                     <p
                                         className="text-muted"
                                         style={{ fontSize: '0.8rem', marginTop: 'var(--space-2)' }}

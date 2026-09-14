@@ -14,6 +14,7 @@ import {
     istTimeOnDay,
     istWeekday,
     parseMinuteOfDay,
+    sortByRollNumber,
     weekdayName,
 } from './slot-assignment.rules';
 
@@ -241,5 +242,62 @@ describe('time-of-day helpers', () => {
         const sunday = istStartOfDay(ist('2026-09-20T12:00:00'));
         // 23:00 start, 01:00 end → the end is minute 1500, not minute 60.
         expect(istTimeOnDay(sunday, 1500).toISOString()).toBe('2026-09-20T19:30:00.000Z');
+    });
+});
+
+describe('sortByRollNumber — the backfill order', () => {
+    const student = (rollNumber: string | null, createdAt = new Date('2026-09-01T10:00:00Z')) => ({
+        rollNumber,
+        createdAt,
+    });
+
+    it('sorts by grade first, then sequence', () => {
+        const ordered = sortByRollNumber([
+            student('BIO26-G9-00005'),
+            student('BIO26-G10-00001'),
+            student('BIO26-G9-00001'),
+        ]);
+        expect(ordered.map((s) => s.rollNumber)).toEqual([
+            'BIO26-G9-00001',
+            'BIO26-G9-00005',
+            'BIO26-G10-00001',
+        ]);
+    });
+
+    it('does not sort the raw strings, or grade 10 would queue ahead of grade 9', () => {
+        // The lexicographic trap: "G10" < "G9" as strings. The parsed number
+        // is what decides, so the grade-9 student keeps their place.
+        const ordered = sortByRollNumber([
+            student('BIO26-G10-00001'),
+            student('BIO26-G9-00001'),
+        ]);
+        expect(ordered.map((s) => s.rollNumber)).toEqual(['BIO26-G9-00001', 'BIO26-G10-00001']);
+    });
+
+    it('puts students without a usable roll number last, in registration order', () => {
+        const early = student(null, new Date('2026-09-01T08:00:00Z'));
+        const late = student(null, new Date('2026-09-01T12:00:00Z'));
+        const numbered = student('BIO26-G8-00007');
+
+        const ordered = sortByRollNumber([early, numbered, late]);
+        expect(ordered).toEqual([numbered, early, late]);
+    });
+
+    it('treats an unparseable roll number like a missing one', () => {
+        const garbage = student('NOT-A-ROLL-NUMBER');
+        const real = student('BIO26-G8-00002');
+
+        expect(sortByRollNumber([garbage, real])).toEqual([real, garbage]);
+    });
+
+    it('returns a new list rather than sorting in place', () => {
+        const a = student('BIO26-G9-00002');
+        const b = student('BIO26-G9-00001');
+        const input = [a, b];
+
+        const ordered = sortByRollNumber(input);
+
+        expect(input).toEqual([a, b]);
+        expect(ordered.map((s) => s.rollNumber)).toEqual(['BIO26-G9-00001', 'BIO26-G9-00002']);
     });
 });

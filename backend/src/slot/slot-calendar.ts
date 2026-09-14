@@ -63,6 +63,18 @@ export const DEFAULT_SITTING_MINUTES = 90;
 /** Seats per sitting, unless an admin raises them on the day. */
 export const DEFAULT_SITTING_CAPACITY = 50;
 
+/**
+ * The lead time a published-calendar instance runs, in days.
+ *
+ * Once the season's dates are on the calendar this is a rule of the season, not
+ * a per-instance setting: a student registering today is offered the first
+ * published date at least a week out, and only falls back to a nearer one when
+ * everything further is full. Hardcoded rather than on `ExamInstance` so an
+ * admin cannot quietly shorten it — the published calendar is what schools were
+ * told, and "at least a week to prepare" is part of what was published.
+ */
+export const CALENDAR_LEAD_DAYS = 7;
+
 export interface CalendarDate {
     /** `YYYY-MM-DD`, the IST calendar day. */
     readonly date: string;

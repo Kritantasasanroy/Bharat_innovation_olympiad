@@ -25,6 +25,7 @@
  * than merely convenient.
  */
 import { isDemoExam } from '../common/demo-exams';
+import { parseRollNumber } from '../user/roll-number';
 
 /** Asia/Kolkata is UTC+05:30, year-round — no daylight saving to track. */
 export const IST_OFFSET_MINUTES = 330;
@@ -315,14 +316,31 @@ export function windowsOverlap(
     return a.startsAt < b.endsAt && b.startsAt < a.endsAt;
 }
 
-/** The same question for two times-of-day on a shared date. */
-export function minuteRangesOverlap(
-    a: { startMinute: number; endMinute: number },
-    b: { startMinute: number; endMinute: number },
-): boolean {
-    const endOf = (r: { startMinute: number; endMinute: number }) =>
-        r.endMinute > r.startMinute ? r.endMinute : r.endMinute + 1440;
-    return a.startMinute < endOf(b) && b.startMinute < endOf(a);
+// ── Backfill ordering ─────────────────────────────────────────────────────────
+
+/**
+ * Students in ascending roll-number order — the order a backfill fills seats in.
+ *
+ * The comparison is on the *parsed* number, grade first then sequence, never on
+ * the raw string: `BIO26-G10-00001` would otherwise sort before `BIO26-G9-00001`
+ * lexicographically, and a whole grade would jump the queue ahead of the one
+ * below it. Students without a usable roll number — registered but never issued
+ * one — go last, in registration order, so they cannot displace anyone the
+ * season has already numbered.
+ */
+export function sortByRollNumber<
+    T extends { rollNumber: string | null; createdAt: Date },
+>(students: T[]): T[] {
+    return [...students].sort((a, b) => {
+        const aParsed = a.rollNumber ? parseRollNumber(a.rollNumber) : null;
+        const bParsed = b.rollNumber ? parseRollNumber(b.rollNumber) : null;
+        if (aParsed && bParsed) {
+            return aParsed.grade - bParsed.grade || aParsed.sequence - bParsed.sequence;
+        }
+        if (aParsed) return -1;
+        if (bParsed) return 1;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+    });
 }
 
 // ── Whether an exam uses sittings at all ─────────────────────────────────────
