@@ -45,3 +45,24 @@ pnpm test:contract
 pnpm boundaries
 pnpm verify
 ```
+
+## Render deployment (current account)
+
+The production backend runs on the Render team **"bio"** (`tea-dain7gfqj5pc73aqjh3g`),
+recreated 2026-09-14 from the suspended "sih" team's layout (see `.render-migration/`):
+
+| Service | Id | URL |
+| --- | --- | --- |
+| `olympiad-backend` (NestJS, `backend/`) | `srv-dajv5d3m8hqs739re19g` | https://olympiad-backend-mok0.onrender.com |
+| `bio-portal-api` (Bun/Elysia) | `srv-dajv5c942hec739188k0` | https://bio-portal-api-56ja.onrender.com |
+| `bio-admin-api` (Bun/Elysia) | `srv-dajv5bh5efls73afduog` | https://bio-admin-api-myog.onrender.com |
+| `bio-admin-redis` (free KV) | `red-dajv5alg1s2s73ca4nd0` | internal only |
+
+All three are free-plan, region singapore, repo `Kritantasasanroy/Bharat_innovation_olympiad`
+branch `main`, autoDeploy on. `olympiad-backend` runs `prisma db push` on boot and
+health-checks at `/api/health`; the Elysia services expose `/health/live` and
+`/health/ready`. Env vars (Neon `DATABASE_URL`, Razorpay, WATI, Cloudinary, …)
+were copied verbatim from the previous account; `REDIS_URL` and `ADMIN_API_URL`
+point at the new in-account resources. `render.yaml` at the repo root is an
+aspirational blueprint (exam-api + workers) that is **not** deployed anywhere yet.
+
