@@ -1,6 +1,7 @@
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import type { ReactNode } from "react";
 import { ConnectionBanner } from "../components/connection-banner";
+import { ScrollToError } from "../components/scroll-to-error";
 import { AuthProvider } from "../lib/auth-context";
 import "./globals.css";
 
@@ -40,6 +41,12 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
 			<body>
 				<ConnectionBanner />
 				<AuthProvider>{children}</AuthProvider>
+				<ScrollToError />
+				<footer
+					style={{ textAlign: "center", padding: "24px 16px", fontSize: "0.8rem", opacity: 0.6 }}
+				>
+					© Bharat Innovation Olympiad is owned by Lemon Ideas Innovations Pvt Ltd.
+				</footer>
 			</body>
 		</html>
 	);
