@@ -75,11 +75,21 @@ function avatarRect(): Rect | null {
  * phone, bottom-left on tablet and desktop (see `.limon-tour__avatar` in
  * globals.css) — by measuring his real rect rather than assuming a corner.
  */
-function placeCard(rect: Rect | null, placement: TourStep['placement']): React.CSSProperties {
+function placeCard(
+    rect: Rect | null,
+    placement: TourStep['placement'],
+    cardHeight: number,
+): React.CSSProperties {
     if (typeof window === 'undefined') return {};
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const estHeight = 190;
+    /**
+     * The card's real painted height — measured by the caller, not guessed:
+     * the clamp below has to know where the card's *bottom* lands, and a
+     * taller-than-estimated card is precisely how Skip and Next used to end up
+     * off the bottom of the screen.
+     */
+    const estHeight = cardHeight;
 
     const avatar = avatarRect();
     /**
@@ -184,6 +194,13 @@ export default function LimonTour({
      */
     const [measured, setMeasured] = useState(false);
     const startedRef = useRef(false);
+    /**
+     * The card's real height, measured after paint. Every step's body is a
+     * different length, so this is re-read per step — `placeCard` clamps the
+     * card's *bottom* into the viewport and needs the truth, not an estimate.
+     */
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [cardHeight, setCardHeight] = useState(190);
 
     /**
      * Open the tour: work out which steps have something to point at, and go.
@@ -228,6 +245,11 @@ export default function LimonTour({
     // Measure on every step, and keep measuring while the page moves under us.
     useLayoutEffect(() => {
         if (!open) return;
+        // The card just painted with this step's body — read its real height so
+        // the position clamp below keeps the whole card, buttons included,
+        // inside the viewport on any screen.
+        const h = cardRef.current?.offsetHeight;
+        if (h && h !== cardHeight) setCardHeight(h);
         const measure = () => setRect(readRect(step?.target));
         measure();
         if (!measured) setMeasured(true);
@@ -250,7 +272,7 @@ export default function LimonTour({
         }
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, [open, index, step?.target, measured]);
+    }, [open, index, step?.target, measured, cardHeight]);
 
     // Escape skips. Arrow keys move, because a tour with a Next button that
     // cannot be reached from the keyboard is not usable by everyone.
@@ -270,7 +292,9 @@ export default function LimonTour({
     const isIntro = index === -1;
     const isOutro = index >= steps.length;
     const mood = isIntro ? 'happy' : isOutro ? 'celebrating' : (step?.mood ?? 'talking');
-    const cardStyle = isIntro || isOutro ? placeCard(null, undefined) : placeCard(rect, step?.placement);
+    const cardStyle = isIntro || isOutro
+        ? placeCard(null, undefined, cardHeight)
+        : placeCard(rect, step?.placement, cardHeight);
 
     const title = isIntro ? 'Hi, I’m Limon' : isOutro ? 'All done' : step!.title;
     const body = isIntro ? tour.intro : isOutro ? (tour.outro ?? '') : step!.body;
@@ -296,7 +320,7 @@ export default function LimonTour({
                 />
             )}
 
-            <div className="limon-tour__card" style={cardStyle}>
+            <div className="limon-tour__card" style={cardStyle} ref={cardRef}>
                 <div className="limon-tour__head">
                     <strong>{title}</strong>
                     {!isIntro && !isOutro && (

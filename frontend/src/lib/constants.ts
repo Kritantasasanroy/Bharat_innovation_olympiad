@@ -110,7 +110,7 @@ export const VIOLATION_REVIEW_THRESHOLD = 3;
  * touches nothing for well over this, so counting it would punish reading. The
  * event is recorded for the proctoring review either way.
  */
-export const EXAM_IDLE_NUDGE_SEC = 20;
+export const EXAM_IDLE_NUDGE_SEC = 60;
 
 /**
  * Minutes a face-check warning stays quiet after showing one.

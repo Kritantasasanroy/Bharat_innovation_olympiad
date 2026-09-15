@@ -11,9 +11,6 @@ export interface AutoSubmitState {
     error?: string;
 }
 
-/** How long the "your exam ended because…" screen is held before moving on. */
-const ACKNOWLEDGE_SECONDS = 10;
-
 /**
  * How long the student is warned *before* the paper is submitted.
  *
@@ -35,9 +32,8 @@ const WARNING_SECONDS = 5;
  *
  * So the submit still fires immediately and unconditionally (answers are already
  * saved server-side; nothing here is negotiable or skippable), but the student is
- * *held* on the explanation until they acknowledge it or {@link
- * ACKNOWLEDGE_SECONDS} pass. The paper is gone either way — this only controls
- * how long the reason stays on screen.
+ * *held* on the explanation until they acknowledge it. The paper is gone either
+ * way — this only controls that the reason stays on screen until they say so.
  */
 export default function AutoSubmitNotice({
     state,
@@ -59,31 +55,17 @@ export default function AutoSubmitNotice({
     });
 
     /**
-     * Latest-refs for the callbacks.
+     * Latest-ref for the countdown callback.
      *
-     * Both countdowns below re-arm a 1s timeout from an effect, so anything in
-     * their dependency list that changes more often than once a second stops
-     * them dead. The player re-renders every 500ms (the face-popup tick), and an
+     * The warning countdown re-arms a 1s timeout from an effect, so anything in
+     * its dependency list that changes more often than once a second stops it
+     * dead. The player re-renders every 500ms (the face-popup tick), and an
      * inline arrow prop is a new identity on each of those — which froze the
      * pre-submit countdown at 5 and left the exam never submitting. Holding the
-     * callbacks in refs keeps the effects dependent on the count alone.
+     * callback in a ref keeps the effect dependent on the count alone.
      */
-    const onContinueRef = useRef(onContinue);
     const onWarningElapsedRef = useRef(onWarningElapsed);
-    useEffect(() => { onContinueRef.current = onContinue; });
     useEffect(() => { onWarningElapsedRef.current = onWarningElapsed; });
-
-    const [secondsLeft, setSecondsLeft] = useState(ACKNOWLEDGE_SECONDS);
-
-    useEffect(() => {
-        if (state.status !== 'done') return;
-        if (secondsLeft <= 0) {
-            onContinueRef.current();
-            return;
-        }
-        const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
-        return () => clearTimeout(t);
-    }, [state.status, secondsLeft]);
 
     const [warningLeft, setWarningLeft] = useState(WARNING_SECONDS);
 
@@ -150,9 +132,6 @@ export default function AutoSubmitNotice({
                         >
                             I understand, continue
                         </button>
-                        <p className="exam-terminal-fineprint">
-                            Submitting automatically in {secondsLeft}s
-                        </p>
                     </>
                 )}
 
