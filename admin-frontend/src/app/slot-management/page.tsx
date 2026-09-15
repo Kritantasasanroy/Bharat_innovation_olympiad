@@ -954,6 +954,8 @@ function DayTable({ days, onOpenDay }: { days: DayRow[]; onOpenDay: (d: string) 
                                                 style={{ fontSize: '0.78rem' }}
                                             >
                                                 {d.sittingsOpen} open · {d.sittingsFull} full
+                                                {d.sittingsConfigured - d.sittingsOpen > 0 &&
+                                                    ` · ${d.sittingsConfigured - d.sittingsOpen} not opened yet`}
                                             </div>
                                         </>
                                     ) : (
@@ -988,6 +990,8 @@ function DayTable({ days, onOpenDay }: { days: DayRow[]; onOpenDay: (d: string) 
                                         </div>
                                         <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                                             {d.students}/{d.capacity}
+                                            {d.capacity > 0 &&
+                                                (d.seatsLeft > 0 ? ` · ${d.seatsLeft} free` : ' · full')}
                                         </span>
                                     </div>
                                 </td>

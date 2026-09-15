@@ -592,6 +592,8 @@ export default function AdminSlotsPage() {
 
                         <SittingsPanel
                             sittings={sittings}
+                            scheduleDates={scheduleDates}
+                            timings={timings}
                             onChanged={(text) => {
                                 setBanner({ tone: 'ok', text });
                                 refresh();
@@ -1658,11 +1660,15 @@ function TimingsPanel({
 
 function SittingsPanel({
     sittings,
+    scheduleDates,
+    timings,
     onChanged,
     onError,
     onOpenRoster,
 }: {
     sittings: Sitting[];
+    scheduleDates: ScheduleDate[];
+    timings: SlotTiming[];
     onChanged: (text: string) => void;
     onError: (text: string) => void;
     onOpenRoster: (sitting: Sitting) => void;
@@ -1702,6 +1708,68 @@ function SittingsPanel({
         }
     };
 
+    /**
+     * Every sitting the season offers, whether or not it has been opened yet.
+     *
+     * A sitting only becomes a real `ExamSlot` row the first time someone is
+     * scheduled onto it, so listing `sittings` alone made a configured day with
+     * no bookings yet look like it had nothing. Planned rows come from the
+     * published calendar — each active date x the timings its tier runs — and
+     * show as "not opened yet" with their configured seats, in the same fill
+     * order the assigner uses (date priority, then date, then earliest start).
+     */
+    type SittingRow =
+        | { kind: 'open'; sitting: Sitting }
+        | { kind: 'planned'; date: ScheduleDate; timing: SlotTiming };
+
+    const rows = useMemo<SittingRow[]>(() => {
+        const byTimingDate = new Map<string, Sitting>();
+        for (const s of sittings) {
+            if (s.timingId) {
+                byTimingDate.set(`${s.timingId}@${istDateInputValue(s.slotDate)}`, s);
+            }
+        }
+
+        const covered = new Set<string>();
+        const out: SittingRow[] = [];
+        const activeDates = scheduleDates
+            .filter((d) => d.isActive)
+            .sort(
+                (a, b) =>
+                    a.priority - b.priority ||
+                    istDateInputValue(a.date).localeCompare(istDateInputValue(b.date)),
+            );
+        for (const d of activeDates) {
+            const dateKey = istDateInputValue(d.date);
+            const tier = timings
+                .filter((t) => t.isActive && (t.priority ?? 1) === d.priority)
+                .sort((a, b) => a.startMinute - b.startMinute);
+            for (const t of tier) {
+                const materialised = byTimingDate.get(`${t.id}@${dateKey}`);
+                if (materialised) covered.add(materialised.id);
+                out.push(
+                    materialised
+                        ? { kind: 'open', sitting: materialised }
+                        : { kind: 'planned', date: d, timing: t },
+                );
+            }
+        }
+        // Sittings the published calendar does not cover — one-off rows, or
+        // ones whose timing/date was later deactivated — still need listing.
+        const extras = sittings
+            .filter((s) => !covered.has(s.id))
+            .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+        for (const s of extras) out.push({ kind: 'open', sitting: s });
+        return out;
+    }, [sittings, scheduleDates, timings]);
+
+    /** Wall-clock `HH:mm` from a timing, rendered like `fmtTime` on an instant. */
+    const fmtClock = (hhmm: string) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        const hr = h % 12 || 12;
+        return `${String(hr).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
+    };
+
     return (
         <section className="glass-card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
             <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Upcoming sittings</h2>
@@ -1713,11 +1781,12 @@ function SittingsPanel({
                     marginBottom: 'var(--space-5)',
                 }}
             >
-                Created automatically as participants are scheduled. Top up the seats on a busy date,
-                or open one to see and move who is in it.
+                Every sitting the published dates offer — opened ones first, then the ones that
+                appear automatically as participants are scheduled onto them. Top up the seats on a
+                busy date, or open one to see and move who is in it.
             </p>
 
-            {sittings.length === 0 ? (
+            {rows.length === 0 ? (
                 <p
                     style={{
                         color: 'var(--text-secondary)',
@@ -1728,8 +1797,8 @@ function SittingsPanel({
                         borderRadius: 'var(--radius-md)',
                     }}
                 >
-                    No sittings yet. One is created the first time a participant is scheduled onto
-                    that date.
+                    No sittings configured. Add dates and timings above — a dated sitting is created
+                    the first time a participant is scheduled onto it.
                 </p>
             ) : (
                 <div className="table-responsive">
@@ -1743,7 +1812,47 @@ function SittingsPanel({
                             </tr>
                         </thead>
                         <tbody>
-                            {sittings.map((s) => (
+                            {rows.map((row) =>
+                                row.kind === 'planned' ? (
+                                    <tr
+                                        key={`planned-${row.timing.id}-${istDateInputValue(row.date.date)}`}
+                                        style={{ opacity: 0.6 }}
+                                    >
+                                        <td>
+                                            <strong>{fmtDate(row.date.date)}</strong>
+                                            {row.timing.label && (
+                                                <div
+                                                    className="text-muted"
+                                                    style={{ fontSize: '0.8rem' }}
+                                                >
+                                                    {row.timing.label}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ fontSize: '0.875rem' }}>
+                                            {fmtClock(row.timing.startTime)} –{' '}
+                                            {fmtClock(row.timing.endTime)}
+                                        </td>
+                                        <td>
+                                            <span
+                                                style={{
+                                                    fontSize: '0.85rem',
+                                                    color: 'var(--text-secondary)',
+                                                }}
+                                            >
+                                                0/{row.timing.capacity}
+                                            </span>
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            <span className="badge badge-muted">
+                                                Not opened yet
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    (() => {
+                                        const s = row.sitting;
+                                        return (
                                 <tr key={s.id}>
                                     <td>
                                         <strong>{fmtDate(s.startsAt)}</strong>
@@ -1829,7 +1938,10 @@ function SittingsPanel({
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                                        );
+                                    })()
+                                ),
+                            )}
                         </tbody>
                     </table>
                 </div>
