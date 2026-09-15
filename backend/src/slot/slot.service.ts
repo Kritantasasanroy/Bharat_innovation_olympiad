@@ -377,6 +377,7 @@ export class SlotService {
                 userId: booking.user.id,
                 phone: booking.user.phone,
                 phoneRaw: booking.user.phoneRaw,
+                firstName: booking.user.firstName,
                 bookingId: booking.id,
                 slotId: booking.slotId,
                 startsAt: booking.slot.startsAt,

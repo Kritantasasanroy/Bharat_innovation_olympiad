@@ -61,6 +61,7 @@ function serviceWith(
 const STUDENT = {
     userId: 'user-1',
     phone: '+919812345678',
+    firstName: 'Akash',
     attemptId: 'attempt-1',
     submittedAt: new Date('2026-08-18T09:30:00.000Z'),
 };
@@ -151,6 +152,7 @@ describe('SmsService — sending once', () => {
         await service.sendSchedule({
             userId: STUDENT.userId,
             phone: STUDENT.phone,
+            firstName: STUDENT.firstName,
             bookingId: 'b1',
             slotId: 's1',
             startsAt: new Date('2026-09-28T04:00:00.000Z'),
@@ -198,8 +200,9 @@ describe('SMS template bodies match the DLT-approved text', () => {
         expect(text).toContain('Bharat Innovation Olympiad team - Lemon Ideas');
     });
 
-    it('schedule carries the ordinal date and unspaced IST time', () => {
-        const text = scheduleMessage({ startsAt: at });
+    it('schedule carries the name, ordinal date and unspaced IST time', () => {
+        const text = scheduleMessage({ firstName: 'Rahul', startsAt: at });
+        expect(text).toContain('Hi Rahul,');
         expect(text).toContain('Your schedule for the Bharat Innovation Olympiad exam is as follows:');
         expect(text).toContain('Date : 28th September 2026');
         expect(text).toContain('Time: 9:30AM IST | Online');
@@ -219,8 +222,9 @@ describe('SMS template bodies match the DLT-approved text', () => {
         expect(text).toContain('Bharat Olympiad team | Lemon Ideas India');
     });
 
-    it('submission carries the submission date', () => {
-        const text = submissionMessage({ submittedAt: at });
+    it('submission carries the name and submission date', () => {
+        const text = submissionMessage({ firstName: 'Rahul', submittedAt: at });
+        expect(text).toContain('Hi Rahul,');
         expect(text).toContain(
             'successful exam submission at the Bharat Innovation Olympiad organised by Lemon Ideas on 28th September 2026',
         );

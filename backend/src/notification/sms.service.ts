@@ -129,6 +129,7 @@ export class SmsService implements OnModuleInit {
         userId: string;
         phone: string | null | undefined;
         phoneRaw?: string | null | undefined;
+        firstName: string;
         bookingId: string;
         slotId: string;
         startsAt: Date;
@@ -139,7 +140,7 @@ export class SmsService implements OnModuleInit {
             phoneRaw: vars.phoneRaw,
             template: 'schedule',
             dedupeKey: `${vars.bookingId}:${vars.slotId}`,
-            message: scheduleMessage({ startsAt: vars.startsAt }),
+            message: scheduleMessage({ firstName: vars.firstName, startsAt: vars.startsAt }),
         });
     }
 
@@ -184,6 +185,7 @@ export class SmsService implements OnModuleInit {
         userId: string;
         phone: string | null | undefined;
         phoneRaw?: string | null | undefined;
+        firstName: string;
         attemptId: string;
         submittedAt: Date;
     }): Promise<SmsOutcome> {
@@ -193,7 +195,7 @@ export class SmsService implements OnModuleInit {
             phoneRaw: vars.phoneRaw,
             template: 'submission',
             dedupeKey: vars.attemptId,
-            message: submissionMessage({ submittedAt: vars.submittedAt }),
+            message: submissionMessage({ firstName: vars.firstName, submittedAt: vars.submittedAt }),
         });
     }
 

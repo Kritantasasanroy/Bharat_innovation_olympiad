@@ -963,6 +963,7 @@ export class AttemptService {
                 userId: attempt.user.id,
                 phone: attempt.user.phone,
                 phoneRaw: attempt.user.phoneRaw,
+                firstName: attempt.user.firstName,
                 attemptId: attempt.id,
                 submittedAt: attempt.submittedAt ?? new Date(),
             });

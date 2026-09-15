@@ -83,10 +83,10 @@ export class SmsTransactionalController {
         const sampleAt = new Date('2026-09-28T04:00:00.000Z'); // 9:30 AM IST
         const message = {
             registration: () => registrationMessage({ rollNumber: 'BIO26-G6-00017' }),
-            schedule: () => scheduleMessage({ startsAt: sampleAt }),
+            schedule: () => scheduleMessage({ firstName: 'Rahul', startsAt: sampleAt }),
             requirements: () => examRequirementsMessage(),
             reminder: () => reminderMessage({ startsAt: sampleAt }),
-            submission: () => submissionMessage({ submittedAt: sampleAt }),
+            submission: () => submissionMessage({ firstName: 'Rahul', submittedAt: sampleAt }),
         }[key]();
 
         const outcome = await this.sms.probe(adminId, normalized, key, message);

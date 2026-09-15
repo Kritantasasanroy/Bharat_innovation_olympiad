@@ -90,10 +90,10 @@ export function scheduleSmsParams(vars: { startsAt: Date }): { date: string; tim
     };
 }
 
-export function scheduleMessage(vars: { startsAt: Date }): string {
+export function scheduleMessage(vars: { firstName: string; startsAt: Date }): string {
     const { date, time } = scheduleSmsParams(vars);
     return [
-        'Hi,',
+        `Hi ${clean(vars.firstName)},`,
         'Your schedule for the Bharat Innovation Olympiad exam is as follows:',
         `Date : ${date}`,
         `Time: ${time} IST | Online`,
@@ -143,9 +143,9 @@ export function reminderMessage(vars: { startsAt: Date }): string {
  * Approved body (BIOSUBMISSION · 1777178938155054822) — note the two blank
  * lines before the sign-off are part of the approved body.
  */
-export function submissionMessage(vars: { submittedAt: Date }): string {
+export function submissionMessage(vars: { firstName: string; submittedAt: Date }): string {
     return [
-        'Hi,',
+        `Hi ${clean(vars.firstName)},`,
         'This is a confirmation regarding your successful exam submission at the ' +
             `Bharat Innovation Olympiad organised by Lemon Ideas on ${formatIstOrdinalDate(vars.submittedAt)}`,
         '',
