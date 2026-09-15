@@ -219,7 +219,9 @@ export type UnassignedReason =
     /** The exam publishes a calendar, but every date on it is past or closed. */
     | 'NO_SCHEDULE_DATES'
     /** Seats were free, but the participant already sits another exam then. */
-    | 'CLASHES_WITH_ANOTHER_EXAM';
+    | 'CLASHES_WITH_ANOTHER_EXAM'
+    /** The student's access pass is not ACTIVE — a seat is only earned by paying. */
+    | 'NO_ACTIVE_PASS';
 
 export function unassignedMessage(reason: UnassignedReason, rules: SearchRules): string {
     const days = `${rules.leadDays}–${rules.horizonDays} days after registration`;
@@ -237,6 +239,8 @@ export function unassignedMessage(reason: UnassignedReason, rules: SearchRules):
             return 'Every date on this exam calendar is in the past or closed. Add a date, or reopen one.';
         case 'CLASHES_WITH_ANOTHER_EXAM':
             return 'Every sitting with a free seat overlaps one this participant already holds for another exam. Move the other booking, or add a sitting at a different hour.';
+        case 'NO_ACTIVE_PASS':
+            return 'No sitting yet — the access pass is not paid. A seat is assigned automatically the moment the payment confirms.';
     }
 }
 

@@ -181,6 +181,9 @@ export class SlotAnalyticsService {
 
         // Participants of an eligible class with no sitting for this instance —
         // the number the "assign everyone" button is there to drive to zero.
+        // Only *paid* participants count: a student without an ACTIVE access
+        // pass is owed no seat yet, and counting them would hold the figure
+        // above zero forever.
         // Zero by definition for an exam exempt from sittings altogether
         // (trial, demo, `requiresSlot: false`): nobody there is missing a seat,
         // because nobody needs one.
@@ -189,6 +192,7 @@ export class SlotAnalyticsService {
                   where: {
                       role: Role.STUDENT,
                       classBand: { in: instance.exam.classBands },
+                      accessPass: { status: 'ACTIVE' },
                       bookings: {
                           none: { status: ACTIVE_BOOKING, slot: { examInstanceId } },
                       },

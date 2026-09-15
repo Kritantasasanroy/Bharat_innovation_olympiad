@@ -71,6 +71,7 @@ function createFakeDb(
             role: string;
             classBand: number | null;
             rollNumber: string | null;
+            accessPass: { status: string } | null;
         }
     >();
     let seq = 0;
@@ -83,12 +84,18 @@ function createFakeDb(
         user: {
             findUnique: async ({ where }: any) => users.get(where.id) ?? null,
             findMany: async ({ where }: any) => {
-                // backfillInstance's candidate query: students of the exam's
-                // class bands with no active booking on this instance.
+                // backfillInstance's candidate query: paid students of the
+                // exam's class bands with no active booking on this instance.
                 return Array.from(users.entries())
                     .filter(([id, u]) => {
                         if (where.role && u.role !== where.role) return false;
                         if (where.classBand?.in && !where.classBand.in.includes(u.classBand)) {
+                            return false;
+                        }
+                        if (
+                            where.accessPass?.status &&
+                            u.accessPass?.status !== where.accessPass.status
+                        ) {
                             return false;
                         }
                         const none = where.bookings?.none;
@@ -294,12 +301,13 @@ function fakeNotifier() {
     return { notifySchedule: jest.fn(), notifyScheduleMany: jest.fn() };
 }
 
-/** A student who registered on Tuesday 1 Sep 2026. */
+/** A student who registered on Tuesday 1 Sep 2026 — paid by default, because
+ * seats are only assigned after the access pass activates. */
 function register(
     db: { users: Map<string, any> },
     id: string,
     on = ist('2026-09-01T10:00:00'),
-    opts: { classBand?: number | null; rollNumber?: string | null } = {},
+    opts: { classBand?: number | null; rollNumber?: string | null; paid?: boolean } = {},
 ) {
     db.users.set(id, {
         createdAt: on,
@@ -307,6 +315,7 @@ function register(
         role: 'STUDENT',
         classBand: opts.classBand !== undefined ? opts.classBand : 8,
         rollNumber: opts.rollNumber ?? null,
+        accessPass: { status: opts.paid === false ? 'PENDING' : 'ACTIVE' },
     });
     return id;
 }
@@ -338,6 +347,31 @@ describe('SlotAssignmentService.ensureAssignment', () => {
         expect(day(result.slotStartsAt!)).toBe('2026-09-20');
         expect(db.bookings).toHaveLength(1);
         expect(db.bookings[0].status).toBe('CONFIRMED');
+    });
+
+    it('refuses a student whose access pass is not ACTIVE — no seat before payment', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-unpaid', ist('2026-09-01T10:00:00'), { paid: false });
+
+        const result = await db.service.ensureAssignment('stu-unpaid', 'inst-1');
+
+        expect(result.status).toBe('UNASSIGNED');
+        expect(result.reason).toBe('NO_ACTIVE_PASS');
+        expect(db.bookings).toHaveLength(0);
+        expect(db.slots).toHaveLength(0); // not even materialised for them
+    });
+
+    it('seats the same student once the pass goes ACTIVE', async () => {
+        const db = setup([SUNDAY_10AM]);
+        register(db, 'stu-1', ist('2026-09-01T10:00:00'), { paid: false });
+        await db.service.ensureAssignment('stu-1', 'inst-1');
+        expect(db.bookings).toHaveLength(0);
+
+        db.users.get('stu-1')!.accessPass!.status = 'ACTIVE';
+        const result = await db.service.ensureAssignment('stu-1', 'inst-1');
+
+        expect(result.status).toBe('ASSIGNED');
+        expect(db.bookings).toHaveLength(1);
     });
 
     it('creates the sitting on demand rather than requiring one to exist', async () => {
@@ -1007,5 +1041,22 @@ describe('SlotAssignmentService.backfillInstance', () => {
         expect(result.assigned).toBe(1);
         expect(db.notifier.notifyScheduleMany).toHaveBeenCalledTimes(1);
         expect(db.notifier.notifyScheduleMany.mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it('never seats a student whose access pass is not ACTIVE', async () => {
+        const db = setup([TIER_1_MORNING], [scheduled('2026-09-27', 1)]);
+        register(db, 'stu-paid', ist('2026-09-01T08:00:00'), { rollNumber: 'BIO26-G8-00001' });
+        register(db, 'stu-unpaid', ist('2026-09-01T09:00:00'), {
+            rollNumber: 'BIO26-G8-00002',
+            paid: false,
+        });
+
+        const result = await db.service.backfillInstance('inst-1');
+
+        // The unpaid student is not even *considered* — a seat is part of what
+        // the pass buys, so they are not missing one.
+        expect(result.considered).toBe(1);
+        expect(result.assigned).toBe(1);
+        expect(db.bookings.map((b) => b.userId)).toEqual(['stu-paid']);
     });
 });

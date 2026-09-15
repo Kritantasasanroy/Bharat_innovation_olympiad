@@ -5,7 +5,7 @@ import {
     Logger,
     NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, Role } from '@prisma/client';
+import { AccessPassStatus, BookingStatus, Role } from '@prisma/client';
 import type { ExamSlot } from '@prisma/client';
 import { isDemoExam } from '../common/demo-exams';
 import { PrismaService } from '../prisma/prisma.service';
@@ -85,13 +85,14 @@ interface PlacementPlan {
  * function — this service only walks the list it produces and tries to claim a
  * seat on each.
  *
- * ## What it is *not* gated on
+ * ## What it is gated on
  *
- * Payment. The sitting is an appointment, made at registration, before any
- * money has changed hands; whether the student may actually *start* the exam is
- * a separate account-level check against `AccessPass` in `AttemptService`.
- * Conflating the two is what the old pay-then-pick flow did, and it left every
- * unpaid student with no date at all until the moment they paid.
+ * Payment. A sitting is part of what the access pass buys, so nothing here
+ * places a student whose pass is not ACTIVE: `ensureAssignment` refuses them,
+ * and the backfill/unassigned queries never even select them. Paying is what
+ * makes a seat appear — `AccessPassService.grantFirstAccessMilestones` calls
+ * `assignForNewStudent` on the pass's first transition to ACTIVE. Starting the
+ * exam stays gated separately in `AttemptService`, which checks the same pass.
  */
 @Injectable()
 export class SlotAssignmentService {
@@ -181,7 +182,13 @@ export class SlotAssignmentService {
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { createdAt: true, activatedAt: true, role: true, classBand: true },
+            select: {
+                createdAt: true,
+                activatedAt: true,
+                role: true,
+                classBand: true,
+                accessPass: { select: { status: true } },
+            },
         });
         if (!user) throw new NotFoundException('Student not found');
         if (user.role !== Role.STUDENT) {
@@ -197,6 +204,16 @@ export class SlotAssignmentService {
         }
 
         const rules = this.rulesFor(instance, user.activatedAt ?? user.createdAt);
+
+        // No seat before payment. The sitting is part of what the access pass
+        // buys, so nobody without an ACTIVE pass is ever placed — not here, and
+        // (via the same filter) not by the backfill either. Paying is what
+        // triggers `assignForNewStudent`, so the seat appears the moment the
+        // pass activates.
+        if (user.accessPass?.status !== AccessPassStatus.ACTIVE) {
+            return this.unassigned(instance.id, 'NO_ACTIVE_PASS', rules, 0);
+        }
+
         const result = await this.place(userId, instance, rules, null);
 
         // A newly claimed seat is an appointment the student has not been told
@@ -606,6 +623,9 @@ export class SlotAssignmentService {
             where: {
                 role: Role.STUDENT,
                 classBand: { in: instance.exam.classBands },
+                // A seat is part of what the access pass buys — the sweep only
+                // ever places students whose payment has confirmed.
+                accessPass: { status: AccessPassStatus.ACTIVE },
                 bookings: {
                     none: {
                         status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
@@ -714,6 +734,10 @@ export class SlotAssignmentService {
             where: {
                 role: Role.STUDENT,
                 classBand: { in: instance.exam.classBands },
+                // "Unassigned" means *paid and still without a seat* — a student
+                // who has not paid is not missing anything yet, and listing
+                // them here would only invite seating them early.
+                accessPass: { status: AccessPassStatus.ACTIVE },
                 bookings: {
                     none: {
                         status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
@@ -756,7 +780,11 @@ export class SlotAssignmentService {
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { createdAt: true, activatedAt: true },
+            select: {
+                createdAt: true,
+                activatedAt: true,
+                accessPass: { select: { status: true } },
+            },
         });
         if (!user) throw new NotFoundException('Student not found');
 
@@ -791,6 +819,9 @@ export class SlotAssignmentService {
         return {
             registeredAt,
             usesPublishedCalendar: plan.usesCalendar,
+            // The payment gate is part of "why no seat" — without it an unpaid
+            // student looks identical to one the algorithm could not place.
+            hasActiveAccessPass: user.accessPass?.status === AccessPassStatus.ACTIVE,
             rules: { ...rules, dayPreferenceNames: rules.dayPreference.map(weekdayName) },
             // What the search actually honoured. On a calendar instance the
             // per-instance `leadDays` is ignored in favour of the season's
