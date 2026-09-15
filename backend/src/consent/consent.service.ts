@@ -2,69 +2,29 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** Bump when the consent text changes; students are then asked to re-consent. */
-export const CURRENT_CONSENT_VERSION = '2026-07-v1';
-
 /** Derive the printable admit-card number from a booking. Stable, no new table. */
 export function admitCardNumber(bookingId: string, year: number): string {
     return `AC-${year}-${bookingId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 }
 
 /**
- * Consent capture (spec Student §6) and admit card (spec Student §17).
+ * Admit card (spec Student §17).
  *
- * Consent is stored permanently and versioned: a policy change bumps
- * {@link CURRENT_CONSENT_VERSION} and the student is asked again, without the
- * earlier record being overwritten (the unique key is user+version).
+ * The consent half of this module is gone: the standalone consent page was
+ * dropped from the flow, and what it recorded is covered by the parental and
+ * data consents captured inside the student-identification form — the
+ * `GuardianProfile` columns `parentalConsentAt`/`dataConsentAt` are the record
+ * the exam gate reads, not a separate table.
  *
- * All three permissions must be granted — the platform cannot run a proctored
- * exam without media capture and monitoring consent, so a partial consent is
- * rejected rather than silently stored.
+ * Rendered as a printable page by the student app — no Puppeteer/Chromium on
+ * the server.
  */
 @Injectable()
 export class ConsentService {
     constructor(private prisma: PrismaService) {}
 
-    async accept(
-        userId: string,
-        input: { dataProcessing: boolean; mediaCapture: boolean; proctoring: boolean },
-        ipAddress?: string,
-    ) {
-        if (!input.dataProcessing || !input.mediaCapture || !input.proctoring) {
-            throw new BadRequestException(
-                'All three permissions are required to sit a proctored exam.',
-            );
-        }
-
-        return this.prisma.consent.upsert({
-            where: { userId_version: { userId, version: CURRENT_CONSENT_VERSION } },
-            create: {
-                userId,
-                version: CURRENT_CONSENT_VERSION,
-                dataProcessing: true,
-                mediaCapture: true,
-                proctoring: true,
-                ...(ipAddress ? { ipAddress } : {}),
-            },
-            update: { acceptedAt: new Date(), ...(ipAddress ? { ipAddress } : {}) },
-        });
-    }
-
-    /** Current consent state for the signed-in student. */
-    async status(userId: string) {
-        const consent = await this.prisma.consent.findUnique({
-            where: { userId_version: { userId, version: CURRENT_CONSENT_VERSION } },
-        });
-        return {
-            version: CURRENT_CONSENT_VERSION,
-            accepted: Boolean(consent),
-            acceptedAt: consent?.acceptedAt ?? null,
-        };
-    }
-
     /**
-     * Admit card for a confirmed booking (ownership-checked). Rendered as a
-     * printable page by the student app — no Puppeteer/Chromium on the server.
+     * Admit card for a confirmed booking (ownership-checked).
      */
     async admitCard(userId: string, bookingId: string) {
         const booking = await this.prisma.booking.findUnique({

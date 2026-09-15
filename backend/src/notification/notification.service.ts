@@ -338,7 +338,7 @@ export class NotificationService implements OnModuleInit {
         guardianName: string,
         studentName: string,
     ): Promise<boolean> {
-        const approvalLink = `${this.appUrl}/consent`;
+        const approvalLink = `${this.appUrl}/guardian`;
         return this.deliver(
             to,
             parentApprovalEmail({ guardianName, studentName, approvalLink }),

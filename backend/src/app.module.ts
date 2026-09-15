@@ -45,13 +45,13 @@ import { UserModule } from './user/user.module';
         PaymentModule,
         PartnerModule,
         SchoolModule,
-        // Phase 3 — results integrity chain, decision loops, consent.
+        // Phase 3 — results integrity chain, decision loops, admit card.
         ResultsModule,
         CertificateModule,
         GrievanceModule,
         RefundModule,
         ConsentModule,
-        // Registration part 2 — parent/guardian details + parental consent (DPDP).
+        // Student identification — parent/guardian details, ward ID, consents.
         GuardianModule,
         TrainingModule,
         // Admin power — user/school/partner management + permanent delete.

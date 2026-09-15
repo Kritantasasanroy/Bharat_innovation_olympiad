@@ -73,7 +73,6 @@ model User {
   certificates     Certificate[]
   grievances       Grievance[]
   refundRequests   RefundRequest[]
-  consents         Consent[]
   trialCompletions TrialCompletion[]
   guardianProfile  GuardianProfile?
   trainingRecords  TrainingRecord[]
@@ -882,20 +881,11 @@ model RefundRequest {
 
 /// Explicit, permanently stored consent (Student §6, DPDP). Versioned so a
 /// policy change can require re-consent without losing the historical record.
-model Consent {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  version        String
-  dataProcessing Boolean
-  mediaCapture   Boolean
-  proctoring     Boolean
-  acceptedAt     DateTime @default(now())
-  ipAddress      String?
-
-  @@unique([userId, version])
-  @@index([userId])
-}
+///
+/// Removed: the standalone consent page was dropped from the flow — parental
+/// and data consent are captured inside the student-identification form and
+/// stored on `GuardianProfile` (`parentalConsentAt`/`dataConsentAt`), which is
+/// the record the exam gate reads.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Partner Attribution, Commission & Payout Engine (PRD-046).
