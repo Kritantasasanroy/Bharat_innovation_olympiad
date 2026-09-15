@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { NotificationService } from '../notification/notification.service';
+import { SmsService } from '../notification/sms.service';
 import { WhatsAppService } from '../notification/whatsapp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { validateSlotWindow } from '../exam/exam-lifecycle';
@@ -30,6 +31,7 @@ export class SlotService {
         private prisma: PrismaService,
         private notifications: NotificationService,
         private whatsapp: WhatsAppService,
+        private sms: SmsService,
     ) {}
 
     // ── Student-facing ────────────────────────────────────────────────────────
@@ -366,6 +368,15 @@ export class SlotService {
                 phone: booking.user.phone,
                 phoneRaw: booking.user.phoneRaw,
                 firstName: booking.user.firstName,
+                bookingId: booking.id,
+                slotId: booking.slotId,
+                startsAt: booking.slot.startsAt,
+            });
+
+            await this.sms.sendSchedule({
+                userId: booking.user.id,
+                phone: booking.user.phone,
+                phoneRaw: booking.user.phoneRaw,
                 bookingId: booking.id,
                 slotId: booking.slotId,
                 startsAt: booking.slot.startsAt,

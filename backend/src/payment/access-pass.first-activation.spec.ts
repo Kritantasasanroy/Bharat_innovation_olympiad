@@ -32,9 +32,19 @@ function make(existingStatus: 'ACTIVE' | null) {
     };
     const rollNumbers = { ensureFor: jest.fn().mockResolvedValue('BIO26-G6-00001') };
     const slotAssignment = { assignForNewStudent: jest.fn().mockResolvedValue([]) };
+    const sms = {
+        sendRegistration: jest.fn().mockResolvedValue({ sent: false, skipped: 'disabled' }),
+        sendExamRequirements: jest.fn().mockResolvedValue({ sent: false, skipped: 'disabled' }),
+    };
 
-    const svc = new AccessPassService(prisma, notifications as any, rollNumbers as any, slotAssignment as any);
-    return { svc, prisma, notifications, rollNumbers, slotAssignment };
+    const svc = new AccessPassService(
+        prisma,
+        notifications as any,
+        rollNumbers as any,
+        slotAssignment as any,
+        sms as any,
+    );
+    return { svc, prisma, notifications, rollNumbers, slotAssignment, sms };
 }
 
 describe('registration milestones fire on first activation, not on account creation', () => {

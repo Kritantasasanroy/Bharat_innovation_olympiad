@@ -1,6 +1,7 @@
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { smsStub } from '../notification/sms.stub';
 
 /**
  * Question media reaches the player as a loadable URL, whichever generation of
@@ -37,6 +38,7 @@ describe('AttemptService — question media is resolved on the way to the player
             null as any,
             null as any,
             whatsAppStub(),
+            smsStub(),
             notificationServiceStub(),
             storage,
         );

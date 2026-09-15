@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { smsStub } from '../notification/sms.stub';
 import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
@@ -63,6 +64,7 @@ describe('attempt expiry', () => {
             {} as any,
             {} as any,
             whatsAppStub(),
+            smsStub(),
             notificationServiceStub(),
             objectStorageStub(),
         );

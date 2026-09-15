@@ -2,6 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { AdminMailController } from './admin-mail.controller';
 import { NotificationService } from './notification.service';
 import { SmsHealthController } from './sms-health.controller';
+import { SmsTransactionalController } from './sms-transactional.controller';
+import { SmsService } from './sms.service';
 import { WhatsAppHealthController } from './whatsapp-health.controller';
 import { WhatsAppReminderService } from './whatsapp-reminder.service';
 import { WhatsAppService } from './whatsapp.service';
@@ -13,7 +15,8 @@ import { WhatsAppService } from './whatsapp.service';
  *
  * Also hosts the admin outbound-mail endpoint (`/admin/mail/*`), which sends
  * announcements through the same provider, `/admin/notifications/*`, which
- * reports SMS gateway health, and `/admin/whatsapp/*` for the WATI channel.
+ * reports SMS gateway health, `/admin/whatsapp/*` for the WATI channel, and
+ * `/admin/sms/*` for the SMS Just transactional channel.
  *
  * `WhatsAppReminderService` is listed as a provider even though nothing injects
  * it besides its own controller: it is a timer that must start with the app, and
@@ -21,8 +24,13 @@ import { WhatsAppService } from './whatsapp.service';
  */
 @Global()
 @Module({
-    controllers: [AdminMailController, SmsHealthController, WhatsAppHealthController],
-    providers: [NotificationService, WhatsAppService, WhatsAppReminderService],
-    exports: [NotificationService, WhatsAppService],
+    controllers: [
+        AdminMailController,
+        SmsHealthController,
+        SmsTransactionalController,
+        WhatsAppHealthController,
+    ],
+    providers: [NotificationService, SmsService, WhatsAppService, WhatsAppReminderService],
+    exports: [NotificationService, SmsService, WhatsAppService],
 })
 export class NotificationModule {}

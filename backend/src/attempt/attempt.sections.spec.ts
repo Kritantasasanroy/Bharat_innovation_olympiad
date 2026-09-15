@@ -1,6 +1,7 @@
 import { AttemptService } from './attempt.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { smsStub } from '../notification/sms.stub';
 import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
@@ -47,6 +48,7 @@ function build(userId: string, sections = buildSections()) {
         null as any,
         null as any,
         whatsAppStub(),
+            smsStub(),
         notificationServiceStub(),
         objectStorageStub(),
     );

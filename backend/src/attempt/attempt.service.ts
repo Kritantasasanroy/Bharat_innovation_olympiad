@@ -7,6 +7,7 @@ import { AccessPassService } from '../payment/access-pass.service';
 import { GuardianService } from '../guardian/guardian.service';
 import { NotificationService } from '../notification/notification.service';
 import { WhatsAppService } from '../notification/whatsapp.service';
+import { SmsService } from '../notification/sms.service';
 import { ObjectStorageService } from '../common/services/object-storage.service';
 import { ProctorService } from '../proctor/proctor.service';
 
@@ -163,6 +164,7 @@ export class AttemptService {
         private guardianService: GuardianService,
         private proctorService: ProctorService,
         private whatsapp: WhatsAppService,
+        private sms: SmsService,
         private notifications: NotificationService,
         private storage: ObjectStorageService,
     ) { }
@@ -953,6 +955,14 @@ export class AttemptService {
                 phone: attempt.user.phone,
                 phoneRaw: attempt.user.phoneRaw,
                 firstName: attempt.user.firstName,
+                attemptId: attempt.id,
+                submittedAt: attempt.submittedAt ?? new Date(),
+            });
+
+            await this.sms.sendSubmission({
+                userId: attempt.user.id,
+                phone: attempt.user.phone,
+                phoneRaw: attempt.user.phoneRaw,
                 attemptId: attempt.id,
                 submittedAt: attempt.submittedAt ?? new Date(),
             });

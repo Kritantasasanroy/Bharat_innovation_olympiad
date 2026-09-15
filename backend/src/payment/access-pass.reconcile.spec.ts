@@ -57,7 +57,13 @@ describe('AccessPassService.reconcileForUser', () => {
         jest.resetModules();
         const { AccessPassService: Fresh } = require('./access-pass.service');
         return {
-            svc: new Fresh(prisma, notifications, rollNumbers, slotAssignment) as AccessPassService,
+            svc: new Fresh(
+                prisma,
+                notifications,
+                rollNumbers,
+                slotAssignment,
+                { sendRegistration: jest.fn(), sendExamRequirements: jest.fn() },
+            ) as AccessPassService,
             prisma,
             notifications,
         };
@@ -131,7 +137,7 @@ describe('AccessPassService.lookupSharedLinkPayment', () => {
             sharedLinkPayment: { findFirst: jest.fn().mockResolvedValue(row) },
         };
         return {
-            svc: new AccessPassService(prisma, {} as any, {} as any, {} as any),
+            svc: new AccessPassService(prisma, {} as any, {} as any, {} as any, {} as any),
             prisma,
         };
     }

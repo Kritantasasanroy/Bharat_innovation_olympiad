@@ -3,6 +3,7 @@ import { AttemptService } from './attempt.service';
 import { DEMO_EXAM_IDS } from '../common/demo-exams';
 import { notificationServiceStub } from '../notification/notification.stub';
 import { whatsAppStub } from '../notification/whatsapp.stub';
+import { smsStub } from '../notification/sms.stub';
 import { objectStorageStub } from '../common/services/object-storage.stub';
 
 /**
@@ -78,6 +79,7 @@ describe('AttemptService — parental consent gate', () => {
                 guardian,
                 proctor,
                 whatsAppStub(),
+            smsStub(),
                 notificationServiceStub(),
                 objectStorageStub(),
             ),

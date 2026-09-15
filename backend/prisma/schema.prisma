@@ -78,6 +78,7 @@ model User {
   guardianProfile  GuardianProfile?
   trainingRecords  TrainingRecord[]
   whatsappMessages WhatsAppMessage[]
+  smsMessages      SmsMessage[]
   examFeedback     ExamFeedback[]
 
   @@index([email])
@@ -1561,6 +1562,48 @@ model WhatsAppMessage {
   /// The provider's rejection, already redacted. Null on success.
   error      String?
   createdAt  DateTime       @default(now())
+  sentAt     DateTime?
+
+  @@unique([template, dedupeKey])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum SmsStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Every transactional SMS this app sends through the SMS Just (UWT) gateway,
+/// and the reason it is allowed to be sent only once.
+///
+/// Mirrors `WhatsAppMessage` exactly — same claim-before-send contract, same
+/// per-template meaning of "once": the unique `(template, dedupeKey)` index is
+/// the lock, written **before** the HTTP call so a crash or a restart can never
+/// double-charge an SMS. The gateway is credit-based, so a retry loop that
+/// re-sent a cohort's reminders would silently drain the balance.
+model SmsMessage {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The DLT-approved template's name, e.g. `BIOSCHEDULE`. Not an enum: adding
+  /// a template must not require a migration, and the DLT registry owns the list.
+  template   String
+  /// What "already sent" means for this template — same shapes as WhatsApp:
+  /// the attempt id for a submission, the booking + slot for a schedule, the
+  /// booking + exam IST date for a reminder, the user id for registration-time
+  /// messages.
+  dedupeKey  String
+  /// E.164, as it was at send time.
+  phone      String
+  status     SmsStatus @default(PENDING)
+  /// The gateway's submission id (`<scheduleid>-<date>`), for its DLR portal.
+  providerId String?
+  /// The gateway's rejection code/text, redacted. Null on success.
+  error      String?
+  createdAt  DateTime  @default(now())
   sentAt     DateTime?
 
   @@unique([template, dedupeKey])

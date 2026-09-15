@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { isDemoExam } from '../common/demo-exams';
 import { NotificationService } from '../notification/notification.service';
+import { SmsService } from '../notification/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhone } from '../auth/phone.helpers';
 import { SlotAssignmentService } from '../slot/slot-assignment.service';
@@ -50,6 +51,7 @@ export class AccessPassService {
         private notifications: NotificationService,
         private rollNumbers: RollNumberService,
         private slotAssignment: SlotAssignmentService,
+        private sms: SmsService,
     ) {
         this.razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID!,
@@ -295,7 +297,14 @@ export class AccessPassService {
     private async grantFirstAccessMilestones(userId: string): Promise<void> {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, email: true, firstName: true, classBand: true },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                classBand: true,
+                phone: true,
+                phoneRaw: true,
+            },
         });
         if (!user) return;
 
@@ -310,6 +319,25 @@ export class AccessPassService {
         }
 
         await this.notifications.sendWelcome(user.email, user.firstName, rollNumber);
+
+        // The DLT-approved registration SMS, and the device-requirements SMS
+        // that tells a fresh registrant what the exam environment needs. Both
+        // dedupe on the user, so a rare double-activation race sends once.
+        // The registration template quotes the roll number, so it is only
+        // sent when one was actually issued.
+        if (rollNumber) {
+            await this.sms.sendRegistration({
+                userId: user.id,
+                phone: user.phone,
+                phoneRaw: user.phoneRaw,
+                rollNumber,
+            });
+        }
+        await this.sms.sendExamRequirements({
+            userId: user.id,
+            phone: user.phone,
+            phoneRaw: user.phoneRaw,
+        });
     }
 
     /** Refund/chargeback → the pass stops unlocking exams. */

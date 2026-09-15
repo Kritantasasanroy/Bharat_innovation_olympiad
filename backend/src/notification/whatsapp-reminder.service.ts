@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SmsService } from './sms.service';
 import { WhatsAppService } from './whatsapp.service';
 
 /**
@@ -52,6 +53,7 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
     constructor(
         private readonly prisma: PrismaService,
         private readonly whatsapp: WhatsAppService,
+        private readonly sms: SmsService,
     ) {}
 
     onModuleInit() {
@@ -120,6 +122,18 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
                 if (outcome.sent) summary.sent++;
                 else if (outcome.error) summary.failed++;
                 else summary.skipped++;
+
+                // The same reminder over the SMS Just gateway, deduped on the
+                // same (booking, exam IST date) shape. A failure here must not
+                // touch the WhatsApp counters — the channels report separately.
+                await this.sms.sendReminder({
+                    userId: booking.user.id,
+                    phone: booking.user.phone,
+                    phoneRaw: booking.user.phoneRaw,
+                    bookingId: booking.id,
+                    startsAt: booking.slot.startsAt,
+                    examDateKey: dateKey,
+                });
             }
 
             if (summary.sent || summary.failed) {
