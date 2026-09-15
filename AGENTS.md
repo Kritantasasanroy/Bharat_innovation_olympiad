@@ -58,6 +58,22 @@ recreated 2026-09-14 from the suspended "sih" team's layout (see `.render-migrat
 | `bio-admin-api` (Bun/Elysia) | `srv-dajv5bh5efls73afduog` | https://bio-admin-api-myog.onrender.com |
 | `bio-admin-redis` (free KV) | `red-dajv5alg1s2s73ca4nd0` | internal only |
 
+## Transactional SMS (SMS Just / UWT)
+
+Five DLT-approved templates (`BIOREGISTRATION`, `BIOSCHEDULE`, `BIOEXAMREQUIREMENTS`,
+`BIOREMINDER`, `BIOSUBMISSION`) send through `smsjust.com` alongside the WhatsApp
+twins — see `backend/src/notification/sms-*.ts`. `SmsMessage` dedupes each send
+(claim-before-send) and one serial queue spaces gateway calls ≥30s apart
+(`SMS_MIN_GAP_MS` tunable). Admin probe: `POST /api/admin/sms/probe?phone=&template=`,
+health/balance: `GET /api/admin/sms/health`.
+
+**Credential gotcha:** the SMS Just *portal login* (`innovate@lemonideas.in`) is NOT
+the API username — the gateway only accepts alphanumeric usernames and answers
+`ES1001` otherwise. The working API credentials are the ones in the sample URL
+(`username=lomonidea`), stored in `SMSJUST_USERNAME`/`SMSJUST_PASSWORD` on Render
+and in `backend/.env`. Render's `PUT /services/:id/env-vars` **replaces the whole
+env set** — always GET the current vars, merge, and PUT the complete set back.
+
 All three are free-plan, region singapore, repo `Kritantasasanroy/Bharat_innovation_olympiad`
 branch `main`, autoDeploy on. `olympiad-backend` runs `prisma db push` on boot and
 health-checks at `/api/health`; the Elysia services expose `/health/live` and
