@@ -666,101 +666,6 @@ export class SlotAssignmentService {
         return { ...summary, failures: failures.slice(0, 20) };
     }
 
-    /**
-     * Runs the backfill across every exam that uses sittings.
-     *
-     * This is the "everyone gets a date" guarantee made operational. Three
-     * things leave a participant unscheduled and none of them are their fault:
-     * they registered before the calendar existed, every sitting was full at the
-     * moment they signed up, or the exam itself was created after they had
-     * already registered. All three are fixed by the same sweep, which is why it
-     * is one method and not three.
-     *
-     * Idempotent and safe to run repeatedly -- a participant who already holds a
-     * seat is skipped by the query, not re-placed.
-     */
-    async backfillAll() {
-        const instances = await this.slotBearingInstances();
-        const perInstance: {
-            examInstanceId: string;
-            considered: number;
-            assigned: number;
-            unassigned: number;
-        }[] = [];
-
-        for (const instanceId of instances) {
-            try {
-                const result = await this.backfillInstance(instanceId);
-                perInstance.push({
-                    examInstanceId: instanceId,
-                    considered: result.considered,
-                    assigned: result.assigned,
-                    unassigned: result.unassigned,
-                });
-            } catch (err) {
-                this.logger.error(
-                    `Backfill failed for instance ${instanceId}: ${(err as Error).message}`,
-                );
-            }
-        }
-
-        return {
-            instances: perInstance.length,
-            assigned: perInstance.reduce((n, r) => n + r.assigned, 0),
-            stillUnassigned: perInstance.reduce((n, r) => n + r.unassigned, 0),
-            perInstance,
-        };
-    }
-
-    /** Students of an instance with no sitting, for the admin's attention list. */
-    async listUnassigned(examInstanceId: string) {
-        const instance = await this.prisma.examInstance.findUnique({
-            where: { id: examInstanceId },
-            select: {
-                exam: { select: { id: true, isTrial: true, requiresSlot: true, classBands: true } },
-            },
-        });
-        if (!instance) throw new NotFoundException('Exam instance not found');
-
-        // An exam exempt from sittings (trial, demo, or `requiresSlot: false`)
-        // has no one "unassigned" — every eligible student is correctly
-        // NOT_APPLICABLE and always will be. Without this check every such
-        // exam showed its whole eligible roster as unscheduled forever: a list
-        // that can never shrink, on a "Schedule everyone" button that can only
-        // ever refuse with "this exam does not use sittings."
-        if (!this.needsSlot(instance.exam)) return [];
-
-        return this.prisma.user.findMany({
-            where: {
-                role: Role.STUDENT,
-                classBand: { in: instance.exam.classBands },
-                // "Unassigned" means *paid and still without a seat* — a student
-                // who has not paid is not missing anything yet, and listing
-                // them here would only invite seating them early.
-                accessPass: { status: AccessPassStatus.ACTIVE },
-                bookings: {
-                    none: {
-                        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
-                        slot: { examInstanceId },
-                    },
-                },
-            },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                rollNumber: true,
-                classBand: true,
-                createdAt: true,
-                activatedAt: true,
-                school: { select: { id: true, name: true } },
-            },
-            orderBy: { createdAt: 'asc' },
-            take: 500,
-        });
-    }
-
     // ── Explanation ───────────────────────────────────────────────────────────
 
     /**
@@ -850,8 +755,8 @@ export class SlotAssignmentService {
      *
      * `classBand` narrows the sweep to exams the student's grade is actually
      * eligible for, so a registration does not walk every exam in the system.
-     * Omitted — as `backfillAll` calls it — it stays unfiltered and sweeps
-     * everything.
+     * Omitted, it stays unfiltered — `backfillInstance` calls it that way from
+     * the exam create/publish path, where the sweep is the whole roster.
      */
     private async slotBearingInstances(classBand?: number | null): Promise<string[]> {
         const now = new Date();

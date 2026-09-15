@@ -212,20 +212,6 @@ export class SlotController {
         return this.analytics.forInstance(instanceId);
     }
 
-    /**
-     * Places every unscheduled participant across every exam that uses sittings.
-     *
-     * The manual form of the same sweep registration triggers, for the cases
-     * registration cannot cover: participants who signed up before the calendar
-     * existed, and exams added after they registered.
-     */
-    @Post('admin/slots/assign-everyone')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(...ADMIN)
-    async assignEveryone() {
-        return this.assignment.backfillAll();
-    }
-
     // ── Admin: assignment rules ───────────────────────────────────────────────
 
     @Get('admin/exams/instances/:instanceId/assignment-rules')
@@ -312,20 +298,5 @@ export class SlotController {
     @Roles(...ADMIN)
     async explain(@Param('userId') userId: string, @Param('instanceId') instanceId: string) {
         return this.assignment.explain(userId, instanceId);
-    }
-
-    @Get('admin/exams/instances/:instanceId/unassigned')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(...ADMIN)
-    async listUnassigned(@Param('instanceId') instanceId: string) {
-        return this.assignment.listUnassigned(instanceId);
-    }
-
-    /** Re-runs the search for everyone still without a sitting. */
-    @Post('admin/exams/instances/:instanceId/backfill-slots')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(...ADMIN)
-    async backfill(@Param('instanceId') instanceId: string) {
-        return this.assignment.backfillInstance(instanceId);
     }
 }

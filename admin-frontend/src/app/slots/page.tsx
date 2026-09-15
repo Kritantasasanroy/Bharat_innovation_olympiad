@@ -103,18 +103,6 @@ interface SittingStudent {
     };
 }
 
-interface UnassignedStudent {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    rollNumber: string | null;
-    classBand: number | null;
-    createdAt: string;
-    activatedAt: string | null;
-    school: { id: string; name: string } | null;
-}
-
 interface AssignmentRules {
     id: string;
     startsAt: string;
@@ -284,7 +272,6 @@ export default function AdminSlotsPage() {
     const [timings, setTimings] = useState<SlotTiming[]>([]);
     const [sittings, setSittings] = useState<Sitting[]>([]);
     const [rules, setRules] = useState<AssignmentRules | null>(null);
-    const [unassigned, setUnassigned] = useState<UnassignedStudent[]>([]);
     const [scheduleDates, setScheduleDates] = useState<ScheduleDate[]>([]);
     const [calendarOptions, setCalendarOptions] = useState<CalendarOptions | null>(null);
 
@@ -329,17 +316,15 @@ export default function AdminSlotsPage() {
     const loadInstance = useCallback(async (id: string) => {
         setLoading(true);
         try {
-            const [t, s, r, u, d] = await Promise.all([
+            const [t, s, r, d] = await Promise.all([
                 api.get<SlotTiming[]>(`/admin/exams/instances/${id}/slot-timings`),
                 api.get<Sitting[]>(`/admin/slots?examInstanceId=${id}`),
                 api.get<AssignmentRules>(`/admin/exams/instances/${id}/assignment-rules`),
-                api.get<UnassignedStudent[]>(`/admin/exams/instances/${id}/unassigned`),
                 api.get<ScheduleDate[]>(`/admin/exams/instances/${id}/schedule-dates`),
             ]);
             setTimings(t.data);
             setSittings(s.data);
             setRules(r.data);
-            setUnassigned(u.data);
             setScheduleDates(d.data);
         } catch (err) {
             setBanner({ tone: 'err', text: errorOf(err, 'Could not load this exam’s schedule.') });
@@ -353,7 +338,6 @@ export default function AdminSlotsPage() {
             setTimings([]);
             setSittings([]);
             setRules(null);
-            setUnassigned([]);
             setScheduleDates([]);
             return;
         }
@@ -617,19 +601,6 @@ export default function AdminSlotsPage() {
                                     setRosterLoading(false);
                                 }
                             }}
-                        />
-
-                        <UnassignedPanel
-                            instanceId={instanceId}
-                            students={unassigned}
-                            sittings={sittings}
-                            scheduleDates={scheduleDates}
-                            timings={timings}
-                            onChanged={(text) => {
-                                setBanner({ tone: 'ok', text });
-                                refresh();
-                            }}
-                            onError={(text) => setBanner({ tone: 'err', text })}
                         />
                     </>
                 )}
@@ -1993,192 +1964,6 @@ function SittingsPanel({
                         </div>
                     </form>
                 </Modal>
-            )}
-        </section>
-    );
-}
-
-// ── Unscheduled participants ──────────────────────────────────────────────────
-
-function UnassignedPanel({
-    instanceId,
-    students,
-    sittings,
-    scheduleDates,
-    timings,
-    onChanged,
-    onError,
-}: {
-    instanceId: string;
-    students: UnassignedStudent[];
-    sittings: Sitting[];
-    scheduleDates: ScheduleDate[];
-    timings: SlotTiming[];
-    onChanged: (text: string) => void;
-    onError: (text: string) => void;
-}) {
-    const [busy, setBusy] = useState(false);
-    const [target, setTarget] = useState<Record<string, string>>({});
-    const [placingId, setPlacingId] = useState<string | null>(null);
-
-    const options = useMemo(
-        () => buildPlacementOptions(scheduleDates, timings, sittings),
-        [scheduleDates, timings, sittings],
-    );
-
-    const backfill = async () => {
-        setBusy(true);
-        try {
-            const { data } = await api.post<{
-                considered: number;
-                assigned: number;
-                unassigned: number;
-                failures: { userId: string; message: string }[];
-            }>(`/admin/exams/instances/${instanceId}/backfill-slots`);
-            onChanged(
-                `Scheduled ${data.assigned} of ${data.considered} participant(s).` +
-                    (data.unassigned > 0
-                        ? ` ${data.unassigned} still could not be placed${data.failures[0] ? `: ${data.failures[0].message}` : '.'}`
-                        : ''),
-            );
-        } catch (err) {
-            onError(errorOf(err, 'Could not run the scheduling sweep.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const place = async (userId: string) => {
-        const value = target[userId];
-        if (!value) return;
-        setPlacingId(userId);
-        try {
-            await api.put(`/admin/students/${userId}/schedule`, parsePlacementValue(value));
-            onChanged('Participant scheduled and told their date.');
-        } catch (err) {
-            onError(errorOf(err, 'Could not schedule that participant.'));
-        } finally {
-            setPlacingId(null);
-        }
-    };
-
-    return (
-        <section className="glass-card" style={{ padding: 'var(--space-6)' }}>
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: 'var(--space-4)',
-                    marginBottom: 'var(--space-5)',
-                }}
-            >
-                <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-                        Not yet scheduled
-                        {students.length > 0 && (
-                            <span className="badge badge-warning" style={{ marginLeft: 8 }}>
-                                {students.length}
-                            </span>
-                        )}
-                    </h2>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            marginTop: 'var(--space-1)',
-                        }}
-                    >
-                        Eligible participants with no sitting — usually because they registered
-                        before any timing existed, or every date in their window was full.
-                    </p>
-                </div>
-                <button
-                    className="btn btn-primary btn-sm"
-                    onClick={backfill}
-                    disabled={busy || students.length === 0}
-                >
-                    {busy ? 'Scheduling…' : 'Schedule everyone'}
-                </button>
-            </div>
-
-            {students.length === 0 ? (
-                <p
-                    style={{
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.9rem',
-                        padding: 'var(--space-6)',
-                        textAlign: 'center',
-                        background: 'var(--bg-elevated)',
-                        borderRadius: 'var(--radius-md)',
-                    }}
-                >
-                    Everyone eligible for this exam has a sitting.
-                </p>
-            ) : (
-                <div className="table-responsive">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Participant</th>
-                                <th>Class</th>
-                                <th>School</th>
-                                <th>Registered</th>
-                                <th style={{ minWidth: 260 }}>Place into</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {students.map((s) => (
-                                <tr key={s.id}>
-                                    <td>
-                                        <div className="student-name">
-                                            <strong>
-                                                {s.firstName} {s.lastName}
-                                            </strong>
-                                            <span className="join-date">
-                                                {s.rollNumber ?? s.email}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td>{s.classBand ?? '—'}</td>
-                                    <td style={{ fontSize: '0.875rem' }}>{s.school?.name ?? '—'}</td>
-                                    <td style={{ fontSize: '0.85rem' }}>
-                                        {fmtDate(s.activatedAt ?? s.createdAt)}
-                                    </td>
-                                    <td>
-                                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                                            <select
-                                                className="input-field"
-                                                style={{ padding: 'var(--space-2) var(--space-3)' }}
-                                                value={target[s.id] ?? ''}
-                                                onChange={(e) =>
-                                                    setTarget((t) => ({
-                                                        ...t,
-                                                        [s.id]: e.target.value,
-                                                    }))
-                                                }
-                                            >
-                                                <option value="">Choose a sitting…</option>
-                                                {options.map((o) => (
-                                                    <option key={o.value} value={o.value} disabled={o.isFull}>
-                                                        {o.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <button
-                                                className="btn btn-secondary btn-sm"
-                                                onClick={() => place(s.id)}
-                                                disabled={!target[s.id] || placingId === s.id}
-                                            >
-                                                {placingId === s.id ? '…' : 'Place'}
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
             )}
         </section>
     );

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, Role } from '@prisma/client';
+import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { examNeedsSlot, formatMinuteOfDay, istWeekday, weekdayName } from './slot-assignment.rules';
+import { formatMinuteOfDay, istWeekday, weekdayName } from './slot-assignment.rules';
 
 const ACTIVE_BOOKING = { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] };
 
@@ -179,27 +179,6 @@ export class SlotAnalyticsService {
             };
         });
 
-        // Participants of an eligible class with no sitting for this instance —
-        // the number the "assign everyone" button is there to drive to zero.
-        // Only *paid* participants count: a student without an ACTIVE access
-        // pass is owed no seat yet, and counting them would hold the figure
-        // above zero forever.
-        // Zero by definition for an exam exempt from sittings altogether
-        // (trial, demo, `requiresSlot: false`): nobody there is missing a seat,
-        // because nobody needs one.
-        const unassigned = examNeedsSlot(instance.exam)
-            ? await this.prisma.user.count({
-                  where: {
-                      role: Role.STUDENT,
-                      classBand: { in: instance.exam.classBands },
-                      accessPass: { status: 'ACTIVE' },
-                      bookings: {
-                          none: { status: ACTIVE_BOOKING, slot: { examInstanceId } },
-                      },
-                  },
-              })
-            : 0;
-
         const active = days.filter((d) => d.isActive);
         const totals = {
             days: active.length,
@@ -210,7 +189,6 @@ export class SlotAnalyticsService {
             capacity: active.reduce((n, d) => n + d.capacity, 0),
             students: active.reduce((n, d) => n + d.students, 0),
             seatsLeft: active.reduce((n, d) => n + d.seatsLeft, 0),
-            unassignedStudents: unassigned,
         };
 
         const byPriority = [...new Set(days.map((d) => d.priority))]

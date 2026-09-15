@@ -95,7 +95,6 @@ interface Analytics {
         capacity: number;
         students: number;
         seatsLeft: number;
-        unassignedStudents: number;
     };
     byPriority: {
         priority: number;
@@ -164,7 +163,6 @@ export default function SlotManagementPage() {
     const [instanceId, setInstanceId] = useState('');
     const [data, setData] = useState<Analytics | null>(null);
     const [loading, setLoading] = useState(false);
-    const [assigning, setAssigning] = useState(false);
     const [banner, setBanner] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
     const [openDay, setOpenDay] = useState<string | null>(null);
 
@@ -215,28 +213,6 @@ export default function SlotManagementPage() {
         load(instanceId);
     }, [instanceId, load]);
 
-    const assignEveryone = async () => {
-        setAssigning(true);
-        try {
-            const { data: result } = await api.post<{
-                assigned: number;
-                stillUnassigned: number;
-            }>('/admin/slots/assign-everyone', {});
-            setBanner({
-                tone: 'ok',
-                text:
-                    result.stillUnassigned > 0
-                        ? `${result.assigned} participant(s) scheduled. ${result.stillUnassigned} still have no date — every sitting they could take is full or clashes.`
-                        : `${result.assigned} participant(s) scheduled. Nobody is left without a date.`,
-            });
-            if (instanceId) load(instanceId);
-        } catch (err) {
-            setBanner({ tone: 'err', text: errorOf(err, 'Could not run the assignment sweep.') });
-        } finally {
-            setAssigning(false);
-        }
-    };
-
     const chartData = useMemo(
         () =>
             (data?.days ?? [])
@@ -283,14 +259,6 @@ export default function SlotManagementPage() {
                         <a className="btn btn-secondary" href="/slots">
                             Exam scheduling
                         </a>
-                        <button
-                            className="btn btn-primary"
-                            onClick={assignEveryone}
-                            disabled={assigning}
-                            title="Places every participant who still has no date, across every exam that uses sittings"
-                        >
-                            {assigning ? 'Scheduling…' : 'Schedule everyone now'}
-                        </button>
                     </div>
                 </header>
 
@@ -445,15 +413,6 @@ function Headline({ data }: { data: Analytics }) {
             value: totals.seatsLeft.toLocaleString('en-IN'),
             hint: `${totals.sittingsFull} sitting${totals.sittingsFull === 1 ? '' : 's'} full`,
             tone: totals.seatsLeft === 0 ? 'bad' : undefined,
-        },
-        {
-            label: 'Without a date',
-            value: totals.unassignedStudents.toLocaleString('en-IN'),
-            hint:
-                totals.unassignedStudents > 0
-                    ? 'Use “Schedule everyone now”'
-                    : 'Everyone eligible has a sitting',
-            tone: totals.unassignedStudents > 0 ? 'bad' : 'good',
         },
     ];
 
