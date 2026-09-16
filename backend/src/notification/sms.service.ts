@@ -10,7 +10,7 @@ import {
 import {
     SMS_TEMPLATES,
     SmsTemplateKey,
-    examRequirementsMessage,
+    examRequirementsNewMessage,
     paymentPendingMessage,
     reminderMessage,
     scheduleMessage,
@@ -156,9 +156,11 @@ export class SmsService implements OnModuleInit {
             userId: vars.userId,
             phone: vars.phone,
             phoneRaw: vars.phoneRaw,
-            template: 'requirements',
+            // The re-approved body/id — the older BIOEXAMREQUIREMENTS row was
+            // kept wired for probing but its ledger text no longer matches.
+            template: 'requirementsNew',
             dedupeKey: `req:${vars.userId}`,
-            message: examRequirementsMessage(),
+            message: examRequirementsNewMessage(),
         });
     }
 

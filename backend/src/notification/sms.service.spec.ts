@@ -165,7 +165,7 @@ describe('SmsService — sending once', () => {
         expect(sendTemplate.mock.calls.map((c) => c[1])).toEqual([
             '1777178947235672764', // BIOREGISTRATIONNEW
             '1777178947263648938', // BIOSCHEDULENEW
-            '1777178939292597525', // BIOEXAMREQUIREMENTS
+            '1777178947312261549', // BIOEXAMREQUIREMENTSNEW
         ]);
     });
 
