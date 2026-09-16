@@ -18,14 +18,13 @@ import { formatIstOrdinalDate, formatIstTime } from './whatsapp.templates';
  * Template ids and the entity id are the DLT registry's identifiers; both are
  * required query parameters on every SMS Just send.
  *
- * ## The nine, and what wires to what
+ * ## The eight, and what wires to what
  *
- * - `registration` → BIOREGISTRATIONNEW (replaces the retired BIOREGISTRATION)
- * - `schedule` → BIOSCHEDULENEW (replaces BIOSCHEDULE)
- * - `requirements` → BIOEXAMREQUIREMENTS (the older approved body, still live)
- * - `requirementsNew` → BIOEXAMREQUIREMENTSNEW (the re-approved body)
- * - `reminder` → BIOREMINDER (re-approved, same name)
- * - `submission` → BIOSUBMISSIONNEW (replaces BIOSUBMISSION)
+ * - `registration` → BIOREGISTRATIONNEW
+ * - `schedule` → BIOSCHEDULENEW
+ * - `requirementsNew` → BIOEXAMREQUIREMENTSNEW (the exam checklist)
+ * - `reminder` → BIOREMINDER
+ * - `submission` → BIOSUBMISSIONNEW
  * - `support` → BIOSUPPORTNEW (support-ticket acknowledgement)
  * - `verificationPending` → BIOVERIFICATIONPENDING (T-1 identification nudge)
  * - `paymentPending` → BIOPAYMENTPENDINGLOGIN (1h unpaid-registration nudge)
@@ -46,8 +45,6 @@ export const SMS_TEMPLATES = {
     /** Sent when a seat is confirmed — the student's date and time. */
     schedule: { name: 'BIOSCHEDULENEW', dltId: '1777178947263648938' },
     /** Sent once, right after registration — the device/environment checklist. */
-    requirements: { name: 'BIOEXAMREQUIREMENTS', dltId: '1777178939292597525' },
-    /** The re-approved device checklist, when it replaces the one above. */
     requirementsNew: { name: 'BIOEXAMREQUIREMENTSNEW', dltId: '1777178947312261549' },
     /** Sent the day before the exam. */
     reminder: { name: 'BIOREMINDER', dltId: '1777178947335107615' },
@@ -112,22 +109,6 @@ export function scheduleMessage(vars: { startsAt: Date }): string {
         `Your Bharat Innovation Olympiad exam is scheduled on ${date} at ${time} IST | Online`,
         'Please check your email for more',
         '- Lemon Ideas Team',
-    ].join('\n');
-}
-
-/**
- * Static body — no variables (BIOEXAMREQUIREMENTS · 1777178939292597525).
- * The older approved wording, still live on the registry.
- */
-export function examRequirementsMessage(): string {
-    return [
-        'Please note the following requirements for your Bharat Innovation Olympiad online exam.',
-        '1. Laptop/PC/Desktop computer',
-        '2. Windows 10+ or macOS 10.14+',
-        '3. Internet connection with min 2 Mbps',
-        '4. Working Microphone & web cam',
-        '5. Peaceful place with solid & plain background',
-        'All the best ! Bharat Innovation Olympiad team- Lemon Ideas',
     ].join('\n');
 }
 

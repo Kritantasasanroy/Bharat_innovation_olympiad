@@ -2,7 +2,6 @@ import { Prisma, SmsStatus } from '@prisma/client';
 import { SmsJustProvider } from './sms-just.provider';
 import { SmsService } from './sms.service';
 import {
-    examRequirementsMessage,
     examRequirementsNewMessage,
     paymentPendingMessage,
     registrationMessage,
@@ -240,14 +239,6 @@ describe('SMS template bodies match the DLT-approved text', () => {
     });
 
     it('requirements is static — no variables at all', () => {
-        const text = examRequirementsMessage();
-        expect(text).toContain('Windows 10+ or macOS 10.14+');
-        expect(text).toContain('Peaceful place with solid & plain background');
-        expect(text).toContain('All the best ! Bharat Innovation Olympiad team- Lemon Ideas');
-        expect(text).not.toContain('{#');
-    });
-
-    it('requirementsNew uses the re-approved wording', () => {
         const text = examRequirementsNewMessage();
         expect(text).toContain('Windows OS10+ or macOS10.14+');
         expect(text).toContain('Please use practice test to be prepared for exam');

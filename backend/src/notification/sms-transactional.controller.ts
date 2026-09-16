@@ -16,7 +16,6 @@ import { SmsService } from './sms.service';
 import {
     SMS_TEMPLATES,
     SmsTemplateKey,
-    examRequirementsMessage,
     examRequirementsNewMessage,
     paymentPendingMessage,
     reminderMessage,
@@ -88,7 +87,6 @@ export class SmsTransactionalController {
         const message = {
             registration: () => registrationMessage({ rollNumber: 'BIO26-G6-00017' }),
             schedule: () => scheduleMessage({ startsAt: sampleAt }),
-            requirements: () => examRequirementsMessage(),
             requirementsNew: () => examRequirementsNewMessage(),
             reminder: () => reminderMessage({ startsAt: sampleAt }),
             submission: () => submissionMessage({ submittedAt: sampleAt }),
