@@ -239,6 +239,14 @@ export default function RegisterPage() {
             setError("Please enter the participant's date of birth.");
             return;
         }
+        // Checked here, on the page that collects it — the backend repeats the
+        // same range, but an error surfacing two steps later would point at a
+        // field the parent cannot see any more.
+        const dobYears = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        if (!Number.isFinite(dobYears) || dobYears < 3 || dobYears > 19) {
+            setError('Check the date of birth — participants must be between 3 and 19 years old.');
+            return;
+        }
         if (!gender) {
             setError("Please select the participant's gender.");
             return;
@@ -534,7 +542,8 @@ export default function RegisterPage() {
                                 <label className="input-label" htmlFor="dob">Date of Birth</label>
                                 <input
                                     id="dob" name="dob" type="date" className="input-field" required
-                                    max={new Date().toISOString().slice(0, 10)}
+                                    min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
+                                    max={new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
                                     value={dob}
                                     onChange={(e) => setDob(e.target.value)}
                                 />

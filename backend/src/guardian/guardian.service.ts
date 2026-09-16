@@ -11,8 +11,8 @@ import { SubmitGuardianDto } from './dto/guardian.dto';
  */
 export const CURRENT_GUARDIAN_CONSENT_VERSION = '2026-07-v1';
 
-/** Oldest and youngest plausible date of birth for a school student. */
-const MAX_AGE_YEARS = 30;
+/** Age range the Olympiad is open to: youngest plausible, oldest allowed. */
+const MAX_AGE_YEARS = 19;
 const MIN_AGE_YEARS = 3;
 
 /**

@@ -245,6 +245,14 @@ export default function GuardianForm({
             setLocalError("Enter the ward's date of birth.");
             return;
         }
+        // Same 3–19 window the server enforces — checked here so the message
+        // lands on this page, beside the field, not after the submit fails.
+        const dobYears =
+            (Date.now() - new Date(values.studentDob).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        if (!Number.isFinite(dobYears) || dobYears < 3 || dobYears > 19) {
+            setLocalError('Check the date of birth — participants must be between 3 and 19 years old.');
+            return;
+        }
         if (!values.gender) {
             setLocalError("Select the ward's gender.");
             return;
@@ -365,7 +373,8 @@ export default function GuardianForm({
                                 <input
                                     id="studentDob" className="input-field" type="date"
                                     required
-                                    max={new Date().toISOString().slice(0, 10)}
+                                    min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
+                                    max={new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
                                     value={values.studentDob}
                                     onChange={(e) => set('studentDob', e.target.value)}
                                 />

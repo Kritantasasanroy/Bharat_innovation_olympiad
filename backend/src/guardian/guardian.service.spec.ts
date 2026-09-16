@@ -253,6 +253,7 @@ describe('GuardianService', () => {
 
         it.each([
             ['a 60-year-old', 60],
+            ['a 20-year-old', 20],
             ['a 1-year-old', 1],
         ])('rejects an implausible age (%s)', async (_label, yearsAgo) => {
             const { service } = serviceWith();
