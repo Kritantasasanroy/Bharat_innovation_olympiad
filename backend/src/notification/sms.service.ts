@@ -11,10 +11,13 @@ import {
     SMS_TEMPLATES,
     SmsTemplateKey,
     examRequirementsMessage,
+    paymentPendingMessage,
     reminderMessage,
     scheduleMessage,
     submissionMessage,
     registrationMessage,
+    supportMessage,
+    verificationPendingMessage,
 } from './sms-templates';
 
 /** Why a send did not happen, when it did not happen for a reason worth naming. */
@@ -129,7 +132,6 @@ export class SmsService implements OnModuleInit {
         userId: string;
         phone: string | null | undefined;
         phoneRaw?: string | null | undefined;
-        firstName: string;
         bookingId: string;
         slotId: string;
         startsAt: Date;
@@ -140,7 +142,7 @@ export class SmsService implements OnModuleInit {
             phoneRaw: vars.phoneRaw,
             template: 'schedule',
             dedupeKey: `${vars.bookingId}:${vars.slotId}`,
-            message: scheduleMessage({ firstName: vars.firstName, startsAt: vars.startsAt }),
+            message: scheduleMessage({ startsAt: vars.startsAt }),
         });
     }
 
@@ -185,7 +187,6 @@ export class SmsService implements OnModuleInit {
         userId: string;
         phone: string | null | undefined;
         phoneRaw?: string | null | undefined;
-        firstName: string;
         attemptId: string;
         submittedAt: Date;
     }): Promise<SmsOutcome> {
@@ -195,7 +196,62 @@ export class SmsService implements OnModuleInit {
             phoneRaw: vars.phoneRaw,
             template: 'submission',
             dedupeKey: vars.attemptId,
-            message: submissionMessage({ firstName: vars.firstName, submittedAt: vars.submittedAt }),
+            message: submissionMessage({ submittedAt: vars.submittedAt }),
+        });
+    }
+
+    /** Support-ticket acknowledgement. Deduped on the ticket reference. */
+    async sendSupportTicket(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        phoneRaw?: string | null | undefined;
+        ticketRef: string;
+    }): Promise<SmsOutcome> {
+        return this.enqueue({
+            userId: vars.userId,
+            phone: vars.phone,
+            phoneRaw: vars.phoneRaw,
+            template: 'support',
+            dedupeKey: `support:${vars.ticketRef}`,
+            message: supportMessage({ ticketRef: vars.ticketRef }),
+        });
+    }
+
+    /**
+     * The T-1 identification nudge — "verification pending". Deduped on the
+     * booking and the exam's IST date, exactly like the reminder, so a sweep
+     * re-run never re-messages a student who has already been nudged.
+     */
+    async sendVerificationPending(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        phoneRaw?: string | null | undefined;
+        bookingId: string;
+        examDateKey: string;
+    }): Promise<SmsOutcome> {
+        return this.enqueue({
+            userId: vars.userId,
+            phone: vars.phone,
+            phoneRaw: vars.phoneRaw,
+            template: 'verificationPending',
+            dedupeKey: `${vars.bookingId}:${vars.examDateKey}:verify`,
+            message: verificationPendingMessage(),
+        });
+    }
+
+    /** The unpaid-registration nudge. Deduped on the user, once ever. */
+    async sendPaymentPending(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        phoneRaw?: string | null | undefined;
+    }): Promise<SmsOutcome> {
+        return this.enqueue({
+            userId: vars.userId,
+            phone: vars.phone,
+            phoneRaw: vars.phoneRaw,
+            template: 'paymentPending',
+            dedupeKey: `paypending:${vars.userId}`,
+            message: paymentPendingMessage(),
         });
     }
 

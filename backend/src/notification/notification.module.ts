@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { AdminMailController } from './admin-mail.controller';
 import { NotificationService } from './notification.service';
+import { PaymentPendingSmsService } from './payment-pending-sms.service';
 import { SmsHealthController } from './sms-health.controller';
 import { SmsTransactionalController } from './sms-transactional.controller';
 import { SmsService } from './sms.service';
@@ -20,7 +21,8 @@ import { WhatsAppService } from './whatsapp.service';
  *
  * `WhatsAppReminderService` is listed as a provider even though nothing injects
  * it besides its own controller: it is a timer that must start with the app, and
- * Nest only runs `onModuleInit` on providers it has instantiated.
+ * Nest only runs `onModuleInit` on providers it has instantiated. The same
+ * applies to `PaymentPendingSmsService` — the unpaid-registration nudge.
  */
 @Global()
 @Module({
@@ -30,7 +32,13 @@ import { WhatsAppService } from './whatsapp.service';
         SmsTransactionalController,
         WhatsAppHealthController,
     ],
-    providers: [NotificationService, SmsService, WhatsAppService, WhatsAppReminderService],
+    providers: [
+        NotificationService,
+        SmsService,
+        WhatsAppService,
+        WhatsAppReminderService,
+        PaymentPendingSmsService,
+    ],
     exports: [NotificationService, SmsService, WhatsAppService],
 })
 export class NotificationModule {}

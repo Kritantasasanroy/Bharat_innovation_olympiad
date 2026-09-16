@@ -97,7 +97,17 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
                 },
                 select: {
                     id: true,
-                    user: { select: { id: true, firstName: true, phone: true, phoneRaw: true } },
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            phone: true,
+                            phoneRaw: true,
+                            // Absent = student identification never completed —
+                            // the condition for the verification-pending nudge.
+                            guardianProfile: { select: { id: true } },
+                        },
+                    },
                     slot: { select: { startsAt: true } },
                 },
             });
@@ -134,6 +144,21 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
                     startsAt: booking.slot.startsAt,
                     examDateKey: dateKey,
                 });
+
+                // Student identification still incomplete the day before the
+                // exam → nudge them to the identification page. Enqueued right
+                // after the reminder, so the 30s serial SMS queue gap lands it
+                // ~30s later, as specified. Deduped on the booking + exam date
+                // so a later sweep never repeats it.
+                if (!booking.user.guardianProfile) {
+                    await this.sms.sendVerificationPending({
+                        userId: booking.user.id,
+                        phone: booking.user.phone,
+                        phoneRaw: booking.user.phoneRaw,
+                        bookingId: booking.id,
+                        examDateKey: dateKey,
+                    });
+                }
             }
 
             if (summary.sent || summary.failed) {

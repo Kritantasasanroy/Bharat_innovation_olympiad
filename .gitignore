@@ -111,3 +111,21 @@ FULLSCREEN_IMPLEMENTATION.md
 
 # Render migration snapshot (contains production secrets)
 .render-migration/
+
+# Local working scripts (data tooling, not part of the app)
+apply_*.py
+build_*.py
+check_*.py
+compare_*.py
+diff_content.py
+parse_xlsx.py
+replace_bio.py
+verify_applied.py
+debug_pos.js
+extract_ts_text.js
+*_extract.json
+mismatches.json
+catalog.json
+apply_failures.txt
+compare_output.txt
+catalog_to_json.py

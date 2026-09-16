@@ -3,10 +3,14 @@ import { SmsJustProvider } from './sms-just.provider';
 import { SmsService } from './sms.service';
 import {
     examRequirementsMessage,
+    examRequirementsNewMessage,
+    paymentPendingMessage,
     registrationMessage,
     reminderMessage,
     scheduleMessage,
     submissionMessage,
+    supportMessage,
+    verificationPendingMessage,
 } from './sms-templates';
 
 /**
@@ -61,7 +65,6 @@ function serviceWith(
 const STUDENT = {
     userId: 'user-1',
     phone: '+919812345678',
-    firstName: 'Akash',
     attemptId: 'attempt-1',
     submittedAt: new Date('2026-08-18T09:30:00.000Z'),
 };
@@ -152,7 +155,6 @@ describe('SmsService — sending once', () => {
         await service.sendSchedule({
             userId: STUDENT.userId,
             phone: STUDENT.phone,
-            firstName: STUDENT.firstName,
             bookingId: 'b1',
             slotId: 's1',
             startsAt: new Date('2026-09-28T04:00:00.000Z'),
@@ -161,10 +163,37 @@ describe('SmsService — sending once', () => {
         await drainQueue(service);
 
         expect(sendTemplate.mock.calls.map((c) => c[1])).toEqual([
-            '1777178939340857740', // BIOREGISTRATION
-            '1777178938193640968', // BIOSCHEDULE
+            '1777178947235672764', // BIOREGISTRATIONNEW
+            '1777178947263648938', // BIOSCHEDULENEW
             '1777178939292597525', // BIOEXAMREQUIREMENTS
         ]);
+    });
+
+    it('sends the new nudges under their own DLT ids, deduped per booking/user', async () => {
+        const { service, create, sendTemplate } = serviceWith();
+
+        await service.sendVerificationPending({
+            userId: STUDENT.userId,
+            phone: STUDENT.phone,
+            bookingId: 'b1',
+            examDateKey: '2026-09-27',
+        });
+        await service.sendPaymentPending({ userId: STUDENT.userId, phone: STUDENT.phone });
+        await service.sendSupportTicket({
+            userId: STUDENT.userId,
+            phone: STUDENT.phone,
+            ticketRef: 'S278943',
+        });
+        await drainQueue(service);
+
+        expect(sendTemplate.mock.calls.map((c) => c[1])).toEqual([
+            '1777178949269638040', // BIOVERIFICATIONPENDING
+            '1777178953351456750', // BIOPAYMENTPENDINGLOGIN
+            '1777178947513266672', // BIOSUPPORTNEW
+        ]);
+        // Each carries its own dedupe key shape.
+        const keys = create.mock.calls.map((c) => c[0].data.dedupeKey);
+        expect(keys).toEqual(['b1:2026-09-27:verify', 'paypending:user-1', 'support:S278943']);
     });
 });
 
@@ -193,41 +222,75 @@ describe('SMS template bodies match the DLT-approved text', () => {
     it('registration carries the roll number', () => {
         const text = registrationMessage({ rollNumber: 'BIO26-G6-00017' });
         expect(text).toContain(
-            'Congratulations ! Your registration with Bharat Innovation Olympiad is confirmed.',
+            'Your registration with Bharat Innovation Olympiad is confirmed.',
         );
         expect(text).toContain('Your roll number is BIO26-G6-00017.');
-        expect(text).toContain('Thanks.');
-        expect(text).toContain('Bharat Innovation Olympiad team - Lemon Ideas');
+        expect(text).toContain('Check email for more');
+        expect(text).toContain('Thanks');
+        expect(text).toContain('- Lemon Ideas Team');
     });
 
-    it('schedule carries the name, ordinal date and unspaced IST time', () => {
-        const text = scheduleMessage({ firstName: 'Rahul', startsAt: at });
-        expect(text).toContain('Hi Rahul,');
-        expect(text).toContain('Your schedule for the Bharat Innovation Olympiad exam is as follows:');
-        expect(text).toContain('Date : 28th September 2026');
-        expect(text).toContain('Time: 9:30AM IST | Online');
-        expect(text).toContain('+918421411142');
+    it('schedule carries the ordinal date and unspaced IST time', () => {
+        const text = scheduleMessage({ startsAt: at });
+        expect(text).toContain(
+            'Your Bharat Innovation Olympiad exam is scheduled on 28th September 2026 at 9:30AM IST | Online',
+        );
+        expect(text).toContain('Please check your email for more');
+        expect(text).toContain('- Lemon Ideas Team');
     });
 
     it('requirements is static — no variables at all', () => {
         const text = examRequirementsMessage();
-        expect(text).toContain('Windows OS 10+ or macOS 10.14+');
+        expect(text).toContain('Windows 10+ or macOS 10.14+');
         expect(text).toContain('Peaceful place with solid & plain background');
+        expect(text).toContain('All the best ! Bharat Innovation Olympiad team- Lemon Ideas');
+        expect(text).not.toContain('{#');
+    });
+
+    it('requirementsNew uses the re-approved wording', () => {
+        const text = examRequirementsNewMessage();
+        expect(text).toContain('Windows OS10+ or macOS10.14+');
+        expect(text).toContain('Please use practice test to be prepared for exam');
+        expect(text).toContain('- Lemon Ideas Team');
         expect(text).not.toContain('{#');
     });
 
     it('reminder names the date and time', () => {
         const text = reminderMessage({ startsAt: at });
         expect(text).toContain('scheduled for - 28th September 2026 at 9:30AM IST.');
-        expect(text).toContain('Bharat Olympiad team | Lemon Ideas India');
+        expect(text).toContain('- Lemon Ideas India');
     });
 
-    it('submission carries the name and submission date', () => {
-        const text = submissionMessage({ firstName: 'Rahul', submittedAt: at });
-        expect(text).toContain('Hi Rahul,');
+    it('submission carries the submission date only', () => {
+        const text = submissionMessage({ submittedAt: at });
         expect(text).toContain(
             'successful exam submission at the Bharat Innovation Olympiad organised by Lemon Ideas on 28th September 2026',
         );
+        expect(text).toContain('- Lemon Ideas Team');
+        expect(text).not.toContain('Hi ');
+    });
+
+    it('support carries the ticket reference', () => {
+        const text = supportMessage({ ticketRef: 'S278943' });
+        expect(text).toContain('Your support ticket with reference Id S278943 has been submitted');
+        expect(text).toContain('- Lemon ideas Team');
+    });
+
+    it('verificationPending is static with the dashboard link', () => {
+        const text = verificationPendingMessage();
+        expect(text).toContain('verification is pending');
+        expect(text).toContain('https://www.innovationolympiad.in/dashboard/');
+        expect(text).toContain('- Lemon Ideas Team');
+        expect(text).not.toContain('{#');
+    });
+
+    it('paymentPending is static with the login link and support number', () => {
+        const text = paymentPendingMessage();
+        expect(text).toContain('registration is incomplete as payment is pending');
+        expect(text).toContain('https://www.innovationolympiad.in/login/');
+        expect(text).toContain('+918421411142');
+        expect(text).toContain('- Lemon Ideas Team');
+        expect(text).not.toContain('{#');
     });
 });
 

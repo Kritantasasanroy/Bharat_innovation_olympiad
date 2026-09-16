@@ -1,7 +1,7 @@
 import { formatIstOrdinalDate, formatIstTime } from './whatsapp.templates';
 
 /**
- * The five DLT-approved transactional SMS templates, and the only place their
+ * The nine DLT-approved transactional SMS templates, and the only place their
  * variables are built.
  *
  * ## Why the bodies are copied in here verbatim
@@ -18,6 +18,18 @@ import { formatIstOrdinalDate, formatIstTime } from './whatsapp.templates';
  * Template ids and the entity id are the DLT registry's identifiers; both are
  * required query parameters on every SMS Just send.
  *
+ * ## The nine, and what wires to what
+ *
+ * - `registration` → BIOREGISTRATIONNEW (replaces the retired BIOREGISTRATION)
+ * - `schedule` → BIOSCHEDULENEW (replaces BIOSCHEDULE)
+ * - `requirements` → BIOEXAMREQUIREMENTS (the older approved body, still live)
+ * - `requirementsNew` → BIOEXAMREQUIREMENTSNEW (the re-approved body)
+ * - `reminder` → BIOREMINDER (re-approved, same name)
+ * - `submission` → BIOSUBMISSIONNEW (replaces BIOSUBMISSION)
+ * - `support` → BIOSUPPORTNEW (support-ticket acknowledgement)
+ * - `verificationPending` → BIOVERIFICATIONPENDING (T-1 identification nudge)
+ * - `paymentPending` → BIOPAYMENTPENDINGLOGIN (1h unpaid-registration nudge)
+ *
  * ## Formatting
  *
  * The approved samples show `28th September 2026` and `9:00AM` — the same
@@ -30,15 +42,23 @@ import { formatIstOrdinalDate, formatIstTime } from './whatsapp.templates';
 /** The DLT template names exactly as approved, with their registry ids. */
 export const SMS_TEMPLATES = {
     /** Sent once, when the access pass first activates (roll number issued). */
-    registration: { name: 'BIOREGISTRATION', dltId: '1777178939340857740' },
+    registration: { name: 'BIOREGISTRATIONNEW', dltId: '1777178947235672764' },
     /** Sent when a seat is confirmed — the student's date and time. */
-    schedule: { name: 'BIOSCHEDULE', dltId: '1777178938193640968' },
+    schedule: { name: 'BIOSCHEDULENEW', dltId: '1777178947263648938' },
     /** Sent once, right after registration — the device/environment checklist. */
     requirements: { name: 'BIOEXAMREQUIREMENTS', dltId: '1777178939292597525' },
+    /** The re-approved device checklist, when it replaces the one above. */
+    requirementsNew: { name: 'BIOEXAMREQUIREMENTSNEW', dltId: '1777178947312261549' },
     /** Sent the day before the exam. */
-    reminder: { name: 'BIOREMINDER', dltId: '1777178938220865501' },
+    reminder: { name: 'BIOREMINDER', dltId: '1777178947335107615' },
     /** Sent once, when a paper is submitted. */
-    submission: { name: 'BIOSUBMISSION', dltId: '1777178938155054822' },
+    submission: { name: 'BIOSUBMISSIONNEW', dltId: '1777178947412171476' },
+    /** Sent when a support ticket is raised. */
+    support: { name: 'BIOSUPPORTNEW', dltId: '1777178947513266672' },
+    /** Sent at T-1 to students who never completed student identification. */
+    verificationPending: { name: 'BIOVERIFICATIONPENDING', dltId: '1777178949269638040' },
+    /** Sent an hour after an OTP-verified registration that never paid. */
+    paymentPending: { name: 'BIOPAYMENTPENDINGLOGIN', dltId: '1777178953351456750' },
 } as const;
 
 export type SmsTemplateKey = keyof typeof SMS_TEMPLATES;
@@ -49,38 +69,34 @@ function clean(value: string): string {
 }
 
 /**
- * `Congratulations ! Your registration … Your roll number is {1}.`
+ * `Your registration … Your roll number is {1}.`
  *
- * Approved body (BIOREGISTRATION · 1777178939340857740):
- *   Congratulations ! Your registration with Bharat Innovation Olympiad is
- *   confirmed. Please check your email for more details including your exam
- *   schedule. Your roll number is {#alp#}.
- *   Thanks.
- *   Bharat Innovation Olympiad team - Lemon Ideas
+ * Approved body (BIOREGISTRATIONNEW · 1777178947235672764):
+ *   Your registration with Bharat Innovation Olympiad is confirmed. Your roll
+ *   number is {#alp#}.
+ *   Check email for more
+ *   Thanks
+ *   - Lemon Ideas Team
  */
 export function registrationMessage(vars: { rollNumber: string }): string {
     return [
-        'Congratulations ! Your registration with Bharat Innovation Olympiad is confirmed. ' +
-            `Please check your email for more details including your exam schedule. ` +
+        'Your registration with Bharat Innovation Olympiad is confirmed. ' +
             `Your roll number is ${clean(vars.rollNumber)}.`,
-        'Thanks.',
-        'Bharat Innovation Olympiad team - Lemon Ideas',
+        'Check email for more',
+        'Thanks',
+        '- Lemon Ideas Team',
     ].join('\n');
 }
 
 /**
- * `Hi {1}, Your schedule … Date : {2} Time: {3} IST | Online …`
+ * `Your … exam is scheduled on {1} at {2} IST | Online …`
  *
- * Approved body (BIOSCHEDULE · 1777178938193640968):
- *   Hi {#alp#},
- *   Your schedule for the Bharat Innovation Olympiad exam is as follows:
- *   Date : {#alp#}
- *   Time: {#alp#} IST | Online
- *   Please check your email for complete details.
- *   For queries, contact the Olympiad WA helpline at +918421411142
- *   Bharat Olympiad team | Lemon Ideas India
+ * Approved body (BIOSCHEDULENEW · 1777178947263648938):
+ *   Your Bharat Innovation Olympiad exam is scheduled on {#alp#} at {#alp#} IST | Online
+ *   Please check your email for more
+ *   - Lemon Ideas Team
  *
- * The body already writes "IST" after the variable, so {3} carries the clock
+ * The body already writes "IST" after the variable, so {2} carries the clock
  * time alone — and unspaced, per the approved sample ("9:00AM").
  */
 export function scheduleSmsParams(vars: { startsAt: Date }): { date: string; time: string } {
@@ -90,66 +106,113 @@ export function scheduleSmsParams(vars: { startsAt: Date }): { date: string; tim
     };
 }
 
-export function scheduleMessage(vars: { firstName: string; startsAt: Date }): string {
+export function scheduleMessage(vars: { startsAt: Date }): string {
     const { date, time } = scheduleSmsParams(vars);
     return [
-        `Hi ${clean(vars.firstName)},`,
-        'Your schedule for the Bharat Innovation Olympiad exam is as follows:',
-        `Date : ${date}`,
-        `Time: ${time} IST | Online`,
-        'Please check your email for complete details.',
-        'For queries, contact the Olympiad WA helpline at +918421411142',
-        'Bharat Olympiad team | Lemon Ideas India',
+        `Your Bharat Innovation Olympiad exam is scheduled on ${date} at ${time} IST | Online`,
+        'Please check your email for more',
+        '- Lemon Ideas Team',
     ].join('\n');
 }
 
 /**
  * Static body — no variables (BIOEXAMREQUIREMENTS · 1777178939292597525).
+ * The older approved wording, still live on the registry.
  */
 export function examRequirementsMessage(): string {
     return [
         'Please note the following requirements for your Bharat Innovation Olympiad online exam.',
         '1. Laptop/PC/Desktop computer',
-        '2. Windows OS 10+ or macOS 10.14+',
+        '2. Windows 10+ or macOS 10.14+',
         '3. Internet connection with min 2 Mbps',
-        '4. Working web cam/camera',
+        '4. Working Microphone & web cam',
         '5. Peaceful place with solid & plain background',
-        'Please use practice test to get comfortable with the online exam environment',
-        '',
         'All the best ! Bharat Innovation Olympiad team- Lemon Ideas',
     ].join('\n');
 }
 
 /**
- * `This is a reminder for your Bharat Innovation Olympiad exam scheduled for - {1} at {2} IST.`
- *
- * Approved body (BIOREMINDER · 1777178938220865501). Only ever correct on the
- * day before the exam — the reminder sweeper is the only caller.
+ * Static body — no variables (BIOEXAMREQUIREMENTSNEW · 1777178947312261549).
+ * The re-approved wording — no space after the list numbers, "OS10+".
  */
-export function reminderMessage(vars: { startsAt: Date }): string {
-    const date = formatIstOrdinalDate(vars.startsAt);
-    const time = formatIstTime(vars.startsAt, false);
+export function examRequirementsNewMessage(): string {
     return [
-        `This is a reminder for your Bharat Innovation Olympiad exam scheduled for - ${date} at ${time} IST.`,
-        'Please check your email for more details, preparations and the portal link.',
-        'For queries, please contact the WA helpline number.',
-        'Bharat Olympiad team | Lemon Ideas India',
+        'Please note the requirements for your Bharat Innovation Olympiad online exam.',
+        '1.Laptop/PC/Desktop computer',
+        '2.Windows OS10+ or macOS10.14+',
+        '3.Internet connection with min 2 Mbps',
+        '4.Working web cam/camera',
+        '5.Peaceful place with solid & plain background',
+        'Please use practice test to be prepared for exam',
+        '- Lemon Ideas Team',
     ].join('\n');
 }
 
 /**
- * `Hi {1}, This is a confirmation regarding your successful exam submission …`
+ * `This is a reminder … scheduled for - {1} at {2} IST.`
  *
- * Approved body (BIOSUBMISSION · 1777178938155054822) — note the two blank
- * lines before the sign-off are part of the approved body.
+ * Approved body (BIOREMINDER · 1777178947335107615). Only ever correct on the
+ * day before the exam — the reminder sweeper is the only caller.
  */
-export function submissionMessage(vars: { firstName: string; submittedAt: Date }): string {
+export function reminderMessage(vars: { startsAt: Date }): string {
+    const { date, time } = scheduleSmsParams(vars);
     return [
-        `Hi ${clean(vars.firstName)},`,
+        `This is a reminder for your Bharat Innovation Olympiad exam scheduled for - ${date} at ${time} IST.`,
+        '- Lemon Ideas India',
+    ].join('\n');
+}
+
+/**
+ * `This is a confirmation regarding your successful exam submission …`
+ *
+ * Approved body (BIOSUBMISSIONNEW · 1777178947412171476) — the new body no
+ * longer carries the student's name; the date variable is the only fill-in.
+ */
+export function submissionMessage(vars: { submittedAt: Date }): string {
+    return [
         'This is a confirmation regarding your successful exam submission at the ' +
             `Bharat Innovation Olympiad organised by Lemon Ideas on ${formatIstOrdinalDate(vars.submittedAt)}`,
+        '- Lemon Ideas Team',
+    ].join('\n');
+}
+
+/**
+ * `Your support ticket with reference Id {1} …`
+ *
+ * Approved body (BIOSUPPORTNEW · 1777178947513266672).
+ */
+export function supportMessage(vars: { ticketRef: string }): string {
+    return [
+        'Your support ticket with reference Id ' +
+            `${clean(vars.ticketRef)} has been submitted for Bharat Innovation Olympiad. ` +
+            'You will be updated on this shortly.',
+        '- Lemon ideas Team',
+    ].join('\n');
+}
+
+/**
+ * Static body — no variables (BIOVERIFICATIONPENDING · 1777178949269638040).
+ * Sent at T-1 to a student who has not completed student identification.
+ */
+export function verificationPendingMessage(): string {
+    return [
+        'Bharat Innovation Olympiad verification is pending. Please complete your ' +
+            'face scan/ID upload: https://www.innovationolympiad.in/dashboard/',
+        '- Lemon Ideas Team',
+    ].join('\n');
+}
+
+/**
+ * Static body — no variables (BIOPAYMENTPENDINGLOGIN · 1777178953351456750).
+ * Sent an hour after an OTP-verified registration that has not paid.
+ */
+export function paymentPendingMessage(): string {
+    return [
+        'Your Bharat Innovation Olympiad registration is incomplete as payment is pending.',
+        'If payment failed, please try again from the registration portal.',
+        'https://www.innovationolympiad.in/login/',
         '',
-        '',
-        'Bharat Olympiad team | Lemon Ideas India',
+        'If payment was deducted, contact support before making another payment: +918421411142.',
+        '- Lemon Ideas Team',
     ].join('\n');
 }

@@ -17,10 +17,14 @@ import {
     SMS_TEMPLATES,
     SmsTemplateKey,
     examRequirementsMessage,
+    examRequirementsNewMessage,
+    paymentPendingMessage,
     reminderMessage,
     scheduleMessage,
     submissionMessage,
     registrationMessage,
+    supportMessage,
+    verificationPendingMessage,
 } from './sms-templates';
 
 /**
@@ -83,10 +87,14 @@ export class SmsTransactionalController {
         const sampleAt = new Date('2026-09-28T04:00:00.000Z'); // 9:30 AM IST
         const message = {
             registration: () => registrationMessage({ rollNumber: 'BIO26-G6-00017' }),
-            schedule: () => scheduleMessage({ firstName: 'Rahul', startsAt: sampleAt }),
+            schedule: () => scheduleMessage({ startsAt: sampleAt }),
             requirements: () => examRequirementsMessage(),
+            requirementsNew: () => examRequirementsNewMessage(),
             reminder: () => reminderMessage({ startsAt: sampleAt }),
-            submission: () => submissionMessage({ firstName: 'Rahul', submittedAt: sampleAt }),
+            submission: () => submissionMessage({ submittedAt: sampleAt }),
+            support: () => supportMessage({ ticketRef: 'S278943' }),
+            verificationPending: () => verificationPendingMessage(),
+            paymentPending: () => paymentPendingMessage(),
         }[key]();
 
         const outcome = await this.sms.probe(adminId, normalized, key, message);
