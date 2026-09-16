@@ -16,6 +16,7 @@ import GuardianStep from './steps/GuardianStep';
 import PaymentStep from './steps/PaymentStep';
 import PresenceStep from './steps/PresenceStep';
 import type { DirectorySchool } from '@/lib/schools';
+import { findSchoolByCode } from '@/lib/schools';
 import { FormEvent, useState, useEffect } from 'react';
 
 /**
@@ -183,6 +184,22 @@ export default function RegisterPage() {
     // A partner may link straight here (`/register?ref=CODE`).
     useEffect(() => {
         captureReferralFromUrl();
+    }, []);
+
+    /**
+     * A school referral link lands as `/register?school=SCH-XXXXXX`. Resolve the
+     * code and pre-pick the school — the field stays a normal picker, so the
+     * student can still change it or search for a different school. A bad or
+     * unknown code is ignored: the prefill must never block registration.
+     */
+    useEffect(() => {
+        const code = new URLSearchParams(window.location.search).get('school');
+        if (!code) return;
+        let cancelled = false;
+        findSchoolByCode(code)
+            .then((found) => { if (!cancelled) setSchool((s) => s ?? found); })
+            .catch(() => {});
+        return () => { cancelled = true; };
     }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
