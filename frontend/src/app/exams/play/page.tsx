@@ -946,18 +946,18 @@ function ExamPlayPage() {
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
                 <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '520px' }}>
                     <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👨‍👩‍👧</div>
-                    <h2 style={{ marginBottom: '1rem' }}>Parent consent needed first</h2>
+                    <h2 style={{ marginBottom: '1rem' }}>Student identification needed first</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        Every participant is a minor, so a parent or guardian has to give
-                        consent before we can proctor an exam. It takes about two minutes and only
+                        Every participant is a minor, so identification and guardian consent have to
+                        be completed before we can proctor an exam. It takes about two minutes and only
                         needs to be done just once.
                     </p>
                     <button
                         className="btn btn-primary"
                         style={{ marginTop: '1.5rem' }}
-                        onClick={() => { window.location.href = `/guardian?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`; }}
+                        onClick={() => { window.location.href = `/identification?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`; }}
                     >
-                        Complete the parent section
+                        Complete student identification
                     </button>
                 </div>
             </div>

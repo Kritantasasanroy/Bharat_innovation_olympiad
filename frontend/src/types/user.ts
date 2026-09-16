@@ -22,7 +22,7 @@ export interface User {
     createdAt: string;
 }
 
-/** Registration part 2 — what `GET /guardian/me` returns. */
+/** Registration part 2 — what `GET /identification/me` returns. */
 export interface GuardianStatus {
     version: string;
     complete: boolean;

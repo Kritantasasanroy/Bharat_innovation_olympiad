@@ -45,9 +45,9 @@ export default function DashboardMobile({
 
             {guardianComplete === false && (
                 <div className="mob-card mob-dash-notice">
-                    <strong>One step left: parent or guardian details.</strong>
+                    <strong>One step left: student identification.</strong>
                     <p>Required before any exam can be started, including the free practice Innovation Olympiad exam.</p>
-                    <Link href="/guardian" className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: '0.6rem' }}>
+                    <Link href="/identification" className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: '0.6rem' }}>
                         Complete it now
                     </Link>
                 </div>
@@ -186,7 +186,7 @@ export default function DashboardMobile({
                                     )}
                                 </div>
                                 <p className="mob-auth__hint">
-                                    Something wrong here? <Link href="/guardian">Update the parent section</Link>.
+                                    Something wrong here? <Link href="/identification">Update student identification</Link>.
                                 </p>
                             </div>
                         </section>

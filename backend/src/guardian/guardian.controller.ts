@@ -19,7 +19,7 @@ import {
 import { SubmitGuardianDto } from './dto/guardian.dto';
 import { GuardianService } from './guardian.service';
 
-/** Registration part 2 — parent/guardian details and parental consent. */
+/** Student identification — guardian details, ward ID document, consents. */
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class GuardianController {
@@ -29,9 +29,9 @@ export class GuardianController {
     ) {}
 
     /**
-     * Uploads the guardian's ID document and returns only its URL.
+     * Uploads the ward's ID document and returns only its URL.
      *
-     * The form used to base64 the file into the JSON body of `POST /guardian`.
+     * The form used to base64 the file into the JSON body of `POST /identification`.
      * A phone photo of an Aadhaar card is 2–5 MB, which base64 inflates by ~33%,
      * so every submission with a document attached was rejected by Express's
      * 100 kB body limit with "request entity too large" — and the parent was
@@ -40,7 +40,7 @@ export class GuardianController {
      * Multipart keeps the bytes out of the JSON body entirely; the profile then
      * stores a short URL instead of megabytes of text in a database column.
      */
-    @Post('guardian/id-document')
+    @Post('identification/id-document')
     @UseInterceptors(
         FileInterceptor('file', {
             // Rejected by multer before the whole body is buffered, so an
@@ -69,12 +69,12 @@ export class GuardianController {
         return { url };
     }
 
-    @Get('guardian/me')
+    @Get('identification/me')
     status(@CurrentUser('id') userId: string) {
         return this.guardianService.status(userId);
     }
 
-    @Post('guardian')
+    @Post('identification')
     submit(
         @CurrentUser('id') userId: string,
         @Body() dto: SubmitGuardianDto,

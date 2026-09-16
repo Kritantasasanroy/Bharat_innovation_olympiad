@@ -35,7 +35,7 @@ export function formatDate(value: string | null): string {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** Everything `/guardian/me` returns, minus the audit-only `ipAddress`. */
+/** Everything `/identification/me` returns, minus the audit-only `ipAddress`. */
 export interface GuardianProfile {
     guardianFirstName: string;
     guardianLastName: string;
@@ -135,7 +135,7 @@ export default function StudentDashboard() {
             // student out of their own dashboard.
             .catch(() => {});
 
-        api.get('/guardian/me')
+        api.get('/identification/me')
             .then((r) => {
                 setGuardianComplete(Boolean(r.data.complete));
                 setGuardian(r.data.profile ?? null);
@@ -220,13 +220,13 @@ export default function StudentDashboard() {
                 {guardianComplete === false && (
                     <div className="notice notice--warn">
                         <div>
-                            <strong>One step left: parent or guardian details.</strong>
+                            <strong>One step left: student identification.</strong>
                             <p>
                                 Required before any exam can be started, including the free practice
                                 Innovation Olympiad exam. It takes about two minutes.
                             </p>
                         </div>
-                        <Link href="/guardian" className="btn btn-primary btn-sm">
+                        <Link href="/identification" className="btn btn-primary btn-sm">
                             Complete it now
                         </Link>
                     </div>
@@ -443,7 +443,7 @@ export default function StudentDashboard() {
                                     </div>
 
                                     <p className="input-hint">
-                                        Something wrong here? <Link href="/guardian">Update the parent section</Link>.
+                                        Something wrong here? <Link href="/identification">Update student identification</Link>.
                                         Your consent date is not changed by an edit.
                                     </p>
                                 </div>

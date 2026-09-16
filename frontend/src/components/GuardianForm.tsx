@@ -5,9 +5,9 @@ import { describeError, describeOversizeFile } from '@/lib/errors';
 import { FormEvent, useEffect, useState } from 'react';
 
 /**
- * Registration part 2 — the parent/guardian section.
+ * Registration part 2 — the parent/identification section.
  *
- * Shared by the registration flow (as step 5) and by `/guardian`, which is where
+ * Shared by the registration flow (as step 5) and by `/identification`, which is where
  * a student who registered before this existed is sent when the exam gate refuses
  * them with `GUARDIAN_CONSENT_REQUIRED`. One component, so the two can never
  * collect different fields or show different consent wording.
@@ -61,7 +61,7 @@ export interface GuardianFormValues {
     guardianEmail: string;
     guardianPhone: string;
     studentDob: string;
-    // Kept so an existing profile's values survive a re-submit from `/guardian`;
+    // Kept so an existing profile's values survive a re-submit from `/identification`;
     // no longer collected by the form, and `pincode` is gone from the database.
     city: string;
     state: string;
@@ -111,10 +111,10 @@ export default function GuardianForm({
     studentName?: string;
     initial?: Partial<GuardianFormValues>;
     /**
-     * The registration flow now collects the parent/guardian's name, email,
+     * The registration flow now collects the parent/identification's name, email,
      * phone, relationship, date of birth and gender earlier, on the details
      * step — `initial` carries them in already, and this page only needs the
-     * ID document and the two consents. The standalone `/guardian` page (for
+     * ID document and the two consents. The standalone `/identification` page (for
      * a student who registered before any of this existed) still needs all of
      * it, so it leaves this `false` and gets the full form.
      */
@@ -178,7 +178,7 @@ export default function GuardianForm({
      *
      * It used to `readAsDataURL` and put the base64 straight into
      * `idDocumentUrl`, which then rode along in the JSON body of `POST
-     * /guardian`. A phone photo of an ID is 2–5 MB and base64 adds a third
+     * /identification`. A phone photo of an ID is 2–5 MB and base64 adds a third
      * again, so every submission with a document attached came back
      * "request entity too large" and the parent could not finish registering.
      *
@@ -208,7 +208,7 @@ export default function GuardianForm({
             form.append('file', file);
             // No explicit Content-Type: the browser has to set the multipart
             // boundary itself, and naming the header would strip it.
-            const { data } = await api.post<{ url: string }>('/guardian/id-document', form);
+            const { data } = await api.post<{ url: string }>('/identification/id-document', form);
             set(field, data.url);
         } catch (err: any) {
             setFileName((s) => ({ ...s, [side]: '' }));

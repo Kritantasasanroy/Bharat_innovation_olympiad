@@ -178,7 +178,7 @@ function ExamInstructionsPage() {
      */
     const [guardianState, setGuardianState] = useState<'checking' | 'complete' | 'missing'>('checking');
     useEffect(() => {
-        api.get('/guardian/me')
+        api.get('/identification/me')
             .then((r) => setGuardianState(r.data.complete ? 'complete' : 'missing'))
             // On a read failure, do not invent a refusal — the server-side gate in
             // startAttempt is authoritative and will stop them if it matters.
@@ -573,17 +573,17 @@ function ExamInstructionsPage() {
                     {/* Parental consent gate — mirrors the server-side refusal. */}
                     {guardianState === 'missing' && (
                         <div className="glass-card instructions-card instructions-card--blocked">
-                            <h2>👨‍👩‍👧 Parent consent needed</h2>
+                            <h2>🪪 Student identification needed</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
-                                A parent or guardian has to give consent before you can start any
+                                Identification has to be completed before you can start any
                                 exam, including the practice Innovation Olympiad exam. It takes about two minutes and
                                 only needs doing once.
                             </p>
                             <button
                                 className="btn btn-primary"
-                                onClick={() => router.push(`/guardian?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`)}
+                                onClick={() => router.push(`/identification?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`)}
                             >
-                                Complete the parent section
+                                Complete student identification
                             </button>
                         </div>
                     )}

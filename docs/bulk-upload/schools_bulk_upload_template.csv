@@ -1,0 +1,4 @@
+external_reference,school_name,board,udise_code,city,state,pincode,school_code,partner_referral_code,partner_org_name,coordinator_name,coordinator_email,coordinator_phone,onboard_now,notes
+SCH-001,Delhi Public School Sector 45,CBSE,DL123456789,Gurugram,Haryana,122003,DPS-GGN-45,PARTNER-ROHTAK-24,EduReach Partners,Anita Sharma,anita.sharma@dpsggn.edu.in,+919876543210,YES,Onboarded via EduReach Q3 drive
+SCH-002,St. Xavier's High School,ICSE,,Mumbai,Maharashtra,400001,,,,,,,NO,Directory-only entry; no coordinator portal access
+SCH-003,Kendriya Vidyalaya No 2,State Board,MH098765432,Pune,Maharashtra,411001,KV2-PUNE,,,Ramesh Iyer,ramesh.iyer@kv2pune.edu.in,+919812345678,YES,"Self-onboarded, no partner attribution"

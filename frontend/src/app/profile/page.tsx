@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { useXp } from '@/hooks/useXp';
 import { XP_PER_EXAM_COMPLETE } from '@/lib/constants';
 
-/** What `GET /guardian/me` returns — see `GuardianService.status`. */
+/** What `GET /identification/me` returns — see `GuardianService.status`. */
 interface GuardianStatus {
     version: string;
     complete: boolean;
@@ -82,7 +82,7 @@ export default function ProfilePage() {
      */
     const [guardian, setGuardian] = useState<GuardianStatus | null>(null);
     useEffect(() => {
-        api.get<GuardianStatus>('/guardian/me')
+        api.get<GuardianStatus>('/identification/me')
             .then((r) => setGuardian(r.data))
             .catch(() => setGuardian(null));
     }, []);
@@ -259,26 +259,26 @@ export default function ProfilePage() {
                         </div>
                     </div>
                 </div>
-                {/* Parent / guardian — registration part 2, read-only */}
+                {/* Student identification — read-only */}
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
-                    <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Parent / Guardian</h2>
+                    <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Student identification</h2>
 
                     {!guardian?.profile ? (
                         <>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                                A parent or guardian has to give consent before you can start any exam,
+                                Identification has to be completed before you can start any exam,
                                 including the practice Innovation Olympiad exam. It takes about two minutes and only needs
                                 to be done once.
                             </p>
-                            <Link href="/guardian?next=/profile" className="btn btn-primary">
-                                Complete the parent section
+                            <Link href="/identification?next=/profile" className="btn btn-primary">
+                                Complete student identification
                             </Link>
                         </>
                     ) : (
                         <>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                                What your parent or guardian provided, and when they agreed. To change
-                                any of it, <Link href="/guardian?next=/profile">reopen the parent form</Link>.
+                                What was provided for identification, and when it was agreed. To change
+                                any of it, <Link href="/identification?next=/profile">reopen the identification form</Link>.
                             </p>
 
                             <GuardianRow

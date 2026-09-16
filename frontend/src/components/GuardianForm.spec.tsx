@@ -297,7 +297,7 @@ describe('GuardianForm', () => {
             await upload(/front of the card/i, 'front.jpg');
             await upload(/back of the card/i, 'back.jpg');
 
-            expect(api.post).toHaveBeenCalledWith('/guardian/id-document', expect.any(FormData));
+            expect(api.post).toHaveBeenCalledWith('/identification/id-document', expect.any(FormData));
 
             fill();
             fillStudent();

@@ -29,7 +29,7 @@ import { FormEvent, useState, useEffect } from 'react';
  *    keyboard for the face scan, and discovering that at the last step is too
  *    late. It also carries the T&C acceptance, so nobody types their details
  *    before seeing what they are agreeing to.
- *  - **details now also collects the parent/guardian's own contact details,
+ *  - **details now also collects the parent/identification's own contact details,
  *    the ward's date of birth and gender** — everything about the family that
  *    isn't the face scan, the ID document or the consents themselves. That
  *    used to live on the final step, asked of a parent who had usually
@@ -101,9 +101,9 @@ export default function RegisterPage() {
     // Mobile number stored for WhatsApp notifications.
     const [phone, setPhone] = useState('');
 
-    // ── Parent/guardian details, collected here now instead of on the final
+    // ── Parent/identification details, collected here now instead of on the final
     // step (see the module doc comment above for why). A single name field —
-    // GuardianForm still has two columns for the standalone `/guardian`
+    // GuardianForm still has two columns for the standalone `/identification`
     // backfill page, but the whole name is sent as `guardianFirstName`; the
     // backend accepts an empty `guardianLastName`.
     const [guardianName, setGuardianName] = useState('');

@@ -1,0 +1,338 @@
+Mismatches: 67 / 309
+
+Row 32 (76-78): frontend/src/lib/examIntegrity.ts
+  Current: 'The face on camera did not match your profile - The face in frame did not match the photo you enrolled when you registered. Only the registered participant may sit this Innovation Olympiad exam. Make sure it is you in frame, well lit.'
+  Source:  'The face on camera did not match your profile - The face in frame did not match the photo you enrolled when you registered. Only the registered participants are allowed to appear in the Bharat Innovation Olympiad exam. Make sure it is you in the frame, well lit.'
+  Reason:  DIFFER
+
+Row 36 (119-119): frontend/src/lib/examIntegrity.ts
+  Current: 'That is ${count} violation(s) recorded on this Innovation Olympiad exam. Your exam has not been stopped and you can carry on, but it has passed the point where a person will review what was recorded before your result is confirmed.'
+  Source:  'That is ${count} ${noun} recorded on this Innovation Olympiad exam. Your exam has not been stopped, and you can carry on, but your violations will be reviewed by the team before your result is confirmed.'
+  Reason:  DIFFER
+
+Row 37 (121-121): frontend/src/lib/examIntegrity.ts
+  Current: 'That is ${count} violation(s) recorded on this Innovation Olympiad exam. Nothing has been taken away, keep going. Violations are only a record, and a person reads them before anything is concluded.'
+  Source:  'That is ${count} ${noun} recorded on this Innovation Olympiad exam. Nothing has been taken away, keep going. Violations are only a record, and the exam team will review them before the result is confirmed.'
+  Reason:  DIFFER
+
+Row 43 (19-19): frontend/src/lib/copy/onboarding.ts
+  Current: 'Microphone: Working'
+  Source:  'Microphone: ook'
+  Reason:  DIFFER
+
+Row 52 (61-63): frontend/src/lib/copy/onboarding.ts
+  Current: 'Set aside about ten minutes - Registration runs in one sitting: details, email verification, face scan, the parent section, and payment.'
+  Source:  'Set aside about ten minutes - Registration runs in one sitting - details, email verification, face scan, the parent consent, and payment.'
+  Reason:  DIFFER
+
+Row 54 (73-74): frontend/src/lib/copy/onboarding.ts
+  Current: 'Take the practice Innovation Olympiad exam - It runs in exactly the same environment as the real exam: fullscreen, webcam, timer and all. It is not scored, you can retake it, and it is required before your real Innovation Olympiad exam will start.'
+  Source:  'Take the practice Innovation Olympiad exam to acclimatise with the online exam environment. It runs in exactly the same environment as the actual exam - fullscreen, webcam, timer and all. It is not scored; you can retake it, and it is mandatory before your Bharat Innovation Olympiad exam commences.'
+  Reason:  DIFFER
+
+Row 56 (81-83): frontend/src/lib/copy/onboarding.ts
+  Current: 'On the day - Sit somewhere quiet and well-lit with a plain wall behind you, keep a school or photo ID nearby, and be signed in fifteen minutes before your schedule opens.'
+  Source:  'On the day - On exam day, Take the exam in a quiet, well-lit place with a plain wall behind you, keep a school or photo ID nearby, and be sign in 15 minutes before your scheduled time.'
+  Reason:  DIFFER
+
+Row 73 (89-90): frontend/src/lib/limon/tours.ts
+  Current: "Find your school, then your section - Just type the school's name. Only use a school code if your school actually gave you one. Most participants don't have one, and you can add your school if it isn't listed. Once you pick it, put your section exactly as your school writes it: A, B2, Rose. Write NA if your school doesn't use sections."
+  Source:  "Find your school, then add your section - Just type the school's name. Only use a school code if your school actually gave you one. If you don't have a school code, you can add your school if it isn't listed. Put your section exactly as your school writes it - A, B2, Rose. Write NA if your school doesn't use sections."
+  Reason:  DIFFER
+
+Row 74 (95-96): frontend/src/lib/limon/tours.ts
+  Current: "One thing I have to be firm about - The face scan at step 4 has to be done by you, not a parent. It's what I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam."
+  Source:  "One thing I have to be firm about - One thing I have to be firm about: the face scan at step 4 has to be done by you, not a parent. It's what Limon/I use to recognise you in the exam. If someone else's face is scanned, you'll be flagged during your Innovation Olympiad exam and may be disqualified."
+  Reason:  DIFFER
+
+Row 79 (130-131): frontend/src/lib/limon/tours.ts
+  Current: 'Your exams - Everything you can sit. Start with the free practice Innovation Olympiad exam: it runs in exactly the same screen as the real thing, and you can retake it as often as you like.'
+  Source:  'Your exams - Everything you can take. Start with the practice Innovation Olympiad exam - it runs in the same screen as the real thing, and you can retake it as often as you like.'
+  Reason:  DIFFER
+
+Row 92 (223-224): frontend/src/lib/limon/tours.ts
+  Current: 'This number - Things I have to record: leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam. A person just reads it afterwards. Hover the little i for the full list.'
+  Source:  'This number - Violations/warnings I have to record - leaving fullscreen, switching apps, my not being able to see your face. It does not end your exam. A person just reviews it afterwards. Hover over it a little for the full list.'
+  Reason:  DIFFER
+
+Row 109 (56-56): frontend/src/app/login/LoginMobile.tsx
+  Current: 'Use the email you registered with.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 112 (52-57): frontend/src/app/register/page.tsx
+  Current: 'Before you start / Your details / Verify email / Enrol your face / Payment / Parent details'
+  Source:  'Before you start / Your details /Verify email/ Enrol your face /Payment/ Parent consent'
+  Reason:  DIFFER
+
+Row 113 (60-67): frontend/src/app/register/page.tsx
+  Current: 'Please read this before you begin / Create your participant account / Verify your email / Enrol your face / Complete your registration / Parent or guardian details'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 119 (376-379): frontend/src/app/register/page.tsx
+  Current: 'Face ID is required for AI-proctored exams. Your face is stored as an encrypted numeric descriptor used to verify you during the exam, and this one photo is kept and printed on your certificate. This step cannot be skipped, and the participant must do it themselves.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 130 (64-64): frontend/src/app/register/steps/PresenceStep.tsx
+  Current: 'What you need to take the exam'
+  Source:  '${"What you need to appear for the olympiad exam"}'
+  Reason:  DIFFER
+
+Row 132 (97-102): frontend/src/app/register/steps/PresenceStep.tsx
+  Current: 'I have read and accept the terms & conditions, including that the registration fee is non-refundable and non-transferable and that a confirmed exam slot cannot be changed.'
+  Source:  '${""}and that a confirmed exam slot cannot be changed.'
+  Reason:  DIFFER
+
+Row 133 (113-115): frontend/src/app/register/steps/PresenceStep.tsx
+  Current: 'I agree that the details entered here may be processed to run the Olympiad, registering the participant, proctoring their exam, marking, ranking and issuing certificates. A parent or guardian confirms this again later in the form.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 135 (89-89): frontend/src/app/register/steps/PaymentStep.tsx
+  Current: 'We could not check whether you have already paid. You can still pay below, if you have already paid, use "I have paid, check now".'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 136 (148-150): frontend/src/app/register/steps/PaymentStep.tsx
+  Current: 'We can\'t see your payment yet. Bank confirmations can take a minute or two, wait a moment and check again. If you have already been charged, use "Already paid but still locked?" below and we will unlock it by hand.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 138 (247-249): frontend/src/app/register/steps/PaymentStep.tsx
+  Current: 'On the payment page, enter this exact email address: ${studentEmail}. That is how your account is unlocked automatically once you pay.'
+  Source:  'On the payment page, enter this exact email address ${"${studentEmail}. That is how your registration is confirmed automatically once you pay."}'
+  Reason:  DIFFER
+
+Row 141 (288-292): frontend/src/app/register/steps/PaymentStep.tsx
+  Current: 'Paid, but still locked? - Your payment is safe. Give us the Razorpay payment id from your confirmation message or email (it looks like pay_XXXXXXXXXXXX) and we will unlock your account by hand.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 145 (243-246): frontend/src/components/SchoolPicker.tsx
+  Current: 'Your results are grouped by school, so your teachers can see how your class did. Every participant needs one. Most participants should just search by name: a school code is only for participants whose school handed them one.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 154 (241-243): frontend/src/components/GuardianForm.tsx
+  Current: 'This section is for a parent or legal guardian. It is required before ${studentName} can sit an exam.'
+  Source:  'This section is for a parent or legal guardian. It is required before can appear for the olympiad exam. ${studentName}'
+  Reason:  DIFFER
+
+Row 155 (302-302): frontend/src/components/GuardianForm.tsx
+  Current: "We use these to reach you about the ward's exam, not for marketing."
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 158 (364-366): frontend/src/components/GuardianForm.tsx
+  Current: "Both sides are required. The back of a school card usually carries the class, section and the school's stamp, and the back of an Aadhaar card carries the address, so one side on its own is not enough to check."
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 159 (397-397): frontend/src/components/GuardianForm.tsx
+  Current: 'JPG, PNG, HEIC or PDF - max 10 MB'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 164 (229-229): frontend/src/components/GuardianForm.tsx
+  Current: 'Both consents are required before the ward can sit an exam.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 175 (368-368): frontend/src/app/dashboard/page.tsx
+  Current: 'No results yet. Complete an exam to see your performance here.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 176 (54-56): frontend/src/components/PayToUnlockBanner.tsx
+  Current: 'Your exams are locked - One Rs.${rupees} payment unlocks every olympiad exam for the current season. The practice Innovation Olympiad exam stays free.'
+  Source:  'Your exams are lockedYour exams are locked - One Rs. payment unlocks the olympiad exam for the current season. The practice Innovation Olympiad exam stays free.${rupees}'
+  Reason:  DIFFER
+
+Row 181 (39-40): frontend/src/components/PaymentTerms.tsx
+  Current: 'The practice Innovation Olympiad exam stays free. You can take it as many times as you like, before or after paying.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 188 (235-238): frontend/src/app/profile/page.tsx
+  Current: 'Your class is final: it decides which Innovation Olympiad exam you sit and who you are ranked against. If it is wrong, raise a support ticket and we will correct it before your exam.'
+  Source:  'Your class is final: it decides which Innovation Olympiad exam you appear and who you are ranked against. If it is wrong, raise a support ticket and we will correct it before your exam. raise a support ticketand we will correct it before your exam.'
+  Reason:  DIFFER
+
+Row 189 (249-252): frontend/src/app/profile/page.tsx
+  Current: 'A parent or guardian has to give consent before you can start any exam, including the practice Innovation Olympiad exam. It takes about two minutes and only needs doing once.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 190 (260-262): frontend/src/app/profile/page.tsx
+  Current: 'What your parent or guardian gave us, and when they agreed. To change any of it, reopen the parent form.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 198 (116-116): frontend/src/app/profile/page.tsx
+  Current: 'Face enrolled successfully! You are ready for AI-proctored exams.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 203 (131-137): frontend/src/app/guardian/page.tsx
+  Current: 'Every participant is a school ward, so the law requires a parent or guardian to consent before we can proctor an exam or process their data. You can read what that covers in the terms & conditions.'
+  Source:  '${""}.'
+  Reason:  DIFFER
+
+Row 208 (314-317): frontend/src/app/results/page.tsx
+  Current: 'Provisional: unverified score. This can still change while proctoring reviews and grievances are settled. Your rank, full analysis and the answer key are published once the season closes.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 213 (72-74): frontend/src/app/exams/[id]/instructions/page.tsx
+  Current: 'If you leave fullscreen or switch to something else, the exam stops and waits for you. The clock keeps running while it waits. Come straight back and carry on.'
+  Source:  'If you leave fullscreen or switch to something else, the exam stops and waits for you. The clock keeps running while the system waits. Come straight back and carry on. This adds to the violation list for you.The clock keeps running while it waits. Come straight back and carry on.'
+  Reason:  DIFFER
+
+Row 214 (77-80): frontend/src/app/exams/[id]/instructions/page.tsx
+  Current: 'If you stay away longer than ${EXAM_PAUSE_TIMEOUT_SEC} seconds, your Innovation Olympiad exam is sent in for you and you cannot go back to it. A countdown shows you exactly how long you have left to return. Along with your time running out, this is the only way your exam can end by itself.'
+  Source:  'way your exam can end by itself. Some things are recorded as violations, but none of them stops your exam.Some things are recorded as violations, but none of them stops your exam. Leaving fullscreen, switching tab or app, your face not being visible or not matching, more than one person on camera, a screenshot, or refreshing the page. Each violation warning tells you on screen what happened, and a photo is taken at that moment. Once you pass , a person reads the record before your result is confirmed & verified. Keep answering, and tell us afterwards if something went wrong. ${VIOLATION_REVIEW_THRESHOLD}'
+  Reason:  DIFFER
+
+Row 215 (83-88): frontend/src/app/exams/[id]/instructions/page.tsx
+  Current: 'Some things are recorded as violations, but none of them stops your exam. Leaving fullscreen, switching tab or app, your face not being visible or not matching, more than one person on camera, a screenshot, or refreshing the page. Each one tells you on screen what happened, and a photo is taken at that moment. Once you pass ${VIOLATION_REVIEW_THRESHOLD}, a person reads the record before your result is confirmed. Keep answering, and tell us afterwards if something went wrong.'
+  Source:  "Try not to refresh the page or press your browser's Back button."
+  Reason:  DIFFER
+
+Row 218 (105-107): frontend/src/app/exams/[id]/instructions/page.tsx
+  Current: 'Your time does not start until you see your first question. There is a "Getting your exam ready" screen first, while your camera starts up. None of that comes out of your exam time.'
+  Source:  'The Innovation Olympiad exam has ${exam.sectionCount}multiple sections. You go through them in order, and you can move back and forth between questions as much as you like.'
+  Reason:  DIFFER
+
+Row 219 (112-113): frontend/src/app/exams/[id]/instructions/page.tsx
+  Current: 'The Innovation Olympiad exam has ${exam.sectionCount} parts. You go through them in order, and you can move back and forth between questions as much as you like.'
+  Source:  'Your answers save themselves'
+  Reason:  DIFFER
+
+Row 232 (64-68): frontend/src/components/TooSmallForExam.tsx
+  Current: 'This device is too small for the exam - The Olympiad Innovation Olympiad exam needs a laptop, desktop, or a tablet. A phone screen cannot show the question list and the Innovation Olympiad exam side by side, and we would rather tell you now than halfway through your exam.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 246 (45-45): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'Printing the exam is not allowed. This attempt has been recorded.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 247 (46-46): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'Screenshots are not allowed during the exam. This attempt has been recorded.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 249 (48-48): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'Copying exam content is not allowed.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 258 (1359-1365): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'What gets counted here - leaving fullscreen/switching tab or app; face not visible / other person / wrong face; looking away; screenshot/print; refresh/browser Back.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 259 (1367-1369): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'This number does not end your exam. It is a record. Past ${VIOLATION_REVIEW_THRESHOLD}, a person reads what was recorded before your result is confirmed, and most of what lands here is an ordinary interruption.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 261 (1377-1380): frontend/src/app/exams/[id]/play/page.tsx
+  Current: 'Does not count at all - Sitting still. If nothing moves for ${EXAM_IDLE_NUDGE_SEC} seconds Limon checks you are still there, but reading and thinking are not against the rules.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 265 (1618-1620): frontend/src/app/exams/[id]/play/page.tsx
+  Current: "This is the only safe way to reload. Pressing F5 or your browser's reload button will end and lock your exam."
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 267 (1668-1672): frontend/src/app/exams/[id]/play/page.tsx
+  Current: '${unansweredCount} question(s) still blank - You have answered ${answeredCount} of ${questions.length}. There is no negative marking, so a guess is always better than a blank.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 271 (162-167): frontend/src/components/exam/AutoSubmitNotice.tsx
+  Current: 'Your exam ended, but we could not submit it - Every answer you gave is already saved on the server, nothing is lost. Check your internet connection and submit again.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 272 (154-154): frontend/src/components/exam/AutoSubmitNotice.tsx
+  Current: 'Continuing automatically in ${secondsLeft}s'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 291 (260-263): frontend/src/components/exam/ExamTutorial.tsx
+  Current: 'The best version of this tour is the practice Innovation Olympiad exam. It is free, unlimited, and runs in exactly this screen with a real timer and a real camera. Sit it once on the device you plan to use, and none of the above will be new on exam day.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 292 (165-165): frontend/src/components/exam/ExamTutorial.tsx
+  Current: 'Diagram of the exam screen: a header with the Innovation Olympiad exam name, question number, warning count, reload button, timer and camera preview; a question area with answer options and navigation buttons; and a sidebar listing every question number.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 293 (79-82): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: "Your exam has been submitted - Every answer you gave is saved on our servers. There is nothing more you need to do${user?.rollNumber ? ', ' + user.firstName : ''}."
+  Source:  'Your exam has been submittedEvery answer you gave is saved on our servers. There is nothing more you need to do${user?.rollNumber ? <>, {user.firstName}</> : null}'
+  Reason:  DIFFER
+
+Row 295 (95-107): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'This is a provisional, unverified score. It can still change while proctoring reviews and grievances are settled.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 296 (111-112): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'This attempt was disqualified after review, so it carries no score.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 297 (116-117): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'Your score is not published yet. It appears on your results page as soon as marking for this Innovation Olympiad exam is released, we will email you.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 299 (142-154): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: '${violationCount} violation(s) recorded. These are the warnings you saw during the Innovation Olympiad exam: leaving fullscreen, switching away, a camera or face issue, or a screenshot attempt. A violation is not a decision. A person reviews anything serious before any conclusion is drawn, and most are ordinary interruptions. If something went wrong during your exam, tell us from the support page and it will be read alongside this record.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 301 (172-175): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'Once the exam window closes, every Innovation Olympiad exam goes through fair-score normalisation so students who sat different sittings are compared fairly. Any Innovation Olympiad exam the proctoring flagged is reviewed by a person, not by the computer, before anything is concluded from it.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 302 (181-183): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'Your score is published first as provisional. It is a real score, but it can still move while reviews and grievances are settled.'
+  Source:  'Your score is published first as provisional. It is a real score, but it can still move while reviews and grievances are settled.'
+  Reason:  DIFFER
+
+Row 303 (188-190): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'When the season closes we publish your final score, your rank and percentile, your breakdown across the five dimensions, and the answer key with an explanation for every question.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 304 (201-202): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'Everything recorded during your exam is kept with your attempt, so any question about it can be answered from the record rather than from memory.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 305 (205-206): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'Nothing is decided automatically. A flagged Innovation Olympiad exam is looked at by a person, who has to write down their reasoning either way.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 306 (209-210): frontend/src/app/exams/[id]/submitted/page.tsx
+  Current: 'If you think something has gone wrong (a power cut, a connection drop, a score that looks wrong) you can raise it and a person will respond.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Row 310 (76-76): frontend/src/components/limon/LimonHelp.tsx
+  Current: 'Need help? Click me for a guided tour of this page.'
+  Source:  None
+  Reason:  NO_SOURCE_CONTENT
+
+Wrote mismatches to C:\KSR\Lemon Ideas\Bharat_innovation_olympiad\mismatches.json

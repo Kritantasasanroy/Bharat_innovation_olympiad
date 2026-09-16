@@ -9,13 +9,13 @@ import { useEffect, useState } from 'react';
  * Registration's last step — "Student identification".
  *
  * Used to be two steps (a standalone face scan, then parent consent). Folded
- * into one page: the parent/guardian's own details (name, email, phone,
+ * into one page: the parent/identification's own details (name, email, phone,
  * relationship, the ward's DOB and gender) were moved to the earlier details
  * step and arrive here already known, via `guardianInfo` — so this page has
  * exactly three things left to do, in order: scan the participant's face,
  * upload their ID document, and give the two consents. `GuardianForm` still
  * renders the ID + consent fieldsets (with `hideGuardianInfoFields`, so it
- * skips the fields collected earlier) — the standalone `/guardian` backfill
+ * skips the fields collected earlier) — the standalone `/identification` backfill
  * page for pre-existing accounts still gets the full form from that same
  * component, unchanged.
  */
@@ -89,7 +89,7 @@ export default function GuardianStep({
         setBusy(true);
         setError('');
         try {
-            await api.post('/guardian', {
+            await api.post('/identification', {
                 ...values,
                 // Blank optional fields are omitted rather than sent as '' — an
                 // empty string is not a valid ISO date and would fail validation
