@@ -177,6 +177,12 @@ function ExamInstructionsPage() {
      * *then* be turned away.
      */
     const [guardianState, setGuardianState] = useState<'checking' | 'complete' | 'missing'>('checking');
+    /**
+     * Steps standing between the student and Start, shown by the blocked modal.
+     * Each entry can carry a `fix` that jumps them to where it gets done —
+     * another page (identification, payment) or the right card on this one.
+     */
+    const [blocked, setBlocked] = useState<{ label: string; fix?: () => void }[] | null>(null);
     useEffect(() => {
         api.get('/identification/me')
             .then((r) => setGuardianState(r.data.complete ? 'complete' : 'missing'))
@@ -389,7 +395,48 @@ function ExamInstructionsPage() {
         router.push(`/exams/play?id=${id}`);
     };
 
+    /**
+     * Every gate Start is waiting on, in the order they should be tackled.
+     * In-page items scroll to their card; the rest navigate. Used by the
+     * blocked modal — a disabled button explained nothing, so Start now stays
+     * clickable once every gate has finished resolving and this names what is
+     * left.
+     */
+    const blockedSteps = () => {
+        const back = `/identification?next=${encodeURIComponent(`/exams/instructions?id=${id}`)}`;
+        const scrollTo = (elId: string) => () =>
+            document.getElementById(elId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const missing: { label: string; fix?: () => void }[] = [];
+        if (passStatus === 'locked') {
+            missing.push({ label: 'Payment — unlock exams for the season', fix: () => router.push('/unlock') });
+        }
+        if (guardianState !== 'complete') {
+            missing.push({ label: 'Student identification', fix: () => router.push(back) });
+        }
+        if (!deviceChecks.viewport) {
+            missing.push({ label: `Screen size — needs at least ${MIN_VIEWPORT_WIDTH}x${MIN_VIEWPORT_HEIGHT}` });
+        }
+        if (!deviceChecks.fullscreen) {
+            missing.push({ label: 'Fullscreen support — try a desktop browser' });
+        }
+        if (!webcamStarted) {
+            missing.push({ label: 'Webcam — allow camera access', fix: scrollTo('webcam-check') });
+        }
+        if (faceEnrollStatus !== 'enrolled') {
+            missing.push({ label: 'Face ID enrollment', fix: scrollTo('face-enroll') });
+        }
+        return missing;
+    };
+
     const handleStartClick = () => {
+        // Anything still missing is named, and clicking takes the student to
+        // the step that fixes it — a silently disabled button left them
+        // guessing which check was holding them back.
+        const missing = blockedSteps();
+        if (missing.length > 0) {
+            setBlocked(missing);
+            return;
+        }
         // Both boxes reset every time the modal opens, so neither is ever
         // pre-ticked from a previous attempt to start.
         setRulesAccepted(false);
@@ -458,16 +505,16 @@ function ExamInstructionsPage() {
                     : 'Required: enroll below before starting',
             passed: faceEnrollStatus === 'checking' ? null : faceEnrollStatus === 'enrolled',
         },
-        // Listed as a check rather than hidden, so the parent section reads as one
+        // Listed as a check rather than hidden, so identification reads as one
         // more thing to complete rather than a refusal that arrives at Start.
         {
-            label: 'Parent / guardian consent',
+            label: 'Student identification',
             description:
                 guardianState === 'checking'
                     ? 'Checking…'
                     : guardianState === 'complete'
                       ? 'Recorded: nothing more needed'
-                      : 'Required: a parent or guardian must complete this once',
+                      : 'Required: complete student identification once',
             passed: guardianState === 'checking' ? null : guardianState === 'complete',
         },
         // Listed as a check rather than hidden, so the rehearsal reads as one
@@ -609,7 +656,7 @@ function ExamInstructionsPage() {
                     </div>
 
                     {/* Webcam Preview */}
-                    <div className="glass-card instructions-card">
+                    <div className="glass-card instructions-card" id="webcam-check">
                         <h2>📷 Webcam Check</h2>
                         <div className="webcam-preview" style={{ display: webcamStarted ? 'block' : 'none' }}>
                             <video ref={videoRef} autoPlay muted playsInline />
@@ -638,7 +685,7 @@ function ExamInstructionsPage() {
 
                     {/* Face ID Enrollment — required, blocks Start Exam until done */}
                     {faceEnrollStatus !== 'enrolled' && (
-                        <div className="glass-card instructions-card">
+                        <div className="glass-card instructions-card" id="face-enroll">
                             <h2>🪪 Face ID Enrollment</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
                                 This is a proctored exam, you must enroll your face before you can start. Your face is stored as an encrypted numeric descriptor used to verify you during the exam, and this one photo is kept and printed on your certificate.
@@ -696,12 +743,9 @@ function ExamInstructionsPage() {
                         <button
                             className="btn btn-primary btn-lg"
                             disabled={
-                                !deviceChecks.viewport ||
-                                !deviceChecks.fullscreen ||
-                                !webcamStarted ||
-                                faceEnrollStatus !== 'enrolled' ||
-                                passStatus === 'locked' ||
-                                guardianState !== 'complete' ||
+                                passStatus === 'checking' ||
+                                guardianState === 'checking' ||
+                                faceEnrollStatus === 'checking' ||
                                 trialState === 'checking'
                             }
                             onClick={handleStartClick}
@@ -740,6 +784,49 @@ function ExamInstructionsPage() {
                         )}
                     </div>
                 </div>
+
+                {/* ── "Not yet" modal — names every step still missing ── */}
+                {blocked && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 9999,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+                    }}>
+                        <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '1.75rem' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '0.4rem' }}>A few steps left before the exam can start</h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                                Complete each of these, then come back and press Start again.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                                {blocked.map((step, i) => (
+                                    <div
+                                        key={i}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            gap: '0.75rem', padding: '0.7rem 0.9rem',
+                                            borderRadius: '10px', background: 'rgba(239, 68, 68, 0.08)',
+                                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                                        }}
+                                    >
+                                        <span style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{step.label}</span>
+                                        {step.fix && (
+                                            <button
+                                                className="btn btn-sm btn-primary"
+                                                style={{ flexShrink: 0 }}
+                                                onClick={() => { setBlocked(null); step.fix!(); }}
+                                            >
+                                                Do it now
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setBlocked(null)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Start Exam confirmation modal — must confirm understanding of all rules ── */}
                 {showConfirmModal && (
