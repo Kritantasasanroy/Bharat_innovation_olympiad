@@ -16,7 +16,7 @@ import { EVENT_PHOTOS } from '@/lib/copy/landing';
  * rotating background is exactly the kind of motion that motion-sensitive
  * visitors need to be able to switch off.
  */
-export default function HeroSlideshow({ overlay = 0.62 }: { overlay?: number }) {
+export default function HeroSlideshow({ overlay = 0.52 }: { overlay?: number }) {
     const [active, setActive] = useState(0);
 
     useEffect(() => {

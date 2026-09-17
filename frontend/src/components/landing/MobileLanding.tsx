@@ -31,7 +31,7 @@ import {
 } from '@/lib/copy/landing';
 
 const BENEFITS = [
-    { Icon: Medal, col: '#7dc832', bg: 'rgba(125,200,50,0.12)', title: 'National Rankings', desc: 'Verified All-India, State, City & School ranks.' },
+    { Icon: Medal, col: '#4f9a12', bg: 'rgba(125,200,50,0.12)', title: 'National Rankings', desc: 'Verified All-India, State, City & School ranks.' },
     { Icon: Lightbulb, col: '#ffcb05', bg: 'rgba(255,203,5,0.12)', title: 'Innopreneurs Advantage', desc: 'A pathway into startup contests and innovation labs.' },
     { Icon: Globe, col: '#7baff5', bg: 'rgba(59,111,224,0.12)', title: 'World Skill Challenge', desc: 'Qualify for global future-skills challenges.' },
     { Icon: FlaskConical, col: '#f97316', bg: 'rgba(249,115,22,0.12)', title: 'Experiential Learning Opportunity', desc: 'Pre-Incubation cohort, startup internship, and bootcamp.' },
@@ -168,6 +168,30 @@ export default function MobileLanding() {
                 </div>
             </section>
 
+            <section style={{ position: 'relative', overflow: 'hidden', background: '#0c1a06' }}>
+                <Image
+                    src="/assets/events/event-winners-cheque.jpg"
+                    alt="Innopreneurs Junior winners with certificates and award cheque"
+                    width={800} height={420}
+                    sizes="100vw"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                />
+                <div style={{
+                    position: 'absolute', inset: 0,
+                    background: 'linear-gradient(180deg, rgba(8,18,4,0.25), rgba(8,18,4,0.72))',
+                    display: 'flex', alignItems: 'flex-end',
+                }}>
+                    <div style={{ padding: '1rem 1rem', color: '#fff', width: '100%' }}>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#ffcb05', marginBottom: 4 }}>
+                            Since 2013 · Lemon Ideas
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.05rem', letterSpacing: -0.3 }}>
+                            Real classrooms. Real innovators. Real stages.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section className="mob-lp-section">
                 <h2 className="mob-lp-section__title">The Participant Journey</h2>
                 <div className="mob-card mob-lp-journey">
@@ -177,8 +201,8 @@ export default function MobileLanding() {
                         const last = i === JOURNEY_STAGES.length - 1;
                         return (
                             <div key={stage.title} className="mob-lp-journey__row">
-                                <div className="mob-lp-journey__dot" style={last ? { background: 'linear-gradient(135deg,#7dc832,#4f9a12)' } : undefined}>
-                                    <StepIcon size={16} color={last ? '#fff' : '#7dc832'} />
+                                <div className="mob-lp-journey__dot" style={last ? { background: 'linear-gradient(135deg,#4f9a12,#35700a)' } : undefined}>
+                                    <StepIcon size={16} color={last ? '#fff' : '#4f9a12'} />
                                 </div>
                                 <div className="mob-lp-journey__body">
                                     <strong>{stage.title}</strong>
@@ -234,12 +258,12 @@ export default function MobileLanding() {
                 <p className="mob-lp-section__sub">Taken from home, judged like a hall exam. Tap a card to read more.</p>
                 <div className="mob-lp-trust">
                     {TRUST.map(({ Icon, title, teaser, body }) => (
-                        <ExpandableCard key={title} title={title} teaser={teaser} detail={body} accent="#7dc832" />
+                        <ExpandableCard key={title} title={title} teaser={teaser} detail={body} accent="#4f9a12" />
                     ))}
                 </div>
                 <div className="mob-card" style={{ marginTop: '0.8rem' }}>
                     <strong style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.6rem' }}>
-                        <FlaskConical size={16} color="#7dc832" /> What you need to take the exam
+                        <FlaskConical size={16} color="#4f9a12" /> What you need to take the exam
                     </strong>
                     <dl style={{ margin: 0 }}>
                         {TECH_REQUIREMENTS.map((req) => (
@@ -283,7 +307,7 @@ export default function MobileLanding() {
                         title={`${d.n} · ${d.title}`}
                         teaser={d.teaser}
                         detail={d.body}
-                        accent="#7dc832"
+                        accent="#4f9a12"
                     />
                 ))}
             </section>
@@ -306,7 +330,7 @@ export default function MobileLanding() {
                 <div className="mob-card mob-lp-what">
                     <strong className="mob-lp-what__head">What every participant receives</strong>
                     {RECEIVES.map((item) => (
-                        <div key={item} className="mob-lp-what__row"><CheckCircle2 size={14} color="#7dc832" /> {item}</div>
+                        <div key={item} className="mob-lp-what__row"><CheckCircle2 size={14} color="#4f9a12" /> {item}</div>
                     ))}
                 </div>
                 <div className="mob-card mob-lp-what">

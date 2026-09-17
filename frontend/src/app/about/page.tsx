@@ -82,7 +82,7 @@ export default function AboutPage() {
                         built on the Innopreneurs movement by Lemon Ideas.
                     </p>
                     <Link href="/register" className="lp-btn-primary" style={{
-                        background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+                        background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
                         fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
                         display: 'inline-flex', alignItems: 'center', gap: 8,
                         boxShadow: '0 12px 30px rgba(125,200,50,0.35)',
@@ -158,10 +158,10 @@ export default function AboutPage() {
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                         <span style={{
                                             width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-                                            background: last ? 'linear-gradient(135deg,#7dc832,#ffcb05)' : (i % 2 === 0 ? 'rgba(125,200,50,0.14)' : 'rgba(255,203,5,0.14)'),
+                                            background: last ? 'linear-gradient(135deg,#4f9a12,#ffcb05)' : (i % 2 === 0 ? 'rgba(125,200,50,0.14)' : 'rgba(255,203,5,0.14)'),
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         }}>
-                                            <StepIcon size={18} color={last ? '#0a0a0a' : i % 2 === 0 ? '#7dc832' : '#ffcb05'} />
+                                            <StepIcon size={18} color={last ? '#0a0a0a' : i % 2 === 0 ? '#4f9a12' : '#ffcb05'} />
                                         </span>
                                         {!last && <span style={{ width: 2, flex: 1, minHeight: 22, background: 'var(--border-default)' }} />}
                                     </div>
@@ -204,7 +204,7 @@ export default function AboutPage() {
                 </div>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '16px 0 0' }}>
                     Program value <s>{COURSE_VALUE.mrp}</s> — offered price{' '}
-                    <b style={{ color: '#7dc832' }}>{COURSE_VALUE.price}</b> ({COURSE_VALUE.note}).
+                    <b style={{ color: '#4f9a12' }}>{COURSE_VALUE.price}</b> ({COURSE_VALUE.note}).
                     Registration works on any device, including mobile phones.
                 </p>
             </section>
@@ -213,7 +213,7 @@ export default function AboutPage() {
             <section style={{ background: 'var(--bg-secondary)', padding: '56px 24px' }}>
                 <div style={{ maxWidth: 900, margin: '0 auto' }}>
                     <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 26, margin: '0 0 18px', letterSpacing: -0.4, display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <CalendarDays size={22} color="#7dc832" /> Program Calendar
+                        <CalendarDays size={22} color="#4f9a12" /> Program Calendar
                     </h2>
                     <div className="about-table" style={{ display: 'grid', gap: 8 }}>
                         {CALENDAR.map(([what, when]) => (
@@ -243,7 +243,7 @@ export default function AboutPage() {
                             borderRadius: 12, padding: '14px 18px', textDecoration: 'none',
                             color: 'var(--text-primary)', fontSize: 14.5, fontWeight: 600,
                         }}>
-                            {b.label} <ArrowRight size={15} color="#7dc832" />
+                            {b.label} <ArrowRight size={15} color="#4f9a12" />
                         </a>
                     ))}
                 </div>
@@ -258,7 +258,7 @@ export default function AboutPage() {
                     Next Olympiad: <b style={{ color: '#ffcb05' }}>{nextOlympiadDate()}</b> · Program value <s>{COURSE_VALUE.mrp}</s> · Offered price <b style={{ color: '#ffcb05' }}>{COURSE_VALUE.price}</b>
                 </p>
                 <Link href="/register" className="lp-btn-primary" style={{
-                    background: 'linear-gradient(135deg,#7dc832,#ffcb05)', color: '#0a0a0a',
+                    background: 'linear-gradient(135deg,#4f9a12,#ffcb05)', color: '#0a0a0a',
                     fontWeight: 800, fontSize: 16, padding: '14px 32px', borderRadius: 13,
                     display: 'inline-flex', alignItems: 'center', gap: 9,
                     boxShadow: '0 16px 40px rgba(125,200,50,0.35)',

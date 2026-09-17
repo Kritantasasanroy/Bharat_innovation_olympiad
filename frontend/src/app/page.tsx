@@ -82,10 +82,10 @@ export default function LandingPage() {
               Participant Login
             </Link>
             <Link href="/register" className="lp-btn-primary" style={{
-              background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
+              background: 'linear-gradient(135deg,#4f9a12,#35700a)',
               color: '#fff', fontWeight: 700, fontSize: 14,
               padding: '10px 22px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 7,
-              boxShadow: '0 8px 24px rgba(125,200,50,0.3)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
             }}>
               <Rocket size={14} /> Register Now
             </Link>
@@ -133,10 +133,10 @@ export default function LandingPage() {
                 moment of decision, not two sections later. */}
             <div className="lp-fade-up-3" style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
               <Link href="/register" className="lp-btn-primary" style={{
-                background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+                background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
                 fontWeight: 700, fontSize: 15.5, padding: '14px 28px', borderRadius: 13,
                 display: 'inline-flex', alignItems: 'center', gap: 9,
-                boxShadow: '0 12px 30px rgba(125,200,50,0.35)',
+                boxShadow: '0 12px 30px rgba(0,0,0,0.3)',
               }}>
                 <Rocket size={17} /> Register Now <ArrowRight size={15} />
               </Link>
@@ -180,17 +180,17 @@ export default function LandingPage() {
                   <div key={stage.title}>
                     <div className="lp-step" style={{
                       display: 'flex', alignItems: 'center', gap: 14, padding: '11px 14px',
-                      background: last ? 'linear-gradient(135deg,#7dc832,#4f9a12)' : 'var(--bg-elevated)',
+                      background: last ? 'linear-gradient(135deg,#4f9a12,#35700a)' : 'var(--bg-elevated)',
                       border: last ? 'none' : '1px solid var(--border-subtle)',
                       borderRadius: 13,
-                      boxShadow: last ? '0 10px 28px rgba(125,200,50,0.3)' : undefined,
+                      boxShadow: last ? '0 10px 28px rgba(0,0,0,0.18)' : undefined,
                     }}>
                       <span className="lp-icon-wrap" style={{
                         width: 40, height: 40, borderRadius: 11, flexShrink: 0,
                         background: last ? 'rgba(255,255,255,0.18)' : (i % 2 === 0 ? 'rgba(125,200,50,0.12)' : 'rgba(255,203,5,0.12)'),
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <StepIcon size={18} color={last ? '#fff' : i % 2 === 0 ? '#7dc832' : '#ffcb05'} />
+                        <StepIcon size={18} color={last ? '#fff' : i % 2 === 0 ? '#4f9a12' : '#ffcb05'} />
                       </span>
                       <div>
                         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: last ? '#fff' : 'var(--text-primary)' }}>{stage.title}</div>
@@ -223,7 +223,7 @@ export default function LandingPage() {
                 Program value{' '}
                 <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{COURSE_VALUE.mrp}</span>{' '}
                 for Training, Exam and Report · Offered price{' '}
-                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#7dc832' }}>{COURSE_VALUE.price}</span>{' '}
+                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#4f9a12' }}>{COURSE_VALUE.price}</span>{' '}
                 <span style={{ fontSize: 12 }}>({COURSE_VALUE.note})</span>
               </div>
               <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 8 }}>
@@ -231,14 +231,46 @@ export default function LandingPage() {
               </div>
             </div>
             <Link href="/register" className="lp-btn-primary" style={{
-              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+              background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
               fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+              boxShadow: '0 12px 30px rgba(0,0,0,0.28)',
             }}>
               Register Now <ArrowRight size={15} />
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* ── PHOTO BAND — real event photos, high on the page. The olympiad is
+          people on stages and in classrooms; showing that early says more
+          than another paragraph could. ── */}
+      <section style={{ position: 'relative', overflow: 'hidden', background: '#0c1a06' }}>
+        <Image
+          src={EVENT_PHOTOS[1].src}
+          alt={EVENT_PHOTOS[1].alt}
+          fill
+          sizes="100vw"
+          style={{ objectFit: 'cover', objectPosition: 'center 30%' }}
+        />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(8,18,4,0.82) 0%, rgba(8,18,4,0.55) 55%, rgba(8,18,4,0.75) 100%)' }} />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 1120, margin: '0 auto', padding: '56px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#ffcb05', marginBottom: 8 }}>
+              Since 2013 · Lemon Ideas
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 26, color: '#fff', letterSpacing: -0.5, lineHeight: 1.25 }}>
+              Real classrooms. Real innovators. Real stages.
+            </div>
+          </div>
+          <Link href="/about" style={{
+            color: '#fff', fontWeight: 700, fontSize: 14,
+            border: '1px solid rgba(255,255,255,0.4)', borderRadius: 999,
+            padding: '10px 22px', display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(6px)',
+          }}>
+            See the journey <ArrowRight size={14} />
+          </Link>
         </div>
       </section>
 
@@ -287,7 +319,7 @@ export default function LandingPage() {
                 title={title}
                 teaser={teaser}
                 detail={body}
-                accent="#7dc832"
+                accent="#4f9a12"
                 icon={<span className="lp-trust__icon"><Icon size={18} /></span>}
               />
             ))}
@@ -301,12 +333,12 @@ export default function LandingPage() {
       <section style={{ background: 'var(--bg-secondary)', padding: '0 32px 76px' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid rgba(125,200,50,0.35)',
+            background: 'var(--bg-card)', border: '1px solid rgba(0,0,0,0.3)',
             borderRadius: 22, padding: '36px 36px 30px', boxShadow: '0 18px 50px rgba(0,0,0,0.25)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <span className="lp-icon-wrap" style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(125,200,50,0.12)' }}>
-                <Monitor size={22} color="#7dc832" />
+                <Monitor size={22} color="#4f9a12" />
               </span>
               <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 26, margin: 0, letterSpacing: -0.4 }}>
                 What You Need to Take the Exam
@@ -355,10 +387,10 @@ export default function LandingPage() {
             <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, margin: '0 0 8px', letterSpacing: -0.4 }}>Today they are participants. Tomorrow, they&apos;ll build the future of Bharat.</p>
             <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '0 0 26px' }}>Your innovation journey could be next · Powered by Lemon Ideas · Connected to Innopreneurs Junior</p>
             <Link href="/register" className="lp-btn-primary" style={{
-              background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+              background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
               fontWeight: 700, fontSize: 15, padding: '13px 28px', borderRadius: 13,
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+              boxShadow: '0 12px 30px rgba(0,0,0,0.28)',
             }}>
               Start your story <ArrowRight size={15} />
             </Link>
@@ -392,7 +424,7 @@ export default function LandingPage() {
             </div>
             <div style={{ width: 1, background: 'var(--border-default)' }} />
             <div style={{ padding: '34px 30px', textAlign: 'left', background: 'rgba(125,200,50,0.04)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#7dc832', marginBottom: 22 }}>Innovation Olympiad</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4f9a12', marginBottom: 22 }}>Innovation Olympiad</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {[
                   ['Creativity', 'Rewards'],
@@ -402,7 +434,7 @@ export default function LandingPage() {
                   ['No syllabus, real life based', ''],
                 ].map(([thing, verb]) => (
                   <div key={thing} className="lp-compare-row" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 8px', color: 'var(--text-primary)', fontSize: 15 }}>
-                    <CheckCircle2 size={16} color="#7dc832" style={{ flexShrink: 0 }} />
+                    <CheckCircle2 size={16} color="#4f9a12" style={{ flexShrink: 0 }} />
                     <span>{verb} <b style={{ fontWeight: 700 }}>{thing}</b></span>
                   </div>
                 ))}
@@ -426,10 +458,10 @@ export default function LandingPage() {
             innovation ecosystem.
           </p>
           <Link href="/about" className="lp-btn-primary" style={{
-            background: 'linear-gradient(135deg,#7dc832,#4f9a12)', color: '#fff',
+            background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
             fontWeight: 700, fontSize: 14.5, padding: '12px 26px', borderRadius: 12,
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            boxShadow: '0 12px 30px rgba(125,200,50,0.32)',
+            boxShadow: '0 12px 30px rgba(0,0,0,0.28)',
           }}>
             Know More <ArrowRight size={15} />
           </Link>
@@ -490,7 +522,7 @@ export default function LandingPage() {
                 title={`${d.n} · ${d.title}`}
                 teaser={d.teaser}
                 detail={d.body}
-                accent="#7dc832"
+                accent="#4f9a12"
               />
             ))}
           </div>
@@ -506,7 +538,7 @@ export default function LandingPage() {
           </div>
           <div className="lp-grid-4">
             {([
-              { Icon: Medal,        col: '#7dc832',  bg: 'rgba(125,200,50,0.1)',  title: 'National Rankings',              desc: 'Stand out with verified All-India, State, City & School ranks.' },
+              { Icon: Medal,        col: '#4f9a12',  bg: 'rgba(125,200,50,0.1)',  title: 'National Rankings',              desc: 'Stand out with verified All-India, State, City & School ranks.' },
               { Icon: Lightbulb,    col: '#ffcb05',  bg: 'rgba(255,203,5,0.1)',   title: 'Innopreneurs Advantage',          desc: 'A direct pathway into startup contests and innovation labs.' },
               { Icon: Globe,        col: '#7baff5',  bg: 'rgba(59,111,224,0.1)',  title: 'World Skill Challenge',          desc: 'Qualify for global future-skills challenges and exposure.' },
               { Icon: FlaskConical, col: '#f97316',  bg: 'rgba(249,115,22,0.1)', title: 'Experiential Learning Opportunity', desc: 'Pre-Incubation cohort, startup internship, and bootcamp.' },
@@ -536,11 +568,11 @@ export default function LandingPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
             <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#7dc832' }}>What every participant receives</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#4f9a12' }}>What every participant receives</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {RECEIVES.map((item) => (
                   <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
-                    <CheckCircle2 size={16} color="#7dc832" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <CheckCircle2 size={16} color="#4f9a12" style={{ flexShrink: 0, marginTop: 2 }} />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -570,7 +602,7 @@ export default function LandingPage() {
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)',
-              color: '#7dc832', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
+              color: '#4f9a12', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
               padding: '7px 15px', borderRadius: 999, marginBottom: 18,
             }}>
               <Award size={12} /> Proven Legacy · Powered by Innopreneurs Junior
@@ -615,14 +647,14 @@ export default function LandingPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
             <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
               <span className="lp-icon-wrap" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(125,200,50,0.1)', marginBottom: 18 }}>
-                <Lightbulb size={24} color="#7dc832" />
+                <Lightbulb size={24} color="#4f9a12" />
               </span>
               <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, marginBottom: 8 }}>About Lemon Ideas</div>
               <p style={{ fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.65, margin: '0 0 14px' }}>
                 An entrepreneurship ecosystem working since 2013, nurturing innovators,
                 entrepreneurs and changemakers across India and beyond.
               </p>
-              <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" style={{ color: '#7dc832', fontWeight: 700, fontSize: 14 }}>
+              <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" style={{ color: '#4f9a12', fontWeight: 700, fontSize: 14 }}>
                 www.lemonideas.in ↗
               </a>
             </div>
@@ -658,10 +690,10 @@ export default function LandingPage() {
             Program value <s>{COURSE_VALUE.mrp}</s> · Offered price <b style={{ color: '#ffcb05' }}>{COURSE_VALUE.price}</b> ({COURSE_VALUE.note})
           </p>
           <Link href="/register" className="lp-btn-primary" style={{
-            background: 'linear-gradient(135deg,#7dc832,#ffcb05)', color: '#0a0a0a',
+            background: 'linear-gradient(135deg,#4f9a12,#ffcb05)', color: '#0a0a0a',
             fontWeight: 800, fontSize: 17, padding: '16px 36px', borderRadius: 14,
             display: 'inline-flex', alignItems: 'center', gap: 10,
-            boxShadow: '0 16px 40px rgba(125,200,50,0.35)',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
           }}>
             <Rocket size={18} /> Register Now <ArrowRight size={16} />
           </Link>
