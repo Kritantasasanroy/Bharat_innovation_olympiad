@@ -22,6 +22,9 @@ export const metadata: Metadata = {
     keywords: [
         'olympiad', 'innovation', 'future ready', 'entrepreneurship', 'STEM',
         'exam', 'India', 'students', 'Lemon Ideas', 'Viksit Bharat',
+        'innovation olympiad', 'bharat innovation olympiad', 'innopreneurs junior',
+        'online olympiad exam', 'future skills', 'innovation contest for students',
+        'school olympiad India', 'entrepreneurship mindset', 'financial literacy olympiad',
     ],
     icons: { icon: '/icon.png', apple: '/icon.png' },
     openGraph: {
