@@ -171,18 +171,55 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
             this.logger.error(`T-1 reminder sweep failed: ${(err as Error).message}`);
         }
 
+        // The T-2 identification nudge — `bio_facescan`, 48 hours out. A
+        // student who has already completed identification never gets it;
+        // the WhatsApp dedupe row makes re-sweeps idempotent.
+        try {
+            const t2 = tomorrowInIst(new Date(), 2);
+            const pending = await this.prisma.booking.findMany({
+                where: {
+                    status: BookingStatus.CONFIRMED,
+                    slot: { startsAt: { gte: t2.start, lt: t2.end } },
+                    user: { guardianProfile: null },
+                },
+                select: {
+                    id: true,
+                    user: {
+                        select: { id: true, firstName: true, phone: true, phoneRaw: true },
+                    },
+                },
+            });
+            for (const booking of pending) {
+                await this.whatsapp.sendFaceScanPending({
+                    userId: booking.user.id,
+                    phone: booking.user.phone,
+                    phoneRaw: booking.user.phoneRaw,
+                    firstName: booking.user.firstName,
+                    bookingId: booking.id,
+                    examDateKey: t2.dateKey,
+                });
+            }
+            if (pending.length) {
+                this.logger.log(`T-2 face-scan nudge for ${t2.dateKey}: ${pending.length} considered.`);
+            }
+        } catch (err) {
+            this.logger.error(`T-2 face-scan sweep failed: ${(err as Error).message}`);
+        }
+
         return summary;
     }
 }
 
 /**
- * The UTC instants bounding tomorrow's IST calendar day, plus its `YYYY-MM-DD`.
+ * The UTC instants bounding an upcoming IST calendar day, plus its
+ * `YYYY-MM-DD`. `daysAhead = 1` is tomorrow (the T-1 reminder); `2` is the day
+ * after (the T-2 face-scan nudge).
  *
  * IST is UTC+5:30 with no daylight saving — it has never observed it — so the
  * offset is a constant rather than something to look up per date. That is what
  * makes this arithmetic instead of a timezone library.
  */
-export function tomorrowInIst(now: Date = new Date()): {
+export function tomorrowInIst(now: Date = new Date(), daysAhead = 1): {
     start: Date;
     end: Date;
     dateKey: string;
@@ -190,9 +227,9 @@ export function tomorrowInIst(now: Date = new Date()): {
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
     const DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Shift into IST, floor to the day, step forward one day, shift back.
+    // Shift into IST, floor to the day, step forward `daysAhead`, shift back.
     const istNow = now.getTime() + IST_OFFSET_MS;
-    const istTomorrowMidnight = Math.floor(istNow / DAY_MS) * DAY_MS + DAY_MS;
+    const istTomorrowMidnight = Math.floor(istNow / DAY_MS) * DAY_MS + daysAhead * DAY_MS;
 
     const start = new Date(istTomorrowMidnight - IST_OFFSET_MS);
     const end = new Date(start.getTime() + DAY_MS);

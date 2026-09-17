@@ -7,6 +7,7 @@ import {
     reminderParams,
     resultParams,
     sanitizeParam,
+    schoolOnboardParams,
     scheduleParams,
     submissionParams,
 } from './whatsapp.templates';
@@ -154,12 +155,27 @@ describe('template parameters', () => {
 describe('WHATSAPP_TEMPLATES', () => {
     // Verified against the live tenant's getMessageTemplates. A typo here is a
     // WATI rejection at send time and nothing earlier.
-    it('names the four approved templates exactly', () => {
+    it('names the seven approved templates exactly', () => {
         expect(Object.values(WHATSAPP_TEMPLATES)).toEqual([
             'bio_submission',
             'bio_schedule',
             'bio_result',
             'bio_reminder',
+            'bio_payment',
+            'bio_facescan',
+            'bio_schoolonboard',
+        ]);
+    });
+
+    it('schoolOnboard carries the school name at {{5}} and the register link at {{6}}', () => {
+        expect(
+            schoolOnboardParams({
+                schoolName: 'DPS School Nagpur',
+                registerUrl: 'https://www.innovationolympiad.in/register?school=SCH-2XF2G5',
+            }),
+        ).toEqual([
+            { name: '5', value: 'DPS School Nagpur' },
+            { name: '6', value: 'https://www.innovationolympiad.in/register?school=SCH-2XF2G5' },
         ]);
     });
 });

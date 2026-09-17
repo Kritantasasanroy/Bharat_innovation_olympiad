@@ -10,9 +10,12 @@ import {
 } from './whatsapp.provider';
 import {
     WHATSAPP_TEMPLATES,
+    faceScanPendingParams,
+    paymentPendingParams,
     reminderParams,
     resultParams,
     scheduleParams,
+    schoolOnboardParams,
     submissionParams,
 } from './whatsapp.templates';
 
@@ -192,6 +195,73 @@ export class WhatsAppService implements OnModuleInit {
             template: WHATSAPP_TEMPLATES.reminder,
             dedupeKey: `${vars.bookingId}:${vars.examDateKey}`,
             params: reminderParams({ firstName: vars.firstName, startsAt: vars.startsAt }),
+        });
+    }
+
+    /**
+     * The unpaid-registration nudge (`bio_payment`). Deduped on the user, once
+     * ever — the sweeper re-runs hourly but only the first send lands.
+     */
+    async sendPaymentPending(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        phoneRaw?: string | null | undefined;
+        firstName: string;
+    }): Promise<WhatsAppOutcome> {
+        return this.send({
+            userId: vars.userId,
+            phone: vars.phone,
+            phoneRaw: vars.phoneRaw,
+            template: WHATSAPP_TEMPLATES.paymentPending,
+            dedupeKey: `paypending:${vars.userId}`,
+            params: paymentPendingParams({ firstName: vars.firstName }),
+        });
+    }
+
+    /**
+     * The T-2 identification nudge (`bio_facescan`) — 48h before the exam when
+     * student identification is still incomplete. Deduped on the booking and
+     * the exam's IST date, like the reminder.
+     */
+    async sendFaceScanPending(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        phoneRaw?: string | null | undefined;
+        firstName: string;
+        bookingId: string;
+        examDateKey: string;
+    }): Promise<WhatsAppOutcome> {
+        return this.send({
+            userId: vars.userId,
+            phone: vars.phone,
+            phoneRaw: vars.phoneRaw,
+            template: WHATSAPP_TEMPLATES.faceScanPending,
+            dedupeKey: `facescan:${vars.bookingId}:${vars.examDateKey}`,
+            params: faceScanPendingParams({ firstName: vars.firstName }),
+        });
+    }
+
+    /**
+     * School onboarded (`bio_schoolonboard`) — staff approved the request.
+     * Sent to the coordinator's phone; the log row hangs off the provisioned
+     * coordinator user. Deduped on the request id.
+     */
+    async sendSchoolOnboarded(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        schoolRequestId: string;
+        schoolName: string;
+        registerUrl: string;
+    }): Promise<WhatsAppOutcome> {
+        return this.send({
+            userId: vars.userId,
+            phone: vars.phone,
+            template: WHATSAPP_TEMPLATES.schoolOnboard,
+            dedupeKey: `schoolonboard:${vars.schoolRequestId}`,
+            params: schoolOnboardParams({
+                schoolName: vars.schoolName,
+                registerUrl: vars.registerUrl,
+            }),
         });
     }
 

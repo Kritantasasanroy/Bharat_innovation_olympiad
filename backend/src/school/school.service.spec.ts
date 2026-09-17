@@ -4,6 +4,7 @@ import { generateAccessToken } from '../common/access-token';
 import type { EmailOtpService } from '../common/email-otp.service';
 import { notificationServiceStub } from '../notification/notification.stub';
 import type { SmsService } from '../notification/sms.service';
+import type { WhatsAppService } from '../notification/whatsapp.service';
 import type { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
 import { SchoolService } from './school.service';
@@ -385,6 +386,7 @@ function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
     const db = createFakeDb();
     const notifications = notificationServiceStub();
     const sms = { sendSchoolOnboarded: jest.fn(async () => ({ sent: true })) };
+    const whatsapp = { sendSchoolOnboarded: jest.fn(async () => ({ sent: true })) };
     const partnerDirectory = createFakePartnerDirectory();
     const emailOtp = createFakeEmailOtp();
     return {
@@ -392,6 +394,7 @@ function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
         adminApi,
         notifications,
         sms,
+        whatsapp,
         partnerDirectory,
         emailOtp,
         service: new SchoolService(
@@ -400,6 +403,7 @@ function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
             adminApi,
             notifications,
             sms as unknown as SmsService,
+            whatsapp as unknown as WhatsAppService,
             partnerDirectory,
             emailOtp as unknown as EmailOtpService,
         ),

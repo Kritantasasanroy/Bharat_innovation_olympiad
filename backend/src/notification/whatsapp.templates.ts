@@ -35,6 +35,12 @@ export const WHATSAPP_TEMPLATES = {
     result: 'bio_result',
     /** Sent the day before the exam. */
     reminder: 'bio_reminder',
+    /** Sent an hour after an OTP-verified registration that has not paid. */
+    paymentPending: 'bio_payment',
+    /** Sent 48h before the exam when student identification is still incomplete. */
+    faceScanPending: 'bio_facescan',
+    /** Sent when staff grant a school access — the coordinator's WhatsApp. */
+    schoolOnboard: 'bio_schoolonboard',
 } as const;
 
 export type WhatsAppTemplateKey = keyof typeof WHATSAPP_TEMPLATES;
@@ -182,4 +188,45 @@ export function reminderParams(vars: { firstName: string; startsAt: Date }): Wat
         formatIstWeekdayDate(vars.startsAt),
         formatIstTime(vars.startsAt, false),
     );
+}
+
+/**
+ * Hi {{1}},
+ * Your Bharat Innovation Olympiad registration is almost complete, but your
+ * payment is pending.
+ * …
+ */
+export function paymentPendingParams(vars: { firstName: string }): WatiParam[] {
+    return params(vars.firstName);
+}
+
+/**
+ * Hi {{1}},
+ * Your Identification verification for the Bharat Innovation Olympiad is pending.
+ * Please complete your face scan/ID upload to become eligible for the exam
+ * through the portal.
+ * …
+ */
+export function faceScanPendingParams(vars: { firstName: string }): WatiParam[] {
+    return params(vars.firstName);
+}
+
+/**
+ * Congratulations! Your School is now onboarded for the Bharat Innovation
+ * Olympiad!
+ * We're excited to have {{5}} school join India's first Future Readiness
+ * Program — …
+ * 👉 Register now:
+ * {{6}}
+ * …
+ *
+ * The approved body references {{5}} and {{6}} — the school name and the
+ * school's own registration link — and no other variable, so those are the
+ * only two parameters sent.
+ */
+export function schoolOnboardParams(vars: { schoolName: string; registerUrl: string }): WatiParam[] {
+    return [
+        { name: '5', value: sanitizeParam(vars.schoolName) },
+        { name: '6', value: sanitizeParam(vars.registerUrl) },
+    ];
 }

@@ -31,6 +31,7 @@ import {
 import { issuePasswordResetTicket, verifyPasswordResetTicket } from '../common/password-reset-ticket';
 import { NotificationService } from '../notification/notification.service';
 import { SmsService } from '../notification/sms.service';
+import { WhatsAppService } from '../notification/whatsapp.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PartnerDirectoryService } from '../partner/partner-directory.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -178,6 +179,7 @@ export class SchoolService {
         @Inject(PartnerAdminApiClient) private adminApi: SchoolPartnerResolver,
         private notifications: NotificationService,
         private sms: SmsService,
+        private whatsapp: WhatsAppService,
         @Inject(PartnerDirectoryService) private partnerDirectory: SchoolPartnerDirectory,
         private emailOtp: EmailOtpService,
     ) {}
@@ -1033,8 +1035,9 @@ export class SchoolService {
         if (dto.decision === 'APPROVED') {
             const token = plaintext ?? openAccessToken(result.accessTokenSealed);
             if (!token) return Promise.resolve(false);
-            // The onboard SMS rides alongside the approval email — best-effort,
-            // deduped on the request id so a re-approval never re-messages.
+            // The onboard SMS + WhatsApp ride alongside the approval email —
+            // best-effort, deduped on the request id so a re-approval never
+            // re-messages.
             if (result.coordinatorUserId) {
                 this.sms.sendSchoolOnboarded({
                     userId: result.coordinatorUserId,
@@ -1045,14 +1048,23 @@ export class SchoolService {
             return this.prisma.school.findUnique({
                 where: { id: result.schoolId ?? '' },
                 select: { code: true },
-            }).then((school) =>
-                this.notifications.sendSchoolApproved(result.coordinatorEmail, {
+            }).then((school) => {
+                if (result.coordinatorUserId && school?.code) {
+                    this.whatsapp.sendSchoolOnboarded({
+                        userId: result.coordinatorUserId,
+                        phone: result.coordinatorPhone,
+                        schoolRequestId: result.id,
+                        schoolName: result.schoolName,
+                        registerUrl: `https://www.innovationolympiad.in/register?school=${school.code}`,
+                    });
+                }
+                return this.notifications.sendSchoolApproved(result.coordinatorEmail, {
                     coordinatorName: result.coordinatorName,
                     schoolName: result.schoolName,
                     schoolCode: school?.code ?? null,
                     accessToken: token,
-                }),
-            );
+                });
+            });
         }
         if (dto.decision === 'REJECTED') {
             return this.notifications.sendSchoolRejected(result.coordinatorEmail, {

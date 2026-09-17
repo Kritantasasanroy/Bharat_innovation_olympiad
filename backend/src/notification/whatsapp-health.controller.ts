@@ -17,6 +17,9 @@ import { WhatsAppService } from './whatsapp.service';
 import {
     WHATSAPP_TEMPLATES,
     WhatsAppTemplateKey,
+    faceScanPendingParams,
+    paymentPendingParams,
+    schoolOnboardParams,
     reminderParams,
     resultParams,
     scheduleParams,
@@ -99,6 +102,13 @@ export class WhatsAppHealthController {
             schedule: () => scheduleParams({ firstName: 'Rajesh', startsAt: sampleAt }),
             result: () => resultParams({ firstName: 'Akash', percentile: 68, rank: 1067 }),
             reminder: () => reminderParams({ firstName: 'Rajesh', startsAt: sampleAt }),
+            paymentPending: () => paymentPendingParams({ firstName: 'Rahul' }),
+            faceScanPending: () => faceScanPendingParams({ firstName: 'Arnav' }),
+            schoolOnboard: () =>
+                schoolOnboardParams({
+                    schoolName: 'DPS School Nagpur',
+                    registerUrl: 'https://www.innovationolympiad.in/register?school=SCH-2XF2G5',
+                }),
         }[key]();
 
         const outcome = await this.whatsapp.probe(

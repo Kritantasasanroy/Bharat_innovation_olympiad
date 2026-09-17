@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { AccessPassStatus, PaymentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from './sms.service';
+import { WhatsAppService } from './whatsapp.service';
 
 /**
  * The unpaid-registration nudge (`bio_paymentpendinglogin`).
@@ -49,6 +50,7 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
     constructor(
         private readonly prisma: PrismaService,
         private readonly sms: SmsService,
+        private readonly whatsapp: WhatsAppService,
     ) {}
 
     onModuleInit() {
@@ -91,7 +93,7 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
                     accessPass: { isNot: { status: AccessPassStatus.ACTIVE } },
                     payments: { none: { status: PaymentStatus.PAID } },
                 },
-                select: { id: true, phone: true, phoneRaw: true },
+                select: { id: true, firstName: true, phone: true, phoneRaw: true },
             });
 
             summary.considered = users.length;
@@ -106,6 +108,14 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
                     userId: user.id,
                     phone: user.phone,
                     phoneRaw: user.phoneRaw,
+                });
+                // The WhatsApp twin (`bio_payment`) — same dedupe key shape, so
+                // a re-sweep never double-sends on either channel.
+                await this.whatsapp.sendPaymentPending({
+                    userId: user.id,
+                    phone: user.phone,
+                    phoneRaw: user.phoneRaw,
+                    firstName: user.firstName,
                 });
                 // `sendPaymentPending` enqueues on the 30s-spaced queue, so
                 // "sent" here means "claimed for the queue".
