@@ -103,7 +103,10 @@ export type PartnerAccessStatus = 'APPROVED' | 'REJECTED' | 'REVOKED';
  * pinging `/health/live` keeps it warm, but a deploy always lands cold, so the
  * client cannot depend on that.
  */
-const RETRY_STATUSES = new Set([502, 503, 504]);
+// 429 joins the cold-start set: Render's edge occasionally rate-limits the
+// free-tier service for a burst window — not a cold start, but the same
+// answer applies: wait it out rather than fail a staff action.
+const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 
 /**
  * `patient` (~62s) is for staff-initiated calls, where waiting out a cold start
@@ -186,7 +189,9 @@ export class PartnerAdminApiClient {
         }
         if (RETRY_STATUSES.has(res.status)) {
             throw new InternalServerErrorException(
-                'The partner engine is starting up. Please try again in a moment.',
+                res.status === 429
+                    ? 'The partner engine is busy right now. Please try again in a moment.'
+                    : 'The partner engine is starting up. Please try again in a moment.',
             );
         }
 
