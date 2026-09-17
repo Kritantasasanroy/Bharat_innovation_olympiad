@@ -30,6 +30,7 @@ import {
 } from '../common/email-verification-token';
 import { issuePasswordResetTicket, verifyPasswordResetTicket } from '../common/password-reset-ticket';
 import { NotificationService } from '../notification/notification.service';
+import { SmsService } from '../notification/sms.service';
 import { PartnerAdminApiClient } from '../partner/admin-api.client';
 import { PartnerDirectoryService } from '../partner/partner-directory.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -176,6 +177,7 @@ export class SchoolService {
         @Inject(JwtService) private jwt: SchoolSessionSigner,
         @Inject(PartnerAdminApiClient) private adminApi: SchoolPartnerResolver,
         private notifications: NotificationService,
+        private sms: SmsService,
         @Inject(PartnerDirectoryService) private partnerDirectory: SchoolPartnerDirectory,
         private emailOtp: EmailOtpService,
     ) {}
@@ -1031,6 +1033,15 @@ export class SchoolService {
         if (dto.decision === 'APPROVED') {
             const token = plaintext ?? openAccessToken(result.accessTokenSealed);
             if (!token) return Promise.resolve(false);
+            // The onboard SMS rides alongside the approval email — best-effort,
+            // deduped on the request id so a re-approval never re-messages.
+            if (result.coordinatorUserId) {
+                this.sms.sendSchoolOnboarded({
+                    userId: result.coordinatorUserId,
+                    phone: result.coordinatorPhone,
+                    schoolRequestId: result.id,
+                });
+            }
             return this.prisma.school.findUnique({
                 where: { id: result.schoolId ?? '' },
                 select: { code: true },

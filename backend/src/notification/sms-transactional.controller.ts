@@ -18,6 +18,8 @@ import {
     SmsTemplateKey,
     examRequirementsNewMessage,
     paymentPendingMessage,
+    partnerOnboardMessage,
+    schoolOnboardMessage,
     reminderMessage,
     scheduleMessage,
     submissionMessage,
@@ -93,6 +95,8 @@ export class SmsTransactionalController {
             support: () => supportMessage({ ticketRef: 'S278943' }),
             verificationPending: () => verificationPendingMessage(),
             paymentPending: () => paymentPendingMessage(),
+            schoolOnboard: () => schoolOnboardMessage(),
+            partnerOnboard: () => partnerOnboardMessage(),
         }[key]();
 
         const outcome = await this.sms.probe(adminId, normalized, key, message);

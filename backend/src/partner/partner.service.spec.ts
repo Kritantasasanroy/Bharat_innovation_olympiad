@@ -5,6 +5,7 @@ import type { EmailOtpService } from '../common/email-otp.service';
 import { PartnerAdminApiClient } from './admin-api.client';
 import { PartnerService } from './partner.service';
 import { NotificationService } from '../notification/notification.service';
+import { SmsService } from '../notification/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Status = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
@@ -182,15 +183,18 @@ function createTestContext() {
 
     const emailOtp = createFakeEmailOtp();
 
+    const sms = { sendPartnerOnboarded: jest.fn(async () => ({ sent: true })) };
+
     const service = new PartnerService(
         prisma,
         jwt,
         adminApi,
         notifications as unknown as NotificationService,
+        sms as unknown as SmsService,
         emailOtp as unknown as EmailOtpService,
     );
 
-    return { service, rows, emailOtp, notifications, adminApi };
+    return { service, rows, emailOtp, notifications, sms, adminApi };
 }
 
 const APPLICATION = {

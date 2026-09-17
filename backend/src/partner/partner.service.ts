@@ -27,6 +27,7 @@ import {
 } from '../common/email-verification-token';
 import { issuePasswordResetTicket, verifyPasswordResetTicket } from '../common/password-reset-ticket';
 import { NotificationService } from '../notification/notification.service';
+import { SmsService } from '../notification/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartnerAdminApiClient, SubmitBankDetailsInput } from './admin-api.client';
 import {
@@ -79,6 +80,7 @@ export class PartnerService {
         private jwt: JwtService,
         private adminApi: PartnerAdminApiClient,
         private notifications: NotificationService,
+        private sms: SmsService,
         private emailOtp: EmailOtpService,
     ) {}
 
@@ -471,6 +473,16 @@ export class PartnerService {
         const decision = await this.persistDecision(request, dto, adminId, engine);
         await this.recordDecisionAudit(id, adminId, dto, engine.partnerId, decision.issuing);
         const emailSent = await this.notifyDecision(decision.updated, dto, decision.plaintext);
+        // The onboard SMS rides alongside the approval email — best-effort,
+        // deduped on the request id so a re-approval never re-messages. The
+        // log row hangs off the approving admin (a partner is not a User).
+        if (dto.decision === 'APPROVED') {
+            this.sms.sendPartnerOnboarded({
+                userId: adminId,
+                phone: decision.updated.phone,
+                partnerRequestId: decision.updated.id,
+            });
+        }
 
         return {
             id: decision.updated.id,

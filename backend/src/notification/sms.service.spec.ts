@@ -4,6 +4,8 @@ import { SmsService } from './sms.service';
 import {
     examRequirementsNewMessage,
     paymentPendingMessage,
+    partnerOnboardMessage,
+    schoolOnboardMessage,
     registrationMessage,
     reminderMessage,
     scheduleMessage,
@@ -281,6 +283,21 @@ describe('SMS template bodies match the DLT-approved text', () => {
         expect(text).toContain('from the portal,');
         expect(text).toContain('https://www.innovationolympiad.in/login/');
         expect(text).toContain('WA HELPLINE- +918421411142');
+        expect(text).toContain('- Lemon Ideas Team');
+        expect(text).not.toContain('{#');
+    });
+
+    it('schoolOnboard is static — the signature line has no dash', () => {
+        const text = schoolOnboardMessage();
+        expect(text).toContain('Your school has been successfully onboarded');
+        expect(text).toContain('check Email for more details.');
+        expect(text).toContain('Lemon Ideas Team');
+        expect(text).not.toContain('{#');
+    });
+
+    it('partnerOnboard is static', () => {
+        const text = partnerOnboardMessage();
+        expect(text).toContain('onboarded at Bharat Innovation Olympiad as partner');
         expect(text).toContain('- Lemon Ideas Team');
         expect(text).not.toContain('{#');
     });

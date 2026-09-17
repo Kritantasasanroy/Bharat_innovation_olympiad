@@ -3,6 +3,7 @@ import { issueActivationTicket } from '../common/activation-ticket';
 import { generateAccessToken } from '../common/access-token';
 import type { EmailOtpService } from '../common/email-otp.service';
 import { notificationServiceStub } from '../notification/notification.stub';
+import type { SmsService } from '../notification/sms.service';
 import type { ApplySchoolDto, DecideSchoolDto, SchoolLoginDto } from './dto/school.dto';
 import { schoolNameKey } from './school-directory.helpers';
 import { SchoolService } from './school.service';
@@ -383,12 +384,14 @@ function createFakeEmailOtp() {
 function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
     const db = createFakeDb();
     const notifications = notificationServiceStub();
+    const sms = { sendSchoolOnboarded: jest.fn(async () => ({ sent: true })) };
     const partnerDirectory = createFakePartnerDirectory();
     const emailOtp = createFakeEmailOtp();
     return {
         ...db,
         adminApi,
         notifications,
+        sms,
         partnerDirectory,
         emailOtp,
         service: new SchoolService(
@@ -396,6 +399,7 @@ function setup(adminApi: FakeAdminApi = createFakeAdminApi()) {
             jwt,
             adminApi,
             notifications,
+            sms as unknown as SmsService,
             partnerDirectory,
             emailOtp as unknown as EmailOtpService,
         ),

@@ -12,6 +12,8 @@ import {
     SmsTemplateKey,
     examRequirementsNewMessage,
     paymentPendingMessage,
+    partnerOnboardMessage,
+    schoolOnboardMessage,
     reminderMessage,
     scheduleMessage,
     submissionMessage,
@@ -254,6 +256,45 @@ export class SmsService implements OnModuleInit {
             template: 'paymentPending',
             dedupeKey: `paypending:${vars.userId}`,
             message: paymentPendingMessage(),
+        });
+    }
+
+    /**
+     * School onboarded — staff approved the access request. Sent to the
+     * coordinator's phone; the log row hangs off the provisioned coordinator
+     * user. Deduped on the request, so re-approvals never re-message.
+     */
+    async sendSchoolOnboarded(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        schoolRequestId: string;
+    }): Promise<SmsOutcome> {
+        return this.enqueue({
+            userId: vars.userId,
+            phone: vars.phone,
+            template: 'schoolOnboard',
+            dedupeKey: `schoolonboard:${vars.schoolRequestId}`,
+            message: schoolOnboardMessage(),
+        });
+    }
+
+    /**
+     * Partner onboarded — staff approved the request. Sent to the contact's
+     * phone. A partner is not a `User`, so the log row is owned by the
+     * approving admin (`userId = decidedBy`); the dedupe key carries the
+     * request, so re-approvals never re-message.
+     */
+    async sendPartnerOnboarded(vars: {
+        userId: string;
+        phone: string | null | undefined;
+        partnerRequestId: string;
+    }): Promise<SmsOutcome> {
+        return this.enqueue({
+            userId: vars.userId,
+            phone: vars.phone,
+            template: 'partnerOnboard',
+            dedupeKey: `partneronboard:${vars.partnerRequestId}`,
+            message: partnerOnboardMessage(),
         });
     }
 

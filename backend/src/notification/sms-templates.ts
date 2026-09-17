@@ -28,6 +28,8 @@ import { formatIstOrdinalDate, formatIstTime } from './whatsapp.templates';
  * - `support` → BIOSUPPORTNEW (support-ticket acknowledgement)
  * - `verificationPending` → BIOVERIFICATIONPENDING (T-1 identification nudge)
  * - `paymentPending` → BIOPAYMENTPENDINGLOGIN (1h unpaid-registration nudge)
+ * - `schoolOnboard` → BIOSCHOOLONBOARD (admin approves a school access request)
+ * - `partnerOnboard` → BIOPARTNERONBOARD (admin approves a partner request)
  *
  * ## Formatting
  *
@@ -56,6 +58,10 @@ export const SMS_TEMPLATES = {
     verificationPending: { name: 'BIOVERIFICATIONPENDING', dltId: '1777178949269638040' },
     /** Sent an hour after an OTP-verified registration that never paid. */
     paymentPending: { name: 'BIOPAYMENTPENDINGLOGIN', dltId: '1777178953351456750' },
+    /** Sent when staff approve a school's access request — goes to the coordinator. */
+    schoolOnboard: { name: 'BIOSCHOOLONBOARD', dltId: '1777178956433482638' },
+    /** Sent when staff approve a partner request — goes to the contact's phone. */
+    partnerOnboard: { name: 'BIOPARTNERONBOARD', dltId: '1777178956445898657' },
 } as const;
 
 export type SmsTemplateKey = keyof typeof SMS_TEMPLATES;
@@ -195,6 +201,30 @@ export function paymentPendingMessage(): string {
         'https://www.innovationolympiad.in/login/',
         '',
         'If payment was deducted, contact support before making another payment: WA HELPLINE- +918421411142.',
+        '- Lemon Ideas Team',
+    ].join('\n');
+}
+
+/**
+ * Static body — no variables (BIOSCHOOLONBOARD · 1777178956433482638).
+ * Sent when staff grant a school access; the signature line has no leading dash.
+ */
+export function schoolOnboardMessage(): string {
+    return [
+        'Your school has been successfully onboarded at Bharat Innovation Olympiad. ' +
+            'Please check Email for more details.',
+        'Lemon Ideas Team',
+    ].join('\n');
+}
+
+/**
+ * Static body — no variables (BIOPARTNERONBOARD · 1777178956445898657).
+ * Sent when staff grant a partner access.
+ */
+export function partnerOnboardMessage(): string {
+    return [
+        'Your organization has been successfully onboarded at Bharat Innovation Olympiad ' +
+            'as partner. Please check email for more details.',
         '- Lemon Ideas Team',
     ].join('\n');
 }
