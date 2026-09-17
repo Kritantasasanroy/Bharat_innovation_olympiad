@@ -11,6 +11,20 @@ import { JwtService } from '@nestjs/jwt';
  */
 const ADMIN_API_URL = process.env.ADMIN_API_URL || 'http://localhost:4100';
 
+/**
+ * Retry-cycle alternates for `patient` calls. The engine service is recreated
+ * per account migration, and a stale `ADMIN_API_URL` pointing at a suspended
+ * predecessor keeps answering 503 forever — the socket never refuses, so the
+ * full cold-start budget burns on a host that can never come up. Trying the
+ * known production URL as an alternate each cycle costs one failed attempt
+ * instead. When the env is correct it wins on attempt 0 and the fallback
+ * never fires; `fast` calls stay single-shot on the configured URL.
+ */
+const ADMIN_API_URLS = [
+    ADMIN_API_URL,
+    'https://bio-admin-api-myog.onrender.com',
+].filter((url, i, all) => all.indexOf(url) === i);
+
 export interface AdminApiApplication {
     id: string; // applicationId
     partnerId: string;
@@ -143,9 +157,9 @@ export class PartnerAdminApiClient {
     }
 
     /** One attempt. Resolves the raw Response, or null when the socket failed. */
-    private async attempt(path: string, init: RequestInit, actingAs?: string): Promise<Response | null> {
+    private async attempt(baseUrl: string, path: string, init: RequestInit, actingAs?: string): Promise<Response | null> {
         try {
-            return await fetch(`${ADMIN_API_URL}${path}`, {
+            return await fetch(`${baseUrl}${path}`, {
                 ...init,
                 headers: {
                     'content-type': 'application/json',
@@ -166,10 +180,13 @@ export class PartnerAdminApiClient {
         actingAs?: string,
     ): Promise<T> {
         const backoff = BACKOFF_MS[policy];
+        // `patient` alternates the configured URL with the production fallback
+        // (see ADMIN_API_URLS); `fast` is single-shot on the configured URL.
+        const bases = backoff.length ? ADMIN_API_URLS : [ADMIN_API_URL];
         let res: Response | null = null;
 
         for (let i = 0; i <= backoff.length; i += 1) {
-            res = await this.attempt(path, init, actingAs);
+            res = await this.attempt(bases[i % bases.length], path, init, actingAs);
 
             const isColdStart = res === null || RETRY_STATUSES.has(res.status);
             if (!isColdStart) break;
@@ -184,7 +201,7 @@ export class PartnerAdminApiClient {
 
         if (!res) {
             throw new InternalServerErrorException(
-                `Partner engine (admin-api) unreachable at ${ADMIN_API_URL}.`,
+                `Partner engine (admin-api) unreachable at ${bases.join(' and ')}.`,
             );
         }
         if (RETRY_STATUSES.has(res.status)) {
