@@ -3,22 +3,18 @@ import { CURRENT_GUARDIAN_CONSENT_VERSION, GuardianService } from './guardian.se
 import { SubmitGuardianDto } from './dto/guardian.dto';
 
 /**
- * Registration part 2 — parental consent.
+ * Student identification — the record the exam gate checks.
  *
  * The rules worth pinning are all about *not* accepting something that merely
- * looks like consent: a half-ticked form, a stale consent version, or an edit
- * that quietly rewrites when consent was originally given.
+ * looks complete: a half-ticked form, a stale consent version, or an edit
+ * that quietly rewrites when consent was originally given. No parent/guardian
+ * fields exist any more — the submission is the participant's own details.
  */
 describe('GuardianService', () => {
     const USER = 'student-1';
 
     function valid(overrides: Partial<SubmitGuardianDto> = {}): SubmitGuardianDto {
         return {
-            guardianFirstName: 'Meera',
-            guardianLastName: 'Sharma',
-            relationship: 'Mother',
-            guardianEmail: 'Meera.Sharma@Example.COM',
-            guardianPhone: '98765 43210',
             // Every one of these is mandatory now, so a "valid" DTO has to carry
             // them all — a fixture missing one would fail on that field rather
             // than on whatever the test is actually about.
@@ -47,14 +43,14 @@ describe('GuardianService', () => {
 
     describe('refusing a partial consent', () => {
         it.each([
-            ['parental consent unticked', { parentalConsent: false }],
+            ['participation consent unticked', { parentalConsent: false }],
             ['data consent unticked', { dataConsent: false }],
             ['both unticked', { parentalConsent: false, dataConsent: false }],
         ])('rejects %s and writes nothing', async (_label, overrides) => {
             const { service, prisma } = serviceWith();
             await expect(service.submit(USER, valid(overrides))).rejects.toThrow(BadRequestException);
-            // The important half: a refused consent must not leave a row behind
-            // that the exam gate would then read as complete.
+            // The important half: a refused submission must not leave a row
+            // behind that the exam gate would then read as complete.
             expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
         });
     });
@@ -160,25 +156,20 @@ describe('GuardianService', () => {
         expect(create.ipAddress).toBe('203.0.113.7');
     });
 
-    it('normalises the guardian email and phone', async () => {
+    it('writes no parent/guardian fields — they do not exist any more', async () => {
         const { service, prisma } = serviceWith();
         await service.submit(USER, valid());
 
         const { create } = prisma.guardianProfile.upsert.mock.calls[0][0];
-        expect(create.guardianEmail).toBe('meera.sharma@example.com');
-        // Same E.164 convention as User.phone, so the two are comparable.
-        expect(create.guardianPhone).toBe('+919876543210');
-    });
-
-    it.each([
-        ['too short', '123'],
-        ['letters', 'not a number'],
-        ['empty', '   '],
-    ])('rejects an invalid guardian phone (%s) with a parent-specific message', async (_l, phone) => {
-        const { service } = serviceWith();
-        await expect(service.submit(USER, valid({ guardianPhone: phone }))).rejects.toThrow(
-            /parent or guardian/i,
-        );
+        for (const field of [
+            'guardianFirstName',
+            'guardianLastName',
+            'relationship',
+            'guardianEmail',
+            'guardianPhone',
+        ]) {
+            expect(create).not.toHaveProperty(field);
+        }
     });
 
     describe('re-submitting', () => {
@@ -190,14 +181,14 @@ describe('GuardianService', () => {
 
         it('does not rewrite the original consent time when only details change', async () => {
             const { service, prisma } = serviceWith(existing);
-            await service.submit(USER, valid({ guardianPhone: '+919000000001' }));
+            await service.submit(USER, valid({ gender: 'Male' }));
 
             const { update } = prisma.guardianProfile.upsert.mock.calls[0][0];
             // The consent timestamp is the legal record of *when* consent was
-            // given. Fixing a typo in a phone number must not move it.
+            // given. Changing a detail must not move it.
             expect(update.parentalConsentAt).toBeUndefined();
             expect(update.dataConsentAt).toBeUndefined();
-            expect(update.guardianPhone).toBe('+919000000001');
+            expect(update.gender).toBe('Male');
         });
 
         it('re-stamps consent when the wording version has moved on', async () => {
@@ -221,8 +212,8 @@ describe('GuardianService', () => {
             expect(create.studentDob).toBeInstanceOf(Date);
         });
 
-        // It used to be optional. It is not: the age band a student competes in
-        // is derived from it, and it is what the uploaded ID is checked against.
+        // The age band a student competes in is derived from it, and it is what
+        // the uploaded ID is checked against.
         it.each([
             ['missing', undefined],
             ['blank', ''],
@@ -296,7 +287,7 @@ describe('GuardianService', () => {
         });
 
         it.each([
-            ['parental consent missing', { parentalConsentAt: null, dataConsentAt: new Date() }],
+            ['participation consent missing', { parentalConsentAt: null, dataConsentAt: new Date() }],
             ['data consent missing', { parentalConsentAt: new Date(), dataConsentAt: null }],
         ])('is false when %s', async (_label, partial) => {
             await expect(
@@ -312,7 +303,7 @@ describe('GuardianService', () => {
                     findUnique: jest.fn().mockResolvedValue({
                         id: 'gp-1',
                         userId: USER,
-                        guardianFirstName: 'Meera',
+                        studentDob: new Date('2012-04-18'),
                         parentalConsentAt: new Date(),
                         dataConsentAt: new Date(),
                         consentVersion: CURRENT_GUARDIAN_CONSENT_VERSION,
@@ -323,7 +314,6 @@ describe('GuardianService', () => {
             const result = await new GuardianService(prisma).status(USER);
             expect(result.complete).toBe(true);
             expect(result.profile).not.toHaveProperty('ipAddress');
-            expect(result.profile).toHaveProperty('guardianFirstName', 'Meera');
         });
     });
 });

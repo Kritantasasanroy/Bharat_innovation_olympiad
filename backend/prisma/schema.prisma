@@ -98,19 +98,17 @@ model User {
 ///
 /// Distinct from `Consent`, which records the *student's* exam-time permissions
 /// (media capture, monitoring). Both are kept; neither replaces the other.
+/// Student identification — the record the exam gate checks.
+///
+/// Was "registration part 2, filled in by a parent/guardian". The parent
+/// details (guardian name, relationship, email, phone) were removed entirely —
+/// the page is student identification only: the ward's ID document, the two
+/// consents, and the demographics below. `User.faceEmbedding` is the face-scan
+/// half, kept on User so proctoring reads it without a join.
 model GuardianProfile {
   id                  String    @id @default(uuid())
   userId              String    @unique
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  guardianFirstName   String
-  guardianLastName    String
-  /// Mother / Father / Legal guardian / Other — free text so an unusual family
-  /// arrangement is never unrepresentable.
-  relationship        String
-  guardianEmail       String
-  /// E.164, same convention as `User.phone`. Deliberately NOT unique: siblings
-  /// registering separately legitimately share a parent's number.
-  guardianPhone       String
   // ── Demographics (optional; used for cohort reporting, never for gating) ──
   studentDob          DateTime?
   gender              String?
@@ -130,20 +128,13 @@ model GuardianProfile {
   /// accepted — `GuardianService` rejects a partial submission rather than
   /// storing half a consent.
   ///
-  /// `parentalConsentAt` is the moment the parent accepted: it is the legal
-  /// record, and it is deliberately NOT rewritten when they later edit a phone
-  /// number. Only a change to the consent wording (`consentVersion`) moves it.
+  /// `parentalConsentAt`/`dataConsentAt` are the consent record: the legal
+  /// moment the terms were accepted. Deliberately NOT rewritten when the row
+  /// is later edited — only a change to the consent wording (`consentVersion`)
+  /// moves them.
   parentalConsentAt   DateTime
   dataConsentAt       DateTime
   consentVersion      String
-  /// When the confirmation email to the parent actually left the building.
-  ///
-  /// Stamped only on a successful send, so null genuinely means "the parent was
-  /// never told", not "we tried". That distinction is the whole reason this is
-  /// stored rather than inferred from `createdAt` — the mail goes out on a
-  /// best-effort path that deliberately never fails the consent submission, so
-  /// a consent record can legitimately exist with no mail behind it.
-  approvalEmailSentAt DateTime?
   ipAddress           String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

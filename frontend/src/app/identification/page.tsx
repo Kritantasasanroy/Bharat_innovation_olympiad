@@ -2,12 +2,11 @@
 
 import AuthGuard from '@/components/layout/AuthGuard';
 import Navbar from '@/components/layout/Navbar';
-import GuardianForm, { GuardianFormValues } from '@/components/GuardianForm';
+import IdentificationForm, { IdentificationFormValues } from '@/components/IdentificationForm';
 import api from '@/lib/api';
 import { describeError } from '@/lib/errors';
 import { useAuthStore } from '@/store/authStore';
-import type { GuardianStatus } from '@/types/user';
-import Link from 'next/link';
+import type { IdentificationStatus } from '@/types/user';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -17,6 +16,8 @@ import { Suspense, useEffect, useState } from 'react';
  * Where a student lands when the exam gate refuses them with
  * `GUARDIAN_CONSENT_REQUIRED` — either because they registered before this
  * existed, or because the consent wording has been revised since they signed it.
+ * The page is the participant's own identification only: date of birth, gender,
+ * the ID document, and the two consents — no parent/guardian details.
  *
  * `?next=` carries them back where they came from, so a student sent here from an
  * exam's instructions page returns to it rather than being dumped on the
@@ -28,7 +29,7 @@ function IdentificationPageInner() {
     const next = searchParams.get('next') ?? '/dashboard';
     const user = useAuthStore((s) => s.user);
 
-    const [status, setStatus] = useState<GuardianStatus | null>(null);
+    const [status, setStatus] = useState<IdentificationStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -41,13 +42,13 @@ function IdentificationPageInner() {
     const [editing, setEditing] = useState(false);
 
     useEffect(() => {
-        api.get<GuardianStatus>('/identification/me')
+        api.get<IdentificationStatus>('/identification/me')
             .then(({ data }) => setStatus(data))
             .catch((err) => setError(describeError(err, 'load this form')))
             .finally(() => setLoading(false));
     }, []);
 
-    const handleSubmit = async (values: GuardianFormValues) => {
+    const handleSubmit = async (values: IdentificationFormValues) => {
         setBusy(true);
         setError('');
         try {
@@ -122,36 +123,17 @@ function IdentificationPageInner() {
                 </p>
             </div>
 
-            {/* Says why they are here, so it does not read as an arbitrary new hurdle. */}
-            <div
-                className="glass-card"
-                style={{ padding: '1rem 1.25rem', marginBottom: 'var(--space-5)', borderLeft: '4px solid var(--color-primary)' }}
-            >
-                <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
-                    Every participant is a minor, so a parent or guardian confirms identity and
-                    consent before we can proctor an exam. You can read what that covers in the{' '}
-                    <Link href="/terms" target="_blank" rel="noopener noreferrer">
-                        terms &amp; conditions
-                    </Link>
-                    .
-                </p>
-            </div>
-
             <div className="glass-card" style={{ padding: 'var(--space-6)' }}>
-                <GuardianForm
+                <IdentificationForm
                     studentName={studentName}
                     initial={
                         status?.profile
                             ? {
-                                  guardianFirstName: status.profile.guardianFirstName,
-                                  guardianLastName: status.profile.guardianLastName,
-                                  relationship: status.profile.relationship,
-                                  guardianEmail: status.profile.guardianEmail,
-                                  guardianPhone: status.profile.guardianPhone,
                                   studentDob: status.profile.studentDob?.slice(0, 10) ?? '',
                                   gender: status.profile.gender ?? '',
                                   city: status.profile.city ?? '',
                                   state: status.profile.state ?? '',
+                                  idDocumentType: status.profile.idDocumentType ?? '',
                               }
                             : undefined
                     }

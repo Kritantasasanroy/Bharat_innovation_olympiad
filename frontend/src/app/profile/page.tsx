@@ -12,18 +12,15 @@ import { useXp } from '@/hooks/useXp';
 import { XP_PER_EXAM_COMPLETE } from '@/lib/constants';
 
 /** What `GET /identification/me` returns — see `GuardianService.status`. */
-interface GuardianStatus {
+interface IdentificationStatus {
     version: string;
     complete: boolean;
     profile: {
-        guardianFirstName: string;
-        guardianLastName: string;
-        relationship: string;
-        guardianEmail: string;
-        guardianPhone: string;
+        studentDob?: string | null;
+        gender?: string | null;
+        idDocumentType?: string | null;
         parentalConsentAt: string | null;
         dataConsentAt: string | null;
-        approvalEmailSentAt: string | null;
         consentVersion: string;
     } | null;
 }
@@ -35,7 +32,7 @@ function fmtDateTime(value: string | null | undefined) {
     });
 }
 
-function GuardianRow({ label, value }: { label: string; value: React.ReactNode }) {
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.6rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{label}</span>
@@ -73,18 +70,16 @@ export default function ProfilePage() {
     }, []);
 
     /**
-     * Registration part 2 — the parent's details and when they consented.
+     * Student identification — the ID document and when consent was recorded.
      *
-     * Shown read-only. A student should be able to see what was recorded about
-     * their parent and when it was agreed to, but changing a consent record from
-     * the child's own account would defeat the point of it being a parent's
-     * consent; edits go back through the guardian form.
+     * Shown read-only. A student should be able to see what was recorded and
+     * when it was agreed; edits go back through the identification form.
      */
-    const [guardian, setGuardian] = useState<GuardianStatus | null>(null);
+    const [identification, setIdentification] = useState<IdentificationStatus | null>(null);
     useEffect(() => {
-        api.get<GuardianStatus>('/identification/me')
-            .then((r) => setGuardian(r.data))
-            .catch(() => setGuardian(null));
+        api.get<IdentificationStatus>('/identification/me')
+            .then((r) => setIdentification(r.data))
+            .catch(() => setIdentification(null));
     }, []);
 
     const handleOpenCamera = async () => {
@@ -263,7 +258,7 @@ export default function ProfilePage() {
                 <div className="glass-card" style={{ maxWidth: '600px', margin: '2rem auto 0', padding: '2rem' }}>
                     <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>Student identification</h2>
 
-                    {!guardian?.profile ? (
+                    {!identification?.profile ? (
                         <>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
                                 Identification has to be completed before you can start any exam,
@@ -281,41 +276,36 @@ export default function ProfilePage() {
                                 any of it, <Link href="/identification?next=/profile">reopen the identification form</Link>.
                             </p>
 
-                            <GuardianRow
-                                label="Name"
-                                value={`${guardian.profile.guardianFirstName} ${guardian.profile.guardianLastName}`.trim()}
-                            />
-                            <GuardianRow label="Relationship" value={guardian.profile.relationship} />
-                            <GuardianRow label="Email" value={guardian.profile.guardianEmail} />
-                            <GuardianRow label="Phone" value={guardian.profile.guardianPhone} />
-                            <GuardianRow
-                                label="Confirmation email sent"
+                            <InfoRow
+                                label="Date of birth"
                                 value={
-                                    fmtDateTime(guardian.profile.approvalEmailSentAt) ?? (
-                                        <span style={{ color: 'var(--warning-400)' }}>Not sent</span>
-                                    )
+                                    identification.profile.studentDob
+                                        ? new Date(identification.profile.studentDob).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                                        : '—'
                                 }
                             />
-                            <GuardianRow
-                                label="Parental consent accepted"
+                            <InfoRow label="Gender" value={identification.profile.gender ?? '—'} />
+                            <InfoRow label="ID document" value={identification.profile.idDocumentType ?? '—'} />
+                            <InfoRow
+                                label="Participation consent accepted"
                                 value={
-                                    fmtDateTime(guardian.profile.parentalConsentAt) ?? (
+                                    fmtDateTime(identification.profile.parentalConsentAt) ?? (
                                         <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
                                     )
                                 }
                             />
-                            <GuardianRow
+                            <InfoRow
                                 label="Data-processing consent accepted"
                                 value={
-                                    fmtDateTime(guardian.profile.dataConsentAt) ?? (
+                                    fmtDateTime(identification.profile.dataConsentAt) ?? (
                                         <span style={{ color: 'var(--danger-400)' }}>Not accepted</span>
                                     )
                                 }
                             />
 
-                            {!guardian.complete && (
+                            {!identification.complete && (
                                 <p style={{ color: 'var(--warning-400)', fontSize: '0.85rem', marginTop: '1rem' }}>
-                                    Our consent wording has changed since your parent agreed, so it needs
+                                    Our consent wording has changed since it was agreed, so it needs
                                     confirming once more before your next exam.
                                 </p>
                             )}

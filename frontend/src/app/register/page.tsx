@@ -11,8 +11,8 @@ import { emailOtp, isValidPhone } from '@/lib/auth-client';
 import { captureReferralFromUrl, clearReferralCode, getReferralCode } from '@/lib/referral';
 import { describeCameraError, describeError } from '@/lib/errors';
 import SchoolPicker from '@/components/SchoolPicker';
-import { GENDERS } from '@/components/GuardianForm';
-import GuardianStep from './steps/GuardianStep';
+import { GENDERS } from '@/components/IdentificationForm';
+import IdentificationStep from './steps/IdentificationStep';
 import PaymentStep from './steps/PaymentStep';
 import PresenceStep from './steps/PresenceStep';
 import type { DirectorySchool } from '@/lib/schools';
@@ -24,36 +24,33 @@ import { FormEvent, useState, useEffect } from 'react';
  *
  * ## The order, and why it is this order
  *
- * `presence` → `details` → `verify` → `payment` → `guardian`
+ * `presence` → `details` → `verify` → `payment` → `identification`
  *
  *  - **presence first**, before a single field: the student has to be at the
  *    keyboard for the face scan, and discovering that at the last step is too
  *    late. It also carries the T&C acceptance, so nobody types their details
  *    before seeing what they are agreeing to.
- *  - **details now also collects the parent/identification's own contact details,
- *    the ward's date of birth and gender** — everything about the family that
- *    isn't the face scan, the ID document or the consents themselves. That
- *    used to live on the final step, asked of a parent who had usually
- *    wandered off by then; collecting it up front means the final step is
- *    something the participant can finish entirely on their own.
+ *  - **details also collects the participant's date of birth and gender** —
+ *    everything about the student that isn't the face scan, the ID document or
+ *    the consents themselves.
  *  - **verify before the account exists**: the account is created at the end of
  *    `verify`, once the email is proven. Everything after that point can rely on
- *    a real, authenticated user, which is why `payment` and `guardian` can
+ *    a real, authenticated user, which is why `payment` and `identification` can
  *    simply call authenticated endpoints.
- *  - **payment before guardian**: paying confirms the season and unlocks the
+ *  - **payment before identification**: paying confirms the season and unlocks the
  *    dashboard. If a student abandons during the last step they can still sign
  *    in and complete it later.
- *  - **guardian last, and it is "Student identification"**: face scan, ID
+ *  - **identification last — "Student identification"**: face scan, ID
  *    upload and the two consents, in one place. The face scan needs the
  *    student personally, so it happens first on this page, while they are
- *    certainly still there; the ID upload and consent that follow can be
- *    finished by a parent leaning over afterwards.
+ *    certainly still there. No parent/guardian details are collected — the
+ *    step is the participant's own identification.
  *
  * Each step lives in its own component under `./steps/`. Only `details` and
  * `verify` remain inline, because they share the form state and the OTP handshake.
  */
 
-type Step = 'presence' | 'details' | 'verify' | 'payment' | 'guardian';
+type Step = 'presence' | 'details' | 'verify' | 'payment' | 'identification';
 
 /** Ordered, so the progress indicator and the labels derive from one list. */
 const STEPS: { id: Step; label: string }[] = [
@@ -61,7 +58,7 @@ const STEPS: { id: Step; label: string }[] = [
     { id: 'details', label: 'Your details' },
     { id: 'verify', label: 'Verify email' },
     { id: 'payment', label: 'Payment' },
-    { id: 'guardian', label: 'Student identification' },
+    { id: 'identification', label: 'Student identification' },
 ];
 
 const SUBTITLES: Record<Step, string> = {
@@ -69,7 +66,7 @@ const SUBTITLES: Record<Step, string> = {
     details: 'Create your participant account',
     verify: 'Verify your email',
     payment: 'Complete your payment',
-    guardian: 'Face scan, ID and consent',
+    identification: 'Face scan, ID and consent',
 };
 
 export default function RegisterPage() {
@@ -102,14 +99,8 @@ export default function RegisterPage() {
     // Mobile number stored for WhatsApp notifications.
     const [phone, setPhone] = useState('');
 
-    // ── Parent/identification details, collected here now instead of on the final
-    // step (see the module doc comment above for why). A single name field —
-    // GuardianForm still has two columns for the standalone `/identification`
-    // backfill page, but the whole name is sent as `guardianFirstName`; the
-    // backend accepts an empty `guardianLastName`.
-    const [guardianName, setGuardianName] = useState('');
-    const [guardianEmail, setGuardianEmail] = useState('');
-    const [guardianPhone, setGuardianPhone] = useState('');
+    // Participant demographics, collected here and handed to the final
+    // "Student identification" step prefilled.
     const [gender, setGender] = useState('');
     const [dob, setDob] = useState('');
 
@@ -234,22 +225,6 @@ export default function RegisterPage() {
         }
         if (!formData.email.trim()) {
             setError('Please enter your email address.');
-            return;
-        }
-        // These four are collected here now but only submitted at the final
-        // "Student identification" step, whose form no longer has fields for
-        // them (see GuardianStep's `hideGuardianInfoFields`) — so they have to
-        // be right before the student ever leaves this page.
-        if (!guardianName.trim()) {
-            setError("Please enter the parent or guardian's name.");
-            return;
-        }
-        if (!guardianEmail.trim()) {
-            setError("Please enter the parent or guardian's email address.");
-            return;
-        }
-        if (!guardianPhone.trim()) {
-            setError("Please enter the parent or guardian's mobile number.");
             return;
         }
         // Compulsory — every exam SMS and WhatsApp goes to this number.
@@ -449,18 +424,12 @@ export default function RegisterPage() {
                     <PaymentStep
                         studentEmail={user?.email ?? formData.email}
                         rollNumber={user?.rollNumber}
-                        onDone={() => { setError(''); setStep('guardian'); }}
+                        onDone={() => { setError(''); setStep('identification'); }}
                     />
-                ) : step === 'guardian' ? (
-                    <GuardianStep
+                ) : step === 'identification' ? (
+                    <IdentificationStep
                         studentName={`${formData.firstName} ${formData.lastName}`.trim() || undefined}
-                        guardianInfo={{
-                            guardianFirstName: guardianName.trim(),
-                            // Not collected on this flow — the backend no longer
-                            // requires it (see `SubmitGuardianDto.relationship`).
-                            relationship: '',
-                            guardianEmail: guardianEmail.trim(),
-                            guardianPhone: guardianPhone.trim(),
+                        identificationInfo={{
                             studentDob: dob,
                             gender,
                         }}
@@ -496,31 +465,13 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="input-group">
-                            <label className="input-label" htmlFor="guardianName">Parent / Guardian Name</label>
+                            <label className="input-label" htmlFor="email">Participant&apos;s Email</label>
                             <input
-                                id="guardianName" name="guardianName" type="text" className="input-field"
-                                placeholder="Full name" value={guardianName}
-                                onChange={(e) => setGuardianName(e.target.value)} required
+                                id="email" name="email" type="email" className="input-field"
+                                placeholder="you@example.com" value={formData.email}
+                                onChange={handleChange} required suppressHydrationWarning
                             />
-                        </div>
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="email">Participant&apos;s Email</label>
-                                <input
-                                    id="email" name="email" type="email" className="input-field"
-                                    placeholder="you@example.com" value={formData.email}
-                                    onChange={handleChange} required suppressHydrationWarning
-                                />
-                                <p className="input-hint">We&apos;ll send your verification code here.</p>
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianEmail">Parent&apos;s Email</label>
-                                <input
-                                    id="guardianEmail" name="guardianEmail" type="email" className="input-field"
-                                    placeholder="parent@example.com" value={guardianEmail}
-                                    onChange={(e) => setGuardianEmail(e.target.value)} required
-                                />
-                            </div>
+                            <p className="input-hint">We&apos;ll send your verification code here.</p>
                         </div>
 
                         <div className="form-row">
@@ -534,17 +485,6 @@ export default function RegisterPage() {
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
                                     required suppressHydrationWarning
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianPhone">
-                                    Parent&apos;s Mobile <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(preferred WhatsApp)</span>
-                                </label>
-                                <input
-                                    id="guardianPhone" name="guardianPhone" type="tel" inputMode="tel" autoComplete="tel"
-                                    className="input-field" placeholder="+91 98765 43210"
-                                    value={guardianPhone}
-                                    onChange={(e) => setGuardianPhone(e.target.value)} required
                                 />
                             </div>
                         </div>

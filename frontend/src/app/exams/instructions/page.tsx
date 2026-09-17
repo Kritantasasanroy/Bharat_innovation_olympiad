@@ -158,7 +158,7 @@ function ExamInstructionsPage() {
      * "Explicit confirmation for grade before the exam starts." Sitting the wrong
      * grade's paper is unrecoverable — the attempt is scored against that grade's
      * cohort — and the class was chosen once, at registration, possibly months
-     * earlier by a parent. So it is confirmed again here, as its own deliberate
+     * earlier. So it is confirmed again here, as its own deliberate
      * act, with a route out if it is wrong.
      */
     const [gradeConfirmed, setGradeConfirmed] = useState(false);
@@ -170,13 +170,13 @@ function ExamInstructionsPage() {
     const [exam, setExam] = useState<any>(null);
 
     /**
-     * Parental consent (registration part 2).
+     * Student identification (consent + ID + face scan).
      *
      * Resolved here rather than letting the player refuse, for the same reason the
      * pass and the trial are: a student should not complete every device check and
      * *then* be turned away.
      */
-    const [guardianState, setGuardianState] = useState<'checking' | 'complete' | 'missing'>('checking');
+    const [identificationState, setidentificationState] = useState<'checking' | 'complete' | 'missing'>('checking');
     /**
      * Steps standing between the student and Start, shown by the blocked modal.
      * Each entry can carry a `fix` that jumps them to where it gets done —
@@ -185,10 +185,10 @@ function ExamInstructionsPage() {
     const [blocked, setBlocked] = useState<{ label: string; fix?: () => void }[] | null>(null);
     useEffect(() => {
         api.get('/identification/me')
-            .then((r) => setGuardianState(r.data.complete ? 'complete' : 'missing'))
+            .then((r) => setidentificationState(r.data.complete ? 'complete' : 'missing'))
             // On a read failure, do not invent a refusal — the server-side gate in
             // startAttempt is authoritative and will stop them if it matters.
-            .catch(() => setGuardianState('complete'));
+            .catch(() => setidentificationState('complete'));
     }, []);
 
     /**
@@ -410,7 +410,7 @@ function ExamInstructionsPage() {
         if (passStatus === 'locked') {
             missing.push({ label: 'Payment — unlock exams for the season', fix: () => router.push('/unlock') });
         }
-        if (guardianState !== 'complete') {
+        if (identificationState !== 'complete') {
             missing.push({ label: 'Student identification', fix: () => router.push(back) });
         }
         if (!deviceChecks.viewport) {
@@ -510,12 +510,12 @@ function ExamInstructionsPage() {
         {
             label: 'Student identification',
             description:
-                guardianState === 'checking'
+                identificationState === 'checking'
                     ? 'Checking…'
-                    : guardianState === 'complete'
+                    : identificationState === 'complete'
                       ? 'Recorded: nothing more needed'
                       : 'Required: complete student identification once',
-            passed: guardianState === 'checking' ? null : guardianState === 'complete',
+            passed: identificationState === 'checking' ? null : identificationState === 'complete',
         },
         // Listed as a check rather than hidden, so the rehearsal reads as one
         // more thing to complete rather than an unexplained detour on the way
@@ -617,8 +617,8 @@ function ExamInstructionsPage() {
                         </p>
                     </div>
 
-                    {/* Parental consent gate — mirrors the server-side refusal. */}
-                    {guardianState === 'missing' && (
+                    {/* Identification gate — mirrors the server-side refusal. */}
+                    {identificationState === 'missing' && (
                         <div className="glass-card instructions-card instructions-card--blocked">
                             <h2>🪪 Student identification needed</h2>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-4)' }}>
@@ -744,7 +744,7 @@ function ExamInstructionsPage() {
                             className="btn btn-primary btn-lg"
                             disabled={
                                 passStatus === 'checking' ||
-                                guardianState === 'checking' ||
+                                identificationState === 'checking' ||
                                 faceEnrollStatus === 'checking' ||
                                 trialState === 'checking'
                             }
@@ -867,7 +867,7 @@ function ExamInstructionsPage() {
                                 rules tick. Sitting the wrong grade's paper cannot be
                                 undone — the attempt is scored against that grade's
                                 cohort — and the class was chosen once at registration,
-                                possibly months ago by a parent. */}
+                                possibly months ago. */}
                             {user?.classBand && (
                                 <>
                                     <label className="rules-ack rules-ack--grade">

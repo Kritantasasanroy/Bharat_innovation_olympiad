@@ -22,20 +22,16 @@ export interface User {
     createdAt: string;
 }
 
-/** Registration part 2 — what `GET /identification/me` returns. */
-export interface GuardianStatus {
+/** Student identification — what `GET /identification/me` returns. */
+export interface IdentificationStatus {
     version: string;
     complete: boolean;
     profile: {
-        guardianFirstName: string;
-        guardianLastName: string;
-        relationship: string;
-        guardianEmail: string;
-        guardianPhone: string;
         studentDob?: string | null;
         gender?: string | null;
         city?: string | null;
         state?: string | null;
+        idDocumentType?: string | null;
         parentalConsentAt: string;
         dataConsentAt: string;
         consentVersion: string;

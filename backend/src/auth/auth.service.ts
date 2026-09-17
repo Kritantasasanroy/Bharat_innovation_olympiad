@@ -525,15 +525,11 @@ export class AuthService {
                 faceEmbedding: true,
                 school: { select: { id: true, name: true, code: true, city: true, state: true } },
                 /**
-                 * Parent / guardian details and the consent trail.
+                 * The identification record and the consent trail.
                  *
-                 * Collected at registration part 2 and stored on `GuardianProfile`,
-                 * but until now readable nowhere in the admin portal — so a
-                 * question like "did this child's parent actually consent, and
-                 * when were they told?" had to be answered from the database by
-                 * hand. `approvalEmailSentAt` is when the confirmation mail went
-                 * out and `parentalConsentAt` is when the parent accepted; both
-                 * are shown on the student page.
+                 * Stored on `GuardianProfile`; no parent/guardian details exist
+                 * any more — the record is the participant's own ID document,
+                 * demographics and consent timestamps.
                  *
                  * `ipAddress` is deliberately not selected — it is kept as part
                  * of the legal consent record, not as something to display next
@@ -541,11 +537,6 @@ export class AuthService {
                  */
                 guardianProfile: {
                     select: {
-                        guardianFirstName: true,
-                        guardianLastName: true,
-                        relationship: true,
-                        guardianEmail: true,
-                        guardianPhone: true,
                         studentDob: true,
                         gender: true,
                         city: true,
@@ -555,7 +546,6 @@ export class AuthService {
                         parentalConsentAt: true,
                         dataConsentAt: true,
                         consentVersion: true,
-                        approvalEmailSentAt: true,
                         createdAt: true,
                         updatedAt: true,
                     },

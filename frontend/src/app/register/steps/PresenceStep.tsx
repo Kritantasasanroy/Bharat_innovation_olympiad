@@ -10,11 +10,12 @@ import { useState } from 'react';
  * "Participant to be present during registration: strong communication and check
  * before registration."
  *
- * The failure this exists to prevent is expensive and silent: a parent registers
- * on the child's behalf, enrols *their own* face at step 5, and the child is then
- * flagged for identity mismatch in the middle of a real paper — by which point
- * nothing can be done without support unpicking it. So the warning comes first,
- * has to be acknowledged deliberately, and says what actually goes wrong.
+ * The failure this exists to prevent is expensive and silent: someone registers
+ * on the participant's behalf, enrols *their own* face at the last step, and the
+ * student is then flagged for identity mismatch in the middle of a real paper —
+ * by which point nothing can be done without support unpicking it. So the
+ * warning comes first, has to be acknowledged deliberately, and says what
+ * actually goes wrong.
  *
  * The technology requirements sit here too rather than at the end, because
  * discovering you need a webcam *after* creating an account is the wrong order.
@@ -82,7 +83,7 @@ export default function PresenceStep({
                         onChange={(e) => onAcknowledgedChange(e.target.checked)}
                     />
                     <span>
-                        <strong>The ward is here with me now, and will do the face scan himself/herself</strong>
+                        <strong>The participant is here now, and will do the face scan himself/herself</strong>
                     </span>
                 </label>
 
@@ -109,9 +110,9 @@ export default function PresenceStep({
                         onChange={(e) => onDataConsentChange(e.target.checked)}
                     />
                     <span>
-                        I give my consent for the collection and use of the ward&apos;s details and face
-                        scan for Olympiad registration, verification, and participation and related
-                        activities.
+                        I give my consent for the collection and use of the participant&apos;s details
+                        and face scan for Olympiad registration, verification, and participation and
+                        related activities.
                     </span>
                 </label>
             </div>

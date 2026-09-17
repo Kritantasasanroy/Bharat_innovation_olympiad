@@ -4,9 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from './notification.service';
 
 /**
- * The two delayed lifecycle mails — BIO-STU-004 (preparation resources, T+1
- * after registration completes) and BIO-STU-005 (parent consent received, T+2,
- * addressed to the guardian).
+ * The delayed lifecycle mail — BIO-STU-004 (preparation resources, T+1 after
+ * registration completes).
  *
  * ## Why a sweeper
  *
@@ -14,9 +13,12 @@ import { NotificationService } from './notification.service';
  * student would have to survive days of deploys, while an hourly "who crossed
  * the mark and has not been mailed?" query is stateless and self-healing. The
  * `EmailMessage` claim inside {@link NotificationService.deliverOnce} makes
- * every re-run idempotent, so the windows below are deliberately open-ended
+ * every re-run idempotent, so the window below is deliberately open-ended
  * (`grantedAt <= 24h ago`) — a student who crossed the mark during a missed
  * sweep is caught by the next one, not skipped.
+ *
+ * (The T+2 parent-consent mail went away when parent/guardian details were
+ * removed from identification — there is no guardian address to send it to.)
  */
 @Injectable()
 export class StudentNudgesService implements OnModuleInit, OnModuleDestroy {
@@ -34,7 +36,7 @@ export class StudentNudgesService implements OnModuleInit, OnModuleDestroy {
 
     onModuleInit() {
         if (process.env.STUDENT_NUDGES_ENABLED?.trim().toLowerCase() === 'false') {
-            this.logger.warn('STUDENT_NUDGES_ENABLED=false — the T+1/T+2 mail sweeper is off.');
+            this.logger.warn('STUDENT_NUDGES_ENABLED=false — the T+1 mail sweeper is off.');
             return;
         }
         const first = setTimeout(() => {
@@ -57,11 +59,6 @@ export class StudentNudgesService implements OnModuleInit, OnModuleDestroy {
             await this.sendPrepResources();
         } catch (err) {
             this.logger.error(`T+1 prep sweep failed: ${(err as Error).message}`);
-        }
-        try {
-            await this.sendParentConsentThanks();
-        } catch (err) {
-            this.logger.error(`T+2 consent sweep failed: ${(err as Error).message}`);
         }
     }
 
@@ -95,53 +92,6 @@ export class StudentNudgesService implements OnModuleInit, OnModuleDestroy {
         }
         if (passes.length) {
             this.logger.log(`T+1 prep sweep: ${sent}/${passes.length} mailed.`);
-        }
-    }
-
-    /**
-     * BIO-STU-005 — every recorded parental consent at least two days old,
-     * addressed to the guardian's own inbox. Deduped on the GuardianProfile id,
-     * so an edited profile never re-mails.
-     */
-    private async sendParentConsentThanks(): Promise<void> {
-        const now = Date.now();
-        const twoDaysAgo = new Date(now - 2 * StudentNudgesService.DAY_MS);
-        // Same week-of-catch-up bound as the prep sweep.
-        const weekAgo = new Date(now - 7 * StudentNudgesService.DAY_MS);
-        const profiles = await this.prisma.guardianProfile.findMany({
-            where: { parentalConsentAt: { lte: twoDaysAgo, gte: weekAgo } },
-            select: {
-                id: true,
-                guardianFirstName: true,
-                guardianLastName: true,
-                guardianEmail: true,
-                user: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                        rollNumber: true,
-                        classBand: true,
-                        school: { select: { name: true } },
-                    },
-                },
-            },
-        });
-        let sent = 0;
-        for (const profile of profiles) {
-            const ok = await this.notifications.sendParentConsentReceived(profile.guardianEmail, {
-                userId: profile.user.id,
-                guardianProfileId: profile.id,
-                parentName: `${profile.guardianFirstName} ${profile.guardianLastName}`.trim(),
-                studentName: `${profile.user.firstName} ${profile.user.lastName}`.trim(),
-                rollNumber: profile.user.rollNumber,
-                grade: profile.user.classBand,
-                schoolName: profile.user.school?.name ?? null,
-            });
-            if (ok) sent++;
-        }
-        if (profiles.length) {
-            this.logger.log(`T+2 consent sweep: ${sent}/${profiles.length} mailed.`);
         }
     }
 }

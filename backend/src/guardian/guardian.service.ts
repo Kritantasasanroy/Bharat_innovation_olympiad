@@ -1,13 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
-import { normalizePhone } from '../auth/phone.helpers';
 import { SubmitGuardianDto } from './dto/guardian.dto';
 
 /**
- * Bump when the parental-consent wording changes. Stored on every row, so a
- * later revision is distinguishable from the consent originally given rather
- * than silently reinterpreting it.
+ * Bump when the consent wording changes. Stored on every row, so a later
+ * revision is distinguishable from the consent originally given rather than
+ * silently reinterpreting it.
  */
 export const CURRENT_GUARDIAN_CONSENT_VERSION = '2026-07-v1';
 
@@ -16,26 +15,23 @@ const MAX_AGE_YEARS = 19;
 const MIN_AGE_YEARS = 3;
 
 /**
- * Registration part 2 — parent/guardian details and parental consent.
+ * Student identification — the ID document, the demographics, and the two
+ * consents that `AttemptService.startAttempt` gates on.
  *
  * ## Why this gates the exam and not the login
  *
- * "Parental consent is must and needs explicit acceptance for data." Under the
- * DPDP Act, processing a minor's data — which is exactly what proctoring a child
- * with a webcam is — needs verifiable guardian consent. So
- * `AttemptService.startAttempt` refuses to open a real paper without a complete
- * row here.
+ * Processing a minor's data — which is exactly what proctoring a child with a
+ * webcam is — needs recorded consent under the DPDP Act. So
+ * `AttemptService.startAttempt` refuses to open a real paper without a
+ * complete row here.
  *
  * It deliberately does *not* gate signing in. A student who registered before
- * this existed must be able to log in and *reach* the form; locking them out of
- * their own account to collect a consent would be self-defeating.
+ * this existed must be able to log in and *reach* the form; locking them out
+ * of their own account to collect it would be self-defeating.
  *
- * ## Why it is separate from `Consent`
- *
- * `Consent` records what the **student** permits at exam time (media capture,
- * monitoring). This records what the **guardian** permits, plus the demographics
- * the guardian is the right person to supply. Both are kept; neither substitutes
- * for the other.
+ * No parent/guardian details are collected any more — the flow is the
+ * participant's own identification. The face scan half lives on
+ * `User.faceEmbedding` via `ProctorService.enrollFace`.
  */
 @Injectable()
 export class GuardianService {
@@ -45,19 +41,19 @@ export class GuardianService {
     ) {}
 
     /**
-     * Create or update the guardian profile.
+     * Create or update the identification record.
      *
-     * Idempotent by design: a parent who resubmits the form (or a student who
-     * corrects a typo months later) updates the row. The consent timestamps are
-     * only advanced on a genuine re-consent, so the original acceptance time
-     * survives an unrelated edit such as fixing a phone number.
+     * Idempotent by design: a student who resubmits (or corrects a typo months
+     * later) updates the row. The consent timestamps are only advanced on a
+     * genuine re-consent, so the original acceptance time survives an
+     * unrelated edit.
      */
     async submit(userId: string, dto: SubmitGuardianDto, ipAddress?: string) {
         // Both, or neither. A half-given consent is not a consent, and storing
         // one would leave a row that *looks* complete to the exam gate.
         if (!dto.parentalConsent || !dto.dataConsent) {
             throw new BadRequestException(
-                'Both parental consent and consent to data processing are required before the ward can sit an exam.',
+                'Both participation consent and consent to data processing are required before the participant can sit an exam.',
             );
         }
 
@@ -70,10 +66,10 @@ export class GuardianService {
         // students who consented before a field existed from sitting their exam,
         // which punishes them for a change they had no part in.
         if (!dto.studentDob) {
-            throw new BadRequestException("Enter the ward's date of birth.");
+            throw new BadRequestException("Enter the participant's date of birth.");
         }
         if (!dto.gender) {
-            throw new BadRequestException("Select the ward's gender.");
+            throw new BadRequestException("Select the participant's gender.");
         }
         const idDocumentType = dto.idDocumentType?.trim();
         if (!idDocumentType) {
@@ -82,25 +78,24 @@ export class GuardianService {
 
         // One picture is enough for a school-diary page or "other" document;
         // only a school ID card, whose class/section is on the back, asks for
-        // two. Mirrors `TWO_SIDED_DOC` in `GuardianForm`.
+        // two. Mirrors `TWO_SIDED_DOC` in `IdentificationForm`.
         const needsBackSide = idDocumentType === 'School ID Card';
 
         const idDocumentUrl = dto.idDocumentUrl?.trim();
         if (!idDocumentUrl) {
             throw new BadRequestException(
                 needsBackSide
-                    ? "Upload the front of the ward's school ID card."
-                    : "Upload a picture of the ward's identity document.",
+                    ? 'Upload the front of the school ID card.'
+                    : 'Upload a picture of the identity document.',
             );
         }
         const idDocumentBackUrl = dto.idDocumentBackUrl?.trim();
         if (needsBackSide && !idDocumentBackUrl) {
             throw new BadRequestException(
-                "Upload the back of the ward's school ID card as well. Both sides are needed.",
+                'Upload the back of the school ID card as well. Both sides are needed.',
             );
         }
 
-        const guardianPhone = this.normaliseGuardianPhone(dto.guardianPhone);
         const studentDob = this.parseDob(dto.studentDob);
         const now = new Date();
 
@@ -111,21 +106,15 @@ export class GuardianService {
 
         // Re-consent only when the wording has moved on. Otherwise keep the
         // original timestamps — they are the legal record of when consent was
-        // actually given, and an edit to a phone number must not rewrite it.
+        // actually given, and a later edit must not rewrite it.
         const consentIsCurrent =
             existing !== null && existing.consentVersion === CURRENT_GUARDIAN_CONSENT_VERSION;
 
         const details = {
-            guardianFirstName: dto.guardianFirstName.trim(),
-            guardianLastName: (dto.guardianLastName ?? '').trim(),
-            relationship: dto.relationship ?? '',
-            guardianEmail: dto.guardianEmail.trim().toLowerCase(),
-            guardianPhone,
             studentDob,
             gender: dto.gender ?? null,
-            // `pincode` was dropped from GuardianProfile along with the field in
-            // the form. `city`/`state` keep their columns so an existing row's
-            // values survive, but nothing collects them any more.
+            // `city`/`state` keep their columns so an existing row's values
+            // survive, but nothing collects them any more.
             city: dto.city?.trim() || null,
             state: dto.state?.trim() || null,
             idDocumentType,
@@ -159,35 +148,15 @@ export class GuardianService {
             },
         });
 
-        // Send parent approval confirmation email.
-        //
-        // The send time is recorded rather than assumed from `createdAt`: this
-        // is a best-effort path that never fails the consent submission, so a
-        // consent can legitimately exist with no mail behind it, and "we told
-        // the parent, at this time" is exactly the thing an admin needs to be
-        // able to answer. Only a genuine send stamps the column.
-        let sent = profile;
-        if (this.notifications) {
-            const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true, email: true, rollNumber: true } });
-            const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Ward';
-            const guardianName = `${profile.guardianFirstName} ${profile.guardianLastName}`.trim();
-
-            const delivered = await this.notifications.sendParentApprovalEmail(
-                profile.guardianEmail,
-                guardianName,
-                studentName,
-            );
-            if (delivered) {
-                sent = await this.prisma.guardianProfile.update({
-                    where: { userId },
-                    data: { approvalEmailSentAt: new Date() },
-                });
-            }
-
-            // Identification just went complete → the "verification complete"
-            // mail (BIO-STU-007) to the student, deduped on the user so a
-            // resubmission never re-mails.
-            if (user?.email && this.isComplete(profile)) {
+        // Identification just went complete → the "verification complete" mail
+        // (BIO-STU-007) to the student, deduped on the user so a resubmission
+        // never re-mails.
+        if (this.notifications && this.isComplete(profile)) {
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+                select: { firstName: true, email: true, rollNumber: true },
+            });
+            if (user?.email) {
                 await this.notifications.sendVerificationComplete(user.email, {
                     userId,
                     firstName: user.firstName,
@@ -196,10 +165,10 @@ export class GuardianService {
             }
         }
 
-        return this.present(sent);
+        return this.present(profile);
     }
 
-    /** What the student app reads to decide whether to prompt for part 2. */
+    /** What the student app reads to decide whether to prompt for the form. */
     async status(userId: string) {
         const profile = await this.prisma.guardianProfile.findUnique({ where: { userId } });
         return {
@@ -239,25 +208,6 @@ export class GuardianService {
     private present(profile: Record<string, any>) {
         const { ipAddress: _ipAddress, ...rest } = profile;
         return rest;
-    }
-
-    private normaliseGuardianPhone(raw: string): string {
-        // Same E.164 convention as `User.phone`, so a parent's number is
-        // comparable with a student's and usable by the SMS provider as-is.
-        //
-        // Deliberately NOT verified by OTP: this is a contact number for the
-        // organisers, not a login identifier, so it grants nothing. Demanding a
-        // second OTP from a parent mid-registration is what makes forms get
-        // abandoned.
-        try {
-            return normalizePhone(raw);
-        } catch {
-            // `normalizePhone` guarantees the shape or throws; only the wording
-            // needs changing, so the parent knows which field is at fault.
-            throw new BadRequestException(
-                "Enter a valid mobile number for the parent or guardian.",
-            );
-        }
     }
 
     private parseDob(raw?: string): Date | null {

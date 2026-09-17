@@ -432,7 +432,7 @@ function ExamPlayPage() {
                 // A still from the camera, kept *only* here — at the instant a
                 // violation is recorded. Nothing is captured on a timer, so a
                 // student who trips no rule has no image stored anywhere, which
-                // is what the registration copy and the parent's consent
+                // is what the registration copy and the identification consent
                 // promise. Without it, "your face didn't match" is an assertion
                 // with nothing behind it that a reviewer can weigh or a student
                 // can appeal.
@@ -934,9 +934,9 @@ function ExamPlayPage() {
     }
 
     /**
-     * Parental consent is missing (registration part 2).
+     * Student identification is missing.
      *
-     * Reached by a student who registered before the parent section existed, or
+     * Reached by a student who registered before identification existed, or
      * whose consent version has been superseded. `?next=` brings them straight
      * back here once it is done, rather than dropping them on the dashboard to
      * find their own way back to the paper they were trying to sit.
@@ -945,12 +945,11 @@ function ExamPlayPage() {
         return (
             <div className="container page-content flex items-center justify-center" style={{ minHeight: '100vh' }}>
                 <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', maxWidth: '520px' }}>
-                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👨‍👩‍👧</div>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🪪</div>
                     <h2 style={{ marginBottom: '1rem' }}>Student identification needed first</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>
-                        Every participant is a minor, so identification and guardian consent have to
-                        be completed before we can proctor an exam. It takes about two minutes and only
-                        needs to be done just once.
+                        Identification and consent have to be completed before we can proctor an exam.
+                        It takes about two minutes and only needs to be done once.
                     </p>
                     <button
                         className="btn btn-primary"

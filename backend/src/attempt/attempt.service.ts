@@ -434,14 +434,14 @@ export class AttemptService {
             throw new ForbiddenException('FACE_ENROLLMENT_REQUIRED');
         }
 
-        // Parental consent (registration part 2). Sits beside the face check
-        // rather than further down with the paywall because it is the same *kind*
-        // of gate: an incomplete account, fixable by the student in a minute,
-        // not a commercial or scheduling condition.
+        // Student identification (consent + ID document). Sits beside the face
+        // check rather than further down with the paywall because it is the same
+        // *kind* of gate: an incomplete account, fixable by the student in a
+        // minute, not a commercial or scheduling condition.
         //
         // Applies to the trial and the free practice paper too, deliberately.
         // Those run the identical proctored environment — a webcam pointed at a
-        // child — and the DPDP Act does not care that the paper is unscored. A
+        // minor — and the DPDP Act does not care that the paper is unscored. A
         // student registered before this existed is not locked out of their
         // account: only *starting* a proctored attempt is blocked, and the error
         // code sends the UI straight to the form.

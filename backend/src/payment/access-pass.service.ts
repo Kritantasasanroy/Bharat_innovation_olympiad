@@ -300,7 +300,8 @@ export class AccessPassService {
                 phone: true,
                 phoneRaw: true,
                 school: { select: { name: true } },
-                guardianProfile: { select: { idDocumentUrl: true, parentalConsentAt: true } },
+                faceEmbedding: true,
+                guardianProfile: { select: { idDocumentUrl: true } },
             },
         });
         if (!user) return;
@@ -324,14 +325,14 @@ export class AccessPassService {
         });
 
         // Face scan lives outside GuardianProfile (the descriptor is enrolled
-        // separately); consent + ID document are what the profile proves.
+        // separately); the profile is what proves the ID document.
         await this.notifications.sendWelcome(user.email, {
             firstName: user.firstName,
             rollNumber,
             grade: user.classBand,
             schoolName: user.school?.name ?? null,
             examStartsAt: booking?.slot.startsAt ?? null,
-            faceScanDone: Boolean(user.guardianProfile?.parentalConsentAt),
+            faceScanDone: Boolean(user.faceEmbedding),
             idDocumentDone: Boolean(user.guardianProfile?.idDocumentUrl),
         });
 

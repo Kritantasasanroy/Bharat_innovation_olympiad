@@ -42,7 +42,6 @@ export class NotificationServiceTestDouble extends NotificationService {
     deliverOnce = jest.fn(async (_input: unknown): Promise<boolean> => true);
     sendPaymentPendingEmail = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
     sendPrepResources = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
-    sendParentConsentReceived = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
     sendVerificationPending = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
     sendExamReminderEmail = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
     sendVerificationComplete = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
@@ -68,9 +67,6 @@ export class NotificationServiceTestDouble extends NotificationService {
     );
     sendResultsPublished = jest.fn(
         async (_to: string, _firstName: string, _examTitle: string): Promise<void> => undefined,
-    );
-    sendParentApprovalEmail = jest.fn(
-        async (_to: string, _guardianName: string, _studentName: string): Promise<boolean> => true,
     );
     sendEmailOtp = jest.fn(
         async (

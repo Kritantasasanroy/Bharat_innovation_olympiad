@@ -112,7 +112,7 @@ export class ProctorService {
      * Stores the enrollment descriptor and, when supplied, the still it was
      * captured alongside — the photo later printed on the certificate.
      *
-     * Disclosed in the guardian consent form (`GuardianForm.tsx`) and the
+     * Disclosed in the identification consent form (`IdentificationForm.tsx`) and the
      * registration face-scan step: unlike a violation snapshot, this one photo
      * is not conditional on anything going wrong, it is taken once, on purpose,
      * because the certificate needs it. A photo upload failure never blocks

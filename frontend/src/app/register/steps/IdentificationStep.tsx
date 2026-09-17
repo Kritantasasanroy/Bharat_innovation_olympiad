@@ -1,6 +1,6 @@
 'use client';
 
-import GuardianForm, { GuardianFormValues } from '@/components/GuardianForm';
+import IdentificationForm, { IdentificationFormValues } from '@/components/IdentificationForm';
 import api from '@/lib/api';
 import { describeError } from '@/lib/errors';
 import { useEffect, useState } from 'react';
@@ -8,16 +8,10 @@ import { useEffect, useState } from 'react';
 /**
  * Registration's last step — "Student identification".
  *
- * Used to be two steps (a standalone face scan, then parent consent). Folded
- * into one page: the parent/identification's own details (name, email, phone,
- * relationship, the ward's DOB and gender) were moved to the earlier details
- * step and arrive here already known, via `guardianInfo` — so this page has
- * exactly three things left to do, in order: scan the participant's face,
- * upload their ID document, and give the two consents. `GuardianForm` still
- * renders the ID + consent fieldsets (with `hideGuardianInfoFields`, so it
- * skips the fields collected earlier) — the standalone `/identification` backfill
- * page for pre-existing accounts still gets the full form from that same
- * component, unchanged.
+ * Three things, in order: scan the participant's face, upload their ID
+ * document, give the two consents. No parent/guardian details are collected
+ * anywhere — the participant's own date of birth and gender arrive prefilled
+ * from the details step.
  */
 
 /**
@@ -46,9 +40,9 @@ function useCosmeticMessage(active: boolean): string {
     return COSMETIC_MESSAGES[index];
 }
 
-export default function GuardianStep({
+export default function IdentificationStep({
     studentName,
-    guardianInfo,
+    identificationInfo,
     videoRef,
     modelsLoaded,
     faceCameraOn,
@@ -61,10 +55,7 @@ export default function GuardianStep({
 }: {
     studentName?: string;
     /** Collected earlier, on the details step — this page only adds ID + consent. */
-    guardianInfo: Pick<
-        GuardianFormValues,
-        'guardianFirstName' | 'relationship' | 'guardianEmail' | 'guardianPhone' | 'studentDob' | 'gender'
-    >;
+    identificationInfo: Pick<IdentificationFormValues, 'studentDob' | 'gender'>;
     videoRef: (el: HTMLVideoElement | null) => void;
     modelsLoaded: boolean;
     faceCameraOn: boolean;
@@ -85,7 +76,7 @@ export default function GuardianStep({
     const cosmeticMsg = useCosmeticMessage(loading);
     const displayedFaceMsg = loading ? cosmeticMsg : faceMsg;
 
-    const handleSubmit = async (values: GuardianFormValues) => {
+    const handleSubmit = async (values: IdentificationFormValues) => {
         setBusy(true);
         setError('');
         try {
@@ -101,7 +92,7 @@ export default function GuardianStep({
             });
             onDone();
         } catch (err: any) {
-            setError(describeError(err, "save your parent's details"));
+            setError(describeError(err, 'save the identification details'));
         } finally {
             setBusy(false);
         }
@@ -118,7 +109,7 @@ export default function GuardianStep({
             <h2 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>Student identification</h2>
             <p className="guardian-form__lede" style={{ marginTop: 0 }}>
                 The last step. {studentName ? <strong>{studentName}</strong> : 'The participant'} scans
-                their face below, then a parent or guardian uploads an ID document and gives consent.
+                their face below, then uploads an ID document and gives consent.
             </p>
 
             <div className="scan-warning" role="note">
@@ -220,10 +211,9 @@ export default function GuardianStep({
                 )}
             </div>
 
-            <GuardianForm
+            <IdentificationForm
                 studentName={studentName}
-                initial={guardianInfo}
-                hideGuardianInfoFields
+                initial={identificationInfo}
                 requireFaceScan
                 faceScanDone={faceScanDone}
                 submitLabel="Submit and finish registration"

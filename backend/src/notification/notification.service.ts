@@ -12,7 +12,6 @@ import {
     adminBroadcastEmail,
     examReminderEmail,
     examSubmittedEmail,
-    parentConsentReceivedEmail,
     paymentPendingEmail,
     prepResourcesEmail,
     verificationCompleteEmail,
@@ -43,7 +42,6 @@ import {
     slotConfirmedEmail,
     studentEmailOtpEmail,
     welcomeEmail,
-    parentApprovalEmail,
 } from './templates';
 import {
     ConsoleSmsProvider,
@@ -258,9 +256,8 @@ export class NotificationService implements OnModuleInit {
      *
      * Still never throws — a mail outage must not fail the business action that
      * triggered it, which is the whole reason this wrapper exists. The boolean
-     * is for callers that record *that* a message was sent (parent consent
-     * stamps `approvalEmailSentAt` from it); everything else ignores it, and a
-     * `false` reads exactly as the old silent failure did.
+     * is for callers that record *that* a message was sent; everything else
+     * ignores it, and a `false` reads exactly as the old silent failure did.
      */
     private async deliver(to: string | null | undefined, mail: RenderedEmail): Promise<boolean> {
         if (!to) return false;
@@ -400,28 +397,6 @@ export class NotificationService implements OnModuleInit {
         });
     }
 
-    /** BIO-STU-005 — parent consent received, T+2, addressed to the guardian. */
-    async sendParentConsentReceived(
-        to: string,
-        vars: {
-            userId: string;
-            guardianProfileId: string;
-            parentName: string;
-            studentName: string;
-            rollNumber?: string | null;
-            grade?: number | null;
-            schoolName?: string | null;
-        },
-    ): Promise<boolean> {
-        return this.deliverOnce({
-            userId: vars.userId,
-            template: 'bio-stu-005',
-            dedupeKey: vars.guardianProfileId,
-            to,
-            mail: parentConsentReceivedEmail(vars),
-        });
-    }
-
     /** BIO-STU-006 — verification still pending, T-3 (72h) before the exam. */
     async sendVerificationPending(
         to: string,
@@ -498,19 +473,6 @@ export class NotificationService implements OnModuleInit {
     /** Milestone 4b — the final report is published and the score is no longer provisional. */
     async sendResultsPublished(to: string, firstName: string, examTitle: string): Promise<void> {
         await this.deliver(to, resultsPublishedEmail({ firstName, examTitle, appUrl: this.appUrl }));
-    }
-
-    /** Returns whether the mail was actually delivered, so the consent record can stamp it. */
-    async sendParentApprovalEmail(
-        to: string,
-        guardianName: string,
-        studentName: string,
-    ): Promise<boolean> {
-        const approvalLink = `${this.appUrl}/identification`;
-        return this.deliver(
-            to,
-            parentApprovalEmail({ guardianName, studentName, approvalLink }),
-        );
     }
 
     // ── Partner lifecycle ──────────────────────────────────────────────────

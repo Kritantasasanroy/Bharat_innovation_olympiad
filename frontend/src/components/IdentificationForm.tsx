@@ -5,27 +5,24 @@ import { describeError, describeOversizeFile } from '@/lib/errors';
 import { FormEvent, useEffect, useState } from 'react';
 
 /**
- * Registration part 2 — the parent/identification section.
+ * Student identification — the exam-gate form.
  *
- * Shared by the registration flow (as step 5) and by `/identification`, which is where
- * a student who registered before this existed is sent when the exam gate refuses
- * them with `GUARDIAN_CONSENT_REQUIRED`. One component, so the two can never
- * collect different fields or show different consent wording.
+ * Shared by the registration flow (its last step, under the face scan) and by
+ * `/identification`, which is where a student who registered before this
+ * existed is sent when the exam gate refuses them with
+ * `GUARDIAN_CONSENT_REQUIRED`. One component, so the two can never collect
+ * different fields or show different consent wording.
  *
- * The two consents are separate checkboxes on purpose: consenting to a child
- * *taking part* is not the same as consenting to their *data being processed*,
- * and the DPDP Act treats them as distinct permissions. The server rejects a
- * submission with either unticked, so this mirrors the rule rather than owning it.
+ * There is no parent/guardian section: the page collects only what identifies
+ * the participant — the ward's date of birth and gender, the ID document, and
+ * the two consents.
+ *
+ * The two consents are separate checkboxes on purpose: consenting to *taking
+ * part* is not the same as consenting to *data being processed*, and the DPDP
+ * Act treats them as distinct permissions. The server rejects a submission
+ * with either unticked, so this mirrors the rule rather than owning it.
  */
 
-/**
- * Deliberately closed, not "…and Other" — the person consenting must actually
- * be one of the three the law recognises as able to give parental consent for
- * a minor. An open "Other" invited a relative with no standing to do so (an
- * uncle, an elder sibling) to tick the box, which is not a valid consent at
- * all if it is ever challenged.
- */
-export const RELATIONSHIPS = ['Mother', 'Father', 'Legal guardian'] as const;
 export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const;
 
 /**
@@ -54,18 +51,12 @@ const TWO_SIDED_DOC = 'School ID Card';
 const MAX_DOCUMENT_MB = 10;
 const MAX_DOCUMENT_BYTES = MAX_DOCUMENT_MB * 1024 * 1024;
 
-export interface GuardianFormValues {
-    guardianFirstName: string;
-    guardianLastName: string;
-    relationship: string;
-    guardianEmail: string;
-    guardianPhone: string;
+export interface IdentificationFormValues {
     studentDob: string;
-    // Kept so an existing profile's values survive a re-submit from `/identification`;
-    // no longer collected by the form, and `pincode` is gone from the database.
+    gender: string;
+    // Kept so an existing profile's values survive a re-submit; not collected.
     city: string;
     state: string;
-    gender: string;
     idDocumentType: string;
     /** The document, or the front of it for a two-sided school card. */
     idDocumentUrl: string;
@@ -78,12 +69,7 @@ export interface GuardianFormValues {
 /** Which side of the ID an upload control is for. */
 type IdSide = 'front' | 'back';
 
-export const EMPTY_GUARDIAN: GuardianFormValues = {
-    guardianFirstName: '',
-    guardianLastName: '',
-    relationship: 'Mother',
-    guardianEmail: '',
-    guardianPhone: '',
+export const EMPTY_IDENTIFICATION: IdentificationFormValues = {
     studentDob: '',
     gender: '',
     city: '',
@@ -96,10 +82,9 @@ export const EMPTY_GUARDIAN: GuardianFormValues = {
     dataConsent: false,
 };
 
-export default function GuardianForm({
+export default function IdentificationForm({
     studentName,
     initial,
-    hideGuardianInfoFields = false,
     requireFaceScan = false,
     faceScanDone = false,
     submitLabel,
@@ -107,27 +92,18 @@ export default function GuardianForm({
     error,
     onSubmit,
 }: {
-    /** Named in the consent wording so a parent knows exactly who they are consenting for. */
+    /** Named in the consent wording so the reader knows who it is for. */
     studentName?: string;
-    initial?: Partial<GuardianFormValues>;
-    /**
-     * The registration flow now collects the parent/identification's name, email,
-     * phone, relationship, date of birth and gender earlier, on the details
-     * step — `initial` carries them in already, and this page only needs the
-     * ID document and the two consents. The standalone `/identification` page (for
-     * a student who registered before any of this existed) still needs all of
-     * it, so it leaves this `false` and gets the full form.
-     */
-    hideGuardianInfoFields?: boolean;
+    initial?: Partial<IdentificationFormValues>;
     /** Registration flow only: the face scan lives above this form, on the same page. */
     requireFaceScan?: boolean;
     faceScanDone?: boolean;
     submitLabel: string;
     busy: boolean;
     error?: string;
-    onSubmit: (values: GuardianFormValues) => void | Promise<void>;
+    onSubmit: (values: IdentificationFormValues) => void | Promise<void>;
 }) {
-    const [values, setValues] = useState<GuardianFormValues>({ ...EMPTY_GUARDIAN, ...initial });
+    const [values, setValues] = useState<IdentificationFormValues>({ ...EMPTY_IDENTIFICATION, ...initial });
     const [localError, setLocalError] = useState('');
     /**
      * Upload state is per side.
@@ -135,7 +111,7 @@ export default function GuardianForm({
      * A single set of `fileName`/`uploading`/`uploadError` would have the two
      * controls overwrite each other: picking the back would blank the "✓
      * Uploaded" line under the front, which reads exactly like the front having
-     * been lost, and a parent would re-upload it.
+     * been lost, and the user would re-upload it.
      */
     const [fileName, setFileName] = useState<Record<IdSide, string>>({ front: '', back: '' });
     const [uploading, setUploading] = useState<Record<IdSide, boolean>>({ front: false, back: false });
@@ -145,12 +121,9 @@ export default function GuardianForm({
     useEffect(() => {
         if (initial) setValues((v) => ({ ...v, ...initial }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initial?.guardianEmail, initial?.guardianPhone]);
+    }, [initial?.studentDob, initial?.idDocumentUrl]);
 
-    // The pincode → city/state lookup lived here. Removed along with those three
-    // fields; `lookupPincode` is still used by the school picker.
-
-    const set = <K extends keyof GuardianFormValues>(key: K, value: GuardianFormValues[K]) =>
+    const set = <K extends keyof IdentificationFormValues>(key: K, value: IdentificationFormValues[K]) =>
         setValues((v) => ({ ...v, [key]: value }));
 
     /** Only the school ID asks for a second picture. */
@@ -176,20 +149,15 @@ export default function GuardianForm({
     /**
      * Uploads the ID document and keeps only the resulting URL.
      *
-     * It used to `readAsDataURL` and put the base64 straight into
-     * `idDocumentUrl`, which then rode along in the JSON body of `POST
-     * /identification`. A phone photo of an ID is 2–5 MB and base64 adds a third
-     * again, so every submission with a document attached came back
-     * "request entity too large" and the parent could not finish registering.
-     *
-     * The file now goes to object storage over multipart and never enters the
-     * JSON body at all.
+     * The file goes to object storage over multipart and never enters the JSON
+     * body of `POST /identification` — a phone photo of an ID is 2–5 MB and
+     * base64 would add a third again.
      */
     const handleFileUpload = (side: IdSide) => async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const field: keyof GuardianFormValues =
+        const field: keyof IdentificationFormValues =
             side === 'front' ? 'idDocumentUrl' : 'idDocumentBackUrl';
 
         setLocalError('');
@@ -226,23 +194,11 @@ export default function GuardianForm({
         e.preventDefault();
         setLocalError('');
 
-        if (!values.guardianFirstName.trim()) {
-            setLocalError("Enter the parent or guardian's full name.");
-            return;
-        }
-        if (!values.guardianEmail.trim()) {
-            setLocalError("Enter the parent or guardian's email address.");
-            return;
-        }
-        if (!values.guardianPhone.trim()) {
-            setLocalError("Enter the parent or guardian's mobile number.");
-            return;
-        }
-        // Nothing on this form is optional any more. Checked one at a time, in
-        // the order the fields appear, so the message always names the first
-        // thing the parent needs to scroll back to rather than listing five.
+        // Nothing on this form is optional. Checked one at a time, in the order
+        // the fields appear, so the message always names the first thing to
+        // scroll back to rather than listing several.
         if (!values.studentDob) {
-            setLocalError("Enter the ward's date of birth.");
+            setLocalError("Enter the participant's date of birth.");
             return;
         }
         // Same 3–19 window the server enforces — checked here so the message
@@ -254,7 +210,7 @@ export default function GuardianForm({
             return;
         }
         if (!values.gender) {
-            setLocalError("Select the ward's gender.");
+            setLocalError("Select the participant's gender.");
             return;
         }
         if (uploading.front || uploading.back) {
@@ -264,14 +220,14 @@ export default function GuardianForm({
         if (!values.idDocumentUrl) {
             setLocalError(
                 needsBackSide
-                    ? "Upload the front of the ward's school ID card."
+                    ? 'Upload the front of the school ID card.'
                     : 'Upload a picture of the document.',
             );
             return;
         }
         if (needsBackSide && !values.idDocumentBackUrl) {
             setLocalError(
-                "Upload the back of the ward's school ID card as well. Both sides are needed.",
+                'Upload the back of the school ID card as well. Both sides are needed.',
             );
             return;
         }
@@ -293,130 +249,60 @@ export default function GuardianForm({
             {shown && <div className="auth-error">{shown}</div>}
 
             <p className="guardian-form__lede">
-                This section is for a parent or legal guardian. It is required before
-                {studentName ? ` ${studentName}` : ' the ward'} can appear for the olympiad exam.
+                Required before{studentName ? ` ${studentName}` : ' the participant'} can appear for
+                the olympiad exam — a one-time identification.
             </p>
 
-            {!hideGuardianInfoFields && (
-                <>
-                    <fieldset className="guardian-fieldset">
-                        <legend>Parent or guardian</legend>
+            <fieldset className="guardian-fieldset">
+                <legend>About the participant (Mandatory)</legend>
+                <p className="input-hint" style={{ marginTop: 0 }}>
+                    Both are required. Neither affects the score or rank. The date of birth has to
+                    match the ID uploaded below, which is how the participant&apos;s identity is
+                    confirmed for the Bharat Innovation Olympiad.
+                </p>
 
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianFirstName">First name</label>
-                                <input
-                                    id="guardianFirstName" className="input-field" type="text" required
-                                    autoComplete="off" maxLength={80}
-                                    value={values.guardianFirstName}
-                                    onChange={(e) => set('guardianFirstName', e.target.value)}
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianLastName">Last name</label>
-                                <input
-                                    id="guardianLastName" className="input-field" type="text" required
-                                    autoComplete="off" maxLength={80}
-                                    value={values.guardianLastName}
-                                    onChange={(e) => set('guardianLastName', e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label" htmlFor="relationship">Relationship to the ward</label>
-                            <select
-                                id="relationship" className="input-field"
-                                value={values.relationship}
-                                onChange={(e) => set('relationship', e.target.value)}
-                            >
-                                {RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianEmail">Email address</label>
-                                <input
-                                    id="guardianEmail" className="input-field" type="email" required
-                                    inputMode="email" autoComplete="email" placeholder="parent@example.com"
-                                    value={values.guardianEmail}
-                                    onChange={(e) => set('guardianEmail', e.target.value)}
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianPhone">Mobile number</label>
-                                <input
-                                    id="guardianPhone" className="input-field" type="tel" required
-                                    inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210"
-                                    value={values.guardianPhone}
-                                    onChange={(e) => set('guardianPhone', e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <p className="input-hint">
-                            We use these to share updates on the olympiad and other useful information for your ward
-                        </p>
-                    </fieldset>
-
-                    <fieldset className="guardian-fieldset">
-                        <legend>About the ward (Mandatory)</legend>
-                        <p className="input-hint" style={{ marginTop: 0 }}>
-                            Both are required. Neither affects the ward&apos;s score or rank. The date
-                            of birth has to match the ID you upload below, which is how we confirm the
-                            participant&apos;s identity for the Bharat Innovation Olympiad.
-                        </p>
-
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="studentDob">Date of birth</label>
-                                <input
-                                    id="studentDob" className="input-field" type="date"
-                                    required
-                                    min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
-                                    max={new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
-                                    value={values.studentDob}
-                                    onChange={(e) => set('studentDob', e.target.value)}
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="gender">Gender</label>
-                                <select
-                                    id="gender" className="input-field"
-                                    required
-                                    value={values.gender}
-                                    onChange={(e) => set('gender', e.target.value)}
-                                >
-                                    {/* No blank default. "Prefer not to say" is a real
-                                        answer and is in GENDERS; an empty option that
-                                        looked identical to it just made the field
-                                        skippable while appearing answered. */}
-                                    <option value="" disabled>Select…</option>
-                                    {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Pincode, city and state were here. Removed — the school
-                            already carries a location, so asking a parent for it again
-                            added three fields to the longest step of registration for
-                            nothing. The columns stay on `GuardianProfile` so existing
-                            rows keep their data; nothing new is collected. */}
-                    </fieldset>
-                </>
-            )}
+                <div className="form-row">
+                    <div className="input-group">
+                        <label className="input-label" htmlFor="studentDob">Date of birth</label>
+                        <input
+                            id="studentDob" className="input-field" type="date"
+                            required
+                            min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
+                            max={new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
+                            value={values.studentDob}
+                            onChange={(e) => set('studentDob', e.target.value)}
+                        />
+                    </div>
+                    <div className="input-group">
+                        <label className="input-label" htmlFor="gender">Gender</label>
+                        <select
+                            id="gender" className="input-field"
+                            required
+                            value={values.gender}
+                            onChange={(e) => set('gender', e.target.value)}
+                        >
+                            {/* No blank default. "Prefer not to say" is a real
+                                answer and is in GENDERS; an empty option that
+                                looked identical to it just made the field
+                                skippable while appearing answered. */}
+                            <option value="" disabled>Select…</option>
+                            {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
 
             <fieldset className="guardian-fieldset">
-                <legend>Ward Identity Document (Mandatory)</legend>
+                <legend>Identity Document (Mandatory)</legend>
                 {/* The preference is stated, not merely implied by the order of
-                    a dropdown. A parent needs a reason to reach for the school
+                    a dropdown. A student needs a reason to reach for the school
                     card, and "it is the one that proves the class you registered
                     under" is that reason. */}
                 <p className="input-hint" style={{ marginTop: 0 }}>
-                    <strong>Please use the ward&apos;s school ID card if you have one.</strong>{' '}
-                    It is the document we prefer, because it shows the school and class the ward
-                    registered under. If there is no school card, the student-info page of the
-                    school diary — or any other document that identifies the ward — is accepted instead.
+                    <strong>Please use the school ID card if you have one.</strong>{' '}
+                    It is the document we prefer, because it shows the school and class the
+                    participant registered under. If there is no school card, the student-info page
+                    of the school diary — or any other identity document — is accepted instead.
                 </p>
                 {needsBackSide ? (
                     <p className="input-hint">
@@ -458,9 +344,8 @@ export default function GuardianForm({
                         return (
                             <div className="input-group" key={side}>
                                 {/* The limit is in the label, not only in the
-                                    error — a parent should know it before they
-                                    pick a 12 MB photo, not after waiting for it
-                                    to be refused. */}
+                                    error — know it before picking a 12 MB
+                                    photo, not after waiting for the refusal. */}
                                 <label className="input-label" htmlFor={`idDocument-${side}`}>
                                     {labelText}{' '}
                                     <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
@@ -508,11 +393,11 @@ export default function GuardianForm({
                         onChange={(e) => set('parentalConsent', e.target.checked)}
                     />
                     <span>
-                        I confirm that I am the parent or legal guardian
-                        of{studentName ? <> <strong>{studentName}</strong></> : ' this ward'} and consent
-                        to my child&apos;s participation, face scan, and processing of their personal
-                        data for the Bharat Innovation Olympiad, including AI-assisted proctoring. I
-                        confirm that my child is present and will complete the face scan themselves. I
+                        I confirm that I am authorised to give consent
+                        for{studentName ? <> <strong>{studentName}</strong></> : ' this participant'} and
+                        consent to participation in the Bharat Innovation Olympiad, the face scan, and
+                        the processing of personal data, including AI-assisted proctoring. I confirm
+                        the participant is present and completes the face scan themselves. I
                         understand that the webcam remains on during the exam and consent can be
                         withdrawn at any time.
                     </span>
@@ -525,19 +410,19 @@ export default function GuardianForm({
                         onChange={(e) => set('dataConsent', e.target.checked)}
                     />
                     <span>
-                        <strong>I consent to their personal data being processed.</strong> As required
-                        by the Digital Personal Data Protection Act, 2023 for a child&apos;s data, I
-                        consent to the collection and use of the details on this form, my child&apos;s
-                        face template, the photo captured at registration, and their exam records, for
-                        running the Olympiad: identifying them, proctoring, marking, ranking,
-                        certificates, and contacting us about it. I understand I can withdraw this
-                        consent at any time.
+                        <strong>I consent to the participant&apos;s personal data being
+                        processed.</strong> As required by the Digital Personal Data Protection Act,
+                        2023 for a child&apos;s data, I consent to the collection and use of the
+                        details on this form, the face template, the photo captured at registration,
+                        and exam records, for running the Olympiad: identifying the participant,
+                        proctoring, marking, ranking, certificates, and related communication. I
+                        understand this consent can be withdrawn at any time.
                     </span>
                 </label>
 
                 {!bothConsents && (
                     <p className="input-hint">
-                        Both boxes must be ticked. Without them the ward cannot start an exam.
+                        Both boxes must be ticked. Without them the participant cannot start an exam.
                     </p>
                 )}
                 {requireFaceScan && !faceScanDone && (
@@ -551,8 +436,7 @@ export default function GuardianForm({
                 or the ID upload isn't done yet — a silently-disabled button
                 gives no reason. Clicking runs the checks in handleSubmit
                 above, which turns each missing step into a specific message
-                in the red banner at the top instead. Only genuinely-can't-
-                submit-right-now states (saving, mid-upload) disable it. */}
+                in the red banner at the top instead. */}
             <button
                 type="submit"
                 className="btn btn-primary btn-lg auth-submit"

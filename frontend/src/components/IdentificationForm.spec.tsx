@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import api from '@/lib/api';
-import GuardianForm from './GuardianForm';
+import IdentificationForm from './IdentificationForm';
 
 // The ID document upload posts to the API; stubbed so the form's own behaviour
 // is what is under test. The real upload is covered end-to-end against a running
@@ -27,26 +27,15 @@ const WITH_DOCUMENT = {
 };
 
 /**
- * Registration part 2 — the client half of the consent rule.
+ * Student identification — the client half of the consent rule.
  *
  * The server rejects a submission with either consent unticked; this pins that
- * the form never *sends* one, so a parent cannot get as far as a server error and
- * conclude the site is broken. Both halves matter: the client for the experience,
- * the server for the guarantee.
+ * the form never *sends* one, so a student cannot get as far as a server error
+ * and conclude the site is broken. Both halves matter: the client for the
+ * experience, the server for the guarantee.
  */
-describe('GuardianForm', () => {
-    const fill = () => {
-        fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: 'Meera' } });
-        fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: 'Sharma' } });
-        fireEvent.change(screen.getByLabelText(/email address/i), {
-            target: { value: 'meera@example.com' },
-        });
-        fireEvent.change(screen.getByLabelText(/mobile number/i), {
-            target: { value: '9876543210' },
-        });
-    };
-
-    /** The two student details that are now mandatory alongside the ID. */
+describe('IdentificationForm', () => {
+    /** The two student details that are mandatory alongside the ID. */
     const fillStudent = () => {
         fireEvent.change(screen.getByLabelText(/date of birth/i), {
             target: { value: '2012-04-18' },
@@ -71,7 +60,7 @@ describe('GuardianForm', () => {
     const mount = (initial?: Record<string, string>) => {
         onSubmit = vi.fn();
         return render(
-            <GuardianForm
+            <IdentificationForm
                 studentName="Aarav Sharma"
                 initial={initial as never}
                 submitLabel="Save and continue"
@@ -83,9 +72,6 @@ describe('GuardianForm', () => {
 
     beforeEach(() => {
         // The mock is module-scoped, so its call log survives between tests.
-        // Without this, "does not contact the server" passes or fails depending
-        // on whether an earlier test happened to upload something — which is
-        // exactly the kind of order-dependence that makes a suite untrustworthy.
         // `mockClear` and not `resetAllMocks`: the resolved value is part of the
         // fixture, not of any one test.
         vi.mocked(api.post).mockClear();
@@ -94,14 +80,22 @@ describe('GuardianForm', () => {
         mount(WITH_DOCUMENT);
     });
 
+    // The parent section is gone entirely — this is student identification
+    // only, so none of those fields may render or be required.
+    it('collects no parent or guardian details', () => {
+        expect(screen.queryByLabelText(/parent/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/guardian/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/mobile number/i)).not.toBeInTheDocument();
+    });
+
     it('leaves submit enabled but blocks and explains when consents are missing', async () => {
         // Not disabled: a silently-disabled button gives no reason. Clicking
         // it runs validation instead, which turns "both consents are missing"
-        // into a message the parent can actually act on.
+        // into a message the student can actually act on.
         const submit = screen.getByRole('button', { name: /save and continue/i });
         expect(submit).toBeEnabled();
 
-        fill();
         fireEvent.click(submit);
         expect(await screen.findByText(/both consents are required/i)).toBeInTheDocument();
         expect(onSubmit).not.toHaveBeenCalled();
@@ -113,7 +107,6 @@ describe('GuardianForm', () => {
     });
 
     it('does not submit with only one consent ticked', async () => {
-        fill();
         fireEvent.click(consents()[0]);
         fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
@@ -121,49 +114,27 @@ describe('GuardianForm', () => {
     });
 
     it('submits both consents once the form is complete', async () => {
-        fill();
         consents().forEach((box) => fireEvent.click(box));
         fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
         await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
         expect(onSubmit.mock.calls[0][0]).toMatchObject({
-            guardianFirstName: 'Meera',
-            guardianEmail: 'meera@example.com',
+            studentDob: '2012-04-18',
+            gender: 'Female',
+            idDocumentUrl: 'https://cdn.example/existing-id.jpg',
             parentalConsent: true,
             dataConsent: true,
         });
-    });
-
-    it('refuses to submit with the name left blank', async () => {
-        consents().forEach((box) => fireEvent.click(box));
-        fireEvent.change(screen.getByLabelText(/email address/i), {
-            target: { value: 'meera@example.com' },
-        });
-        fireEvent.change(screen.getByLabelText(/mobile number/i), { target: { value: '9876543210' } });
-        fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
-
-        // Blocked by the browser's own `required` validation before the submit
-        // handler runs, so no custom message appears — which is why this asserts
-        // the outcome (nothing is sent) rather than the wording. The handler's
-        // own name check still covers a whitespace-only name, which `required`
-        // lets through.
-        await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
-        expect(screen.getByLabelText(/first name/i)).toBeInvalid();
-    });
-
-    it('refuses a whitespace-only name, which `required` alone would allow', async () => {
-        fill();
-        fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: '   ' } });
-        consents().forEach((box) => fireEvent.click(box));
-        fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
-
-        await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
-        expect(await screen.findByText(/full name/i)).toBeInTheDocument();
+        // Nothing parent-shaped may be sent to the API.
+        expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('guardianFirstName');
+        expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('guardianEmail');
+        expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('guardianPhone');
+        expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('relationship');
     });
 
     it('names the student in the consent wording', () => {
-        // A parent consenting for the wrong child is the failure this prevents;
-        // the name has to be in the sentence they are agreeing to.
+        // Consenting for the wrong participant is the failure this prevents;
+        // the name has to be in the sentence being agreed to.
         expect(screen.getAllByText(/Aarav Sharma/).length).toBeGreaterThan(0);
     });
 
@@ -171,15 +142,14 @@ describe('GuardianForm', () => {
         expect(screen.getByText(/both boxes must be ticked/i)).toBeInTheDocument();
     });
 
-    // Nothing on this form is optional any more. Date of birth used to be, and
-    // it is the one the age band is derived from.
+    // Nothing on this form is optional. Date of birth is the one the age band
+    // is derived from.
     it('refuses to submit with the student details left blank', async () => {
         cleanup();
         mount({
             idDocumentUrl: 'https://cdn.example/a.jpg',
             idDocumentBackUrl: 'https://cdn.example/b.jpg',
         } as never);
-        fill();
         consents().forEach((box) => fireEvent.click(box));
         fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
@@ -196,10 +166,8 @@ describe('GuardianForm', () => {
             expect(select.options[0].value).toBe('School ID Card');
         });
 
-        // The preference and the two-sides rule have to be *stated*. A reordered
-        // dropdown alone does not tell a parent reaching for Aadhaar by habit
-        // why the school card is the better answer, and a missing back is the
-        // most likely reason a submission gets bounced.
+        // The preference and the two-sides rule have to be *stated*; a missing
+        // back is the most likely reason a submission gets bounced.
         it('says on screen which document is preferred, and that both sides are needed', () => {
             expect(
                 screen.getByText(/school ID card if you have one/i),
@@ -210,7 +178,6 @@ describe('GuardianForm', () => {
         it('blocks submission when neither side has been uploaded', async () => {
             cleanup();
             mount(); // nothing on file
-            fill();
             fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
@@ -234,7 +201,6 @@ describe('GuardianForm', () => {
             expect(screen.queryByLabelText(/back of the card/i)).not.toBeInTheDocument();
             expect(screen.getByText(/one clear picture of the document is enough/i)).toBeInTheDocument();
 
-            fill();
             fillStudent();
             await upload(/picture of the document/i, 'diary.jpg');
             consents().forEach((box) => fireEvent.click(box));
@@ -265,7 +231,6 @@ describe('GuardianForm', () => {
         it('blocks submission when only the front has been uploaded', async () => {
             cleanup();
             mount();
-            fill();
             fillStudent();
             await upload(/front of the card/i, 'front.jpg');
             consents().forEach((box) => fireEvent.click(box));
@@ -285,7 +250,7 @@ describe('GuardianForm', () => {
 
             fireEvent.change(input, { target: { files: [huge] } });
 
-            // The point of the client-side cap: the parent is told immediately
+            // The point of the client-side cap: the student is told immediately
             // rather than waiting out an upload that is going to be refused.
             expect(await screen.findByText(/the limit is 10 MB/i)).toBeInTheDocument();
             expect(api.post).not.toHaveBeenCalled();
@@ -299,7 +264,6 @@ describe('GuardianForm', () => {
 
             expect(api.post).toHaveBeenCalledWith('/identification/id-document', expect.any(FormData));
 
-            fill();
             fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
@@ -313,7 +277,7 @@ describe('GuardianForm', () => {
         // Each side owns its upload state. Sharing one set of
         // filename/uploading/error flags made picking the back blank the
         // "✓ Uploaded" line under the front, which reads as the front being
-        // lost — and a parent would upload it again.
+        // lost — and the user would upload it again.
         it('keeps each side’s confirmation independent', async () => {
             cleanup();
             mount();

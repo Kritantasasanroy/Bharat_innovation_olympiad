@@ -327,51 +327,6 @@ export function prepResourcesEmail(vars: { firstName: string }): RenderedEmail {
 }
 
 /**
- * BIO-STU-005 — Parent Consent Received (to the parent's address).
- *
- * Sent T+2 days after the consent was recorded. Restates what the consent
- * covers under the DPDP Act 2023 and how to withdraw it.
- */
-export function parentConsentReceivedEmail(vars: {
-    parentName: string;
-    studentName: string;
-    rollNumber?: string | null;
-    grade?: number | null;
-    schoolName?: string | null;
-}): RenderedEmail {
-    return build(
-        '🎉 Parent consent received — Bharat Innovation Olympiad',
-        `Dear ${escapeHtml(vars.parentName)},`,
-        `<p style="margin:0 0 12px;">Thank you for providing consent for ${escapeHtml(vars.studentName)} to participate in the Bharat Innovation Olympiad - Become future ready. 🚀</p>
-     <p style="margin:0 0 12px;">We have successfully received and recorded the required consent and information. Please refer to accepted <a href="${TERMS_URL}" style="color:#2563eb;">Terms and conditions</a> for the program.</p>
-     <p style="margin:16px 0 4px;font-weight:600;color:#111827;">📌 Participant Details</p>
-     ${factTable([
-         factRow('Student', vars.studentName),
-         ...(vars.rollNumber ? [factRow('Roll Number', vars.rollNumber)] : []),
-         ...(vars.grade ? [factRow('Grade', `Class ${vars.grade}`)] : []),
-         ...(vars.schoolName ? [factRow('School', vars.schoolName)] : []),
-     ])}
-     <p style="margin:16px 0 4px;font-weight:600;color:#111827;">🔐 Consent &amp; Personal Data</p>
-     <p style="margin:0 0 12px;">Every participant in the Bharat Innovation Olympiad is a minor or may be a minor. In accordance with the Digital Personal Data Protection Act, 2023, we obtain verifiable consent from a parent or legal guardian before a participant sits for the examination.</p>
-     <p style="margin:0 0 8px;">The consent provided by you covers:</p>
-     <ul style="margin:0 0 12px;padding-left:20px;font-size:15px;line-height:1.7;color:#374151;">
-       <li>${escapeHtml(vars.studentName)}'s participation in the Bharat Innovation Olympiad.</li>
-       <li>The collection and processing of personal data required for participation, examination administration, verification and related purposes explained during the consent process.</li>
-       <li>The use of the student's face scan for identity verification during the examination and the result verification process.</li>
-     </ul>
-     <p style="margin:0 0 12px;">The information provided during the consent process will be handled and processed for the purposes communicated during consent and as required to administer and verify the student's participation in the Olympiad.</p>
-     <p style="margin:16px 0 4px;font-weight:600;color:#111827;">↩️ Withdrawal of Consent</p>
-     <p style="margin:0 0 12px;">A parent or legal guardian may withdraw consent at any time by contacting us through the support channel below.<br/><a href="${SUPPORT_URL}" style="color:#2563eb;">${SUPPORT_URL}</a></p>
-     <p style="margin:0 0 12px;color:#6b7280;font-size:14px;">Please note that if consent is withdrawn after the examination has already been taken, such withdrawal does not require us to delete examination results that have already been published. However, no further processing based on that consent will take place, subject to any processing that may otherwise be required or permitted by applicable law.</p>
-     <p style="margin:16px 0 4px;font-weight:600;color:#111827;">❓ Need Help or Have a Grievance?</p>
-     <p style="margin:0 0 12px;">If you have any questions, concerns or grievances regarding the consent, examination schedule, registration or participation, please raise a support request: <a href="${SUPPORT_URL}" style="color:#2563eb;">${SUPPORT_URL}</a></p>
-     <p style="margin:0;">Thank you for your trust and support.</p>
-     ${signoff()}
-     ${innopreneursBlock()}`,
-    );
-}
-
-/**
  * BIO-STU-006 — Face Scan / ID Upload Pending.
  *
  * The T-3 nudge — 72 hours before a confirmed exam, only while a required
@@ -534,24 +489,6 @@ export function adminBroadcastEmail(vars: { subject: string; message: string; ap
         .map((block) => `<p style="margin:0 0 12px;">${escapeHtml(block).replace(/\n/g, '<br/>')}</p>`)
         .join('');
     return build(vars.subject, vars.subject, body);
-}
-
-export function parentApprovalEmail(vars: {
-    guardianName: string;
-    studentName: string;
-    approvalLink: string;
-}): RenderedEmail {
-    const body = `
-        <p style="margin:0 0 12px;">Dear ${escapeHtml(vars.guardianName)},</p>
-        <p style="margin:0 0 12px;">Your details and consent were submitted for <strong>${escapeHtml(vars.studentName)}</strong>'s participation in the <strong>Bharat Innovation Olympiad</strong>.</p>
-        <p style="margin:0 0 12px;">Please review and confirm your parental approval by clicking the link below.</p>
-    `;
-    return build(
-        'Parental Consent Confirmation — Bharat Innovation Olympiad',
-        'Parental Approval Required',
-        body,
-        { label: 'Review & Confirm Approval', url: vars.approvalLink },
-    );
 }
 
 // ── Partner lifecycle ────────────────────────────────────────────────────
