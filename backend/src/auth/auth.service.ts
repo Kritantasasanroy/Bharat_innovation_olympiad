@@ -179,6 +179,10 @@ export class AuthService {
     }
 
     async syncUser(email: string, dto: SyncUserDto) {
+        // Phone is compulsory — every transactional message goes to it. The
+        // normalize call doubles as the format check: an un-typable number is
+        // a 400 here, not a silent drop into phoneRaw-only.
+        normalizePhone(dto.phone);
         const existing = await this.prisma.user.findUnique({ where: { email } });
 
         // A coordinator may have put this student on their roster already. That

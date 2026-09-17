@@ -22,16 +22,15 @@ export class SyncUserDto {
     code?: string;
 
     /**
-     * Mandatory mobile number. Every WhatsApp notification (submission,
-     * schedule, result, reminder — see `WhatsAppService`) is sent to this
-     * number. It is stored as `phoneRaw` the moment it is typed regardless of
-     * whether `phoneCode` (SMS OTP) is ever completed — see
-     * `AuthService.syncUser` — so collection does not depend on SMS delivery,
-     * which has its own, separate reliability problems.
+     * Mandatory mobile number. Every transactional message — WhatsApp and SMS
+     * (submission, schedule, result, reminder, the pending nudges) — is sent to
+     * this number, so a registration without one is unreachable for everything
+     * that matters. Stored as `phoneRaw` the moment it is typed; `phone` takes
+     * the normalized form when it is not already held by another account.
      */
     @IsString()
-    @IsOptional()
-    phone?: string;
+    @IsNotEmpty()
+    phone: string;
 
     /** The SMS code for `phone`. Required whenever `phone` is supplied. */
     @IsString()

@@ -217,7 +217,7 @@ export default function RegisterPage() {
     const registrationDetails = () => ({
         name: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        phone: phone.trim() || undefined,
+        phone: phone.trim(),
         classBand: formData.classBand,
         schoolId: school?.id,
         schoolName: school?.name,
@@ -250,6 +250,11 @@ export default function RegisterPage() {
         }
         if (!guardianPhone.trim()) {
             setError("Please enter the parent or guardian's mobile number.");
+            return;
+        }
+        // Compulsory — every exam SMS and WhatsApp goes to this number.
+        if (!phone.trim() || !isValidPhone(phone)) {
+            setError("Please enter a valid mobile number for the participant — exam updates are sent to it.");
             return;
         }
         if (!dob) {
@@ -528,7 +533,7 @@ export default function RegisterPage() {
                                     className="input-field" placeholder="+91 98765 43210"
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
-                                    suppressHydrationWarning
+                                    required suppressHydrationWarning
                                 />
                             </div>
                             <div className="input-group">

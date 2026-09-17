@@ -81,7 +81,7 @@ describe('email sign-in requires a code the server issued', () => {
         const { ctrl, authService } = controller();
 
         await expect(
-            ctrl.syncUser({ email: 'ada@example.com', firstName: 'Ada', lastName: 'L' }),
+            ctrl.syncUser({ email: 'ada@example.com', firstName: 'Ada', lastName: 'L', phone: '+919812345678' }),
         ).rejects.toBeInstanceOf(UnauthorizedException);
         expect(authService.syncUser).not.toHaveBeenCalled();
     });
@@ -93,6 +93,7 @@ describe('email sign-in requires a code the server issued', () => {
             email: 'ada@example.com',
             firstName: 'Ada',
             lastName: 'L',
+            phone: '+919812345678',
             code: '123456',
         });
 
