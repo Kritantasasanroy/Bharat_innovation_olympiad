@@ -74,6 +74,13 @@ the API username — the gateway only accepts alphanumeric usernames and answers
 and in `backend/.env`. Render's `PUT /services/:id/env-vars` **replaces the whole
 env set** — always GET the current vars, merge, and PUT the complete set back.
 
+A duplicate trio (`olympiad-backend-iqzn`, `bio-portal-api-yq4h`,
+`bio-admin-api-x09d` + `bio-admin-redis`) existed on a second account (team
+`tea-d9ds3at7vvec73ejtv10`, key `rnd_SuY92…` in `.render-migration/snapshot.py`)
+also auto-deploying `main` — it ran console providers and ate sweep-claimed
+notification rows. Deleted 2026-09-17; the `-mok0`/`56ja`/`myog` set above is
+the only production.
+
 All three are free-plan, region singapore, repo `Kritantasasanroy/Bharat_innovation_olympiad`
 branch `main`, autoDeploy on. `olympiad-backend` runs `prisma db push` on boot and
 health-checks at `/api/health`; the Elysia services expose `/health/live` and
