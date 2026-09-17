@@ -57,7 +57,17 @@ export default function SchoolPartnerForm({ email }: { email?: string }) {
                 <input aria-label="Phone or email" placeholder="Phone or email" value={reach} onChange={(e) => setReach(e.target.value)} />
             </div>
             {error && <p className="lp-school-form__error">{error}</p>}
-            <button type="button" className="lp-btn-primary lp-school-form__submit" onClick={handleSubmit}>
+            <button
+                type="button"
+                className="lp-school-form__submit"
+                onClick={handleSubmit}
+                style={{
+                    background: 'linear-gradient(135deg,#4f9a12,#35700a)', color: '#fff',
+                    fontWeight: 700, fontSize: 14.5, padding: '12px 26px', borderRadius: 11,
+                    display: 'inline-flex', alignItems: 'center', gap: 8, border: 'none',
+                    cursor: 'pointer',
+                }}
+            >
                 <Send size={15} /> Send inquiry by email
             </button>
             <p className="lp-school-form__hint">
