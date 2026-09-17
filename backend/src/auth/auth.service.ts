@@ -242,6 +242,8 @@ export class AuthService {
                 },
             });
 
+            await this.recordGuardianContact(claimed.id, dto);
+
             // No roll number, no sitting, no welcome mail yet — those are
             // earned by paying, not by claiming an invited roster row.
             // `AccessPassService` issues all three together the moment this
@@ -279,6 +281,8 @@ export class AuthService {
             }
         });
 
+        await this.recordGuardianContact(user.id, dto);
+
         // No roll number, no sitting, no welcome mail here. All three used to
         // fire at this exact point — before a rupee had changed hands, which is
         // exactly the complaint: a student who never paid still had a roll
@@ -287,6 +291,27 @@ export class AuthService {
         // `AccessPassService`, at the moment this account's pass first goes
         // ACTIVE — paying is what earns them, not typing an email address.
         return user;
+    }
+
+    /**
+     * The guardian's name/email/WhatsApp collected on the details step lives on
+     * `GuardianProfile` — the same record the identification step later fills
+     * with consent + ID document. The row is created here with the contact
+     * only (consent columns stay null until the student actually consents),
+     * and the identification upsert's update-set never touches these columns,
+     * so the contact survives identification intact.
+     */
+    private async recordGuardianContact(userId: string, dto: SyncUserDto) {
+        const guardianName = dto.guardianName?.trim() || null;
+        const guardianEmail = dto.guardianEmail?.trim().toLowerCase() || null;
+        const guardianPhone =
+            tryNormalizePhone(dto.guardianPhone ?? '') ?? dto.guardianPhone?.trim() ?? null;
+        if (!guardianName && !guardianEmail && !guardianPhone) return;
+        await this.prisma.guardianProfile.upsert({
+            where: { userId },
+            create: { userId, guardianName, guardianEmail, guardianPhone },
+            update: { guardianName, guardianEmail, guardianPhone },
+        });
     }
 
     async getUserByEmail(email: string) {

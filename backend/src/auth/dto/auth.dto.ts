@@ -93,6 +93,24 @@ export class SyncUserDto {
     @IsString()
     @IsOptional()
     referralCode?: string;
+
+    /**
+     * Guardian contact — the parent's name, email and WhatsApp number, taken
+     * on the registration details step. Record-only: every code and exam
+     * update goes to the participant's own email/phone; these are stored on
+     * `GuardianProfile` for the school's records and never drive a send.
+     */
+    @IsString()
+    @IsOptional()
+    guardianName?: string;
+
+    @IsEmail()
+    @IsOptional()
+    guardianEmail?: string;
+
+    @IsString()
+    @IsOptional()
+    guardianPhone?: string;
 }
 
 export class LoginSyncDto {

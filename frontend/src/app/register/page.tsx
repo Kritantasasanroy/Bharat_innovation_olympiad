@@ -104,6 +104,13 @@ export default function RegisterPage() {
     const [gender, setGender] = useState('');
     const [dob, setDob] = useState('');
 
+    // Guardian contact — one name field, one email, one WhatsApp number.
+    // Record-only: the verification code and every exam update go to the
+    // participant's own email and mobile above.
+    const [guardianName, setGuardianName] = useState('');
+    const [guardianEmail, setGuardianEmail] = useState('');
+    const [guardianPhone, setGuardianPhone] = useState('');
+
     // No inline verify step: the code is submitted with the form and checked
     // server-side at /auth/sync. Verifying here would consume the single-use
     // code before registration could use it.
@@ -249,6 +256,22 @@ export default function RegisterPage() {
             return;
         }
 
+        // Guardian contact — kept for the school's records. The participant's
+        // own email/mobile still carry every code and update; these are never
+        // used for messaging.
+        if (!guardianName.trim()) {
+            setError("Please enter the parent/guardian's name.");
+            return;
+        }
+        if (!guardianEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guardianEmail.trim())) {
+            setError("Please enter a valid email for the parent/guardian.");
+            return;
+        }
+        if (!guardianPhone.trim() || !isValidPhone(guardianPhone)) {
+            setError("Please enter a valid WhatsApp number for the parent/guardian.");
+            return;
+        }
+
         // School is required — checked here as well as server-side so the student
         // is told before an OTP is spent rather than after.
         if (!school) {
@@ -323,6 +346,9 @@ export default function RegisterPage() {
                 termsVersion: TERMS_VERSION,
                 ...(referralCode ? { referralCode } : {}),
                 phone: phone.trim(),
+                guardianName: guardianName.trim(),
+                guardianEmail: guardianEmail.trim(),
+                guardianPhone: guardianPhone.trim(),
                 // The emailed code. Where our own API owns it, `verifyEmail`
                 // above deferred rather than checked, and this is where it is
                 // proved and consumed — so a registration cannot be completed
@@ -447,7 +473,7 @@ export default function RegisterPage() {
                     <form onSubmit={handleSendOtp} className="auth-form">
                         <div className="form-row">
                             <div className="input-group">
-                                <label className="input-label" htmlFor="firstName">First Name</label>
+                                <label className="input-label" htmlFor="firstName">Participant&apos;s First Name</label>
                                 <input
                                     id="firstName" name="firstName" type="text" className="input-field"
                                     placeholder="Aarav" value={formData.firstName}
@@ -455,7 +481,7 @@ export default function RegisterPage() {
                                 />
                             </div>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="lastName">Last Name</label>
+                                <label className="input-label" htmlFor="lastName">Participant&apos;s Last Name</label>
                                 <input
                                     id="lastName" name="lastName" type="text" className="input-field"
                                     placeholder="Sharma" value={formData.lastName}
@@ -491,7 +517,7 @@ export default function RegisterPage() {
 
                         <div className="form-row">
                             <div className="input-group">
-                                <label className="input-label" htmlFor="gender">Gender</label>
+                                <label className="input-label" htmlFor="gender">Participant&apos;s Gender</label>
                                 <select
                                     id="gender" name="gender" className="input-field" required
                                     value={gender} onChange={(e) => setGender(e.target.value)}
@@ -501,7 +527,7 @@ export default function RegisterPage() {
                                 </select>
                             </div>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="dob">Date of Birth</label>
+                                <label className="input-label" htmlFor="dob">Participant&apos;s Date of Birth</label>
                                 <input
                                     id="dob" name="dob" type="date" className="input-field" required
                                     min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
@@ -536,6 +562,41 @@ export default function RegisterPage() {
                             section={section}
                             onSectionChange={setSection}
                         />
+                        </div>
+
+                        {/* Guardian contact — a single block, clearly marked as
+                            the parent's details. For records only: the code and
+                            every exam update go to the participant's own email
+                            and WhatsApp above, never these. */}
+                        <div className="input-group" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border, #e5e7eb)', paddingTop: '1.25rem' }}>
+                            <p className="input-label" style={{ marginBottom: '0.25rem' }}>Parent / Guardian Details</p>
+                            <p className="input-hint" style={{ marginBottom: '0.75rem' }}>
+                                For our records only — all codes and exam updates go to the participant&apos;s own email and WhatsApp above.
+                            </p>
+                            <label className="input-label" htmlFor="guardianName">Guardian&apos;s Name</label>
+                            <input
+                                id="guardianName" name="guardianName" type="text" className="input-field"
+                                placeholder="Parent or guardian's full name" value={guardianName}
+                                onChange={(e) => setGuardianName(e.target.value)} required
+                            />
+                        </div>
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianEmail">Guardian&apos;s Email</label>
+                                <input
+                                    id="guardianEmail" name="guardianEmail" type="email" className="input-field"
+                                    placeholder="guardian@example.com" value={guardianEmail}
+                                    onChange={(e) => setGuardianEmail(e.target.value)} required suppressHydrationWarning
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianPhone">Guardian&apos;s WhatsApp</label>
+                                <input
+                                    id="guardianPhone" name="guardianPhone" type="tel" inputMode="tel" className="input-field"
+                                    placeholder="+91 98765 43210" value={guardianPhone}
+                                    onChange={(e) => setGuardianPhone(e.target.value)} required suppressHydrationWarning
+                                />
+                            </div>
                         </div>
 
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>

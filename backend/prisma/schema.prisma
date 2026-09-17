@@ -109,6 +109,13 @@ model GuardianProfile {
   id                  String    @id @default(uuid())
   userId              String    @unique
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // ── Guardian contact (record-only) ──
+  // Collected at registration. Stored for the record — every code, reminder
+  // and exam update goes to the participant's own email and WhatsApp number,
+  // never to these.
+  guardianName        String?
+  guardianEmail       String?
+  guardianPhone       String?
   // ── Demographics (optional; used for cohort reporting, never for gating) ──
   studentDob          DateTime?
   gender              String?
@@ -131,10 +138,12 @@ model GuardianProfile {
   /// `parentalConsentAt`/`dataConsentAt` are the consent record: the legal
   /// moment the terms were accepted. Deliberately NOT rewritten when the row
   /// is later edited — only a change to the consent wording (`consentVersion`)
-  /// moves them.
-  parentalConsentAt   DateTime
-  dataConsentAt       DateTime
-  consentVersion      String
+  /// moves them. Nullable because a row can exist before consent is given:
+  /// registration stores the guardian contact on this same record, and
+  /// consent is only collected on the identification step.
+  parentalConsentAt   DateTime?
+  dataConsentAt       DateTime?
+  consentVersion      String?
   ipAddress           String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

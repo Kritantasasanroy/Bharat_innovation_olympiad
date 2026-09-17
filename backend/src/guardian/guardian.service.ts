@@ -29,9 +29,11 @@ const MIN_AGE_YEARS = 3;
  * this existed must be able to log in and *reach* the form; locking them out
  * of their own account to collect it would be self-defeating.
  *
- * No parent/guardian details are collected any more — the flow is the
- * participant's own identification. The face scan half lives on
- * `User.faceEmbedding` via `ProctorService.enrollFace`.
+ * The guardian's name/email/WhatsApp is collected once at registration
+ * (`AuthService.recordGuardianContact`) and stored on this same record, but
+ * this flow itself is the participant's own identification — consent, ID
+ * document, demographics. The face scan half lives on `User.faceEmbedding`
+ * via `ProctorService.enrollFace`.
  */
 @Injectable()
 export class GuardianService {
@@ -194,7 +196,7 @@ export class GuardianService {
     }
 
     private isComplete(
-        profile: { parentalConsentAt: Date | null; dataConsentAt: Date | null; consentVersion: string } | null,
+        profile: { parentalConsentAt: Date | null; dataConsentAt: Date | null; consentVersion: string | null } | null,
     ): boolean {
         if (!profile) return false;
         return (
