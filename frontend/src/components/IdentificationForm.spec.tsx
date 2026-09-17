@@ -14,13 +14,12 @@ vi.mock('@/lib/api', () => ({
  * A complete profile already on file, so the consent tests are not blocked by
  * the fields that come before the consents.
  *
- * Every one of these is mandatory now — date of birth, gender and *both* sides
- * of the ID — so a fixture missing any of them would stop at the first
- * validation check and never reach the consent behaviour under test.
+ * The ID (both sides, for a school card) is mandatory — a fixture missing it
+ * would stop at the document check and never reach the consent behaviour
+ * under test. Demographics are not part of this form: dob and gender were
+ * collected at registration.
  */
 const WITH_DOCUMENT = {
-    studentDob: '2012-04-18',
-    gender: 'Female',
     idDocumentType: 'School ID Card',
     idDocumentUrl: 'https://cdn.example/existing-id.jpg',
     idDocumentBackUrl: 'https://cdn.example/existing-id-back.jpg',
@@ -35,14 +34,6 @@ const WITH_DOCUMENT = {
  * experience, the server for the guarantee.
  */
 describe('IdentificationForm', () => {
-    /** The two student details that are mandatory alongside the ID. */
-    const fillStudent = () => {
-        fireEvent.change(screen.getByLabelText(/date of birth/i), {
-            target: { value: '2012-04-18' },
-        });
-        fireEvent.change(screen.getByLabelText(/gender/i), { target: { value: 'Female' } });
-    };
-
     /** Uploads one side and waits for it to be acknowledged on screen. */
     const upload = async (label: RegExp, filename: string) => {
         const input = screen.getByLabelText(label);
@@ -119,8 +110,6 @@ describe('IdentificationForm', () => {
 
         await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
         expect(onSubmit.mock.calls[0][0]).toMatchObject({
-            studentDob: '2012-04-18',
-            gender: 'Female',
             idDocumentUrl: 'https://cdn.example/existing-id.jpg',
             parentalConsent: true,
             dataConsent: true,
@@ -142,18 +131,11 @@ describe('IdentificationForm', () => {
         expect(screen.getByText(/both boxes must be ticked/i)).toBeInTheDocument();
     });
 
-    // Nothing on this form is optional. Date of birth is the one the age band
-    // is derived from.
-    it('refuses to submit with the student details left blank', async () => {
-        cleanup();
-        mount({
-            idDocumentUrl: 'https://cdn.example/a.jpg',
-            idDocumentBackUrl: 'https://cdn.example/b.jpg',
-        } as never);
-        consents().forEach((box) => fireEvent.click(box));
-        fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
-
-        await waitFor(() => expect(onSubmit).not.toHaveBeenCalled());
+    // Registration already collected dob and gender — asking again here was a
+    // duplicated question. None of those fields may render or be sent.
+    it('collects no demographics — they were taken at registration', () => {
+        expect(screen.queryByLabelText(/date of birth/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/gender/i)).not.toBeInTheDocument();
     });
 
     describe('the mandatory ID document', () => {
@@ -178,7 +160,6 @@ describe('IdentificationForm', () => {
         it('blocks submission when neither side has been uploaded', async () => {
             cleanup();
             mount(); // nothing on file
-            fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 
@@ -201,7 +182,6 @@ describe('IdentificationForm', () => {
             expect(screen.queryByLabelText(/back of the card/i)).not.toBeInTheDocument();
             expect(screen.getByText(/one clear picture of the document is enough/i)).toBeInTheDocument();
 
-            fillStudent();
             await upload(/picture of the document/i, 'diary.jpg');
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
@@ -231,7 +211,6 @@ describe('IdentificationForm', () => {
         it('blocks submission when only the front has been uploaded', async () => {
             cleanup();
             mount();
-            fillStudent();
             await upload(/front of the card/i, 'front.jpg');
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
@@ -264,7 +243,6 @@ describe('IdentificationForm', () => {
 
             expect(api.post).toHaveBeenCalledWith('/identification/id-document', expect.any(FormData));
 
-            fillStudent();
             consents().forEach((box) => fireEvent.click(box));
             fireEvent.click(screen.getByRole('button', { name: /save and continue/i }));
 

@@ -18,8 +18,6 @@ describe('GuardianService', () => {
             // Every one of these is mandatory now, so a "valid" DTO has to carry
             // them all — a fixture missing one would fail on that field rather
             // than on whatever the test is actually about.
-            studentDob: '2012-04-18',
-            gender: 'Female',
             idDocumentType: 'School ID Card',
             idDocumentUrl: 'https://cdn.example/id.jpg',
             idDocumentBackUrl: 'https://cdn.example/id-back.jpg',
@@ -181,14 +179,25 @@ describe('GuardianService', () => {
 
         it('does not rewrite the original consent time when only details change', async () => {
             const { service, prisma } = serviceWith(existing);
-            await service.submit(USER, valid({ gender: 'Male' }));
+            await service.submit(USER, valid({ city: 'Raipur' }));
 
             const { update } = prisma.guardianProfile.upsert.mock.calls[0][0];
             // The consent timestamp is the legal record of *when* consent was
             // given. Changing a detail must not move it.
             expect(update.parentalConsentAt).toBeUndefined();
             expect(update.dataConsentAt).toBeUndefined();
-            expect(update.gender).toBe('Male');
+            expect(update.city).toBe('Raipur');
+        });
+
+        it('never touches the dob/gender registration wrote — they are not part of this submission', async () => {
+            const { service, prisma } = serviceWith(existing);
+            await service.submit(USER, valid());
+
+            const { create, update } = prisma.guardianProfile.upsert.mock.calls[0][0];
+            for (const fields of [create, update]) {
+                expect(fields).not.toHaveProperty('studentDob');
+                expect(fields).not.toHaveProperty('gender');
+            }
         });
 
         it('re-stamps consent when the wording version has moved on', async () => {
@@ -198,61 +207,6 @@ describe('GuardianService', () => {
             const { update } = prisma.guardianProfile.upsert.mock.calls[0][0];
             expect(update.parentalConsentAt).toBeInstanceOf(Date);
             expect(update.consentVersion).toBe(CURRENT_GUARDIAN_CONSENT_VERSION);
-        });
-    });
-
-    describe('date of birth', () => {
-        it('accepts a plausible school-age date', async () => {
-            const { service, prisma } = serviceWith();
-            const dob = new Date();
-            dob.setFullYear(dob.getFullYear() - 13);
-            await service.submit(USER, valid({ studentDob: dob.toISOString() }));
-
-            const { create } = prisma.guardianProfile.upsert.mock.calls[0][0];
-            expect(create.studentDob).toBeInstanceOf(Date);
-        });
-
-        // The age band a student competes in is derived from it, and it is what
-        // the uploaded ID is checked against.
-        it.each([
-            ['missing', undefined],
-            ['blank', ''],
-        ])('rejects a submission whose date of birth is %s', async (_label, dob) => {
-            const { service, prisma } = serviceWith();
-            await expect(
-                service.submit(USER, valid({ studentDob: dob as string })),
-            ).rejects.toThrow(BadRequestException);
-            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
-        });
-
-        it('rejects a submission with no gender given', async () => {
-            const { service, prisma } = serviceWith();
-            await expect(
-                service.submit(USER, valid({ gender: undefined })),
-            ).rejects.toThrow(BadRequestException);
-            expect(prisma.guardianProfile.upsert).not.toHaveBeenCalled();
-        });
-
-        it('rejects a future date', async () => {
-            const { service } = serviceWith();
-            const future = new Date();
-            future.setFullYear(future.getFullYear() + 1);
-            await expect(
-                service.submit(USER, valid({ studentDob: future.toISOString() })),
-            ).rejects.toThrow(/future/i);
-        });
-
-        it.each([
-            ['a 60-year-old', 60],
-            ['a 20-year-old', 20],
-            ['a 1-year-old', 1],
-        ])('rejects an implausible age (%s)', async (_label, yearsAgo) => {
-            const { service } = serviceWith();
-            const dob = new Date();
-            dob.setFullYear(dob.getFullYear() - yearsAgo);
-            await expect(
-                service.submit(USER, valid({ studentDob: dob.toISOString() })),
-            ).rejects.toThrow(/date of birth/i);
         });
     });
 

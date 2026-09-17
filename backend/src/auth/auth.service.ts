@@ -294,24 +294,53 @@ export class AuthService {
     }
 
     /**
-     * The guardian's name/email/WhatsApp collected on the details step lives on
-     * `GuardianProfile` — the same record the identification step later fills
-     * with consent + ID document. The row is created here with the contact
-     * only (consent columns stay null until the student actually consents),
-     * and the identification upsert's update-set never touches these columns,
-     * so the contact survives identification intact.
+     * What the registration details step collects for `GuardianProfile` — the
+     * guardian's name/email/WhatsApp plus the participant's dob/gender. The
+     * identification step later fills the same record with consent + ID
+     * document (consent columns stay null until the student actually
+     * consents), and its update-set never touches these columns, so what was
+     * typed at registration survives identification intact.
      */
     private async recordGuardianContact(userId: string, dto: SyncUserDto) {
-        const guardianName = dto.guardianName?.trim() || null;
-        const guardianEmail = dto.guardianEmail?.trim().toLowerCase() || null;
-        const guardianPhone =
-            tryNormalizePhone(dto.guardianPhone ?? '') ?? dto.guardianPhone?.trim() ?? null;
-        if (!guardianName && !guardianEmail && !guardianPhone) return;
+        const studentDob = dto.dob ? this.parseParticipantDob(dto.dob) : undefined;
+        const fields = {
+            guardianName: dto.guardianName?.trim() || undefined,
+            guardianEmail: dto.guardianEmail?.trim().toLowerCase() || undefined,
+            guardianPhone:
+                tryNormalizePhone(dto.guardianPhone ?? '') ?? (dto.guardianPhone?.trim() || undefined),
+            studentDob,
+            gender: dto.gender || undefined,
+        };
+        // Only what was actually sent — a staff sync without these fields must
+        // not null out values a student registration already wrote.
+        const provided = Object.fromEntries(
+            Object.entries(fields).filter(([, v]) => v !== undefined),
+        );
+        if (Object.keys(provided).length === 0) return;
         await this.prisma.guardianProfile.upsert({
             where: { userId },
-            create: { userId, guardianName, guardianEmail, guardianPhone },
-            update: { guardianName, guardianEmail, guardianPhone },
+            create: { userId, ...provided },
+            update: provided,
         });
+    }
+
+    /** Same 3–19 band the registration page enforces client-side. */
+    private parseParticipantDob(raw: string): Date {
+        const dob = new Date(raw);
+        if (Number.isNaN(dob.getTime())) {
+            throw new BadRequestException('Enter a valid date of birth.');
+        }
+        const now = new Date();
+        if (dob > now) {
+            throw new BadRequestException('Date of birth cannot be in the future.');
+        }
+        const years = (now.getTime() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        if (years > 19 || years < 3) {
+            throw new BadRequestException(
+                `Check the date of birth — it works out to about ${Math.floor(years)} years old.`,
+            );
+        }
+        return dob;
     }
 
     async getUserByEmail(email: string) {

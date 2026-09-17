@@ -16,8 +16,9 @@ import { Suspense, useEffect, useState } from 'react';
  * Where a student lands when the exam gate refuses them with
  * `GUARDIAN_CONSENT_REQUIRED` — either because they registered before this
  * existed, or because the consent wording has been revised since they signed it.
- * The page is the participant's own identification only: date of birth, gender,
- * the ID document, and the two consents — no parent/guardian details.
+ * The page is the participant's own identification only: the ID document and
+ * the two consents — no parent/guardian details, and no demographics (those
+ * were taken at registration).
  *
  * `?next=` carries them back where they came from, so a student sent here from an
  * exam's instructions page returns to it rather than being dumped on the
@@ -54,10 +55,6 @@ function IdentificationPageInner() {
         try {
             await api.post('/identification', {
                 ...values,
-                // Only send a date if one was picked — an empty string is not a
-                // valid ISO date and the server would reject the whole form.
-                studentDob: values.studentDob || undefined,
-                gender: values.gender || undefined,
                 city: values.city || undefined,
                 state: values.state || undefined,
             });
@@ -129,8 +126,6 @@ function IdentificationPageInner() {
                     initial={
                         status?.profile
                             ? {
-                                  studentDob: status.profile.studentDob?.slice(0, 10) ?? '',
-                                  gender: status.profile.gender ?? '',
                                   city: status.profile.city ?? '',
                                   state: status.profile.state ?? '',
                                   idDocumentType: status.profile.idDocumentType ?? '',

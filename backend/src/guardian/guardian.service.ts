@@ -10,10 +10,6 @@ import { SubmitGuardianDto } from './dto/guardian.dto';
  */
 export const CURRENT_GUARDIAN_CONSENT_VERSION = '2026-07-v1';
 
-/** Age range the Olympiad is open to: youngest plausible, oldest allowed. */
-const MAX_AGE_YEARS = 19;
-const MIN_AGE_YEARS = 3;
-
 /**
  * Student identification — the ID document, the demographics, and the two
  * consents that `AttemptService.startAttempt` gates on.
@@ -67,12 +63,6 @@ export class GuardianService {
         // `hasGuardianConsent`: adding them there would retroactively bar
         // students who consented before a field existed from sitting their exam,
         // which punishes them for a change they had no part in.
-        if (!dto.studentDob) {
-            throw new BadRequestException("Enter the participant's date of birth.");
-        }
-        if (!dto.gender) {
-            throw new BadRequestException("Select the participant's gender.");
-        }
         const idDocumentType = dto.idDocumentType?.trim();
         if (!idDocumentType) {
             throw new BadRequestException('Choose which ID document you are uploading.');
@@ -98,7 +88,6 @@ export class GuardianService {
             );
         }
 
-        const studentDob = this.parseDob(dto.studentDob);
         const now = new Date();
 
         const existing = await this.prisma.guardianProfile.findUnique({
@@ -113,8 +102,10 @@ export class GuardianService {
             existing !== null && existing.consentVersion === CURRENT_GUARDIAN_CONSENT_VERSION;
 
         const details = {
-            studentDob,
-            gender: dto.gender ?? null,
+            // `studentDob`/`gender` are deliberately absent: registration
+            // already wrote them onto this record via `/auth/sync`, and an
+            // update set carrying them would wipe what the student typed there
+            // with nulls.
             // `city`/`state` keep their columns so an existing row's values
             // survive, but nothing collects them any more.
             city: dto.city?.trim() || null,
@@ -210,25 +201,5 @@ export class GuardianService {
     private present(profile: Record<string, any>) {
         const { ipAddress: _ipAddress, ...rest } = profile;
         return rest;
-    }
-
-    private parseDob(raw?: string): Date | null {
-        if (!raw) return null;
-        const dob = new Date(raw);
-        if (Number.isNaN(dob.getTime())) {
-            throw new BadRequestException('Enter a valid date of birth.');
-        }
-
-        const now = new Date();
-        if (dob > now) {
-            throw new BadRequestException('Date of birth cannot be in the future.');
-        }
-        const years = (now.getTime() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-        if (years > MAX_AGE_YEARS || years < MIN_AGE_YEARS) {
-            throw new BadRequestException(
-                `Check the date of birth — it works out to about ${Math.floor(years)} years old.`,
-            );
-        }
-        return dob;
     }
 }

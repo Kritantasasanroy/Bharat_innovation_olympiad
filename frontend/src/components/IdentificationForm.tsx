@@ -13,8 +13,9 @@ import { FormEvent, useEffect, useState } from 'react';
  * `GUARDIAN_CONSENT_REQUIRED`. One component, so the two can never collect
  * different fields or show different consent wording.
  *
- * There is no parent/guardian section: the page collects only what identifies
- * the participant — the ward's date of birth and gender, the ID document, and
+ * There is no parent/guardian section, and no demographics either: the
+ * participant's date of birth and gender were collected at registration, so
+ * the page asks only what identifies the participant — the ID document and
  * the two consents.
  *
  * The two consents are separate checkboxes on purpose: consenting to *taking
@@ -52,8 +53,6 @@ const MAX_DOCUMENT_MB = 10;
 const MAX_DOCUMENT_BYTES = MAX_DOCUMENT_MB * 1024 * 1024;
 
 export interface IdentificationFormValues {
-    studentDob: string;
-    gender: string;
     // Kept so an existing profile's values survive a re-submit; not collected.
     city: string;
     state: string;
@@ -70,8 +69,6 @@ export interface IdentificationFormValues {
 type IdSide = 'front' | 'back';
 
 export const EMPTY_IDENTIFICATION: IdentificationFormValues = {
-    studentDob: '',
-    gender: '',
     city: '',
     state: '',
     // The preferred document — see ID_DOC_TYPES.
@@ -121,7 +118,7 @@ export default function IdentificationForm({
     useEffect(() => {
         if (initial) setValues((v) => ({ ...v, ...initial }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initial?.studentDob, initial?.idDocumentUrl]);
+    }, [initial?.idDocumentType, initial?.idDocumentUrl]);
 
     const set = <K extends keyof IdentificationFormValues>(key: K, value: IdentificationFormValues[K]) =>
         setValues((v) => ({ ...v, [key]: value }));
@@ -197,22 +194,6 @@ export default function IdentificationForm({
         // Nothing on this form is optional. Checked one at a time, in the order
         // the fields appear, so the message always names the first thing to
         // scroll back to rather than listing several.
-        if (!values.studentDob) {
-            setLocalError("Enter the participant's date of birth.");
-            return;
-        }
-        // Same 3–19 window the server enforces — checked here so the message
-        // lands on this page, beside the field, not after the submit fails.
-        const dobYears =
-            (Date.now() - new Date(values.studentDob).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-        if (!Number.isFinite(dobYears) || dobYears < 3 || dobYears > 19) {
-            setLocalError('Check the date of birth — participants must be between 3 and 19 years old.');
-            return;
-        }
-        if (!values.gender) {
-            setLocalError("Select the participant's gender.");
-            return;
-        }
         if (uploading.front || uploading.back) {
             setLocalError('Wait for the document to finish uploading.');
             return;
@@ -252,45 +233,6 @@ export default function IdentificationForm({
                 Required before{studentName ? ` ${studentName}` : ' the participant'} can appear for
                 the olympiad exam — a one-time identification.
             </p>
-
-            <fieldset className="guardian-fieldset">
-                <legend>About the participant (Mandatory)</legend>
-                <p className="input-hint" style={{ marginTop: 0 }}>
-                    Both are required. Neither affects the score or rank. The date of birth has to
-                    match the ID uploaded below, which is how the participant&apos;s identity is
-                    confirmed for the Bharat Innovation Olympiad.
-                </p>
-
-                <div className="form-row">
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="studentDob">Date of birth</label>
-                        <input
-                            id="studentDob" className="input-field" type="date"
-                            required
-                            min={new Date(new Date().getFullYear() - 19, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
-                            max={new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10)}
-                            value={values.studentDob}
-                            onChange={(e) => set('studentDob', e.target.value)}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label" htmlFor="gender">Gender</label>
-                        <select
-                            id="gender" className="input-field"
-                            required
-                            value={values.gender}
-                            onChange={(e) => set('gender', e.target.value)}
-                        >
-                            {/* No blank default. "Prefer not to say" is a real
-                                answer and is in GENDERS; an empty option that
-                                looked identical to it just made the field
-                                skippable while appearing answered. */}
-                            <option value="" disabled>Select…</option>
-                            {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                    </div>
-                </div>
-            </fieldset>
 
             <fieldset className="guardian-fieldset">
                 <legend>Identity Document (Mandatory)</legend>

@@ -10,8 +10,8 @@ import { useEffect, useState } from 'react';
  *
  * Three things, in order: scan the participant's face, upload their ID
  * document, give the two consents. No parent/guardian details are collected
- * anywhere — the participant's own date of birth and gender arrive prefilled
- * from the details step.
+ * anywhere, and no demographics either — the participant's date of birth and
+ * gender were already taken on the details step and saved with registration.
  */
 
 /**
@@ -42,7 +42,6 @@ function useCosmeticMessage(active: boolean): string {
 
 export default function IdentificationStep({
     studentName,
-    identificationInfo,
     videoRef,
     modelsLoaded,
     faceCameraOn,
@@ -54,8 +53,6 @@ export default function IdentificationStep({
     onDone,
 }: {
     studentName?: string;
-    /** Collected earlier, on the details step — this page only adds ID + consent. */
-    identificationInfo: Pick<IdentificationFormValues, 'studentDob' | 'gender'>;
     videoRef: (el: HTMLVideoElement | null) => void;
     modelsLoaded: boolean;
     faceCameraOn: boolean;
@@ -82,11 +79,7 @@ export default function IdentificationStep({
         try {
             await api.post('/identification', {
                 ...values,
-                // Blank optional fields are omitted rather than sent as '' — an
-                // empty string is not a valid ISO date and would fail validation
-                // for the whole form.
-                studentDob: values.studentDob || undefined,
-                gender: values.gender || undefined,
+                // Blank optional fields are omitted rather than sent as ''.
                 city: values.city || undefined,
                 state: values.state || undefined,
             });
@@ -213,7 +206,6 @@ export default function IdentificationStep({
 
             <IdentificationForm
                 studentName={studentName}
-                initial={identificationInfo}
                 requireFaceScan
                 faceScanDone={faceScanDone}
                 submitLabel="Submit and finish registration"

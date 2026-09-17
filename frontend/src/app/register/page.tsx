@@ -349,6 +349,10 @@ export default function RegisterPage() {
                 guardianName: guardianName.trim(),
                 guardianEmail: guardianEmail.trim(),
                 guardianPhone: guardianPhone.trim(),
+                // Stored on the identification record here, at collection —
+                // so the identification step never has to ask for them again.
+                dob,
+                gender,
                 // The emailed code. Where our own API owns it, `verifyEmail`
                 // above deferred rather than checked, and this is where it is
                 // proved and consumed — so a registration cannot be completed
@@ -455,10 +459,6 @@ export default function RegisterPage() {
                 ) : step === 'identification' ? (
                     <IdentificationStep
                         studentName={`${formData.firstName} ${formData.lastName}`.trim() || undefined}
-                        identificationInfo={{
-                            studentDob: dob,
-                            gender,
-                        }}
                         videoRef={videoRef}
                         modelsLoaded={modelsLoaded}
                         faceCameraOn={faceCameraOn}

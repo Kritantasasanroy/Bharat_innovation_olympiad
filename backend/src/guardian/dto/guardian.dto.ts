@@ -1,7 +1,5 @@
 import {
     IsBoolean,
-    IsIn,
-    IsISO8601,
     IsOptional,
     IsString,
     MaxLength,
@@ -17,25 +15,17 @@ export const GENDERS = ['Female', 'Male', 'Other', 'Prefer not to say'] as const
  * separately through proctoring). Old clients still posting guardian fields
  * get a 400 from `forbidNonWhitelisted` rather than silently storing them.
  *
+ * The participant's date of birth and gender are collected once, on the
+ * registration details step, and arrive through `/auth/sync` — asking again
+ * here was a duplicated question, so they are not part of this submission.
+ *
  * The two consent booleans stay separate because the DPDP Act treats them as
  * distinct permissions: consenting to *participation* is not the same as
  * consenting to *data being processed*. `GuardianService` rejects the
  * submission unless both are true.
  */
 export class SubmitGuardianDto {
-    // ── Student demographics ──
-    //
-    // Required in the service (not here) so the rejection is one clear sentence
-    // a student can act on rather than class-validator's field-by-field list.
-
-    /** ISO date string. Validated as a real, sane date in the service. */
-    @IsISO8601()
-    @IsOptional()
-    studentDob?: string;
-
-    @IsIn(GENDERS as unknown as string[])
-    @IsOptional()
-    gender?: string;
+    // ── Kept so an existing profile's values survive a re-submit ──
 
     @IsString()
     @MaxLength(80)

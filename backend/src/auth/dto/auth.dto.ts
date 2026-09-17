@@ -3,6 +3,7 @@ import {
     IsEnum,
     IsIn,
     IsInt,
+    IsISO8601,
     IsNotEmpty,
     IsOptional,
     IsString,
@@ -11,6 +12,7 @@ import {
     Min,
 } from 'class-validator';
 import { Role } from '@prisma/client';
+import { GENDERS } from '../../guardian/dto/guardian.dto';
 
 export class SyncUserDto {
     @IsEmail()
@@ -111,6 +113,20 @@ export class SyncUserDto {
     @IsString()
     @IsOptional()
     guardianPhone?: string;
+
+    /**
+     * Participant demographics, collected on the registration details step and
+     * stored on `GuardianProfile` for cohort reporting — never for gating.
+     * They used to be asked again on the identification step; collecting them
+     * once, here, is what lets that step stay just ID + consent.
+     */
+    @IsISO8601()
+    @IsOptional()
+    dob?: string;
+
+    @IsIn(GENDERS as unknown as string[])
+    @IsOptional()
+    gender?: string;
 }
 
 export class LoginSyncDto {
