@@ -1,4 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import {
     ConsoleEmailProvider,
     EmailProvider,
@@ -7,9 +9,14 @@ import {
 } from './email.provider';
 import {
     RenderedEmail,
-    accessPassActivatedEmail,
     adminBroadcastEmail,
+    examReminderEmail,
     examSubmittedEmail,
+    parentConsentReceivedEmail,
+    paymentPendingEmail,
+    prepResourcesEmail,
+    verificationCompleteEmail,
+    verificationPendingEmail,
     partnerAccessResentEmail,
     partnerAccessTokenRotatedEmail,
     partnerApplicationReceivedEmail,
@@ -67,6 +74,8 @@ export class NotificationService implements OnModuleInit {
      */
     private sms: SmsProvider = new ConsoleSmsProvider();
     private voice: SmsProvider = new ConsoleSmsProvider();
+
+    constructor(private readonly prisma: PrismaService) {}
 
     onModuleInit() {
         const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -295,15 +304,171 @@ export class NotificationService implements OnModuleInit {
         this.logger.log(`Sent sign-in code to ${to}`);
     }
 
-    async sendWelcome(to: string, firstName: string, rollNumber?: string | null): Promise<void> {
-        await this.deliver(to, welcomeEmail({ firstName, rollNumber, appUrl: this.appUrl }));
+    /**
+     * BIO-STU-003 — registration complete. Fires once the pass first goes
+     * ACTIVE: payment processed, roll number issued, and the schedule +
+     * verification state at that instant.
+     */
+    async sendWelcome(
+        to: string,
+        vars: {
+            firstName: string;
+            rollNumber?: string | null;
+            grade?: number | null;
+            schoolName?: string | null;
+            examStartsAt?: Date | null;
+            faceScanDone: boolean;
+            idDocumentDone: boolean;
+        },
+    ): Promise<void> {
+        await this.deliver(to, welcomeEmail({ ...vars, appUrl: this.appUrl }));
     }
 
-    async sendAccessPassActivated(to: string, firstName: string, amountPaise: number): Promise<void> {
-        await this.deliver(
+    /**
+     * Deduped send for the sweep-driven mails.
+     *
+     * Same claim-then-send pattern as `SmsService`/`WhatsAppService`: the
+     * `EmailMessage` row lands before the send, so a re-running sweep meets
+     * P2002 and moves on. `userId` is the student the mail concerns; `to` is
+     * where it actually goes (the parent-consent mail is addressed to the
+     * guardian).
+     */
+    async deliverOnce(input: {
+        userId: string;
+        template: string;
+        dedupeKey: string;
+        to: string | null | undefined;
+        mail: RenderedEmail;
+    }): Promise<boolean> {
+        if (!input.to) return false;
+        let claimId: string;
+        try {
+            const claim = await this.prisma.emailMessage.create({
+                data: {
+                    userId: input.userId,
+                    template: input.template,
+                    dedupeKey: input.dedupeKey,
+                    email: input.to,
+                    status: 'PENDING',
+                },
+                select: { id: true },
+            });
+            claimId = claim.id;
+        } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+                return false; // already sent (or claimed) — the dedupe is doing its job
+            }
+            this.logger.error(
+                `Could not claim ${input.template} for ${input.userId}: ${(err as Error).message}`,
+            );
+            return false;
+        }
+        const sent = await this.deliver(input.to, input.mail);
+        await this.prisma.emailMessage
+            .update({
+                where: { id: claimId },
+                data: sent
+                    ? { status: 'SENT', sentAt: new Date() }
+                    : { status: 'FAILED', error: 'provider send failed' },
+            })
+            .catch(() => undefined);
+        return sent;
+    }
+
+    /** BIO-STU-002 — payment not completed (the 1h unpaid sweep). */
+    async sendPaymentPendingEmail(
+        to: string,
+        vars: { firstName: string; userId: string },
+    ): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-002',
+            dedupeKey: vars.userId,
             to,
-            accessPassActivatedEmail({ firstName, amountPaise, appUrl: this.appUrl }),
-        );
+            mail: paymentPendingEmail({ firstName: vars.firstName }),
+        });
+    }
+
+    /** BIO-STU-004 — preparation resources, T+1 after registration. */
+    async sendPrepResources(to: string, vars: { firstName: string; userId: string }): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-004',
+            dedupeKey: vars.userId,
+            to,
+            mail: prepResourcesEmail({ firstName: vars.firstName }),
+        });
+    }
+
+    /** BIO-STU-005 — parent consent received, T+2, addressed to the guardian. */
+    async sendParentConsentReceived(
+        to: string,
+        vars: {
+            userId: string;
+            guardianProfileId: string;
+            parentName: string;
+            studentName: string;
+            rollNumber?: string | null;
+            grade?: number | null;
+            schoolName?: string | null;
+        },
+    ): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-005',
+            dedupeKey: vars.guardianProfileId,
+            to,
+            mail: parentConsentReceivedEmail(vars),
+        });
+    }
+
+    /** BIO-STU-006 — verification still pending, T-3 (72h) before the exam. */
+    async sendVerificationPending(
+        to: string,
+        vars: {
+            userId: string;
+            bookingId: string;
+            examDateKey: string;
+            firstName: string;
+            faceScanDone: boolean;
+            idDocumentDone: boolean;
+        },
+    ): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-006',
+            dedupeKey: `${vars.bookingId}:${vars.examDateKey}`,
+            to,
+            mail: verificationPendingEmail(vars),
+        });
+    }
+
+    /** BIO-STU-008 — the T-1 exam reminder mail, twin of the reminder SMS/WA. */
+    async sendExamReminderEmail(
+        to: string,
+        vars: { userId: string; bookingId: string; examDateKey: string; firstName: string; examStartsAt: Date },
+    ): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-008',
+            dedupeKey: `${vars.bookingId}:${vars.examDateKey}`,
+            to,
+            mail: examReminderEmail(vars),
+        });
+    }
+
+    /** BIO-STU-007 — verification just completed (event-driven, deduped anyway). */
+    async sendVerificationComplete(
+        to: string,
+        vars: { userId: string; firstName: string; rollNumber?: string | null },
+    ): Promise<boolean> {
+        return this.deliverOnce({
+            userId: vars.userId,
+            template: 'bio-stu-007',
+            dedupeKey: vars.userId,
+            to,
+            mail: verificationCompleteEmail(vars),
+        });
     }
 
     /** Milestone 2 — a confirmed slot means the exam is really happening. */
@@ -322,9 +487,12 @@ export class NotificationService implements OnModuleInit {
         await this.deliver(to, slotConfirmedEmail({ ...vars, appUrl: this.appUrl }));
     }
 
-    /** Milestone 4a — receipt of the submission (score still provisional). */
-    async sendExamSubmitted(to: string, firstName: string, examTitle: string): Promise<void> {
-        await this.deliver(to, examSubmittedEmail({ firstName, examTitle, appUrl: this.appUrl }));
+    /** BIO-STU-009 — receipt of the submission (score still provisional). */
+    async sendExamSubmitted(
+        to: string,
+        vars: { firstName: string; examTitle: string; rollNumber?: string | null; submittedAt?: Date },
+    ): Promise<void> {
+        await this.deliver(to, examSubmittedEmail({ ...vars, appUrl: this.appUrl }));
     }
 
     /** Milestone 4b — the final report is published and the score is no longer provisional. */
@@ -504,6 +672,10 @@ export class NotificationService implements OnModuleInit {
             schoolName: string;
             schoolCode: string | null;
             accessToken: string;
+            schoolBoard?: string | null;
+            schoolPincode?: string | null;
+            contactNumber?: string | null;
+            coordinatorEmail?: string | null;
         },
     ): Promise<boolean> {
         return this.deliver(to, schoolApprovedEmail({ ...vars, portalUrl: this.schoolPortalUrl }));

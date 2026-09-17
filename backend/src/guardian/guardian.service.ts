@@ -168,7 +168,7 @@ export class GuardianService {
         // able to answer. Only a genuine send stamps the column.
         let sent = profile;
         if (this.notifications) {
-            const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+            const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true, email: true, rollNumber: true } });
             const studentName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Ward';
             const guardianName = `${profile.guardianFirstName} ${profile.guardianLastName}`.trim();
 
@@ -181,6 +181,17 @@ export class GuardianService {
                 sent = await this.prisma.guardianProfile.update({
                     where: { userId },
                     data: { approvalEmailSentAt: new Date() },
+                });
+            }
+
+            // Identification just went complete → the "verification complete"
+            // mail (BIO-STU-007) to the student, deduped on the user so a
+            // resubmission never re-mails.
+            if (user?.email && this.isComplete(profile)) {
+                await this.notifications.sendVerificationComplete(user.email, {
+                    userId,
+                    firstName: user.firstName,
+                    rollNumber: user.rollNumber,
                 });
             }
         }

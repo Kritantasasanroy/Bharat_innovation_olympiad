@@ -269,11 +269,6 @@ export class AccessPassService {
                 include: { user: { select: { id: true, email: true, firstName: true } } },
             });
             if (pass?.user) {
-                await this.notifications.sendAccessPassActivated(
-                    pass.user.email,
-                    pass.user.firstName,
-                    pass.amount,
-                );
                 await this.grantFirstAccessMilestones(pass.user.id);
             }
         }
@@ -304,6 +299,8 @@ export class AccessPassService {
                 classBand: true,
                 phone: true,
                 phoneRaw: true,
+                school: { select: { name: true } },
+                guardianProfile: { select: { idDocumentUrl: true, parentalConsentAt: true } },
             },
         });
         if (!user) return;
@@ -318,7 +315,25 @@ export class AccessPassService {
             );
         }
 
-        await this.notifications.sendWelcome(user.email, user.firstName, rollNumber);
+        // The registration-complete mail quotes the confirmed sitting when the
+        // auto-assigner already placed one — look up whatever landed just now.
+        const booking = await this.prisma.booking.findFirst({
+            where: { userId: user.id, status: 'CONFIRMED' },
+            orderBy: { createdAt: 'desc' },
+            select: { slot: { select: { startsAt: true } } },
+        });
+
+        // Face scan lives outside GuardianProfile (the descriptor is enrolled
+        // separately); consent + ID document are what the profile proves.
+        await this.notifications.sendWelcome(user.email, {
+            firstName: user.firstName,
+            rollNumber,
+            grade: user.classBand,
+            schoolName: user.school?.name ?? null,
+            examStartsAt: booking?.slot.startsAt ?? null,
+            faceScanDone: Boolean(user.guardianProfile?.parentalConsentAt),
+            idDocumentDone: Boolean(user.guardianProfile?.idDocumentUrl),
+        });
 
         // The DLT-approved registration SMS, and the device-requirements SMS
         // that tells a fresh registrant what the exam environment needs. Both
@@ -488,7 +503,6 @@ export class AccessPassService {
         // Only mail on the transition into ACTIVE, so a retried webhook or a
         // student who was already unlocked isn't thanked twice.
         if (before?.status !== AccessPassStatus.ACTIVE) {
-            await this.notifications.sendAccessPassActivated(user.email, user.firstName, amount);
             await this.grantFirstAccessMilestones(user.id);
         }
 
@@ -712,7 +726,6 @@ export class AccessPassService {
             .catch(() => undefined);
 
         if (before?.status !== AccessPassStatus.ACTIVE) {
-            await this.notifications.sendAccessPassActivated(user.email, user.firstName, p.amount);
             await this.grantFirstAccessMilestones(user.id);
             this.logger.log(
                 `Shared-link ₹1 pass granted to ${user.email} via reconcile (payment ${p.razorpayPaymentId}).`,

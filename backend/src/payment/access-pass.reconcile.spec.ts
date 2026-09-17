@@ -35,9 +35,11 @@ describe('AccessPassService.reconcileForUser', () => {
                 findUnique: jest.fn().mockResolvedValue(null),
                 create: jest.fn().mockResolvedValue({ id: 'pay-row-1' }),
             },
+            booking: {
+                findFirst: jest.fn().mockResolvedValue(null),
+            },
         };
         const notifications = {
-            sendAccessPassActivated: jest.fn().mockResolvedValue(undefined),
             sendWelcome: jest.fn().mockResolvedValue(undefined),
         };
         const rollNumbers = { ensureFor: jest.fn().mockResolvedValue('BIO26-G6-00001') };
@@ -99,7 +101,7 @@ describe('AccessPassService.reconcileForUser', () => {
                 create: expect.objectContaining({ status: 'ACTIVE' }),
             }),
         );
-        expect(notifications.sendAccessPassActivated).toHaveBeenCalled();
+        expect(notifications.sendWelcome).toHaveBeenCalled();
     });
 
     it('grants on the peer backend\'s word when nothing is local', async () => {

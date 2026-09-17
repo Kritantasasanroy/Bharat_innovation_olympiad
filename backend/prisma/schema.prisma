@@ -78,6 +78,7 @@ model User {
   trainingRecords  TrainingRecord[]
   whatsappMessages WhatsAppMessage[]
   smsMessages      SmsMessage[]
+  emailMessages    EmailMessage[]
   examFeedback     ExamFeedback[]
 
   @@index([email])
@@ -1209,6 +1210,38 @@ model ExamSlot {
 /// CONFIRMED. Paying is a separate, account-level gate (`AccessPass`) checked
 /// independently when the student tries to start. PENDING survives only for
 /// rows written by the old pay-then-pick flow.
+/// The claim-then-send ledger for lifecycle emails that fire from a sweeper
+/// rather than an event — the T+1 preparation mail, the T+2 parent-consent
+/// mail, the T-3 verification nudge and the T-1 reminder. The unique
+/// (template, dedupeKey) row is written before the send, so an hourly sweep
+/// can never mail a student twice.
+model EmailMessage {
+  id         String      @id @default(uuid())
+  /// The student the mail concerns — also the parent-mail recipient's owner.
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The Phase-1 template id, e.g. 'bio-stu-004'.
+  template   String
+  dedupeKey  String
+  /// The address the mail actually went to — for parent mails this is the
+  /// guardian's, not the student's.
+  email      String
+  status     EmailStatus @default(PENDING)
+  providerId String?
+  error      String?
+  createdAt  DateTime    @default(now())
+  sentAt     DateTime?
+
+  @@unique([template, dedupeKey])
+  @@index([userId])
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model Booking {
   id         String        @id @default(uuid())
   userId     String

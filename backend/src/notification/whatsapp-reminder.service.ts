@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from './notification.service';
 import { SmsService } from './sms.service';
 import { WhatsAppService } from './whatsapp.service';
 
@@ -54,6 +55,7 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
         private readonly prisma: PrismaService,
         private readonly whatsapp: WhatsAppService,
         private readonly sms: SmsService,
+        private readonly notifications: NotificationService,
     ) {}
 
     onModuleInit() {
@@ -101,6 +103,7 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
                         select: {
                             id: true,
                             firstName: true,
+                            email: true,
                             phone: true,
                             phoneRaw: true,
                             // Absent = student identification never completed —
@@ -143,6 +146,17 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
                     bookingId: booking.id,
                     startsAt: booking.slot.startsAt,
                     examDateKey: dateKey,
+                });
+
+                // The reminder email (BIO-STU-008) — same dedupe shape as the
+                // reminder SMS/WA, so a re-sweep is idempotent on all three
+                // channels.
+                await this.notifications.sendExamReminderEmail(booking.user.email, {
+                    userId: booking.user.id,
+                    bookingId: booking.id,
+                    examDateKey: dateKey,
+                    firstName: booking.user.firstName,
+                    examStartsAt: booking.slot.startsAt,
                 });
 
                 // Student identification still incomplete the day before the
@@ -204,6 +218,54 @@ export class WhatsAppReminderService implements OnModuleInit, OnModuleDestroy {
             }
         } catch (err) {
             this.logger.error(`T-2 face-scan sweep failed: ${(err as Error).message}`);
+        }
+
+        // The T-3 verification mail (BIO-STU-006) — 72 hours before the exam,
+        // only while a required identification step is still missing (consent,
+        // ID document, or the face enrollment itself). Students who completed
+        // everything are never told anything is pending.
+        try {
+            const t3 = tomorrowInIst(new Date(), 3);
+            const unverified = await this.prisma.booking.findMany({
+                where: {
+                    status: BookingStatus.CONFIRMED,
+                    slot: { startsAt: { gte: t3.start, lt: t3.end } },
+                    OR: [
+                        { user: { guardianProfile: null } },
+                        { user: { guardianProfile: { idDocumentUrl: null } } },
+                        { user: { faceEmbedding: null } },
+                    ],
+                },
+                select: {
+                    id: true,
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            email: true,
+                            faceEmbedding: true,
+                            guardianProfile: {
+                                select: { idDocumentUrl: true, parentalConsentAt: true },
+                            },
+                        },
+                    },
+                },
+            });
+            for (const booking of unverified) {
+                await this.notifications.sendVerificationPending(booking.user.email, {
+                    userId: booking.user.id,
+                    bookingId: booking.id,
+                    examDateKey: t3.dateKey,
+                    firstName: booking.user.firstName,
+                    faceScanDone: Boolean(booking.user.faceEmbedding),
+                    idDocumentDone: Boolean(booking.user.guardianProfile?.idDocumentUrl),
+                });
+            }
+            if (unverified.length) {
+                this.logger.log(`T-3 verification mail for ${t3.dateKey}: ${unverified.length} considered.`);
+            }
+        } catch (err) {
+            this.logger.error(`T-3 verification sweep failed: ${(err as Error).message}`);
         }
 
         return summary;

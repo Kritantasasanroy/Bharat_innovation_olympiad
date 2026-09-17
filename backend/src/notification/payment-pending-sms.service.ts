@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AccessPassStatus, PaymentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from './notification.service';
 import { SmsService } from './sms.service';
 import { WhatsAppService } from './whatsapp.service';
 
@@ -51,6 +52,7 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
         private readonly prisma: PrismaService,
         private readonly sms: SmsService,
         private readonly whatsapp: WhatsAppService,
+        private readonly notifications: NotificationService,
     ) {}
 
     onModuleInit() {
@@ -93,7 +95,7 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
                     accessPass: { isNot: { status: AccessPassStatus.ACTIVE } },
                     payments: { none: { status: PaymentStatus.PAID } },
                 },
-                select: { id: true, firstName: true, phone: true, phoneRaw: true },
+                select: { id: true, firstName: true, email: true, phone: true, phoneRaw: true },
             });
 
             summary.considered = users.length;
@@ -116,6 +118,11 @@ export class PaymentPendingSmsService implements OnModuleInit, OnModuleDestroy {
                     phone: user.phone,
                     phoneRaw: user.phoneRaw,
                     firstName: user.firstName,
+                });
+                // And the email (BIO-STU-002), deduped on the user.
+                await this.notifications.sendPaymentPendingEmail(user.email, {
+                    firstName: user.firstName,
+                    userId: user.id,
                 });
                 // `sendPaymentPending` enqueues on the 30s-spaced queue, so
                 // "sent" here means "claimed for the queue".

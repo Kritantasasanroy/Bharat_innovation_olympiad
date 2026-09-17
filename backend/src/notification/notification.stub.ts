@@ -13,6 +13,12 @@ import { NotificationService } from './notification.service';
  * behaviour; this is deliberately inert, always "sent".
  */
 export class NotificationServiceTestDouble extends NotificationService {
+    constructor() {
+        // The double overrides every send; the real constructor only needs a
+        // PrismaService for `deliverOnce`, which the double also replaces.
+        super(null as never);
+    }
+
     sendOtpSms = jest.fn(async (_toE164: string): Promise<string> => '000000');
     sendOtpVoice = jest.fn(async (_toE164: string, _code: string): Promise<void> => undefined);
     smsDiagnostics = jest.fn(async () => ({ provider: 'stub', voice: 'stub' }));
@@ -20,11 +26,26 @@ export class NotificationServiceTestDouble extends NotificationService {
     smsDeliveryReport = jest.fn(async (_sessionId: string): Promise<string> => 'stub');
 
     sendWelcome = jest.fn(
-        async (_to: string, _firstName: string, _rollNumber?: string | null): Promise<void> => undefined,
+        async (
+            _to: string,
+            _vars: {
+                firstName: string;
+                rollNumber?: string | null;
+                grade?: number | null;
+                schoolName?: string | null;
+                examStartsAt?: Date | null;
+                faceScanDone: boolean;
+                idDocumentDone: boolean;
+            },
+        ): Promise<void> => undefined,
     );
-    sendAccessPassActivated = jest.fn(
-        async (_to: string, _firstName: string, _amountPaise: number): Promise<void> => undefined,
-    );
+    deliverOnce = jest.fn(async (_input: unknown): Promise<boolean> => true);
+    sendPaymentPendingEmail = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
+    sendPrepResources = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
+    sendParentConsentReceived = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
+    sendVerificationPending = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
+    sendExamReminderEmail = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
+    sendVerificationComplete = jest.fn(async (_to: string, _vars: unknown): Promise<boolean> => true);
     sendSlotConfirmed = jest.fn(
         async (
             _to: string,
@@ -40,7 +61,10 @@ export class NotificationServiceTestDouble extends NotificationService {
         ): Promise<void> => undefined,
     );
     sendExamSubmitted = jest.fn(
-        async (_to: string, _firstName: string, _examTitle: string): Promise<void> => undefined,
+        async (
+            _to: string,
+            _vars: { firstName: string; examTitle: string; rollNumber?: string | null; submittedAt?: Date },
+        ): Promise<void> => undefined,
     );
     sendResultsPublished = jest.fn(
         async (_to: string, _firstName: string, _examTitle: string): Promise<void> => undefined,
@@ -130,6 +154,10 @@ export class NotificationServiceTestDouble extends NotificationService {
                 schoolName: string;
                 schoolCode: string | null;
                 accessToken: string;
+                schoolBoard?: string | null;
+                schoolPincode?: string | null;
+                contactNumber?: string | null;
+                coordinatorEmail?: string | null;
             },
         ): Promise<boolean> => true,
     );

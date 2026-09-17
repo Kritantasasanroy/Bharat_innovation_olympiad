@@ -941,7 +941,7 @@ export class AttemptService {
                 select: {
                     id: true,
                     submittedAt: true,
-                    user: { select: { id: true, firstName: true, email: true, phone: true, phoneRaw: true } },
+                    user: { select: { id: true, firstName: true, email: true, phone: true, phoneRaw: true, rollNumber: true } },
                     examInstance: { select: { exam: { select: { id: true, title: true, isTrial: true } } } },
                 },
             });
@@ -967,11 +967,12 @@ export class AttemptService {
                 submittedAt: attempt.submittedAt ?? new Date(),
             });
 
-            await this.notifications.sendExamSubmitted(
-                attempt.user.email,
-                attempt.user.firstName,
-                attempt.examInstance.exam.title,
-            );
+            await this.notifications.sendExamSubmitted(attempt.user.email, {
+                firstName: attempt.user.firstName,
+                examTitle: attempt.examInstance.exam.title,
+                rollNumber: attempt.user.rollNumber,
+                submittedAt: attempt.submittedAt ?? new Date(),
+            });
         } catch (err) {
             this.logger.error(
                 `Submission notification failed for attempt ${attemptId}: ${(err as Error).message}`,

@@ -1047,7 +1047,7 @@ export class SchoolService {
             }
             return this.prisma.school.findUnique({
                 where: { id: result.schoolId ?? '' },
-                select: { code: true },
+                select: { code: true, board: true, pincode: true },
             }).then((school) => {
                 if (result.coordinatorUserId && school?.code) {
                     this.whatsapp.sendSchoolOnboarded({
@@ -1063,6 +1063,10 @@ export class SchoolService {
                     schoolName: result.schoolName,
                     schoolCode: school?.code ?? null,
                     accessToken: token,
+                    schoolBoard: school?.board ?? null,
+                    schoolPincode: school?.pincode ?? null,
+                    contactNumber: result.coordinatorPhone,
+                    coordinatorEmail: result.coordinatorEmail,
                 });
             });
         }

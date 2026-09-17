@@ -5,6 +5,7 @@ import { PaymentPendingSmsService } from './payment-pending-sms.service';
 import { SmsHealthController } from './sms-health.controller';
 import { SmsTransactionalController } from './sms-transactional.controller';
 import { SmsService } from './sms.service';
+import { StudentNudgesService } from './student-nudges.service';
 import { WhatsAppHealthController } from './whatsapp-health.controller';
 import { WhatsAppReminderService } from './whatsapp-reminder.service';
 import { WhatsAppService } from './whatsapp.service';
@@ -38,6 +39,7 @@ import { WhatsAppService } from './whatsapp.service';
         WhatsAppService,
         WhatsAppReminderService,
         PaymentPendingSmsService,
+        StudentNudgesService,
     ],
     exports: [NotificationService, SmsService, WhatsAppService],
 })

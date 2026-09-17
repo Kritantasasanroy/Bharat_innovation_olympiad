@@ -24,10 +24,12 @@ function make(existingStatus: 'ACTIVE' | null) {
         payment: {
             update: jest.fn().mockResolvedValue({ id: 'pay-1' }),
         },
+        booking: {
+            findFirst: jest.fn().mockResolvedValue(null),
+        },
         $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
     };
     const notifications = {
-        sendAccessPassActivated: jest.fn().mockResolvedValue(undefined),
         sendWelcome: jest.fn().mockResolvedValue(undefined),
     };
     const rollNumbers = { ensureFor: jest.fn().mockResolvedValue('BIO26-G6-00001') };
@@ -55,7 +57,10 @@ describe('registration milestones fire on first activation, not on account creat
 
         expect(rollNumbers.ensureFor).toHaveBeenCalledWith('u1', 6);
         expect(slotAssignment.assignForNewStudent).toHaveBeenCalledWith('u1');
-        expect(notifications.sendWelcome).toHaveBeenCalledWith('ada@example.com', 'Ada', 'BIO26-G6-00001');
+        expect(notifications.sendWelcome).toHaveBeenCalledWith(
+            'ada@example.com',
+            expect.objectContaining({ firstName: 'Ada', rollNumber: 'BIO26-G6-00001' }),
+        );
     });
 
     it('adminGrant on an already-ACTIVE pass does not re-issue anything', async () => {
@@ -82,7 +87,10 @@ describe('registration milestones fire on first activation, not on account creat
 
         expect(rollNumbers.ensureFor).toHaveBeenCalledWith('u1', 6);
         expect(slotAssignment.assignForNewStudent).toHaveBeenCalledWith('u1');
-        expect(notifications.sendWelcome).toHaveBeenCalledWith('ada@example.com', 'Ada', 'BIO26-G6-00001');
+        expect(notifications.sendWelcome).toHaveBeenCalledWith(
+            'ada@example.com',
+            expect.objectContaining({ firstName: 'Ada', rollNumber: 'BIO26-G6-00001' }),
+        );
     });
 
     it('activate() confirming an already-ACTIVE pass a second time re-issues nothing', async () => {
