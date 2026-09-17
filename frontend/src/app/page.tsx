@@ -29,7 +29,7 @@ import {
   Rocket, Lightbulb, Users, Medal, Globe,
   Target, ScrollText, Star, ArrowRight, CheckCircle2, Minus,
   Award, Sparkles, GraduationCap, FlaskConical,
-  BadgeCheck, PenLine, Briefcase,
+  BadgeCheck, PenLine, Briefcase, CalendarDays,
   MessageCircle, Instagram, Linkedin, Mail, Monitor,
 } from 'lucide-react';
 
@@ -49,7 +49,10 @@ export default function LandingPage() {
       <ReferralCapture />
       <RegistrationPopup />
 
-      {/* ── NAV ── */}
+      {/* ── NAV ──
+          One bar, one Register CTA. The next-Olympiad date lives here as a
+          slim chip (the old separate announcement band duplicated the
+          Register CTA a few pixels below it). */}
       <nav className="lp-nav" style={{
         position: 'sticky', top: 0, zIndex: 30,
         background: 'var(--glass-bg)',
@@ -57,13 +60,20 @@ export default function LandingPage() {
         WebkitBackdropFilter: 'blur(var(--glass-blur))',
         borderBottom: '1px solid var(--border-subtle)',
       }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           {/* The logo lockup already carries the full name — no written
               wordmark beside it (#1). */}
           <Link href="/" aria-label="Bharat Innovation Olympiad — home">
             <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad: Become Future Ready" height={46} width={152} style={{ height: 46, width: 'auto', display: 'block' }} priority />
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Next-Olympiad date (#5) as a quiet chip — informative, not a
+                second CTA. */}
+            <span className="lp-date-chip" title="Exam slots open every Sunday, 8:30 AM – 7 PM">
+              <CalendarDays size={14} />
+              <span>Next Olympiad</span>
+              <b>{nextDate}</b>
+            </span>
             <Link href="/login" className="lp-btn-secondary" style={{
               border: '1px solid var(--border-default)', background: 'var(--bg-elevated)',
               color: 'var(--text-primary)', fontWeight: 600, fontSize: 14,
@@ -83,24 +93,6 @@ export default function LandingPage() {
           </div>
         </div>
       </nav>
-
-      {/* ── NEXT OLYMPIAD BAND (#5: the Sunday after 15 days from today) ── */}
-      <div style={{
-        background: 'linear-gradient(135deg,#1a3a0a,#0e2206)',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        padding: '10px 32px', textAlign: 'center',
-      }}>
-        <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, fontWeight: 600 }}>
-          Next Olympiad · <b style={{ color: '#ffcb05' }}>{nextDate}</b> — Only 500 exam slots per week
-        </span>{' '}
-        <Link href="/register" style={{
-          marginLeft: 14, color: '#fff', background: 'linear-gradient(135deg,#7dc832,#4f9a12)',
-          fontWeight: 700, fontSize: 12.5, padding: '7px 16px', borderRadius: 999,
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-        }}>
-          <Rocket size={13} /> Register Now
-        </Link>
-      </div>
 
       {/* ── HERO — real event photos crossfading behind a dark translucent
           veil (#18/#20). Text is forced light: it sits on the photos, not on

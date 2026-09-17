@@ -5474,6 +5474,25 @@ textarea.form-control {
 }
 .lp-social-link:hover { color: var(--primary-400); border-color: var(--primary-400); }
 
+/* ── Nav date chip ──
+   The next-Olympiad date lives in the nav as a quiet chip instead of a full
+   announcement band under it — one Register CTA in view, not two. */
+.lp-date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.lp-date-chip svg { color: #7dc832; flex-shrink: 0; }
+.lp-date-chip b { color: #4f9a12; font-weight: 700; }
+
 /* ── Registration pop-up (#17) ──
    A fixed, centred modal — not document flow. Matte finish: solid surfaces,
    a hairline border and one flat green accent; no gradients or glow. */
@@ -5604,6 +5623,9 @@ textarea.form-control {
   .lp-grid-4 { grid-template-columns: repeat(2, 1fr); }
   .lp-grid-5 { grid-template-columns: repeat(3, 1fr); }
   .lp-trust__grid { grid-template-columns: repeat(2, 1fr); }
+  /* The date chip crowds the nav once the buttons need the room; the date
+     still appears in the pricing band below the hero. */
+  .lp-date-chip { display: none; }
   /* The 7- and 5-column gallery cells become half-width pairs. */
   .lp-gallery-grid > * { grid-column: span 6 !important; }
 }
