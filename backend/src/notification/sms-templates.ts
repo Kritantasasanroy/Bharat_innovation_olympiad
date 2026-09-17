@@ -174,11 +174,12 @@ export function supportMessage(vars: { ticketRef: string }): string {
 /**
  * Static body — no variables (BIOVERIFICATIONPENDING · 1777178949269638040).
  * Sent at T-1 to a student who has not completed student identification.
+ * The approved body links to /profile/ — not /dashboard/.
  */
 export function verificationPendingMessage(): string {
     return [
         'Bharat Innovation Olympiad verification is pending. Please complete your ' +
-            'face scan/ID upload: https://www.innovationolympiad.in/dashboard/',
+            'face scan/ID upload: https://www.innovationolympiad.in/profile/',
         '- Lemon Ideas Team',
     ].join('\n');
 }
@@ -190,10 +191,10 @@ export function verificationPendingMessage(): string {
 export function paymentPendingMessage(): string {
     return [
         'Your Bharat Innovation Olympiad registration is incomplete as payment is pending.',
-        'If payment failed, please try again from the registration portal.',
+        'If payment failed, please try again from the portal,',
         'https://www.innovationolympiad.in/login/',
         '',
-        'If payment was deducted, contact support before making another payment: +918421411142.',
+        'If payment was deducted, contact support before making another payment: WA HELPLINE- +918421411142.',
         '- Lemon Ideas Team',
     ].join('\n');
 }

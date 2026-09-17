@@ -267,10 +267,10 @@ describe('SMS template bodies match the DLT-approved text', () => {
         expect(text).toContain('- Lemon ideas Team');
     });
 
-    it('verificationPending is static with the dashboard link', () => {
+    it('verificationPending is static with the profile link', () => {
         const text = verificationPendingMessage();
         expect(text).toContain('verification is pending');
-        expect(text).toContain('https://www.innovationolympiad.in/dashboard/');
+        expect(text).toContain('https://www.innovationolympiad.in/profile/');
         expect(text).toContain('- Lemon Ideas Team');
         expect(text).not.toContain('{#');
     });
@@ -278,8 +278,9 @@ describe('SMS template bodies match the DLT-approved text', () => {
     it('paymentPending is static with the login link and support number', () => {
         const text = paymentPendingMessage();
         expect(text).toContain('registration is incomplete as payment is pending');
+        expect(text).toContain('from the portal,');
         expect(text).toContain('https://www.innovationolympiad.in/login/');
-        expect(text).toContain('+918421411142');
+        expect(text).toContain('WA HELPLINE- +918421411142');
         expect(text).toContain('- Lemon Ideas Team');
         expect(text).not.toContain('{#');
     });
