@@ -491,19 +491,41 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="input-group">
-                            <label className="input-label" htmlFor="email">Participant&apos;s Email</label>
+                            <label className="input-label" htmlFor="guardianName">Guardian&apos;s Name</label>
                             <input
-                                id="email" name="email" type="email" className="input-field"
-                                placeholder="you@example.com" value={formData.email}
-                                onChange={handleChange} required suppressHydrationWarning
+                                id="guardianName" name="guardianName" type="text" className="input-field"
+                                placeholder="Parent or guardian's full name" value={guardianName}
+                                onChange={(e) => setGuardianName(e.target.value)} required
                             />
-                            <p className="input-hint">We&apos;ll send your verification code here.</p>
+                            <p className="input-hint">
+                                For our records only — all codes and exam updates go to the participant&apos;s own email and WhatsApp below.
+                            </p>
+                        </div>
+
+                        <div className="form-row">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="email">Participant&apos;s Email</label>
+                                <input
+                                    id="email" name="email" type="email" className="input-field"
+                                    placeholder="you@example.com" value={formData.email}
+                                    onChange={handleChange} required suppressHydrationWarning
+                                />
+                                <p className="input-hint">We&apos;ll send your verification code here.</p>
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianEmail">Guardian&apos;s Email</label>
+                                <input
+                                    id="guardianEmail" name="guardianEmail" type="email" className="input-field"
+                                    placeholder="guardian@example.com" value={guardianEmail}
+                                    onChange={(e) => setGuardianEmail(e.target.value)} required suppressHydrationWarning
+                                />
+                            </div>
                         </div>
 
                         <div className="form-row">
                             <div className="input-group">
                                 <label className="input-label" htmlFor="phone">
-                                    Participant&apos;s Mobile <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(for WhatsApp updates)</span>
+                                    Participant&apos;s WhatsApp <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(mobile)</span>
                                 </label>
                                 <input
                                     id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel"
@@ -513,19 +535,17 @@ export default function RegisterPage() {
                                     required suppressHydrationWarning
                                 />
                             </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="guardianPhone">Guardian&apos;s WhatsApp</label>
+                                <input
+                                    id="guardianPhone" name="guardianPhone" type="tel" inputMode="tel" className="input-field"
+                                    placeholder="+91 98765 43210" value={guardianPhone}
+                                    onChange={(e) => setGuardianPhone(e.target.value)} required suppressHydrationWarning
+                                />
+                            </div>
                         </div>
 
                         <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="gender">Participant&apos;s Gender</label>
-                                <select
-                                    id="gender" name="gender" className="input-field" required
-                                    value={gender} onChange={(e) => setGender(e.target.value)}
-                                >
-                                    <option value="" disabled>Select…</option>
-                                    {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                            </div>
                             <div className="input-group">
                                 <label className="input-label" htmlFor="dob">Participant&apos;s Date of Birth</label>
                                 <input
@@ -535,6 +555,16 @@ export default function RegisterPage() {
                                     value={dob}
                                     onChange={(e) => setDob(e.target.value)}
                                 />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="gender">Participant&apos;s Gender</label>
+                                <select
+                                    id="gender" name="gender" className="input-field" required
+                                    value={gender} onChange={(e) => setGender(e.target.value)}
+                                >
+                                    <option value="" disabled>Select…</option>
+                                    {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                                </select>
                             </div>
                         </div>
 
@@ -555,48 +585,28 @@ export default function RegisterPage() {
                             </p>
                         </div>
 
+                        {/* Section lives on its own now, below class — not
+                            inside the school picker — so it's collected the
+                            same way whether or not the school is listed. */}
+                        <div className="input-group">
+                            <label className="input-label" htmlFor="section">Participant&apos;s Section</label>
+                            <input
+                                id="section" name="section" type="text" className="input-field"
+                                placeholder="A" maxLength={10} autoComplete="off" required
+                                value={section}
+                                onChange={(e) => setSection(e.target.value.slice(0, 10))}
+                            />
+                            <p className="input-hint">
+                                Exactly as the school writes it: <strong>A</strong>, <strong>B2</strong>,{' '}
+                                <strong>Rose</strong>. If the school does not use sections, write <strong>NA</strong>.
+                            </p>
+                        </div>
+
                         <div data-limon="register-school">
                         <SchoolPicker
                             value={school}
                             onChange={setSchool}
-                            section={section}
-                            onSectionChange={setSection}
                         />
-                        </div>
-
-                        {/* Guardian contact — a single block, clearly marked as
-                            the parent's details. For records only: the code and
-                            every exam update go to the participant's own email
-                            and WhatsApp above, never these. */}
-                        <div className="input-group" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border, #e5e7eb)', paddingTop: '1.25rem' }}>
-                            <p className="input-label" style={{ marginBottom: '0.25rem' }}>Parent / Guardian Details</p>
-                            <p className="input-hint" style={{ marginBottom: '0.75rem' }}>
-                                For our records only — all codes and exam updates go to the participant&apos;s own email and WhatsApp above.
-                            </p>
-                            <label className="input-label" htmlFor="guardianName">Guardian&apos;s Name</label>
-                            <input
-                                id="guardianName" name="guardianName" type="text" className="input-field"
-                                placeholder="Parent or guardian's full name" value={guardianName}
-                                onChange={(e) => setGuardianName(e.target.value)} required
-                            />
-                        </div>
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianEmail">Guardian&apos;s Email</label>
-                                <input
-                                    id="guardianEmail" name="guardianEmail" type="email" className="input-field"
-                                    placeholder="guardian@example.com" value={guardianEmail}
-                                    onChange={(e) => setGuardianEmail(e.target.value)} required suppressHydrationWarning
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="guardianPhone">Guardian&apos;s WhatsApp</label>
-                                <input
-                                    id="guardianPhone" name="guardianPhone" type="tel" inputMode="tel" className="input-field"
-                                    placeholder="+91 98765 43210" value={guardianPhone}
-                                    onChange={(e) => setGuardianPhone(e.target.value)} required suppressHydrationWarning
-                                />
-                            </div>
                         </div>
 
                         <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={isLoading}>
