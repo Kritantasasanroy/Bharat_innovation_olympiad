@@ -24,6 +24,7 @@ import {
   TAKEAWAYS,
   COMMUNITY_LINKS,
   EVENT_PHOTOS,
+  PARTNERS,
   nextOlympiadDate,
 } from '@/lib/copy/landing';
 import {
@@ -327,6 +328,44 @@ export default function LandingPage() {
                 accent="#4f9a12"
                 icon={<span className="lp-trust__icon"><Icon size={18} /></span>}
               />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PARTNERS (#21) — ecosystem partners, above "What you need".
+          Data-driven: the next partner is one entry in PARTNERS. ── */}
+      <section style={{ background: 'var(--bg-secondary)', padding: '0 32px 76px' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div className="lp-fade-up" style={{ textAlign: 'center', marginBottom: 34 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 30, margin: '0 0 8px', letterSpacing: -0.5 }}>
+              Our Partners
+            </h2>
+            <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0 }}>
+              The ecosystem behind the Olympiad — organisations that share the belief that
+              skills are built by doing.
+            </p>
+          </div>
+          <div className="lp-partners">
+            {PARTNERS.map((p) => (
+              <a
+                key={p.name}
+                href={p.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lp-partner-card lp-fade-up"
+              >
+                <span className="lp-partner-card__logo">
+                  <Image src={p.logo} alt={`${p.name} logo`} width={128} height={128} style={{ objectFit: 'contain', width: 128, height: 128 }} />
+                </span>
+                <span className="lp-partner-card__body">
+                  <span className="lp-partner-card__kicker">Ecosystem Partner</span>
+                  <strong>{p.name}</strong>
+                  <em>“{p.motto}”</em>
+                  <span className="lp-partner-card__blurb">{p.blurb}</span>
+                  <span className="lp-partner-card__site">{p.website.replace('https://', '').replace(/\/$/, '')} ↗</span>
+                </span>
+              </a>
             ))}
           </div>
         </div>

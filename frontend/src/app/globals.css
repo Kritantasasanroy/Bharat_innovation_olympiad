@@ -5493,6 +5493,66 @@ textarea.form-control {
 .lp-date-chip svg { color: #4f9a12; flex-shrink: 0; }
 .lp-date-chip b { color: #35700a; font-weight: 700; }
 
+/* ── Partners segment (#21) ──
+   One wide card per partner: logo left, name + motto lines right, site link.
+   Adding a partner is a data change in `PARTNERS`, not a layout change. */
+.lp-partner-card {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  padding: 28px 32px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.lp-partner-card:hover {
+  border-color: rgba(125, 200, 50, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
+}
+.lp-partner-card__kicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4f9a12;
+  background: rgba(125, 200, 50, 0.1);
+  border: 1px solid rgba(125, 200, 50, 0.28);
+  border-radius: 999px;
+  padding: 4px 11px;
+  margin-bottom: 4px;
+}
+.lp-partner-card__logo {
+  flex-shrink: 0;
+  width: 128px;
+  height: 128px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.lp-partner-card__body { display: flex; flex-direction: column; gap: 3px; }
+.lp-partner-card strong {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 21px;
+  color: var(--text-primary);
+}
+.lp-partner-card em {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  color: #4f9a12;
+}
+.lp-partner-card__blurb { font-size: 14px; line-height: 1.65; color: var(--text-secondary); }
+.lp-partner-card__site { font-size: 13.5px; font-weight: 700; color: #4f9a12; margin-top: 6px; }
+
 /* ── Nav "Join us" menu ──
    A small clickable label in the nav that opens two ways in: partner and
    school. Both open the respective portal in a new tab. */

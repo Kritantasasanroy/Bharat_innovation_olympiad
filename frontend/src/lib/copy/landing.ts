@@ -168,3 +168,21 @@ export const EVENT_PHOTOS = [
     { src: '/assets/events/event-gadkari-team.jpg', alt: 'The Lemon Ideas team with Shri Nitin Gadkari' },
     { src: '/assets/events/event-school-awards.jpg', alt: 'A partner school celebrating its young innovators on stage' },
 ] as const;
+
+/**
+ * Ecosystem partners (#21). One entry per partner — logo, name, a couple of
+ * lines from their own words, and their site — so adding the next partner is
+ * a data change, not a layout change.
+ */
+export const PARTNERS = [
+    {
+        name: 'World Skill Challenge',
+        logo: '/assets/wsc-logo.png',
+        website: 'https://worldskillchallenge.com/',
+        motto: 'Crafting Champions of Tomorrow',
+        blurb:
+            'A national skill challenge for students across age groups, blending innovation, ' +
+            'teamwork and real-world problem solving. Compete across exciting categories with ' +
+            'cash prizes up to ₹1 lakh — and discover how far your skills can take you.',
+    },
+] as const;
