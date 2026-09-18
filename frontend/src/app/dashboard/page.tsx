@@ -155,15 +155,18 @@ export default function StudentDashboard() {
             }
             try {
                 const resultsRes = await api.get<ResultSummary[]>('/attempts/recent');
-                const released = resultsRes.data || [];
-                setRecentResults(released);
-                const completed = released.length;
-                const avg = completed > 0
+                const all = resultsRes.data || [];
+                // Only released scores feed the average — an unreleased paper
+                // carries no score at all (the API sends null).
+                const released = all.filter((r) => r.isReleased && typeof r.score === 'number');
+                setRecentResults(all);
+                const completed = all.length;
+                const avg = released.length > 0
                     ? Math.round(
-                        released.reduce((sum, r) => sum + (r.score / (r.totalMarks || 1)) * 100, 0) / completed,
+                        released.reduce((sum, r) => sum + ((r.score ?? 0) / (r.totalMarks || 1)) * 100, 0) / released.length,
                     )
                     : 0;
-                setStats((s) => ({ ...s, completed, avgScore: completed > 0 ? `${avg}%` : '-' }));
+                setStats((s) => ({ ...s, completed, avgScore: released.length > 0 ? `${avg}%` : '-' }));
             } catch {
                 // Results endpoint optional — leave defaults.
             }
@@ -347,7 +350,13 @@ export default function StudentDashboard() {
                                                 </div>
                                             </div>
                                             <div className="exam-item-actions">
-                                                {!result.isDisqualified ? (
+                                                {result.isDisqualified ? (
+                                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>Under review</span>
+                                                ) : !result.isReleased ? (
+                                                    /* No score leaves the server before the admin
+                                                        releases this exam's results. */
+                                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>Under verification</span>
+                                                ) : (
                                                     <div className="score-display">
                                                         <span className="score-value">{result.score}</span>
                                                         <span className="score-total">/ {result.totalMarks}</span>
@@ -357,8 +366,6 @@ export default function StudentDashboard() {
                                                             <span className="score-provisional">Provisional</span>
                                                         )}
                                                     </div>
-                                                ) : (
-                                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>Under review</span>
                                                 )}
                                             </div>
                                         </div>

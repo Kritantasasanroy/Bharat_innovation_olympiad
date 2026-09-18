@@ -1196,6 +1196,11 @@ export class AttemptService {
             // move this student's rank, or anyone else's.
             const isFinal = Boolean(attempt.examInstance.finalResultsReleasedAt);
             const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+            // The release switch the admin result tab sets. Until it is on, the
+            // score does not leave the server at all — the student is told their
+            // paper is submitted and under verification, and nothing in the
+            // payload carries a number for a curious network tab to find.
+            const isReleased = attempt.examInstance.exam.isResultReleased;
 
             // The violation total the student is shown after submitting.
             //
@@ -1220,11 +1225,15 @@ export class AttemptService {
                 examId: attempt.examInstance.examId,
                 examInstanceId: attempt.examInstanceId,
                 title: attempt.examInstance.exam.title,
-                score,
+                // Gated on the release switch: no number leaves the server
+                // before the admin releases this exam's results.
+                score: isReleased ? score : null,
                 total: attempt.maxScore || attempt.examInstance.exam.totalMarks,
                 date: attempt.submittedAt,
-                percentage: ((score) / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100,
-                isReleased: attempt.examInstance.exam.isResultReleased,
+                percentage: isReleased
+                    ? (score / (attempt.maxScore || attempt.examInstance.exam.totalMarks || 1)) * 100
+                    : null,
+                isReleased,
                 // A disqualified attempt carries no score, rank or analysis — but
                 // it is still returned, so the student is told plainly rather than
                 // finding their exam has silently vanished from their results.
@@ -1273,13 +1282,16 @@ export class AttemptService {
 
         return attempts.map((attempt) => {
             const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+            // Same release switch as `getResults`: no score leaves the server
+            // before the admin result tab releases this exam.
+            const isReleased = attempt.examInstance.exam.isResultReleased;
             return {
                 id: attempt.id,
                 examTitle: attempt.examInstance.exam.title,
-                score: attempt.totalScore || 0,
+                score: isReleased ? attempt.totalScore || 0 : null,
                 totalMarks: attempt.maxScore || attempt.examInstance.exam.totalMarks,
                 completedAt: attempt.submittedAt,
-                isReleased: attempt.examInstance.exam.isResultReleased,
+                isReleased,
                 isDisqualified,
                 // Drives the "Provisional" chip on the dashboard, so a score there
                 // never reads as settled while it can still move.
@@ -1322,6 +1334,10 @@ export class AttemptService {
         const isFinal = Boolean(examInstance.finalResultsReleasedAt);
         const answerKeyReleased = Boolean(examInstance.answerKeyReleasedAt);
         const isDisqualified = attempt.status === AttemptStatus.DISQUALIFIED;
+        // The release switch: until the admin result tab releases this exam,
+        // the score does not leave the server — the student sees "under
+        // verification" instead of a number.
+        const isReleased = Boolean(examInstance.exam.isResultReleased);
 
         const maxScore = attempt.maxScore || examInstance.exam.totalMarks || 0;
         const score = attempt.totalScore ?? 0;
@@ -1330,9 +1346,9 @@ export class AttemptService {
             attemptId: attempt.id,
             examTitle: examInstance.exam.title,
             submittedAt: attempt.submittedAt,
-            score,
+            score: isReleased ? score : null,
             maxScore,
-            percentage: maxScore > 0 ? (score / maxScore) * 100 : 0,
+            percentage: isReleased && maxScore > 0 ? (score / maxScore) * 100 : null,
             stage: isDisqualified ? 'DISQUALIFIED' : isFinal ? 'FINAL' : 'PROVISIONAL',
             isProvisional: !isFinal && !isDisqualified,
             isDisqualified,
@@ -1353,6 +1369,14 @@ export class AttemptService {
         }
 
         if (!isFinal) {
+            if (!isReleased) {
+                return {
+                    ...base,
+                    verificationNote:
+                        'Your exam is submitted and under verification. Your verified result is published on your results page once the exam team releases it.',
+                    questions: [],
+                };
+            }
             return {
                 ...base,
                 provisionalNote:
@@ -1386,7 +1410,6 @@ export class AttemptService {
                 : [],
         };
     }
-
     async findById(id: string) {
         return this.prisma.attempt.findUnique({
             where: { id },

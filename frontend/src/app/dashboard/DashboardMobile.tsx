@@ -139,11 +139,15 @@ export default function DashboardMobile({
                                         {result.rank && <span>🏅 Rank #{result.rank}</span>}
                                     </div>
                                     {!result.isDisqualified ? (
-                                        <div className="score-display" style={{ marginTop: '0.5rem' }}>
-                                            <span className="score-value">{result.score}</span>
-                                            <span className="score-total">/ {result.totalMarks}</span>
-                                            {result.isProvisional && <span className="score-provisional">Provisional</span>}
-                                        </div>
+                                        result.isReleased ? (
+                                            <div className="score-display" style={{ marginTop: '0.5rem' }}>
+                                                <span className="score-value">{result.score}</span>
+                                                <span className="score-total">/ {result.totalMarks}</span>
+                                                {result.isProvisional && <span className="score-provisional">Provisional</span>}
+                                            </div>
+                                        ) : (
+                                            <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px', display: 'inline-block', marginTop: '0.5rem' }}>Under verification</span>
+                                        )
                                     ) : (
                                         <span className="badge badge-warning" style={{ backgroundColor: 'rgba(251, 197, 11, 0.1)', color: 'var(--warning-400)', padding: '0.25rem 0.5rem', borderRadius: '4px', display: 'inline-block', marginTop: '0.5rem' }}>Under review</span>
                                     )}

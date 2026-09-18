@@ -17,12 +17,14 @@ import { useEffect, useState } from 'react';
  *
  * Before this existed, submitting redirected straight into the beta feedback form
  * and then to a results page showing "Results Pending" — so the questions a
- * student actually has at that moment ("did it save?", "when do I find out?",
- * "why is there no score?") were answered nowhere.
+ * student actually has at that moment ("did it save?", "when do I find out?")
+ * were answered nowhere.
  *
- * The order here is the order those questions arrive in: it saved → here is your
- * provisional score → here is what happens next and when → here is how the score
- * is verified → here is where to go.
+ * The order here is the order those questions arrive in: it saved → it is under
+ * verification → here is what happens next and when → here is how the result is
+ * verified → here is where to go. No score appears anywhere: a score is visible
+ * only after the exam team releases results from the admin result tab, and
+ * until then this page says exactly that.
  */
 function ExamSubmittedPage() {
     const id = useRouteParam('id');
@@ -54,22 +56,14 @@ function ExamSubmittedPage() {
     }, [id]);
 
     /**
-     * The provisional score is shown here as soon as the paper is marked, and
-     * does **not** wait for `isReleased`.
-     *
-     * `isResultReleased` is the switch for the *results page* — the settled,
-     * published, rankable result. This page is the other thing: the moment the
-     * paper ends, where the first question a student has is "how did I do".
-     * Gating it on the same flag meant every beta tester finished their exam and
-     * was told "your score is not published yet", which is exactly the screen
-     * this page was written to replace.
-     *
-     * A disqualified attempt still shows nothing — it genuinely carries no score
-     * — and the provisional caveat below stays, because the number can still
-     * move under review.
+     * No score is shown here — not even a provisional one. The rule is that a
+     * student sees a score only after the exam team releases results from the
+     * admin result tab; until then this page says the paper is submitted and
+     * under verification. A disqualified attempt says so plainly, and the
+     * verification note below stays, because "what happens now" is still the
+     * first question a student has.
      */
-    const scoreShown =
-        result && !result.isDisqualified && typeof result.score === 'number';
+    const scoreShown = false;
 
     return (
         <AuthGuard allowedRoles={['STUDENT']}>
@@ -89,38 +83,30 @@ function ExamSubmittedPage() {
                     )}
                 </div>
 
-                {/* ── Score, if any is visible yet ── */}
+                {/* ── Verification status — no score until the admin releases it ── */}
                 <section className="glass-card submitted-card">
-                    <h2>Your score</h2>
+                    <h2>Verification status</h2>
                     {loading ? (
                         <div className="loading-container" style={{ minHeight: '80px' }}><div className="spinner" /></div>
-                    ) : scoreShown ? (
-                        <>
-                            <div className="submitted-score">
-                                <span className="submitted-score__value">
-                                    {result.score}
-                                </span>
-                                <span className="submitted-score__total">/ {result.total}</span>
-                            </div>
-                            <p className="submitted-provisional">
-                                <strong>This is a provisional, unverified score, and this is the only
-                                time you will see it.</strong> It may change while violations and warnings
-                                are reviewed by the exam team and grievances are settled, so it is not
-                                repeated on your results page — your verified result is published there
-                                once the exam team releases it.
-                            </p>
-                        </>
                     ) : result?.isDisqualified ? (
                         <p className="text-muted">
                             {result.disqualificationNote ??
                                 'Sorry! This attempt was disqualified after review, so it carries no score.'}
                         </p>
                     ) : (
-                        <p className="text-muted">
-                            Your exam is submitted and safe. Marking is not finished yet — your result is
-                            published on your results page once the exam team releases it, and you will
-                            receive details by email.
-                        </p>
+                        <>
+                            <p>
+                                <strong>Your exam is submitted and under verification.</strong> Every
+                                answer is saved and the paper is marked automatically. Your{' '}
+                                <strong>verified result</strong> is published on your results page once
+                                the exam team releases it — no score is shown anywhere before that.
+                            </p>
+                            <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                Until then, no score is visible anywhere on your account — this is how
+                                every result is kept fair while violations and warnings are reviewed by
+                                the exam team.
+                            </p>
+                        </>
                     )}
                 </section>
 

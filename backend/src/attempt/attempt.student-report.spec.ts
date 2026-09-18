@@ -80,8 +80,16 @@ describe('AttemptService.getStudentReport', () => {
     const serialised = (report: unknown) => JSON.stringify(report);
 
     describe('before the final report is published', () => {
-        it('reports the score as provisional', async () => {
+        it('hides the score entirely until the admin releases the exam\'s results', async () => {
             const report: any = await serviceFor({}).getStudentReport(USER, ATTEMPT);
+            expect(report.stage).toBe('PROVISIONAL');
+            expect(report.score).toBeNull();
+            expect(report.percentage).toBeNull();
+            expect(report.verificationNote).toMatch(/under verification/i);
+        });
+
+        it('shows the provisional score only once the exam team has released results', async () => {
+            const report: any = await serviceFor({ exam: { isResultReleased: true } }).getStudentReport(USER, ATTEMPT);
             expect(report.stage).toBe('PROVISIONAL');
             expect(report.isProvisional).toBe(true);
             expect(report.score).toBe(7);
