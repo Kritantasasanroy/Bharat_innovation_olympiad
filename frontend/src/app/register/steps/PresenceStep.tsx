@@ -62,7 +62,7 @@ export default function PresenceStep({
                 aria-expanded={showTech}
                 onClick={() => setShowTech((v) => !v)}
             >
-                {showTech ? '▾' : '▸'} What you need to appear for  the olympiad exam
+                {showTech ? '▾' : '▸'} What you need to appear for the Olympiad exam
             </button>
             {showTech && (
                 <dl className="tech-req-list">
@@ -110,9 +110,9 @@ export default function PresenceStep({
                         onChange={(e) => onDataConsentChange(e.target.checked)}
                     />
                     <span>
-                        I give my consent for the collection and use of the participant&apos;s details
-                        and face scan for Olympiad registration, verification, and participation and
-                        related activities.
+                        As a parent/legal guardian, I give my consent for the collection and use of
+                        the ward&apos;s details and face scan for Olympiad registration, verification,
+                        participation, and related activities.
                     </span>
                 </label>
             </div>

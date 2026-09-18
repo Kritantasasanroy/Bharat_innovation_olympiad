@@ -44,7 +44,7 @@ export const PRESENCE_POINTS = [
         // said no picture is ever saved, which stopped being true the moment
         // violations started capturing a frame — and a privacy promise that is
         // quietly false is worse than one that is narrower than you would like.
-        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers used to verify the participant during their exam, and this one photo is kept and printed on their certificate. During an exam a further photo is saved only if a violation is recorded, and it is kept with that Innovation Olympiad exam for the review team.',
+        body: 'We ask for camera permission to capture the face scan. It is stored as an encrypted set of numbers used to verify the participant during their exam, and this one photo is kept and printed on their certificate. During an exam, a further photo is saved only if a violation is recorded, and it is kept with your submitted exam for the review team.',
     },
     {
         icon: '👨‍👩‍👧',
@@ -67,7 +67,7 @@ export const PRESENCE_POINTS = [
 export const NEXT_STEPS = [
     {
         title: 'Choose your exam schedule',
-        body: 'Slots in each sitting are limited. Once you confirm a schedule, it cannot be changed from your account, so pick a time you are certain about.',
+        body: 'Your exam schedule will be allotted to you. Slots in each sitting are limited. Once your schedule is allotted, it cannot be changed from your account.',
     },
     {
         title: 'Take the practice Innovation Olympiad exam to acclimatise with the online exam environment. It runs in exactly the same environment as the actual exam',
