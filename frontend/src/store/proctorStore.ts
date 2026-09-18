@@ -29,6 +29,10 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
         webcam: false,
         fullscreen: false,
         audio: false,
+        // Assumed fine until proven otherwise: the platform check only flips
+        // this false when Android/ChromeOS is actually detected, so a slow
+        // UA read can never block a supported device.
+        platform: true,
     },
     allChecksPassed: false,
     webcamStream: null,
@@ -61,7 +65,7 @@ export const useProctorStore = create<ProctorState>((set, get) => ({
     reset: () => {
         releaseCamera();
         set({
-            deviceChecks: { viewport: false, webcam: false, fullscreen: false, audio: false },
+            deviceChecks: { viewport: false, webcam: false, fullscreen: false, audio: false, platform: true },
             allChecksPassed: false,
             webcamStream: null,
             isWebcamActive: false,

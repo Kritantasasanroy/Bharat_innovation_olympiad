@@ -4,6 +4,7 @@ import ExamTutorial from '@/components/exam/ExamTutorial';
 import { useRouteParam, withSearchParams } from '@/lib/route-params';
 import AuthGuard from '@/components/layout/AuthGuard';
 import TooSmallForExam from '@/components/TooSmallForExam';
+import UnsupportedDevice from '@/components/UnsupportedDevice';
 import { useDeviceCheck } from '@/hooks/useDeviceCheck';
 import { useWebcam } from '@/hooks/useWebcam';
 import { useFaceProctor } from '@/hooks/useFaceProctor';
@@ -540,6 +541,18 @@ function ExamInstructionsPage() {
                   },
               ]),
     ];
+
+    /**
+     * Android and ChromeOS are hard-blocked before anything else: the exam
+     * cannot be started from them at all, regardless of screen size.
+     */
+    if (deviceChecks.platform === false) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <UnsupportedDevice />
+            </AuthGuard>
+        );
+    }
 
     /**
      * A phone or a small window cannot run the player, so say so here rather than

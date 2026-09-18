@@ -6,6 +6,7 @@ import ExamPreparingOverlay from '@/components/exam/ExamPreparingOverlay';
 import ProctorToast, { type ProctorToastData } from '@/components/exam/ProctorToast';
 import ViolationBanner from '@/components/exam/ViolationBanner';
 import AuthGuard from '@/components/layout/AuthGuard';
+import UnsupportedDevice from '@/components/UnsupportedDevice';
 import LimonTour from '@/components/limon/LimonTour';
 import MascotToast from '@/components/MascotToast';
 import { useExamLockdown, type BlockedAction, type LockdownBreach } from '@/hooks/useExamLockdown';
@@ -15,6 +16,7 @@ import { useFullscreenMonitor } from '@/hooks/useFullscreenMonitor';
 import { useIdleMonitor } from '@/hooks/useIdleMonitor';
 import { useTimer } from '@/hooks/useTimer';
 import api from '@/lib/api';
+import { isUnsupportedExamPlatform } from '@/lib/platform';
 import {
     EXAM_IDLE_NUDGE_SEC,
     EXAM_PAUSE_TIMEOUT_SEC,
@@ -897,6 +899,17 @@ function ExamPlayPage() {
     const positionInSection = currentSection
         ? currentSection.indices.indexOf(currentIndex) + 1
         : currentIndex + 1;
+
+    // Android/ChromeOS are hard-blocked here too, not only on the instructions
+    // page: the player is reachable by deep link, and the block must hold
+    // regardless of how the page was opened.
+    if (isUnsupportedExamPlatform()) {
+        return (
+            <AuthGuard allowedRoles={['STUDENT']}>
+                <UnsupportedDevice />
+            </AuthGuard>
+        );
+    }
 
     if (error === 'FACE_ENROLLMENT_REQUIRED') {
         return (

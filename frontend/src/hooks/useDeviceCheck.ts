@@ -3,6 +3,7 @@
 import { openCamera } from '@/lib/camera';
 import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/lib/constants';
 import { isFullscreenSupported } from '@/lib/fullscreen';
+import { isUnsupportedExamPlatform } from '@/lib/platform';
 import { useProctorStore } from '@/store/proctorStore';
 import { useEffect } from 'react';
 
@@ -51,6 +52,10 @@ export function useDeviceCheck() {
 
         // 2. Fullscreen capability check
         setDeviceCheck('fullscreen', isFullscreenSupported());
+
+        // 5. Platform check — Android phones/tablets and ChromeOS devices are
+        // not supported for the exam (see TECH_REQUIREMENTS).
+        setDeviceCheck('platform', !isUnsupportedExamPlatform());
 
         // 3 & 4. Webcam + Audio — always request permission first
         const checkCamera = async () => {

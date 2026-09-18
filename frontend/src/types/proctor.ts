@@ -33,6 +33,8 @@ export interface DeviceCheckStatus {
     webcam: boolean;
     fullscreen: boolean;
     audio: boolean;
+    /** Android and ChromeOS are not supported for the exam — see `UnsupportedDevice`. */
+    platform: boolean;
 }
 
 export interface LiveMonitoringEntry {
