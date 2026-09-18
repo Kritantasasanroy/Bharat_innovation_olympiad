@@ -116,9 +116,10 @@ export const TAKEAWAYS = [
     'Advantage of the Lemon Ideas ecosystem — since 2013',
 ] as const;
 
-/** The first Sunday that is at least 15 days from today (#5). */
+/** The first Sunday that is at least 22 days from today (#5) — the season's
+ * published start, currently 11 October. */
 export function nextOlympiadDate(): string {
-    const d = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+    const d = new Date(Date.now() + 22 * 24 * 60 * 60 * 1000);
     while (d.getDay() !== 0) d.setDate(d.getDate() + 1);
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }

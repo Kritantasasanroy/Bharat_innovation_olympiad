@@ -896,9 +896,47 @@ function ExamPlayPage() {
     const hasSections = sectionBlocks.length > 0 && Boolean(sectionBlocks[0].title);
     const currentSectionIdx = sectionBlocks.findIndex((b) => b.indices.includes(currentIndex));
     const currentSection = currentSectionIdx >= 0 ? sectionBlocks[currentSectionIdx] : null;
+    // The bonus round: +2 / −1 marking, and Limon briefs the student the first
+    // time they ever reach it.
+    // The bonus round: +2 / −1 marking, and Limon briefs the student the first
+    // time they ever reach it.
+    const isSuperOlympiadSection =
+        Boolean(currentSection?.title) && /super/i.test(currentSection?.title ?? '');
     const positionInSection = currentSection
         ? currentSection.indices.indexOf(currentIndex) + 1
         : currentIndex + 1;
+
+    /**
+     * Limon's Super Olympiad briefing — once per browser, the first time the
+     * student reaches the bonus section. Negative marking is the one rule a
+     * student can genuinely hurt themselves with, so it gets a personal
+     * warning rather than a line of small print.
+     */
+    const superBriefingRef = useRef(false);
+    useEffect(() => {
+        if (!isSuperOlympiadSection || isTrialRun) return;
+        const KEY = 'limon-super-olympiad-briefing';
+        let seen = false;
+        try {
+            seen = window.localStorage.getItem(KEY) === '1';
+        } catch {
+            // Private-mode storage: show the briefing; it simply may repeat.
+        }
+        if (seen) return;
+        try {
+            localStorage.setItem(KEY, '1');
+        } catch {
+            // Storage unavailable — the briefing may reappear next exam.
+        }
+        setPepToast({
+            key: `limon-super-olympiad-${Date.now()}`,
+            icon: '⚠️',
+            title: 'Super Olympiad — read this first',
+            message:
+                'Please be careful with Super olympiad questions. They carry bonus marks as well as negative marking. Be very sure of the answer before marking your response. All the best!',
+            durationMs: 9000,
+        });
+    }, [isSuperOlympiadSection, isTrialRun]);
 
     // Android/ChromeOS are hard-blocked here too, not only on the instructions
     // page: the player is reachable by deep link, and the block must hold
@@ -1465,6 +1503,13 @@ function ExamPlayPage() {
                             <span className="exam-section-progress">
                                 Question {positionInSection} of {currentSection.indices.length}
                             </span>
+                        </div>
+                    )}
+                    {isSuperOlympiadSection && (
+                        <div className="exam-super-note" role="note">
+                            These are bonus questions and carry negative marking. Each correct answer
+                            gets <strong>+2</strong> marks and an incorrect answer gets{' '}
+                            <strong>−1</strong> mark.
                         </div>
                     )}
 

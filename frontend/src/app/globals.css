@@ -1709,6 +1709,21 @@ h4 {
             font-size: 0.82rem; font-weight: 600;
             color: var(--text-secondary); white-space: nowrap;
           }
+          /* The Super Olympiad marking rule, stated on every bonus question:
+             +2 for a correct answer, −1 for an incorrect one. Amber because
+             it is a caution, not an error. */
+          .exam-super-note {
+            max-width: 800px;
+            margin: calc(var(--space-4) * -1) 0 var(--space-4);
+            padding: var(--space-3) var(--space-5);
+            font-size: 0.85rem; line-height: 1.55;
+            color: var(--text-primary);
+            background: rgba(255, 203, 5, 0.1);
+            border: 1px solid rgba(255, 203, 5, 0.45);
+            border-left: 3px solid #ffcb05;
+            border-radius: var(--radius-md);
+          }
+          .exam-super-note strong { color: #b98900; }
           /* The finer topic label inside the question header. Muted — it is
              context, and must not compete with the section title above. */
           .question-topic {

@@ -74,6 +74,9 @@ export default function AboutPage() {
                     <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(8,18,4,0.78), rgba(8,18,4,0.62) 50%, rgba(8,18,4,0.85))' }} />
                 </div>
                 <div style={{ position: 'relative', zIndex: 1, maxWidth: 760, margin: '0 auto' }}>
+                    <Link href="/" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 18, border: '1px solid rgba(255,255,255,0.35)', borderRadius: 999, padding: '7px 16px', background: 'rgba(255,255,255,0.08)' }}>
+                        ← Back to home
+                    </Link>
                     <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 38, color: '#fff', margin: '0 0 14px', letterSpacing: -1 }}>
                         About Bharat Innovation Olympiad
                     </h1>
