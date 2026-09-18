@@ -7,6 +7,7 @@ import HeroSlideshow from '@/components/landing/HeroSlideshow';
 import ExpandableCard from '@/components/landing/ExpandableCard';
 import RegistrationPopup from '@/components/landing/RegistrationPopup';
 import SchoolPartnerForm from '@/components/landing/SchoolPartnerForm';
+import NavJoinMenu from '@/components/landing/NavJoinMenu';
 import MobileLanding from '@/components/landing/MobileLanding';
 import ReferralCapture from '@/components/ReferralCapture';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -74,6 +75,7 @@ export default function LandingPage() {
               <span>Next Olympiad</span>
               <b>{nextDate}</b>
             </span>
+            <NavJoinMenu />
             <Link href="/login" className="lp-btn-secondary" style={{
               border: '1px solid var(--border-default)', background: 'var(--bg-elevated)',
               color: 'var(--text-primary)', fontWeight: 600, fontSize: 14,

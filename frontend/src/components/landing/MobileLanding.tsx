@@ -105,6 +105,8 @@ export default function MobileLanding() {
                         Participant Login
                     </Link>
                     <Link href="/about" onClick={() => setMenuOpen(false)}>About the Olympiad</Link>
+                    <a href="https://partner.innovationolympiad.in" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Join as a Partner ↗</a>
+                    <a href="https://school.innovationolympiad.in" target="_blank" rel="noopener noreferrer">Join as a School ↗</a>
                     <Link href="/terms" onClick={() => setMenuOpen(false)}>Terms &amp; Conditions</Link>
                     <Link href="/support" onClick={() => setMenuOpen(false)}>Support</Link>
                 </div>
