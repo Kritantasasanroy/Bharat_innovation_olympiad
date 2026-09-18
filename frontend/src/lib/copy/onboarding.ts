@@ -14,13 +14,13 @@
 
 /** The technology requirements, straight from the olympiad's published spec. */
 export const TECH_REQUIREMENTS = [
-    { label: 'Device', value: 'Laptop or desktop (preferred), or a tablet with a webcam' },
+    { label: 'Device', value: 'Laptop or desktop with a webcam' },
     { label: 'Webcam', value: 'Working, 720p or better' },
     { label: 'Microphone', value: 'Working' },
     { label: 'Internet', value: 'At least 2 Mbps' },
     { label: 'Browser', value: 'Google Chrome or Microsoft Edge, latest version' },
     { label: 'Screen Resolution', value: '1024 x 768 or larger' },
-    { label: 'Operating system', value: 'Windows 10+, macOS 10.14+, or ChromeOS' },
+    { label: 'Operating system', value: 'Windows 10+, macOS 10.14+' },
 ] as const;
 
 /**

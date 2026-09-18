@@ -29,7 +29,7 @@ export function useDeviceCheck() {
          * this passes; judging a student on the size their browser window
          * happened to be was failing them for something the Start button fixes.
          *
-         * Orientation is normalised because a tablet held in portrait reports a
+         * Orientation is normalised because a device held in portrait reports a
          * width below the floor while being perfectly able to sit the exam once
          * it is turned — and fullscreen does not rotate it, the student does.
          */
@@ -44,7 +44,7 @@ export function useDeviceCheck() {
         };
 
         checkViewport();
-        // `resize` still matters: a rotated tablet or a screen change fires it,
+        // `resize` still matters: a rotated device or a screen change fires it,
         // and `orientationchange` is not reliable across browsers.
         window.addEventListener('resize', checkViewport);
         window.addEventListener('orientationchange', checkViewport);

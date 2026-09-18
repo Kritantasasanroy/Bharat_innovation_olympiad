@@ -113,7 +113,7 @@ export function describeCameraError(err: unknown): string {
             return "Your browser is blocking the camera. Click the padlock (or camera icon) in the address bar, set Camera to Allow, then reload this page.";
         case 'NotFoundError':
         case 'DevicesNotFoundError':
-            return 'We couldn\'t find a camera on this device. Plug in a webcam, or switch to a laptop or tablet that has one built in.';
+            return 'We couldn\'t find a camera on this device. Plug in a webcam, or switch to a laptop or desktop that has one built in.';
         case 'NotReadableError':
         case 'TrackStartError':
             return 'Your camera is already being used by another app. Close Zoom, Meet, Teams or any other tab using the camera, then try again.';

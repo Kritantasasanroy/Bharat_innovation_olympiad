@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
  * to know a phone was the problem.
  *
  * Since the exam now enters fullscreen on Start, a small *window* is no longer
- * a reason to be here — only a small *screen* is. A tablet held in portrait is
+ * a reason to be here — only a small *screen* is. A device held in portrait is
  * told to turn it rather than told to go away, because rotating genuinely fixes
  * it and `useDeviceCheck` re-checks on `orientationchange`.
  */
@@ -63,7 +63,7 @@ export default function TooSmallForExam() {
                     <>
                         <h1>This device is too small for the exam</h1>
                         <p className="too-small__lede">
-                            The Bharat Olympiad Innovation exam needs a laptop, desktop, or a tablet. A phone screen
+                            The Bharat Olympiad Innovation exam needs a laptop or desktop. A phone screen
                             cannot show the question list and the Innovation Olympiad exam side by side, and we would
                                 rather tell you now than halfway through your exam. Please appear for the exam using the right device.
                         </p>
