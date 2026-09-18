@@ -105,8 +105,9 @@ export default function LandingPage() {
           <div>
             <div className="lp-fade-up lp-badge-glow" style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(125,200,50,0.16)', border: '1px solid rgba(125,200,50,0.4)',
-              color: '#a9e35b', fontWeight: 600, fontSize: 12.5, letterSpacing: '0.04em',
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.28)',
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+              color: '#fff', fontWeight: 600, fontSize: 12.5, letterSpacing: '0.04em',
               padding: '7px 14px', borderRadius: 999, marginBottom: 22,
             }}>
               <Sparkles size={12} />
@@ -164,45 +165,47 @@ export default function LandingPage() {
           </div>
 
           {/* Right — the participant journey (#3), exactly the sequence the
-              brief specifies, with capacity building's three ingredients. */}
+              brief specifies, with capacity building's three ingredients.
+              Glass over the photo slideshow: translucent, blurred, light text. */}
           <div className="lp-fade-up-2 lp-float" style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-            borderRadius: 24, padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 24, padding: 28,
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.3px', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 20 }}>The Participant Journey</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.3px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', marginBottom: 20 }}>The Participant Journey</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {JOURNEY_STAGES.map((stage, i) => {
                 const last = i === JOURNEY_STAGES.length - 1;
                 const icons = [Rocket, GraduationCap, PenLine, Lightbulb, FlaskConical, Briefcase];
                 const StepIcon = icons[i];
-                const isLast = last;
                 return (
                   <div key={stage.title}>
                     <div className="lp-step" style={{
                       display: 'flex', alignItems: 'center', gap: 14, padding: '11px 14px',
-                      background: last ? 'linear-gradient(135deg,#4f9a12,#35700a)' : 'var(--bg-elevated)',
-                      border: last ? 'none' : '1px solid var(--border-subtle)',
+                      background: last ? 'rgba(79,154,18,0.28)' : 'rgba(255,255,255,0.07)',
+                      border: last ? '1px solid rgba(125,200,50,0.45)' : '1px solid rgba(255,255,255,0.14)',
                       borderRadius: 13,
-                      boxShadow: last ? '0 10px 28px rgba(0,0,0,0.18)' : undefined,
                     }}>
                       <span className="lp-icon-wrap" style={{
                         width: 40, height: 40, borderRadius: 11, flexShrink: 0,
-                        background: last ? 'rgba(255,255,255,0.18)' : (i % 2 === 0 ? 'rgba(125,200,50,0.12)' : 'rgba(255,203,5,0.12)'),
+                        background: last ? 'rgba(125,200,50,0.3)' : (i % 2 === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)'),
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <StepIcon size={18} color={last ? '#fff' : i % 2 === 0 ? '#4f9a12' : '#ffcb05'} />
+                        <StepIcon size={18} color={last ? '#a4e04c' : i % 2 === 0 ? '#a4e04c' : '#ffcb05'} />
                       </span>
                       <div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: last ? '#fff' : 'var(--text-primary)' }}>{stage.title}</div>
-                        <div style={{ fontSize: 12, color: last ? 'rgba(255,255,255,0.78)' : 'var(--text-secondary)' }}>{stage.sub}</div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: '#fff' }}>{stage.title}</div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>{stage.sub}</div>
                       </div>
                     </div>
-                    {!last && <div style={{ height: 14, width: 2, background: 'var(--border-default)', marginLeft: 33 }} />}
+                    {!last && <div style={{ height: 14, width: 2, background: 'rgba(255,255,255,0.25)', marginLeft: 33 }} />}
                   </div>
                 );
               })}
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '14px 2px 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', margin: '14px 2px 0', lineHeight: 1.5 }}>
               Capacity building = training, material resources, and guidance &amp; mentoring — included with registration.
             </p>
           </div>
