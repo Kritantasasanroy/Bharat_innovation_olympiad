@@ -59,6 +59,7 @@ export default function RootLayout({
                     {/* "Need help?" — Limon, on demand, on every page that has a
                         tour. Hides itself on the exam player for the same reason
                         the feedback tab does. */}
+                    <LimonHelp />
                     {/* Brings any error banner into view + announces it. */}
                     <ScrollToError />
                 </ThemeProvider>
