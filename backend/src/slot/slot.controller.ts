@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
     AssignSlotDto,
     CreateScheduleDateDto,
+    CreateScheduleDateWithTimingsDto,
     CreateSlotDto,
     CreateSlotTimingDto,
     UpdateAssignmentRulesDto,
@@ -179,6 +180,18 @@ export class SlotController {
     @Roles(...ADMIN)
     async createScheduleDate(@Body() dto: CreateScheduleDateDto) {
         return this.scheduleDates.create(dto);
+    }
+
+    /**
+     * A date and the sittings that run on it, in one call — the shape the
+     * admin UI actually builds: pick a date, give it a priority, add the
+     * timings and seat counts under it directly.
+     */
+    @Post('admin/schedule-dates/with-timings')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async createScheduleDateWithTimings(@Body() dto: CreateScheduleDateWithTimingsDto) {
+        return this.scheduleDates.createWithTimings(dto);
     }
 
     @Put('admin/schedule-dates/:id')

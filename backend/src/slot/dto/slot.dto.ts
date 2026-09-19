@@ -12,6 +12,7 @@ import {
     Matches,
     Max,
     Min,
+    ValidateNested,
 } from 'class-validator';
 
 /** `HH:mm` on a 24-hour clock, IST. */
@@ -251,4 +252,56 @@ export class UpdateScheduleDateDto {
     @IsOptional()
     @IsString()
     note?: string;
+}
+
+/**
+ * One sitting as an admin actually thinks of it: a time and how many people
+ * can be seated in it — entered directly under the date it belongs to,
+ * instead of as a separately-managed "timing" linked back to the date only by
+ * a shared priority number.
+ */
+export class DateTimingDto {
+    @Matches(TIME_OF_DAY, { message: 'startTime must be HH:mm (24-hour, IST)' })
+    startTime: string;
+
+    @Matches(TIME_OF_DAY, { message: 'endTime must be HH:mm (24-hour, IST)' })
+    endTime: string;
+
+    /** How many participants this specific date's sitting seats. */
+    @IsInt()
+    @Min(1)
+    @Max(100_000)
+    seats: number;
+
+    @IsOptional()
+    @IsString()
+    label?: string;
+}
+
+/** One date, with the sittings that run on it, added in a single call. */
+export class CreateScheduleDateWithTimingsDto {
+    @IsUUID()
+    examInstanceId: string;
+
+    /** `YYYY-MM-DD`, read as an IST calendar day. */
+    @IsDateString()
+    date: string;
+
+    /** 1 is filled before 2 before 3, and so on — as many tiers as needed. */
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9)
+    priority?: number;
+
+    @IsOptional()
+    @IsString()
+    note?: string;
+
+    @IsArray()
+    @ArrayMinSize(1)
+    @ArrayMaxSize(20)
+    @ValidateNested({ each: true })
+    @Type(() => DateTimingDto)
+    timings: DateTimingDto[];
 }

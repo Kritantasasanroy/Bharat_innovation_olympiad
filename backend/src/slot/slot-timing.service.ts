@@ -172,6 +172,26 @@ export class SlotTimingService {
     }
 
     /**
+     * The timing a given tier already runs at a given start time, if any.
+     *
+     * This is the reuse check behind adding a date "with its timings": a
+     * second Sunday added at Priority 1, 11:00 must land on the *same*
+     * `SlotTiming` the first Sunday's 11:00 created, not a duplicate that
+     * would silently double that hour's real capacity across the season.
+     */
+    async findByPriorityAndStart(
+        examInstanceId: string,
+        priority: number,
+        startTime: string,
+    ): Promise<SlotTiming | null> {
+        const startMinute = parseMinuteOfDay(startTime);
+        if (startMinute === null) return null;
+        return this.prisma.slotTiming.findFirst({
+            where: { examInstanceId, priority, startMinute },
+        });
+    }
+
+    /**
      * The sitting for `(timing, date)`, creating it if it does not exist yet.
      *
      * Two students registering at the same moment can both find nothing and both

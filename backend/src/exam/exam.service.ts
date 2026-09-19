@@ -14,7 +14,6 @@ import {
     startRefusalReason,
     validateSlotWindow,
 } from './exam-lifecycle';
-import { parseMinuteOfDay } from '../slot/slot-assignment.rules';
 import { SlotAssignmentService } from '../slot/slot-assignment.service';
 import { SlotScheduleDateService } from '../slot/slot-schedule-date.service';
 import { SlotTimingService } from '../slot/slot-timing.service';
@@ -554,21 +553,8 @@ export class ExamService {
             slotDayPreference?: number[];
         };
         /**
-         * The recurring sitting times. `startTime`/`endTime` are `HH:mm` IST and
-         * `weekdays` is 0=Sunday…6=Saturday — the same shape `SlotTiming` stores.
-         */
-        slotTimings?: {
-            label?: string;
-            startTime: string;
-            endTime: string;
-            capacity?: number;
-            weekdays?: number[];
-            /** Calendar tier: 1 is filled before 2. */
-            priority?: number;
-        }[];
-        /**
          * Creates the season's published calendar for this exam -- its dates and
-         * the timings each tier runs -- instead of taking `slotTimings`. The
+         * the timings each tier runs -- instead of taking `customSchedule`. The
          * usual path: an exam that runs on the published schedule should not be
          * configured date by date.
          */
@@ -579,22 +565,33 @@ export class ExamService {
          * already-configured instance never resizes what exists.
          */
         standardCalendarCapacity?: number;
-        /** Specific dates, when the exam does not run on the standard calendar. */
-        scheduleDates?: {
+        /**
+         * Specific dates, when the exam does not run on the standard calendar --
+         * each with its own priority and the sittings (time + seats) that run on
+         * it. This is the whole "date, priority, timings underneath it" shape an
+         * admin builds by hand; see `SlotScheduleDateService.createWithTimings`
+         * for how a timing shared across dates at the same priority is reused
+         * rather than duplicated, while each date's own seat count still wins.
+         */
+        customSchedule?: {
             date: string;
             priority?: number;
-            isActive?: boolean;
             note?: string;
+            timings: {
+                startTime: string;
+                endTime: string;
+                seats: number;
+                label?: string;
+            }[];
         }[];
     }) {
         const {
             instance,
-            slotTimings,
             isPublished,
             isResultReleased,
             useStandardCalendar,
             standardCalendarCapacity,
-            scheduleDates,
+            customSchedule,
             ...examData
         } = input;
 
@@ -605,32 +602,6 @@ export class ExamService {
         if (instanceWindow.endsAt <= instanceWindow.startsAt) {
             throw new BadRequestException('The exam window must end after it starts.');
         }
-
-        // Parsed up front, outside the transaction: a typo in a time should fail
-        // before an exam row exists, not leave a half-built exam behind.
-        const timings = (slotTimings ?? []).map((t, i) => {
-            const startMinute = parseMinuteOfDay(t.startTime);
-            const endMinute = parseMinuteOfDay(t.endTime);
-            if (startMinute === null || endMinute === null) {
-                throw new BadRequestException(
-                    `Slot timing ${i + 1}: times must be HH:mm on a 24-hour clock (IST).`,
-                );
-            }
-            if (startMinute === endMinute) {
-                throw new BadRequestException(
-                    `Slot timing ${i + 1}: a sitting must be longer than zero minutes.`,
-                );
-            }
-            return {
-                label: t.label ?? null,
-                startMinute,
-                endMinute,
-                capacity: t.capacity ?? 50,
-                weekdays: t.weekdays ?? [0, 6],
-                priority: t.priority ?? 1,
-                sortOrder: i,
-            };
-        });
 
         const created = await this.prisma.$transaction(async (tx) => {
             const exam = await tx.exam.create({
@@ -662,36 +633,16 @@ export class ExamService {
                 },
             });
 
-            if (timings.length) {
-                await tx.slotTiming.createMany({
-                    data: timings.map((t) => ({ ...t, examInstanceId: examInstance.id })),
-                });
-            }
-
-            const createdTimings = await tx.slotTiming.findMany({
-                where: { examInstanceId: examInstance.id },
-                orderBy: [{ sortOrder: 'asc' }, { startMinute: 'asc' }],
-            });
-
-            // No dated sittings are created here on purpose. A sitting is
-            // materialised the first time somebody is actually put on it, so a
-            // season's calendar costs its date rows and nothing else until it
-            // starts filling.
-            return { exam, instance: examInstance, slotTimings: createdTimings };
+            return { exam, instance: examInstance };
         });
 
-        // The calendar is written outside the transaction because the seeder is
-        // idempotent and re-runnable: a failure here leaves an exam that an
-        // admin can seed from the scheduling page with one click, which is a far
-        // better outcome than rolling back a fully built exam and its paper.
-        //
-        // `sittingsOpened` is surfaced to the wizard so "create exam" ends on
-        // concrete proof -- a seat count -- rather than a promise that sittings
-        // will show up once someone registers. Both branches already
-        // materialise as they go (`scheduleDates.create`/`seedStandardCalendar`
-        // call it internally per write); the extra call after the custom-dates
-        // loop is just to read back the final tally in one number, not to do
-        // any work a prior call didn't already do.
+        // Calendar and timings are written outside the transaction because both
+        // paths below are idempotent and re-runnable: a failure here leaves an
+        // exam an admin can finish configuring from the scheduling page, which
+        // is a far better outcome than rolling back a fully built exam and its
+        // paper. `sittingsOpened` is surfaced to the wizard so "create exam"
+        // ends on concrete proof -- a seat count -- rather than a promise that
+        // sittings will show up once someone registers.
         let sittingsOpened = 0;
         if (useStandardCalendar) {
             const seeded = await this.scheduleDates.seedStandardCalendar(
@@ -699,19 +650,23 @@ export class ExamService {
                 standardCalendarCapacity,
             );
             sittingsOpened = seeded.sittingsOpened;
-        } else if (scheduleDates?.length) {
-            for (const d of scheduleDates) {
-                await this.scheduleDates.create({
+        } else if (customSchedule?.length) {
+            for (const d of customSchedule) {
+                const { sittings } = await this.scheduleDates.createWithTimings({
                     examInstanceId: created.instance.id,
                     date: d.date,
                     priority: d.priority,
-                    isActive: d.isActive,
                     note: d.note,
+                    timings: d.timings,
                 });
+                sittingsOpened += sittings.length;
             }
-            const tally = await this.slotTimings.materializeCalendar(created.instance.id);
-            sittingsOpened = tally.opened + tally.alreadyOpen;
         }
+
+        const slotTimings = await this.prisma.slotTiming.findMany({
+            where: { examInstanceId: created.instance.id },
+            orderBy: [{ sortOrder: 'asc' }, { startMinute: 'asc' }],
+        });
 
         // Participants who registered before this exam existed have no sitting
         // for it, and nothing else would ever give them one -- registration has
@@ -725,7 +680,7 @@ export class ExamService {
                 ),
             );
 
-        return { ...created, sittingsOpened };
+        return { ...created, slotTimings, sittingsOpened };
     }
 
     async deleteExam(id: string) {

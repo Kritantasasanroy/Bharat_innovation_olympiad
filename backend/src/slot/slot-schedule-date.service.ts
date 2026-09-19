@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateScheduleDateDto, UpdateScheduleDateDto } from './dto/slot.dto';
+import {
+    CreateScheduleDateDto,
+    CreateScheduleDateWithTimingsDto,
+    UpdateScheduleDateDto,
+} from './dto/slot.dto';
 import {
     BIO_2026_CALENDAR,
     CALENDAR_TIMES,
@@ -8,22 +12,25 @@ import {
     DEFAULT_SITTING_MINUTES,
 } from './slot-calendar';
 import { istStartOfDay, istWeekday, parseMinuteOfDay, weekdayName } from './slot-assignment.rules';
+import { SlotService } from './slot.service';
 import { SlotTimingService } from './slot-timing.service';
 
 /**
  * The published list of days an exam runs, and the one-click seed that creates
  * a season's worth of them.
  *
- * A date here is a *promise*, not a materialised sitting: the dated `ExamSlot`
- * rows are still created lazily by the assigner, so an instance carrying all
- * seventy-two of the season's sittings costs seventy-two small rows here and
- * nothing else until students actually need seats.
+ * A date's sittings open automatically the moment both halves of the pairing
+ * exist -- see `SlotTimingService.materializeCalendar`, which every write path
+ * here calls. They are not, however, pre-created for a date that has no
+ * matching timing yet: a season carrying dates nobody has put a timing behind
+ * costs only those small date rows, nothing else.
  */
 @Injectable()
 export class SlotScheduleDateService {
     constructor(
         private prisma: PrismaService,
         private timings: SlotTimingService,
+        private slots: SlotService,
     ) {}
 
     /**
@@ -85,6 +92,59 @@ export class SlotScheduleDateService {
         await this.timings.materializeCalendar(dto.examInstanceId);
 
         return created;
+    }
+
+    /**
+     * A date, with the sittings that run on it -- the way an admin actually
+     * thinks about scheduling, in one call.
+     *
+     * The catalogue underneath is still `SlotTiming`, keyed by
+     * `(priority, startMinute)`: a second date added at the same priority
+     * reuses whatever timing already exists at a given time rather than
+     * creating a duplicate. That reuse is what makes "the next Sunday
+     * automatically runs the same sitting times" work without re-entering
+     * them -- but it means a shared timing's *default* capacity is set by
+     * whichever date created it first. Each date's own seat count is never
+     * left to that default: after the sitting opens, its capacity is set
+     * explicitly to what *this* date asked for, through the same guarded path
+     * (`SlotService.updateSitting`) the scheduling page uses -- so it inherits
+     * the same refusal to cut capacity below students already seated.
+     */
+    async createWithTimings(dto: CreateScheduleDateWithTimingsDto) {
+        const dateRow = await this.create({
+            examInstanceId: dto.examInstanceId,
+            date: dto.date,
+            priority: dto.priority,
+            note: dto.note,
+        });
+
+        const sittings = [];
+        for (const t of dto.timings) {
+            let timing = await this.timings.findByPriorityAndStart(
+                dto.examInstanceId,
+                dateRow.priority,
+                t.startTime,
+            );
+            if (!timing) {
+                timing = await this.timings.create({
+                    examInstanceId: dto.examInstanceId,
+                    label: t.label,
+                    startTime: t.startTime,
+                    endTime: t.endTime,
+                    capacity: t.seats,
+                    priority: dateRow.priority,
+                });
+            }
+
+            const slot = await this.timings.ensureSlot(timing, dateRow.date);
+            const sitting =
+                slot.capacity === t.seats
+                    ? slot
+                    : await this.slots.updateSitting(slot.id, { capacity: t.seats });
+            sittings.push(sitting);
+        }
+
+        return { date: dateRow, sittings };
     }
 
     async update(id: string, dto: UpdateScheduleDateDto) {

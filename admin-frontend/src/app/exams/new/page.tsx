@@ -7,23 +7,29 @@ import { CLASS_BANDS } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-/** One recurring sitting time — the shape `SlotTiming` stores. */
-interface TimingRow {
-    label: string;
+/**
+ * One sitting under a date — a time and how many participants it seats.
+ * `id` is a client-only key, never sent to the server.
+ */
+interface DateTimingDraft {
+    id: string;
     startTime: string;
     endTime: string;
-    capacity: number;
-    weekdays: number[];
-    /** Calendar tier: 1 is filled before 2. */
-    priority: number;
+    seats: number;
+    label: string;
 }
 
-/** One date this exam runs on. */
-interface DateRow {
-    /** `YYYY-MM-DD`, IST. */
+/**
+ * One date this exam runs on, and the sittings that run on it — the shape an
+ * admin actually thinks in: pick a date, give it a priority, add the timings
+ * and seat counts underneath it. `id` is a client-only key.
+ */
+interface DateCard {
+    id: string;
     date: string;
     priority: number;
     note: string;
+    timings: DateTimingDraft[];
 }
 
 /** The sitting times the season publishes, served so the two never drift. */
@@ -56,6 +62,8 @@ interface CreateFullResult {
 
 const STEPS = ['Exam details', 'Schedule', 'Sittings', 'Review'] as const;
 
+const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const WEEKDAYS = [
     { value: 0, label: 'Sun' },
     { value: 1, label: 'Mon' },
@@ -66,8 +74,6 @@ const WEEKDAYS = [
     { value: 6, label: 'Sat' },
 ];
 
-const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 /** `HH:mm` plus minutes, wrapped at midnight. */
 function addMinutes(hhmm: string, minutes: number) {
     const [h, m] = hhmm.split(':').map(Number);
@@ -75,8 +81,18 @@ function addMinutes(hhmm: string, minutes: number) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-const priorityName = (p: number) =>
-    p === 1 ? 'Priority 1 — filled first' : p === 2 ? 'Priority 2 — overflow' : `Priority ${p}`;
+function newId() {
+    return Math.random().toString(36).slice(2);
+}
+
+function fmtDate(date: string) {
+    return new Date(`${date}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        timeZone: 'Asia/Kolkata',
+    });
+}
 
 function apiError(err: unknown, fallback: string): string {
     const data =
@@ -89,13 +105,15 @@ function apiError(err: unknown, fallback: string): string {
 }
 
 /**
- * The exam-creation wizard: the exam, the window it runs in, and the recurring
- * sittings inside it.
+ * The exam-creation wizard: the exam, the window it runs in, and the sittings
+ * inside it.
  *
- * Step 3 collects *timings*, not dates. Which Sundays actually need to exist
- * depends on when each participant registers, so the dated sittings are created
- * by the assigner as it needs them — there is nothing to enumerate here, and
- * nothing to auto-distribute afterwards.
+ * A custom exam is built date-first: add a date, give it a priority (lower
+ * fills before higher), then add the timings and seat counts that run under
+ * that date. Once one sitting fills, the next registration lands on the next
+ * one — by priority, then by date, then by clock order within a date — with
+ * no further setup. The published-season shortcut skips all of this for an
+ * exam that runs on the standard calendar instead.
  */
 export default function NewExamWizard() {
     const router = useRouter();
@@ -121,19 +139,7 @@ export default function NewExamWizard() {
     const [mode, setMode] = useState<SittingMode>('standard');
     const [options, setOptions] = useState<CalendarOptions | null>(null);
     const [standardCapacity, setStandardCapacity] = useState(50);
-    const [dates, setDates] = useState<DateRow[]>([]);
-    const [newDate, setNewDate] = useState('');
-    const [newDatePriority, setNewDatePriority] = useState(1);
-    const [timings, setTimings] = useState<TimingRow[]>([
-        {
-            label: 'Morning sitting',
-            startTime: '10:00',
-            endTime: '12:00',
-            capacity: 50,
-            weekdays: [0, 6],
-            priority: 1,
-        },
-    ]);
+    const [dateCards, setDateCards] = useState<DateCard[]>([]);
     const [leadDays, setLeadDays] = useState(14);
     const [horizonDays, setHorizonDays] = useState(56);
     const [dayPreference, setDayPreference] = useState<number[]>([0, 6]);
@@ -150,20 +156,6 @@ export default function NewExamWizard() {
             .catch(() => setOptions(null));
     }, []);
 
-    const addDate = () => {
-        if (!newDate) return;
-        setDates((prev) =>
-            prev.some((d) => d.date === newDate)
-                ? prev
-                : [...prev, { date: newDate, priority: newDatePriority, note: '' }].sort((a, b) =>
-                      a.priority - b.priority || a.date.localeCompare(b.date),
-                  ),
-        );
-        setNewDate('');
-    };
-
-    const removeDate = (date: string) => setDates((prev) => prev.filter((d) => d.date !== date));
-
     /**
      * What the published season adds up to, read off the served time list rather
      * than hard-coded — a review screen that disagreed with what the server
@@ -177,62 +169,81 @@ export default function NewExamWizard() {
         return { sittings, places: sittings * standardCapacity };
     }, [options, standardCapacity]);
 
-    /** The same arithmetic for a custom calendar: dates x their tier's times. */
+    /** The same arithmetic for a custom calendar: every timing under every date. */
     const customTotals = useMemo(() => {
         let sittings = 0;
         let places = 0;
-        for (const d of dates) {
-            for (const t of timings.filter((x) => x.priority === d.priority)) {
+        for (const d of dateCards) {
+            for (const t of d.timings) {
                 sittings += 1;
-                places += Number(t.capacity);
+                places += Number(t.seats) || 0;
             }
         }
         return { sittings, places };
-    }, [dates, timings]);
-
-    /** The tiers that actually have a date, so a timing cannot be stranded. */
-    const usedPriorities = useMemo(
-        () => Array.from(new Set(dates.map((d) => d.priority))).sort((a, b) => a - b),
-        [dates],
-    );
+    }, [dateCards]);
 
     const toggleBand = (band: number) =>
         setClassBands((prev) =>
             prev.includes(band) ? prev.filter((b) => b !== band) : [...prev, band].sort((a, b) => a - b),
         );
 
-    const addTiming = () =>
-        setTimings((prev) => [
+    // ── Date cards ────────────────────────────────────────────────────────────
+
+    const addDateCard = () =>
+        setDateCards((prev) => [
             ...prev,
             {
-                label: '',
-                startTime: options?.times[0]?.value ?? '14:00',
-                endTime: addMinutes(
-                    options?.times[0]?.value ?? '14:00',
-                    options?.defaultDurationMinutes ?? 120,
-                ),
-                capacity: options?.defaultCapacity ?? 50,
-                weekdays: [0, 6],
-                priority: 1,
+                id: newId(),
+                date: '',
+                // Consecutive dates are usually the same tier — defaulting to
+                // the last one added means only the overflow dates need the
+                // priority actually changed.
+                priority: prev[prev.length - 1]?.priority ?? 1,
+                note: '',
+                timings: [],
             },
         ]);
 
-    const updateTiming = (i: number, patch: Partial<TimingRow>) =>
-        setTimings((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+    const removeDateCard = (id: string) =>
+        setDateCards((prev) => prev.filter((d) => d.id !== id));
 
-    const removeTiming = (i: number) => setTimings((prev) => prev.filter((_, idx) => idx !== i));
+    const updateDateCard = (id: string, patch: Partial<Omit<DateCard, 'id' | 'timings'>>) =>
+        setDateCards((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 
-    const toggleTimingDay = (i: number, day: number) =>
-        setTimings((prev) =>
-            prev.map((t, idx) =>
-                idx === i
-                    ? {
-                          ...t,
-                          weekdays: t.weekdays.includes(day)
-                              ? t.weekdays.filter((d) => d !== day)
-                              : [...t.weekdays, day].sort((a, b) => a - b),
-                      }
-                    : t,
+    const addTimingToDate = (dateId: string) =>
+        setDateCards((prev) =>
+            prev.map((d) => {
+                if (d.id !== dateId) return d;
+                const start = options?.times[0]?.value ?? '11:00';
+                return {
+                    ...d,
+                    timings: [
+                        ...d.timings,
+                        {
+                            id: newId(),
+                            startTime: start,
+                            endTime: addMinutes(start, options?.defaultDurationMinutes ?? 60),
+                            seats: options?.defaultCapacity ?? 50,
+                            label: '',
+                        },
+                    ],
+                };
+            }),
+        );
+
+    const updateTimingInDate = (dateId: string, timingId: string, patch: Partial<DateTimingDraft>) =>
+        setDateCards((prev) =>
+            prev.map((d) =>
+                d.id !== dateId
+                    ? d
+                    : { ...d, timings: d.timings.map((t) => (t.id === timingId ? { ...t, ...patch } : t)) },
+            ),
+        );
+
+    const removeTimingFromDate = (dateId: string, timingId: string) =>
+        setDateCards((prev) =>
+            prev.map((d) =>
+                d.id !== dateId ? d : { ...d, timings: d.timings.filter((t) => t.id !== timingId) },
             ),
         );
 
@@ -260,25 +271,21 @@ export default function NewExamWizard() {
                 return null;
             }
 
-            if (dates.length === 0) return 'Add at least one exam date.';
-            if (timings.length === 0) return 'Add at least one sitting time.';
-            for (const t of timings) {
-                if (!t.startTime || !t.endTime) return 'Every sitting needs a start and end time.';
-                if (t.startTime === t.endTime) return 'A sitting must be longer than zero minutes.';
-                if (t.capacity < 1) return 'Each sitting needs at least one seat.';
-            }
-            // A date whose tier runs no sitting, or a sitting whose tier has no
-            // date, is the single most common way to end up with an exam nobody
-            // can be scheduled for — so both are caught here rather than
-            // discovered later on the unassigned list.
-            const timedTiers = new Set(timings.map((t) => t.priority));
-            const orphanDate = usedPriorities.find((p) => !timedTiers.has(p));
-            if (orphanDate !== undefined) {
-                return `No sitting time is set for Priority ${orphanDate}, but dates use it. Add a time for that priority, or move those dates.`;
-            }
-            const orphanTiming = timings.find((t) => !usedPriorities.includes(t.priority));
-            if (orphanTiming) {
-                return `The ${orphanTiming.startTime} sitting is Priority ${orphanTiming.priority}, but no date uses that priority. Add a date for it, or change the sitting's priority.`;
+            if (dateCards.length === 0) return 'Add at least one exam date.';
+            const dateValues = new Set<string>();
+            for (const d of dateCards) {
+                if (!d.date) return 'Every date needs an actual date picked.';
+                if (dateValues.has(d.date)) return `${fmtDate(d.date)} is added twice.`;
+                dateValues.add(d.date);
+                if (!d.priority || d.priority < 1) return `${fmtDate(d.date)} needs a priority of 1 or higher.`;
+                if (d.timings.length === 0) {
+                    return `${fmtDate(d.date)} has no sittings yet — add at least one time and seat count.`;
+                }
+                for (const t of d.timings) {
+                    if (!t.startTime || !t.endTime) return `${fmtDate(d.date)}: every sitting needs a start and end time.`;
+                    if (t.startTime === t.endTime) return `${fmtDate(d.date)}: a sitting must be longer than zero minutes.`;
+                    if (!t.seats || t.seats < 1) return `${fmtDate(d.date)}: every sitting needs at least one seat.`;
+                }
             }
         }
         return null;
@@ -317,18 +324,16 @@ export default function NewExamWizard() {
                 ...(mode === 'standard'
                     ? { useStandardCalendar: true, standardCalendarCapacity: standardCapacity }
                     : {
-                          scheduleDates: dates.map((d) => ({
+                          customSchedule: dateCards.map((d) => ({
                               date: d.date,
                               priority: d.priority,
                               note: d.note || undefined,
-                          })),
-                          slotTimings: timings.map((t) => ({
-                              label: t.label || undefined,
-                              startTime: t.startTime,
-                              endTime: t.endTime,
-                              capacity: Number(t.capacity),
-                              weekdays: t.weekdays,
-                              priority: t.priority,
+                              timings: d.timings.map((t) => ({
+                                  startTime: t.startTime,
+                                  endTime: t.endTime,
+                                  seats: Number(t.seats),
+                                  label: t.label || undefined,
+                              })),
                           })),
                       }),
             });
@@ -487,7 +492,7 @@ export default function NewExamWizard() {
                                     {(
                                         [
                                             ['standard', 'Published season', 'The eight Priority 1 Sundays and eight Priority 2 Saturdays, their sitting times, and the Diwali blackout.'],
-                                            ['custom', 'Custom dates', 'Choose the dates and times yourself.'],
+                                            ['custom', 'Custom dates', 'Pick your own dates. Add sittings and seat counts directly under each one.'],
                                         ] as const
                                     ).map(([value, label, hint]) => {
                                         const on = mode === value;
@@ -569,246 +574,44 @@ export default function NewExamWizard() {
                                 </div>
                             ) : (
                                 <>
-                                    <div
-                                        className="glass-card"
-                                        style={{
-                                            padding: 'var(--space-4)',
-                                            marginBottom: 'var(--space-4)',
-                                        }}
-                                    >
-                                        <label>Exam dates</label>
-                                        <p className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                            Filled in priority order — every Priority 1 date is full
-                                            before a Priority 2 one is used.
-                                        </p>
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                gap: 'var(--space-3)',
-                                                flexWrap: 'wrap',
-                                                alignItems: 'flex-end',
-                                                marginBottom: 'var(--space-3)',
-                                            }}
-                                        >
-                                            <div
-                                                className="form-group"
-                                                style={{ flex: '1 1 170px', marginBottom: 0 }}
-                                            >
-                                                <label>Date (IST)</label>
-                                                <input
-                                                    type="date"
-                                                    className="form-control"
-                                                    value={newDate}
-                                                    min={instanceStart ? instanceStart.slice(0, 10) : undefined}
-                                                    max={instanceEnd ? instanceEnd.slice(0, 10) : undefined}
-                                                    onChange={(e) => setNewDate(e.target.value)}
-                                                />
-                                            </div>
-                                            <div
-                                                className="form-group"
-                                                style={{ flex: '1 1 200px', marginBottom: 0 }}
-                                            >
-                                                <label>Priority</label>
-                                                <select
-                                                    className="form-control"
-                                                    value={newDatePriority}
-                                                    onChange={(e) =>
-                                                        setNewDatePriority(Number(e.target.value))
-                                                    }
-                                                >
-                                                    <option value={1}>{priorityName(1)}</option>
-                                                    <option value={2}>{priorityName(2)}</option>
-                                                </select>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary btn-sm"
-                                                onClick={addDate}
-                                                disabled={!newDate}
-                                            >
-                                                + Add date
-                                            </button>
-                                        </div>
-
-                                        {dates.length === 0 ? (
-                                            <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                                No dates yet.
-                                            </p>
-                                        ) : (
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    gap: 'var(--space-2)',
-                                                    flexWrap: 'wrap',
-                                                }}
-                                            >
-                                                {dates.map((d) => (
-                                                    <span
-                                                        key={d.date}
-                                                        style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: 'var(--space-2)',
-                                                            padding: 'var(--space-2) var(--space-3)',
-                                                            borderRadius: 'var(--radius-full)',
-                                                            border: '1px solid var(--border-default)',
-                                                            background: 'var(--bg-input)',
-                                                            fontSize: '0.85rem',
-                                                        }}
-                                                    >
-                                                        {new Date(`${d.date}T00:00:00+05:30`).toLocaleDateString(
-                                                            'en-IN',
-                                                            {
-                                                                weekday: 'short',
-                                                                day: '2-digit',
-                                                                month: 'short',
-                                                                timeZone: 'Asia/Kolkata',
-                                                            },
-                                                        )}
-                                                        <span className="text-muted">P{d.priority}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeDate(d.date)}
-                                                            aria-label={`Remove ${d.date}`}
-                                                            style={{
-                                                                background: 'none',
-                                                                border: 0,
-                                                                color: 'var(--text-secondary)',
-                                                                cursor: 'pointer',
-                                                                fontSize: '1rem',
-                                                                lineHeight: 1,
-                                                            }}
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <p className="text-muted">
-                                        The sitting times each date runs. A time belongs to one
-                                        priority, so a Priority 2 date can run a shorter list than a
-                                        Priority 1 one.
+                                    <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+                                        Add a date, give it a priority — <strong>lower numbers fill
+                                        first</strong> — then add the sittings that run on it. Once one
+                                        sitting is full, the next registration lands on the next one:
+                                        the next sitting on that date, then the next date at the same
+                                        priority, then the next priority up.
                                     </p>
 
-                            {timings.map((timing, i) => (
-                                <div key={i} className="glass-card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-3)' }}>
-                                    <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
-                                        <div className="form-group">
-                                            <label>Priority</label>
-                                            <select
-                                                className="form-control"
-                                                value={timing.priority}
-                                                onChange={(e) =>
-                                                    updateTiming(i, { priority: Number(e.target.value) })
-                                                }
-                                            >
-                                                <option value={1}>{priorityName(1)}</option>
-                                                <option value={2}>{priorityName(2)}</option>
-                                            </select>
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Starts (IST)</label>
-                                            {options ? (
-                                                <select
-                                                    className="form-control"
-                                                    value={timing.startTime}
-                                                    onChange={(e) =>
-                                                        updateTiming(i, {
-                                                            startTime: e.target.value,
-                                                            // The end follows the start by the gap the
-                                                            // published schedule runs on; shortening a
-                                                            // paper is still one edit away below.
-                                                            endTime: addMinutes(
-                                                                e.target.value,
-                                                                options.defaultDurationMinutes,
-                                                            ),
-                                                        })
-                                                    }
-                                                >
-                                                    {options.times
-                                                        .filter((t) =>
-                                                            t.priorities.includes(timing.priority),
-                                                        )
-                                                        .map((t) => (
-                                                            <option key={t.value} value={t.value}>
-                                                                {t.label}
-                                                            </option>
-                                                        ))}
-                                                    {!options.times.some(
-                                                        (t) => t.value === timing.startTime,
-                                                    ) && (
-                                                        <option value={timing.startTime}>
-                                                            {timing.startTime} (not on the published list)
-                                                        </option>
-                                                    )}
-                                                </select>
-                                            ) : (
-                                                <input type="time" className="form-control" value={timing.startTime} onChange={(e) => updateTiming(i, { startTime: e.target.value })} />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
-                                        <div className="form-group">
-                                            <label>Ends (IST)</label>
-                                            <input type="time" className="form-control" value={timing.endTime} onChange={(e) => updateTiming(i, { endTime: e.target.value })} />
-                                        </div>
-                                        <div />
-                                    </div>
-                                    <div className="grid-2" style={{ gap: 'var(--space-3)' }}>
-                                        <div className="form-group">
-                                            <label>Seats per sitting</label>
-                                            <input type="number" min={1} className="form-control" value={timing.capacity} onChange={(e) => updateTiming(i, { capacity: Number(e.target.value) })} />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Label (optional)</label>
-                                            <input className="form-control" value={timing.label} placeholder="Morning sitting" onChange={(e) => updateTiming(i, { label: e.target.value })} />
-                                        </div>
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Runs on (fallback only)</label>
-                                        <p className="text-muted" style={{ fontSize: '0.78rem' }}>
-                                            The priority above pairs this time with its dates. These
-                                            weekdays only matter if every date is later removed.
-                                        </p>
-                                        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                                            {WEEKDAYS.map((d) => {
-                                                const on = timing.weekdays.includes(d.value);
-                                                return (
-                                                    <button
-                                                        key={d.value}
-                                                        type="button"
-                                                        aria-pressed={on}
-                                                        onClick={() => toggleTimingDay(i, d.value)}
-                                                        style={{
-                                                            padding: 'var(--space-2) var(--space-4)',
-                                                            borderRadius: 'var(--radius-full)',
-                                                            border: on ? '1px solid var(--primary-400)' : '1px solid var(--border-default)',
-                                                            background: on ? 'rgba(255,203,5,0.14)' : 'var(--bg-input)',
-                                                            color: on ? 'var(--primary-400)' : 'var(--text-secondary)',
-                                                            cursor: 'pointer',
-                                                            fontSize: '0.875rem',
-                                                        }}
-                                                    >
-                                                        {d.label}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                    {timings.length > 1 && (
-                                        <button type="button" className="btn btn-danger btn-sm" onClick={() => removeTiming(i)}>
-                                            Remove sitting
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                                    {dateCards.map((card) => (
+                                        <DateScheduleCard
+                                            key={card.id}
+                                            card={card}
+                                            minDate={instanceStart ? instanceStart.slice(0, 10) : undefined}
+                                            maxDate={instanceEnd ? instanceEnd.slice(0, 10) : undefined}
+                                            calendarOptions={options}
+                                            onUpdate={(patch) => updateDateCard(card.id, patch)}
+                                            onRemove={() => removeDateCard(card.id)}
+                                            onAddTiming={() => addTimingToDate(card.id)}
+                                            onUpdateTiming={(timingId, patch) =>
+                                                updateTimingInDate(card.id, timingId, patch)
+                                            }
+                                            onRemoveTiming={(timingId) =>
+                                                removeTimingFromDate(card.id, timingId)
+                                            }
+                                        />
+                                    ))}
 
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={addTiming}>
-                                + Add sitting time
-                            </button>
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={addDateCard}>
+                                        + Add date
+                                    </button>
+
+                                    {dateCards.length > 0 && (
+                                        <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: 'var(--space-3)' }}>
+                                            {customTotals.sittings} sitting{customTotals.sittings === 1 ? '' : 's'} ·{' '}
+                                            {customTotals.places.toLocaleString('en-IN')} seats total across{' '}
+                                            {dateCards.length} date{dateCards.length === 1 ? '' : 's'}.
+                                        </p>
+                                    )}
                                 </>
                             )}
 
@@ -862,11 +665,21 @@ export default function NewExamWizard() {
                                 </div>
                                 {dayPreference.length > 0 && (
                                     <p className="text-muted" style={{ marginTop: 'var(--space-3)', lineHeight: 1.6 }}>
-                                        Every {WEEKDAY_FULL[dayPreference[0]]} between {leadDays} and{' '}
-                                        {horizonDays} days out is tried in turn
-                                        {dayPreference.length > 1
-                                            ? `, and only when all of them are full are ${dayPreference.slice(1).map((d) => `${WEEKDAY_FULL[d]}s`).join(', then ')} tried.`
-                                            : '.'}
+                                        {mode === 'standard' ? (
+                                            <>
+                                                Every {WEEKDAY_FULL[dayPreference[0]]} between {leadDays} and{' '}
+                                                {horizonDays} days out is tried in turn
+                                                {dayPreference.length > 1
+                                                    ? `, and only when all of them are full are ${dayPreference.slice(1).map((d) => `${WEEKDAY_FULL[d]}s`).join(', then ')} tried.`
+                                                    : '.'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                This only matters as a fallback if every date above is
+                                                later removed — while any of them exist, your dates and
+                                                priorities decide the order, not this.
+                                            </>
+                                        )}
                                     </p>
                                 )}
                             </div>
@@ -904,38 +717,28 @@ export default function NewExamWizard() {
                                 </>
                             ) : (
                                 <>
-                                    <p
-                                        className="text-muted"
-                                        style={{ marginTop: 'var(--space-3)' }}
-                                    >
-                                        {dates.length} date{dates.length === 1 ? '' : 's'}:{' '}
-                                        {dates
-                                            .map(
-                                                (d) =>
-                                                    `${new Date(`${d.date}T00:00:00+05:30`).toLocaleDateString(
-                                                        'en-IN',
-                                                        { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' },
-                                                    )} (P${d.priority})`,
-                                            )
-                                            .join(', ')}
-                                    </p>
                                     <table className="data-table" style={{ marginTop: 'var(--space-3)' }}>
                                         <thead>
                                             <tr>
-                                                <th>Sitting</th>
+                                                <th>Date</th>
                                                 <th>Priority</th>
-                                                <th>Seats each</th>
+                                                <th>Sittings</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {timings.map((t, i) => (
-                                                <tr key={i}>
+                                            {dateCards.map((d) => (
+                                                <tr key={d.id}>
+                                                    <td>{fmtDate(d.date)}</td>
+                                                    <td className="text-muted">{d.priority}</td>
                                                     <td>
-                                                        {t.startTime} – {t.endTime}
-                                                        {t.label && <div className="text-muted">{t.label}</div>}
+                                                        {d.timings.map((t) => (
+                                                            <div key={t.id}>
+                                                                {t.startTime}–{t.endTime}: {t.seats} seat
+                                                                {t.seats === 1 ? '' : 's'}
+                                                                {t.label && <span className="text-muted"> ({t.label})</span>}
+                                                            </div>
+                                                        ))}
                                                     </td>
-                                                    <td className="text-muted">{t.priority}</td>
-                                                    <td>{t.capacity}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -969,5 +772,181 @@ export default function NewExamWizard() {
                 </div>
             </main>
         </AuthGuard>
+    );
+}
+
+/** One date card in the custom-schedule builder: its own priority and its own nested sittings. */
+function DateScheduleCard({
+    card,
+    minDate,
+    maxDate,
+    calendarOptions,
+    onUpdate,
+    onRemove,
+    onAddTiming,
+    onUpdateTiming,
+    onRemoveTiming,
+}: {
+    card: DateCard;
+    minDate?: string;
+    maxDate?: string;
+    calendarOptions: CalendarOptions | null;
+    onUpdate: (patch: Partial<Omit<DateCard, 'id' | 'timings'>>) => void;
+    onRemove: () => void;
+    onAddTiming: () => void;
+    onUpdateTiming: (timingId: string, patch: Partial<DateTimingDraft>) => void;
+    onRemoveTiming: (timingId: string) => void;
+}) {
+    const totalSeats = card.timings.reduce((n, t) => n + (Number(t.seats) || 0), 0);
+
+    return (
+        <div className="glass-card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div className="form-group" style={{ flex: '1 1 170px', marginBottom: 0 }}>
+                    <label>Date (IST)</label>
+                    <input
+                        type="date"
+                        className="form-control"
+                        value={card.date}
+                        min={minDate}
+                        max={maxDate}
+                        onChange={(e) => onUpdate({ date: e.target.value })}
+                    />
+                </div>
+                <div className="form-group" style={{ flex: '0 1 150px', marginBottom: 0 }}>
+                    <label>Priority</label>
+                    <input
+                        type="number"
+                        min={1}
+                        max={9}
+                        className="form-control"
+                        value={card.priority}
+                        onChange={(e) => onUpdate({ priority: Number(e.target.value) })}
+                    />
+                </div>
+                <div className="form-group" style={{ flex: '2 1 200px', marginBottom: 0 }}>
+                    <label>Note (optional)</label>
+                    <input
+                        className="form-control"
+                        value={card.note}
+                        placeholder="e.g. overflow day"
+                        onChange={(e) => onUpdate({ note: e.target.value })}
+                    />
+                </div>
+                <button type="button" className="btn btn-danger btn-sm" onClick={onRemove}>
+                    Remove date
+                </button>
+            </div>
+            <p className="text-muted" style={{ fontSize: '0.78rem', marginTop: 'var(--space-2)' }}>
+                Priority {card.priority}{card.priority === 1 ? ' — filled first' : ''} — filled before any
+                higher-numbered priority is used.
+            </p>
+
+            <div style={{ marginTop: 'var(--space-4)' }}>
+                {card.timings.length === 0 ? (
+                    <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                        No sittings yet — add at least one time and seat count.
+                    </p>
+                ) : (
+                    card.timings.map((t) => (
+                        <div
+                            key={t.id}
+                            style={{
+                                display: 'flex',
+                                gap: 'var(--space-3)',
+                                flexWrap: 'wrap',
+                                alignItems: 'flex-end',
+                                background: 'var(--bg-elevated)',
+                                padding: 'var(--space-3)',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: 'var(--space-2)',
+                            }}
+                        >
+                            <div className="form-group" style={{ flex: '1 1 130px', marginBottom: 0 }}>
+                                <label>Starts</label>
+                                {calendarOptions ? (
+                                    <select
+                                        className="form-control"
+                                        value={t.startTime}
+                                        onChange={(e) =>
+                                            onUpdateTiming(t.id, {
+                                                startTime: e.target.value,
+                                                endTime: addMinutes(
+                                                    e.target.value,
+                                                    calendarOptions.defaultDurationMinutes,
+                                                ),
+                                            })
+                                        }
+                                    >
+                                        {calendarOptions.times.map((ct) => (
+                                            <option key={ct.value} value={ct.value}>
+                                                {ct.label}
+                                            </option>
+                                        ))}
+                                        {!calendarOptions.times.some((ct) => ct.value === t.startTime) && (
+                                            <option value={t.startTime}>{t.startTime}</option>
+                                        )}
+                                    </select>
+                                ) : (
+                                    <input
+                                        type="time"
+                                        className="form-control"
+                                        value={t.startTime}
+                                        onChange={(e) => onUpdateTiming(t.id, { startTime: e.target.value })}
+                                    />
+                                )}
+                            </div>
+                            <div className="form-group" style={{ flex: '1 1 130px', marginBottom: 0 }}>
+                                <label>Ends</label>
+                                <input
+                                    type="time"
+                                    className="form-control"
+                                    value={t.endTime}
+                                    onChange={(e) => onUpdateTiming(t.id, { endTime: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: '1 1 110px', marginBottom: 0 }}>
+                                <label>Seats</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    className="form-control"
+                                    value={t.seats}
+                                    onChange={(e) => onUpdateTiming(t.id, { seats: Number(e.target.value) })}
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
+                                <label>Label (optional)</label>
+                                <input
+                                    className="form-control"
+                                    value={t.label}
+                                    placeholder="Morning sitting"
+                                    onChange={(e) => onUpdateTiming(t.id, { label: e.target.value })}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => onRemoveTiming(t.id)}
+                                aria-label="Remove this sitting"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    ))
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-2)' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={onAddTiming}>
+                        + Add sitting
+                    </button>
+                    {card.timings.length > 0 && (
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {card.timings.length} sitting{card.timings.length === 1 ? '' : 's'} ·{' '}
+                            {totalSeats} seat{totalSeats === 1 ? '' : 's'} on this date
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }
