@@ -5,6 +5,7 @@ import Navbar from '@/components/layout/Navbar';
 import ThemeToggle from '@/components/ThemeToggle';
 import { ArrowRight, Rocket, Star, Newspaper, CalendarDays, GraduationCap, FlaskConical, Briefcase } from 'lucide-react';
 import { COURSE_VALUE, JOURNEY_STAGES, EVENT_PHOTOS, nextOlympiadDate } from '@/lib/copy/landing';
+import { ORGANIZATION_ID, canonical } from '@/lib/seo';
 
 /**
  * About the Bharat Innovation Olympiad.
@@ -19,6 +20,40 @@ export const metadata: Metadata = {
     title: 'About — Bharat Innovation Olympiad',
     description:
         'The Bharat Innovation Olympiad by Lemon Ideas — since 2013 — assessing curiosity, creativity and real-world problem solving for Grades 6–12, and opening pathways to Innopreneurs Juniors, pre-incubation and startup internships.',
+    alternates: { canonical: canonical('/about') },
+    openGraph: {
+        title: 'About — Bharat Innovation Olympiad',
+        description:
+            'The Bharat Innovation Olympiad by Lemon Ideas — since 2013 — assessing curiosity, ' +
+            'creativity and real-world problem solving for Grades 6–12.',
+        url: canonical('/about'),
+    },
+};
+
+/** Every date and the price here are the ones rendered on this page below. */
+const olympiadEventJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: 'Bharat Innovation Olympiad 2026–27',
+    description:
+        'India\'s innovation and future-skills olympiad for Grades 6–12, assessed across five ' +
+        'future-focused dimensions: problem solving and innovation, entrepreneurship mindset, ' +
+        'emerging technologies, future readiness and financial readiness.',
+    startDate: '2026-09-27',
+    endDate: '2026-12-27',
+    eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
+    eventStatus: 'https://schema.org/EventScheduled',
+    location: { '@type': 'VirtualLocation', url: canonical('/') },
+    organizer: { '@id': ORGANIZATION_ID },
+    inLanguage: 'en-IN',
+    offers: {
+        '@type': 'Offer',
+        price: '379',
+        priceCurrency: 'INR',
+        url: canonical('/register'),
+        availability: 'https://schema.org/InStock',
+        validThrough: '2026-12-19',
+    },
 };
 
 const EXAM_SECTIONS = [
@@ -64,6 +99,10 @@ const ROADMAP_ICONS = [Rocket, GraduationCap, CalendarDays, Star, FlaskConical, 
 export default function AboutPage() {
     return (
         <div style={{ minHeight: '100vh' }}>
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(olympiadEventJsonLd) }}
+            />
             <Navbar />
             <ThemeToggle />
 

@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Authenticated routes are excluded with X-Robots-Tag: noindex (see vercel.json)
+# rather than Disallow, because a disallowed page can never be crawled and so its
+# noindex is never read.
+
+Sitemap: https://www.innovationolympiad.in/sitemap.xml

@@ -2,15 +2,20 @@ import FeedbackTab from '@/components/FeedbackTab';
 import LimonHelp from '@/components/limon/LimonHelp';
 import ScrollToError from '@/components/ScrollToError';
 import ThemeProvider from '@/components/ThemeProvider';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { SITE_URL, canonical, siteJsonLd } from '@/lib/seo';
 import './globals.css';
+
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+};
 
 export const metadata: Metadata = {
     // Needed to turn the relative openGraph image below into an absolute URL.
     // Without it Next falls back to localhost:3000 and warns at build time.
-    metadataBase: new URL(
-        process.env.NEXT_PUBLIC_SITE_URL || 'https://exam.bharatolympiad.in',
-    ),
+    metadataBase: new URL(SITE_URL),
+    alternates: { canonical: canonical('/') },
     title: 'Bharat Innovation Olympiad | Become Future Ready',
     description:
         'Discover your potential beyond academics by developing the mindset, skills and awareness ' +
@@ -27,6 +32,10 @@ export const metadata: Metadata = {
         'school olympiad India', 'entrepreneurship mindset', 'financial literacy olympiad',
     ],
     icons: { icon: '/icon.png', apple: '/icon.png' },
+    applicationName: 'Bharat Innovation Olympiad',
+    authors: [{ name: 'Lemon Ideas', url: 'https://www.lemonideas.in' }],
+    creator: 'Kritanta Sasan Roy',
+    publisher: 'Lemon Ideas',
     openGraph: {
         title: 'Bharat Innovation Olympiad: Become Future Ready',
         description:
@@ -34,6 +43,15 @@ export const metadata: Metadata = {
             'future-focused dimensions, not memorisation.',
         siteName: 'Bharat Innovation Olympiad',
         type: 'website',
+        url: canonical('/'),
+        locale: 'en_IN',
+        images: ['/bio-logo.png'],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Bharat Innovation Olympiad: Become Future Ready',
+        description:
+            'India\'s innovation and future-skills olympiad for Grades 6–12, by Lemon Ideas.',
         images: ['/bio-logo.png'],
     },
 };
@@ -46,9 +64,14 @@ export default function RootLayout({
     return (
         <html lang="en" data-theme="light" suppressHydrationWarning>
             <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
                 {/* `metadata.icons` above emits the link tag. The hand-written
-                    /favicon.ico this used to reference did not exist and 404'd. */}
+                    /favicon.ico this used to reference did not exist and 404'd.
+                    The viewport tag comes from `export const viewport` — a
+                    hand-written one here produced a duplicate in the head. */}
+                <script
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+                />
             </head>
             <body>
                 <ThemeProvider>

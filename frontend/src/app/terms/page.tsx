@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { TERMS_VERSION } from '@/lib/constants';
+import { canonical } from '@/lib/seo';
 
 /**
  * Terms & conditions for the olympiad.
@@ -111,6 +112,7 @@ export const metadata = {
     title: 'Terms & Conditions · Bharat Innovation Olympiad',
     description:
         'Participation terms for the Bharat Innovation Olympiad: eligibility, fees, exam conditions, proctoring, results and personal data.',
+    alternates: { canonical: canonical('/terms') },
 };
 
 export default function TermsPage() {

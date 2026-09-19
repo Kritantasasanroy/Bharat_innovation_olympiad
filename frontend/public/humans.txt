@@ -1,0 +1,16 @@
+/* TEAM */
+    Founder: Deepak Menaria
+    Organisation: Lemon Ideas
+    Site: https://www.lemonideas.in
+    Location: Nagpur, India
+
+/* DEVELOPER */
+    Developer: Kritanta Sasan Roy
+    Role: Software Developer — Bharat Innovation Olympiad platform
+
+/* SITE */
+    Name: Bharat Innovation Olympiad
+    Programme: Innovation and future-skills olympiad for Grades 6-12
+    Standards: HTML5, CSS3, JSON-LD
+    Components: Next.js, React, TypeScript
+    Contact: olympiad@lemonideas.in
