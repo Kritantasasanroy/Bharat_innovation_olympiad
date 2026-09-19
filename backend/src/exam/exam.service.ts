@@ -17,6 +17,7 @@ import {
 import { parseMinuteOfDay } from '../slot/slot-assignment.rules';
 import { SlotAssignmentService } from '../slot/slot-assignment.service';
 import { SlotScheduleDateService } from '../slot/slot-schedule-date.service';
+import { SlotTimingService } from '../slot/slot-timing.service';
 
 // ── Deterministic seeded shuffle (Fisher-Yates) ──
 // Uses a simple mulberry32 PRNG seeded from the userId hash so each
@@ -75,6 +76,7 @@ export class ExamService {
         private drive: GoogleDriveService,
         private scheduleDates: SlotScheduleDateService,
         private slotAssignment: SlotAssignmentService,
+        private slotTimings: SlotTimingService,
     ) { }
 
     /**
@@ -682,11 +684,21 @@ export class ExamService {
         // idempotent and re-runnable: a failure here leaves an exam that an
         // admin can seed from the scheduling page with one click, which is a far
         // better outcome than rolling back a fully built exam and its paper.
+        //
+        // `sittingsOpened` is surfaced to the wizard so "create exam" ends on
+        // concrete proof -- a seat count -- rather than a promise that sittings
+        // will show up once someone registers. Both branches already
+        // materialise as they go (`scheduleDates.create`/`seedStandardCalendar`
+        // call it internally per write); the extra call after the custom-dates
+        // loop is just to read back the final tally in one number, not to do
+        // any work a prior call didn't already do.
+        let sittingsOpened = 0;
         if (useStandardCalendar) {
-            await this.scheduleDates.seedStandardCalendar(
+            const seeded = await this.scheduleDates.seedStandardCalendar(
                 created.instance.id,
                 standardCalendarCapacity,
             );
+            sittingsOpened = seeded.sittingsOpened;
         } else if (scheduleDates?.length) {
             for (const d of scheduleDates) {
                 await this.scheduleDates.create({
@@ -697,6 +709,8 @@ export class ExamService {
                     note: d.note,
                 });
             }
+            const tally = await this.slotTimings.materializeCalendar(created.instance.id);
+            sittingsOpened = tally.opened + tally.alreadyOpen;
         }
 
         // Participants who registered before this exam existed have no sitting
@@ -711,7 +725,7 @@ export class ExamService {
                 ),
             );
 
-        return created;
+        return { ...created, sittingsOpened };
     }
 
     async deleteExam(id: string) {

@@ -42,6 +42,7 @@ describe('findExamById — answer-key exposure', () => {
             {} as any,
             {} as any,
             {} as any,
+            {} as any,
         );
         await service.findExamById('exam-1', userId);
         return captured!;

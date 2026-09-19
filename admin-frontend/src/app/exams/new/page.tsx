@@ -50,6 +50,8 @@ interface CreateFullResult {
     exam: { id: string; title: string };
     instance: { id: string };
     slotTimings: { id: string }[];
+    /** Sittings already open and visible on the scheduling page — not a promise, a count. */
+    sittingsOpened: number;
 }
 
 const STEPS = ['Exam details', 'Schedule', 'Sittings', 'Review'] as const;
@@ -354,8 +356,21 @@ export default function NewExamWizard() {
                             {created.slotTimings.length === 1 ? '' : 's'} configured. Participants
                             are now scheduled automatically as they register — the first{' '}
                             {WEEKDAY_FULL[dayPreference[0]]} at least {leadDays} days after they
-                            sign up, rolling forward as dates fill. Dated sittings appear on the
-                            scheduling page as they are needed.
+                            sign up, rolling forward as dates fill.
+                        </p>
+                        <p
+                            style={{
+                                marginTop: 'var(--space-3)',
+                                padding: 'var(--space-3) var(--space-4)',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'rgba(255,203,5,0.12)',
+                                border: '1px solid var(--primary-400)',
+                                fontWeight: 600,
+                            }}
+                        >
+                            {created.sittingsOpened} sitting{created.sittingsOpened === 1 ? '' : 's'}{' '}
+                            {created.sittingsOpened === 1 ? 'is' : 'are'} already open — see them now
+                            on the scheduling page, no need to wait for a registration.
                         </p>
 
                         {error && <div className="form-error">{error}</div>}
