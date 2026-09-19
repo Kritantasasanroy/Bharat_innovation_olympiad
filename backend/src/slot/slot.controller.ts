@@ -203,6 +203,23 @@ export class SlotController {
         return this.scheduleDates.seedStandardCalendar(instanceId);
     }
 
+    /**
+     * Opens every sitting the calendar implies, right now.
+     *
+     * Every write that could complete a (date, timing) pairing already does
+     * this automatically -- adding a date, adding a timing, seeding the
+     * season. This is the manual fallback: force a re-sync after editing
+     * something upstream (capacity, priority) that this endpoint's own writes
+     * don't cover, or to fix an instance that was configured before this
+     * existed.
+     */
+    @Post('admin/exams/instances/:instanceId/materialize-slots')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(...ADMIN)
+    async materializeSlots(@Param('instanceId') instanceId: string) {
+        return this.timings.materializeCalendar(instanceId);
+    }
+
     // ── Admin: slot management dashboard ────────────────────────────────
 
     @Get('admin/exams/instances/:instanceId/slot-analytics')

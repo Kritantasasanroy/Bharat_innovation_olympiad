@@ -946,12 +946,40 @@ function ScheduleDatesPanel({
             const { data } = await api.post<{
                 datesAdded: number;
                 timingsAdded: number;
+                sittingsOpened: number;
             }>(`/admin/exams/instances/${instanceId}/schedule-dates/seed-standard`, {});
             onChanged(
-                `Published calendar loaded — ${data.datesAdded} date(s) and ${data.timingsAdded} sitting time(s) added.`,
+                `Published calendar loaded — ${data.datesAdded} date(s), ${data.timingsAdded} sitting time(s), and ${data.sittingsOpened} sitting(s) now on the schedule below.`,
             );
         } catch (err) {
             onError(errorOf(err, 'Could not load the published calendar.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    /**
+     * The manual fallback. Every date and timing added through this page
+     * already opens its own sittings automatically — this exists for an
+     * instance set up before that, or after an edit made elsewhere (a
+     * capacity change, a priority swap) that this page's own writes don't
+     * cover.
+     */
+    const materialize = async () => {
+        setBusy(true);
+        try {
+            const { data } = await api.post<{
+                opened: number;
+                alreadyOpen: number;
+                outsideWindow: number;
+            }>(`/admin/exams/instances/${instanceId}/materialize-slots`, {});
+            onChanged(
+                data.opened === 0
+                    ? `Already up to date — every date/time pairing has a sitting (${data.alreadyOpen} open).`
+                    : `Opened ${data.opened} new sitting(s). ${data.alreadyOpen} were already open.`,
+            );
+        } catch (err) {
+            onError(errorOf(err, 'Could not open the calendar’s sittings.'));
         } finally {
             setBusy(false);
         }
@@ -1010,9 +1038,17 @@ function ScheduleDatesPanel({
                         back to the older weekday rules below.
                     </p>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                     <button className="btn btn-secondary btn-sm" onClick={seed} disabled={busy}>
                         Load published season
+                    </button>
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={materialize}
+                        disabled={busy}
+                        title="Dates and times added here open their sittings automatically. Use this to force a re-check."
+                    >
+                        Sync sittings now
                     </button>
                     <button
                         className="btn btn-primary btn-sm"

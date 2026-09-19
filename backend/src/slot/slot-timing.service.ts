@@ -57,6 +57,13 @@ export class SlotTimingService {
                 sortOrder: dto.sortOrder ?? startMinute,
             },
         });
+
+        // A published calendar may already have dates at this priority waiting
+        // for a timing to run — this one now qualifies, so open its sittings
+        // immediately rather than leaving the scheduling page to show nothing
+        // until the first student happens to be placed on it.
+        await this.materializeCalendar(dto.examInstanceId);
+
         return this.decorate(timing);
     }
 
@@ -202,6 +209,66 @@ export class SlotTimingService {
             if (!raced) throw new BadRequestException('Could not open a sitting for that date.');
             return raced;
         }
+    }
+
+    /**
+     * Opens every sitting a published calendar implies — every active
+     * `ExamScheduleDate` paired with the timings its tier runs — instead of
+     * waiting for a student to be placed on each one first.
+     *
+     * The lazy path (`ensureSlot`, called from the assigner) exists so a season
+     * with a year of dates does not carry rows nobody will ever fill. That
+     * reasoning does not apply to a calendar an admin has just published: they
+     * are about to look at the scheduling page to check it, and "the calendar
+     * you just built shows nothing" reads as broken even though it is working
+     * as designed. So this runs automatically after every write that could
+     * complete a (date, timing) pairing — adding a date, adding a timing,
+     * seeding the standard season — and is also exposed standalone so an admin
+     * can force a re-sync (the one thing a script used to be needed for).
+     *
+     * Idempotent and safe to re-run: `ensureSlot` no-ops on a pairing that
+     * already has a row, so calling this after every small edit costs nothing
+     * extra beyond the first time each pairing is opened.
+     */
+    async materializeCalendar(examInstanceId: string) {
+        const instance = await this.prisma.examInstance.findUnique({
+            where: { id: examInstanceId },
+            select: { startsAt: true, endsAt: true },
+        });
+        if (!instance) throw new NotFoundException('Exam instance not found');
+
+        const dates = await this.prisma.examScheduleDate.findMany({
+            where: { examInstanceId, isActive: true },
+            select: { date: true, priority: true },
+        });
+
+        let opened = 0;
+        let alreadyOpen = 0;
+        let outsideWindow = 0;
+
+        for (const d of dates) {
+            const timings = await this.timingsForPriority(examInstanceId, d.priority);
+            for (const timing of timings) {
+                const { startsAt, endsAt } = slotWindow(d.date, timing.startMinute, timing.endMinute);
+                // A pairing that could never be sat -- its window falls outside
+                // the exam's own -- is exactly what the assigner itself refuses
+                // to materialise, so this mirrors that rather than opening a
+                // sitting nobody could ever be placed into.
+                if (startsAt < instance.startsAt || endsAt > instance.endsAt) {
+                    outsideWindow += 1;
+                    continue;
+                }
+                const existing = await this.prisma.examSlot.findFirst({
+                    where: { timingId: timing.id, slotDate: d.date },
+                    select: { id: true },
+                });
+                await this.ensureSlot(timing, d.date);
+                if (existing) alreadyOpen += 1;
+                else opened += 1;
+            }
+        }
+
+        return { datesChecked: dates.length, opened, alreadyOpen, outsideWindow };
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

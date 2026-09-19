@@ -8,6 +8,7 @@ import {
     DEFAULT_SITTING_MINUTES,
 } from './slot-calendar';
 import { istStartOfDay, istWeekday, parseMinuteOfDay, weekdayName } from './slot-assignment.rules';
+import { SlotTimingService } from './slot-timing.service';
 
 /**
  * The published list of days an exam runs, and the one-click seed that creates
@@ -20,7 +21,10 @@ import { istStartOfDay, istWeekday, parseMinuteOfDay, weekdayName } from './slot
  */
 @Injectable()
 export class SlotScheduleDateService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private timings: SlotTimingService,
+    ) {}
 
     /**
      * Parses a `YYYY-MM-DD` into the canonical midnight-IST instant.
@@ -64,7 +68,7 @@ export class SlotScheduleDateService {
             throw new BadRequestException('That date is already on this exam calendar.');
         }
 
-        return this.prisma.examScheduleDate.create({
+        const created = await this.prisma.examScheduleDate.create({
             data: {
                 examInstanceId: dto.examInstanceId,
                 date,
@@ -73,6 +77,14 @@ export class SlotScheduleDateService {
                 note: dto.note ?? null,
             },
         });
+
+        // If a timing already exists for this date's tier, its sitting opens
+        // right away — an admin adding "22 Sep, Priority 1" to an exam that
+        // already has Priority 1 timings should see it on the schedule
+        // immediately, not the first time a student registers.
+        await this.timings.materializeCalendar(dto.examInstanceId);
+
+        return created;
     }
 
     async update(id: string, dto: UpdateScheduleDateDto) {
@@ -98,6 +110,10 @@ export class SlotScheduleDateService {
                 ...(dto.note !== undefined && { note: dto.note || null }),
             },
         });
+
+        // Reopening a date, or moving it to a tier that now has timings, can
+        // complete a pairing the same way adding a fresh date does.
+        await this.timings.materializeCalendar(existing.examInstanceId);
 
         return { ...updated, studentsAlreadySeatedOnOldDate: seated._sum.booked ?? 0 };
     }
@@ -213,10 +229,17 @@ export class SlotScheduleDateService {
             await this.prisma.slotTiming.createMany({ data: wanted });
         }
 
+        // Every date and timing the season needs now exists — open their
+        // sittings in the same call, so "Load published season" leaves the
+        // scheduling page showing the whole calendar rather than an empty grid
+        // that only fills in as students happen to register.
+        const materialised = await this.timings.materializeCalendar(examInstanceId);
+
         return {
             datesAdded: newDates.length,
             datesAlreadyPresent: BIO_2026_CALENDAR.length - newDates.length,
             timingsAdded: wanted.length,
+            sittingsOpened: materialised.opened,
         };
     }
 }
