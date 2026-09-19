@@ -97,6 +97,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
+      <main>
       {/* ── HERO — real event photos crossfading behind a dark translucent
           veil (#18/#20). Text is forced light: it sits on the photos, not on
           the theme background. ── */}
@@ -160,7 +161,7 @@ export default function LandingPage() {
             <div style={{ display: 'flex', gap: 36, marginTop: 44, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.18)' }}>
               {STATISTICS.map((s, i) => (
                 <div key={s.label} className={`lp-stat-${i + 1}`}>
-                  <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 28, color: '#ffcb05' }}>{s.value}</div>
+                  <div style={{ fontFamily: "var(--font-montserrat), sans-serif", fontWeight: 800, fontSize: 28, color: '#ffcb05' }}>{s.value}</div>
                   <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>{s.label}</div>
                 </div>
               ))}
@@ -229,7 +230,7 @@ export default function LandingPage() {
                 Program value{' '}
                 <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{COURSE_VALUE.mrp}</span>{' '}
                 for Training, Exam and Report · Offered price{' '}
-                <span style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 800, fontSize: 20, color: '#4f9a12' }}>{COURSE_VALUE.price}</span>{' '}
+                <span style={{ fontFamily: "var(--font-montserrat), sans-serif", fontWeight: 800, fontSize: 20, color: '#4f9a12' }}>{COURSE_VALUE.price}</span>{' '}
                 <span style={{ fontSize: 12 }}>({COURSE_VALUE.note})</span>
               </div>
               <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 8 }}>
@@ -391,14 +392,19 @@ export default function LandingPage() {
             <p style={{ fontSize: 14.5, color: 'var(--text-secondary)', margin: '0 0 22px' }}>
               Register from any device, including a mobile phone. For the exam itself:
             </p>
-            <div className="lp-tech-grid">
+            {/* <dl> wrapping — a bare <div className="lp-tech-grid"> holding
+                <dt>/<dd> pairs failed Lighthouse's dlitem audit: those two
+                elements are only valid inside a real <dl> (with an
+                optionally-wrapping <div> per pair, which lp-tech-item already
+                is — the HTML5 spec allows that). */}
+            <dl className="lp-tech-grid">
               {TECH_REQUIREMENTS.map((req) => (
                 <div key={req.label} className="lp-tech-item">
                   <dt>{req.label}</dt>
                   <dd>{req.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
         </div>
       </section>
@@ -468,7 +474,7 @@ export default function LandingPage() {
             </div>
             <div style={{ width: 1, background: 'var(--border-default)' }} />
             <div style={{ padding: '34px 30px', textAlign: 'left', background: 'rgba(125,200,50,0.04)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4f9a12', marginBottom: 22 }}>Innovation Olympiad</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#417e0f', marginBottom: 22 }}>Innovation Olympiad</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {[
                   ['Creativity', 'Rewards'],
@@ -624,7 +630,7 @@ export default function LandingPage() {
             </div>
 
             <div className="lp-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '30px 28px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#ffcb05' }}>Takeaways for participants</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19, marginBottom: 18, color: '#876c03' }}>Takeaways for participants</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {TAKEAWAYS.map((item) => (
                   <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
@@ -646,7 +652,7 @@ export default function LandingPage() {
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(125,200,50,0.1)', border: '1px solid rgba(125,200,50,0.2)',
-              color: '#4f9a12', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
+              color: '#417e0f', fontWeight: 700, fontSize: 11, letterSpacing: '1.3px', textTransform: 'uppercase',
               padding: '7px 15px', borderRadius: 999, marginBottom: 18,
             }}>
               <Award size={12} /> Proven Legacy · Powered by Innopreneurs Junior
@@ -698,7 +704,7 @@ export default function LandingPage() {
                 An entrepreneurship ecosystem working since 2013, nurturing innovators,
                 entrepreneurs and changemakers across India and beyond.
               </p>
-              <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" style={{ color: '#4f9a12', fontWeight: 700, fontSize: 14 }}>
+              <a href="https://www.lemonideas.in" target="_blank" rel="noopener noreferrer" style={{ color: '#417e0f', fontWeight: 700, fontSize: 14 }}>
                 www.lemonideas.in ↗
               </a>
             </div>
@@ -711,7 +717,7 @@ export default function LandingPage() {
                 The flagship junior innovation movement behind the Olympiad — where school participants
                 across India identify problems, build solutions and present their ideas on a national stage.
               </p>
-              <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer" style={{ color: '#ffcb05', fontWeight: 700, fontSize: 14 }}>
+              <a href="https://www.innopreneurs.in/junior-contest" target="_blank" rel="noopener noreferrer" style={{ color: '#876c03', fontWeight: 700, fontSize: 14 }}>
                 www.innopreneurs.in/junior-contest ↗
               </a>
             </div>
@@ -743,6 +749,7 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+      </main>
 
       {/* ── FOOTER (#19: social links + bigger Lemon Ideas mark) ── */}
       <footer className="lp-footer">
@@ -752,7 +759,10 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-footer__social" aria-label="Community links">
-            <a href={COMMUNITY_LINKS.whatsapp} target="_blank" rel="noopener noreferrer" className="lp-social" title="WhatsApp Community">
+            {/* Explicit color rather than relying on `.lp-social`, which has
+                no rule of its own — it was inheriting an unrelated ~2:1
+                contrast gold from somewhere up the tree. */}
+            <a href={COMMUNITY_LINKS.whatsapp} target="_blank" rel="noopener noreferrer" className="lp-social" title="WhatsApp Community" style={{ color: '#916d00' }}>
               <MessageCircle size={18} /> WhatsApp Community
             </a>
             <a href={COMMUNITY_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="lp-social-link">

@@ -5,8 +5,11 @@
    Dark is an opt-in toggle (frontend/src/components/ThemeToggle.tsx).
    ══════════════════════════════════════════════════════════════ */
 
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Poppins:wght@500;600;700;800&family=Montserrat:wght@600;700;800&family=Nunito:wght@700;800;900&display=swap');
+/* Fonts are self-hosted via next/font (see app/layout.tsx) rather than a
+   Google Fonts `@import` — that import was a render-blocking external
+   request (~680ms per Lighthouse). next/font fetches at build time and
+   exposes each family as a CSS variable (--font-inter etc.) on <html>,
+   consumed by the --font-* variables below. */
 
 /* ── CSS Custom Properties ── */
 :root {
@@ -90,12 +93,16 @@
   --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Typography — var(--font-inter) etc. come from next/font on <html>
+     (app/layout.tsx); the quoted names are the fallback chain if that
+     variable is ever unset. --font-montserrat itself is next/font's own
+     variable, used directly where needed — no alias here, since an alias of
+     the same name would just shadow next/font's own rule for it. */
+  --font-sans: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', 'Fira Code', monospace;
   /* Rounded and friendly for headings — DESIGN_BRIEF.md §3. Falls back to
      --font-sans so a slow font load never leaves a heading unstyled. */
-  --font-display: 'Nunito', var(--font-sans);
+  --font-display: var(--font-nunito), 'Nunito', var(--font-sans);
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -116,7 +123,7 @@
   /* Text */
   --text-primary: #1a1a1a;
   --text-secondary: #555555;
-  --text-tertiary: #888888;
+  --text-tertiary: #707070;
   --text-muted: #999999;
   --text-on-primary: #0a0a0a;
 
@@ -2686,34 +2693,42 @@ h4 {
 }
 .lp-carousel__arrow:hover {
   border-color: rgba(125, 200, 50, 0.5);
-  color: #4f9a12;
+  color: #417e0f;
   transform: scale(1.06);
 }
 
-.lp-carousel__dots { display: flex; align-items: center; gap: 9px; }
+.lp-carousel__dots { display: flex; align-items: center; gap: 0; }
 
+/*
+ * The button's own box is the full 24x24 touch target (WCAG 2.5.8 / Lighthouse
+ * target-size) — the visible 9px pill is drawn as a centered ::after instead of
+ * being the interactive box itself. An earlier version kept the button at 9px
+ * and grew the hit area with a negative-inset ::after; that passes in real
+ * browsers (clicks on generated content still hit the host element) but
+ * automated auditors measure the element's own layout box, so it was reported
+ * as a 9x9 target every time. Sizing the real box correctly is what both a
+ * human thumb and an audit agree on.
+ */
 .lp-carousel__dot {
-  width: 9px;
-  height: 9px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.lp-carousel__dot::after {
+  content: '';
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
   background: var(--border-default);
-  cursor: pointer;
   transition: width 0.25s ease, background 0.25s ease;
 }
-.lp-carousel__dot.is-active { width: 26px; background: #4f9a12; }
-
-/* The touch targets have to be finger-sized even though the dot is 9px — the
-   pill is the visible affordance, the padding is the hit area. */
-@media (pointer: coarse) {
-  .lp-carousel__dot { position: relative; }
-  .lp-carousel__dot::after {
-    content: '';
-    position: absolute;
-    inset: -14px -8px;
-  }
-}
+.lp-carousel__dot.is-active::after { width: 26px; background: #417e0f; }
 
 /* — The five dimensions the paper assesses.
      Auto-fit rather than a fixed column count: five cards do not divide evenly
@@ -2754,7 +2769,7 @@ h4 {
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: #4f9a12;
+  color: #417e0f;
   margin-bottom: 10px;
 }
 .lp-dimension-title {
@@ -5262,7 +5277,7 @@ textarea.form-control {
   height: 42px;
   border-radius: 12px;
   background: rgba(125, 200, 50, 0.12);
-  color: #4f9a12;
+  color: #417e0f;
   margin-bottom: 14px;
 }
 
@@ -5412,7 +5427,7 @@ textarea.form-control {
   font-size: 16px;
   color: var(--text-primary);
 }
-.lp-xcard.is-open .lp-expandable__title { color: #4f9a12; }
+.lp-xcard.is-open .lp-expandable__title { color: #417e0f; }
 .lp-expandable__teaser { font-size: 13px; color: var(--text-secondary); }
 .lp-expandable__chevron { flex-shrink: 0; color: var(--text-tertiary); transition: transform 0.25s ease; }
 .lp-xcard.is-open .lp-expandable__chevron { transform: rotate(180deg); }
@@ -5533,7 +5548,7 @@ textarea.form-control {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #4f9a12;
+  color: #417e0f;
   background: rgba(125, 200, 50, 0.1);
   border: 1px solid rgba(125, 200, 50, 0.28);
   border-radius: 999px;
@@ -5563,10 +5578,10 @@ textarea.form-control {
   font-family: var(--font-display);
   font-style: italic;
   font-size: 15px;
-  color: #4f9a12;
+  color: #417e0f;
 }
 .lp-partner-card__blurb { font-size: 14px; line-height: 1.65; color: var(--text-secondary); }
-.lp-partner-card__site { font-size: 13.5px; font-weight: 700; color: #4f9a12; margin-top: 6px; }
+.lp-partner-card__site { font-size: 13.5px; font-weight: 700; color: #417e0f; margin-top: 6px; }
 
 /* ── Nav "Join us" menu ──
    A small clickable label in the nav that opens two ways in: partner and
@@ -6100,7 +6115,7 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
   color: #fff; font-weight: 800; font-size: 1.4rem;
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto 1rem;
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--font-montserrat), sans-serif;
 }
 .mob-lp-founder blockquote {
   margin: 0 0 0.8rem; padding: 0; border: none;
@@ -6111,16 +6126,16 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
 .mob-lp-what__head { font-family: var(--font-display); font-size: 1rem; margin-bottom: 0.7rem; display: block; }
 .mob-lp-what__row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary); padding: 4px 0; }
 .mob-lp-what__row svg { flex-shrink: 0; margin-top: 3px; }
-.mob-lp-what__link { color: #4f9a12; font-weight: 700; font-size: 0.85rem; }
+.mob-lp-what__link { color: #417e0f; font-weight: 700; font-size: 0.85rem; }
 .mob-lp-price { text-align: left; font-size: 0.88rem; color: var(--text-secondary); }
-.mob-lp-price__offer { color: #4f9a12; font-size: 1.15rem; font-family: 'Montserrat', sans-serif; }
+.mob-lp-price__offer { color: #417e0f; font-size: 1.15rem; font-family: var(--font-montserrat), sans-serif; }
 .mob-lp-price__note { font-size: 0.72rem; }
 .mob-lp-price__meta { margin: 0.5rem 0 0.85rem; font-size: 0.8rem; }
 .mob-lp-price__meta b { color: var(--text-primary); }
 .mob-lp-badge {
   display: inline-flex; align-items: center;
   background: rgba(125,200,50,0.1); border: 1px solid rgba(125,200,50,0.25);
-  color: #4f9a12; font-weight: 600; font-size: 0.66rem; letter-spacing: 0.03em;
+  color: #417e0f; font-weight: 600; font-size: 0.66rem; letter-spacing: 0.03em;
   padding: 0.4rem 0.75rem; border-radius: 999px; margin-bottom: 1rem;
 }
 .mob-lp-hero__title {
@@ -6138,7 +6153,7 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
 }
 .mob-lp-stats div { display: flex; flex-direction: column; }
 .mob-lp-stats strong {
-  font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.15rem;
+  font-family: var(--font-montserrat), sans-serif; font-weight: 800; font-size: 1.15rem;
   background: var(--gradient-brand); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 .mob-lp-stats span { font-size: 0.62rem; color: var(--text-secondary); margin-top: 2px; }
@@ -6173,7 +6188,7 @@ body.has-mobile-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom,
 
 .mob-lp-dim { display: flex; gap: 0.8rem; align-items: flex-start; }
 .mob-lp-dim__num {
-  font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 0.9rem; color: #4f9a12;
+  font-family: var(--font-montserrat), sans-serif; font-weight: 800; font-size: 0.9rem; color: #417e0f;
   flex-shrink: 0; width: 30px;
 }
 .mob-lp-dim strong { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; }

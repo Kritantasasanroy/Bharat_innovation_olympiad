@@ -116,6 +116,7 @@ export default function MobileLanding() {
                 Next Olympiad · <b>{nextDate}</b> — Only 500 exam slots per week
             </div>
 
+            <main>
             <section className="mob-lp-hero" style={{ position: 'relative', overflow: 'hidden', background: '#0c1a06' }}>
                 <HeroSlideshow overlay={0.66} />
                 <div style={{ position: 'relative', zIndex: 1, color: '#fff' }}>
@@ -380,6 +381,7 @@ export default function MobileLanding() {
                     </Link>
                 </div>
             </section>
+            </main>
 
             <footer className="mob-lp-footer">
                 <Image src="/bio-logo.png" alt="Bharat Innovation Olympiad" height={28} width={92} style={{ height: 28, width: 'auto' }} />

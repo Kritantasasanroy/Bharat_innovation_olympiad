@@ -67,8 +67,11 @@ const ALUMNI: Alumnus[] = [
         name: 'Guransh Singh',
         tagline: 'From Young Innovator to National Champion',
         badge: "National Champion '26",
-        badgeBg: '#7dc832',
-        accent: '#7dc832',
+        // Darkened from the brand #7dc832 — used as text (tagline/journey/pills)
+        // and as the badge fill under white text, both of which need 4.5:1 on a
+        // near-white ground; the lighter brand shade only clears 1.9-2.1:1 there.
+        badgeBg: '#4d7c1f',
+        accent: '#4d7c1f',
         pillBg: 'rgba(125,200,50,0.1)',
         pillBorder: 'rgba(125,200,50,0.2)',
         image: '/assets/alumni-guransh.jpg',
@@ -84,8 +87,10 @@ const ALUMNI: Alumnus[] = [
         name: 'Falak Arora',
         tagline: 'Turning Sustainability into Entrepreneurship',
         badge: 'Founder',
-        badgeBg: '#d4a017',
-        accent: '#ffcb05',
+        // See the note on Guransh's badgeBg/accent above — same fix, darkened
+        // from #d4a017 and #ffcb05 respectively.
+        badgeBg: '#8e6b0f',
+        accent: '#876c03',
         pillBg: 'rgba(255,203,5,0.08)',
         pillBorder: 'rgba(255,203,5,0.2)',
         image: '/assets/alumni-falak.jpg',
@@ -101,8 +106,11 @@ const ALUMNI: Alumnus[] = [
         name: 'Anay & Abeer Ramakrishnan',
         tagline: 'From Child Innovators to AI Pioneers',
         badge: 'AI Pioneers',
+        // badgeBg already clears 4.5:1 under white text (4.63:1) — untouched.
+        // accent is used as text (tagline/journey/pills) and needed darkening
+        // from #7baff5, same as the other two entries.
         badgeBg: '#3b6fe0',
-        accent: '#7baff5',
+        accent: '#50729f',
         pillBg: 'rgba(59,111,224,0.12)',
         pillBorder: 'rgba(59,111,224,0.25)',
         image: '/assets/alumni-anay-abeer.jpg',
